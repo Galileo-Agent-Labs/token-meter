@@ -194,6 +194,29 @@ ls ~/.codex/sessions
 
 Then run a Claude Code or Codex task and reload the dashboard.
 
+### The dashboard says `page.html` is missing
+
+Token Meter serves the UI from `page.html`. Use a full repository clone and run
+from the clone:
+
+```bash
+git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+cd token-meter
+./scripts/start-token-meter
+```
+
+If you copied `meter.py` somewhere else, copy `page.html` into that same folder
+too, or start the server from the repository root.
+
+If you already started Token Meter from the wrong directory, the old server may
+still be running. Stop the process listening on port `8722`, then start again:
+
+```bash
+lsof -nP -iTCP:8722 -sTCP:LISTEN
+kill <PID>
+./scripts/start-token-meter
+```
+
 ### Browser notifications do not appear
 
 Use the notification toggle in the top-right of the dashboard. If notifications

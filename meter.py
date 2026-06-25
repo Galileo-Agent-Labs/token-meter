@@ -15,6 +15,7 @@ Codex uses token_count events instead; those are already one usage slice.
 """
 import calendar
 import glob
+import html
 import json
 import os
 import queue
@@ -1620,7 +1621,57 @@ def watcher():
         time.sleep(0.5)
 
 
-PAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "page.html")
+def page_candidates():
+    paths = []
+    explicit = os.environ.get("TOKEN_METER_PAGE")
+    if explicit:
+        paths.append(os.path.abspath(os.path.expanduser(explicit)))
+    paths.extend([
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "page.html"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "page.html"),
+        os.path.join(os.getcwd(), "page.html"),
+    ])
+
+    out, seen = [], set()
+    for path in paths:
+        if path not in seen:
+            out.append(path)
+            seen.add(path)
+    return out
+
+
+PAGE_CANDIDATES = page_candidates()
+
+
+def page_path():
+    for path in PAGE_CANDIDATES:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def missing_page_html():
+    candidates = "\n".join(
+        f"<li><code>{html.escape(path)}</code></li>" for path in PAGE_CANDIDATES
+    )
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Token Meter setup error</title>
+  <style>
+    body {{ font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 40px; max-width: 760px; }}
+    code {{ background: #f3f4f6; padding: 2px 5px; border-radius: 4px; }}
+  </style>
+</head>
+<body>
+  <h1>page.html is missing</h1>
+  <p>Token Meter needs the dashboard file <code>page.html</code> alongside <code>meter.py</code>, or in the directory where you start the server.</p>
+  <p>Run from a full repository clone with <code>./scripts/start-token-meter</code>, or copy <code>page.html</code> from the repo into the same folder as <code>meter.py</code>.</p>
+  <p>Looked in:</p>
+  <ul>{candidates}</ul>
+</body>
+</html>"""
 
 
 class H(BaseHTTPRequestHandler):
@@ -1633,10 +1684,10 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, body, ctype="text/html; charset=utf-8"):
+    def _send(self, body, ctype="text/html; charset=utf-8", status=200):
         if isinstance(body, str):
             body = body.encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1644,22 +1695,22 @@ class H(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         if self.path == "/":
-            self.send_response(200)
+            path = page_path()
+            body = b"" if path else missing_page_html().encode()
+            self.send_response(200 if path else 503)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            try:
-                self.send_header("Content-Length", str(os.path.getsize(PAGE_PATH)))
-            except OSError:
-                self.send_header("Content-Length", "0")
+            self.send_header("Content-Length", str(os.path.getsize(path) if path else len(body)))
             self.end_headers()
         else:
             self.send_error(404)
 
     def do_GET(self):
         if self.path == "/":
-            try:
-                self._send(open(PAGE_PATH, encoding="utf-8").read())
-            except FileNotFoundError:
-                self._send("<h1>page.html not found next to meter.py</h1>")
+            path = page_path()
+            if path:
+                self._send(open(path, encoding="utf-8").read())
+            else:
+                self._send(missing_page_html(), status=503)
         elif self.path.startswith("/session"):
             sid = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
             source = find_session(sid)
@@ -1675,12 +1726,16 @@ class H(BaseHTTPRequestHandler):
         elif self.path == "/menubar":
             self._send(json.dumps(menubar_state()), "application/json")
         elif self.path == "/health":
+            path = page_path()
             self._send(json.dumps({
-                "ok": True,
+                "ok": bool(path),
                 "state_ready": bool(STATE),
                 "sources": len(all_session_sources()),
                 "port": PORT,
-            }), "application/json")
+                "page_ready": bool(path),
+                "page_path": path,
+                "page_candidates": PAGE_CANDIDATES,
+            }), "application/json", status=200 if path else 503)
         elif self.path == "/events":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")

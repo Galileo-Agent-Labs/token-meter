@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Token Meter runtime logs
+*.log
+
+# Swift and local build output
+.build/
+DerivedData/
+*.dSYM/
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+
+# Local agent planning state, not public user docs
+PLAN.md
+STATE.md

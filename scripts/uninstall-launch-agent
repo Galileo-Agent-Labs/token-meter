@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LABEL="com.token-meter.menubar"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+
+launchctl bootout "gui/$UID" "$PLIST" >/dev/null 2>&1 || true
+rm -f "$PLIST"
+
+echo "Uninstalled $LABEL"
+echo "Removed: $PLIST"
+echo "Logs, if present, remain in: $ROOT"

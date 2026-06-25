@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LABEL="com.token-meter.menubar"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+START="$ROOT/scripts/start-token-meter"
+OUT_LOG="$ROOT/menubar.log"
+ERR_LOG="$ROOT/menubar.err.log"
+
+if [[ ! -x "$START" ]]; then
+  echo "Missing executable starter: $START" >&2
+  echo "Run: chmod +x $START" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$PLIST")"
+cat > "$PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$START</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$ROOT</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$OUT_LOG</string>
+  <key>StandardErrorPath</key>
+  <string>$ERR_LOG</string>
+</dict>
+</plist>
+PLIST
+
+launchctl bootout "gui/$UID" "$PLIST" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$UID" "$PLIST"
+launchctl kickstart -k "gui/$UID/$LABEL" >/dev/null 2>&1 || true
+
+echo "Installed $LABEL"
+echo "LaunchAgent: $PLIST"
+echo "Uninstall: $ROOT/scripts/uninstall-launch-agent"

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HEALTH_URL="http://127.0.0.1:8722/health"
+LOG="$ROOT/meter.log"
+
+if ! curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+  nohup python3 "$ROOT/meter.py" >> "$LOG" 2>&1 &
+  for _ in $(seq 1 40); do
+    if curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+fi
+
+exec "$ROOT/scripts/run-menubar"

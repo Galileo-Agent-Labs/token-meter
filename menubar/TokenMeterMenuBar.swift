@@ -4,6 +4,11 @@ import Foundation
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
 private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/")!
 
+// Cisco brand accent — Cisco Blue (#00BCEB)
+extension NSColor {
+    static let ciscoBlue = NSColor(srgbRed: 0.0, green: 0.737, blue: 0.922, alpha: 1.0)
+}
+
 enum Verdict {
     case healthy
     case watch
@@ -33,11 +38,33 @@ enum Verdict {
 
     var color: NSColor {
         switch self {
-        case .healthy: return .labelColor
-        case .watch: return .systemOrange
-        case .intervene: return .systemRed
-        case .idle: return .secondaryLabelColor
+        case .healthy: return .ciscoBlue
+        case .watch: return .ciscoBlue
+        case .intervene: return .ciscoBlue
+        case .idle: return .ciscoBlue
         case .disconnected: return .secondaryLabelColor
+        }
+    }
+
+    static func fromKey(_ key: String?) -> Verdict? {
+        switch key {
+        case "healthy": return .healthy
+        case "watch": return .watch
+        case "intervene": return .intervene
+        case "idle": return .idle
+        case "disconnected": return .disconnected
+        default: return nil
+        }
+    }
+
+    static func fromLabel(_ label: String?) -> Verdict? {
+        switch label {
+        case "Healthy": return .healthy
+        case "Watch closely": return .watch
+        case "Intervene now": return .intervene
+        case "Idle": return .idle
+        case "Server offline": return .disconnected
+        default: return nil
         }
     }
 }
@@ -46,6 +73,7 @@ struct MeterSnapshot {
     var connected: Bool
     var error: String
     var verdict: Verdict
+    var verdictDetail: String
     var provider: String
     var project: String
     var session: String
@@ -82,6 +110,7 @@ struct MeterSnapshot {
             connected: false,
             error: error,
             verdict: .disconnected,
+            verdictDetail: "Token Meter server is not reachable.",
             provider: "Token Meter",
             project: "",
             session: "",
@@ -153,19 +182,24 @@ struct MeterSnapshot {
         let recommendationLabel = string(recommendation["label"]) ?? "Let it run"
         let recommendationDetail = string(recommendation["detail"]) ?? "No immediate intervention needed."
         let recommendationSeverity = string(recommendation["severity"]) ?? "good"
+        let verdictInfo = dict["verdict"] as? [String: Any] ?? [:]
+        let serverVerdict = Verdict.fromKey(string(verdictInfo["key"])) ?? Verdict.fromLabel(string(verdictInfo["label"]))
+        let serverVerdictDetail = string(verdictInfo["detail"])
 
         let warn = insights.first { string($0["kind"]) == "warn" }
         let firstInsight = warn ?? insights.first
         let topSignal = string(firstInsight?["text"]) ?? "No warnings yet."
 
         let verdict: Verdict
-        if ended {
+        if let serverVerdict = serverVerdict {
+            verdict = serverVerdict
+        } else if ended {
             verdict = .idle
-        } else if (contextPct ?? 0) >= 0.80 {
+        } else if (contextPct ?? 0) >= 0.85 {
             verdict = .intervene
         } else if lastTurnCost >= 0.50 {
             verdict = .intervene
-        } else if warn != nil || (contextPct ?? 0) >= 0.65 {
+        } else if (contextPct ?? 0) >= 0.70 || recommendationSeverity == "warn" {
             verdict = .watch
         } else {
             verdict = .healthy
@@ -175,6 +209,7 @@ struct MeterSnapshot {
             connected: true,
             error: "",
             verdict: verdict,
+            verdictDetail: serverVerdictDetail ?? MeterSnapshot.verdictFallbackDetail(verdict, contextPct: contextPct, lastTurnCost: lastTurnCost),
             provider: provider,
             project: project,
             session: session,
@@ -206,6 +241,25 @@ struct MeterSnapshot {
             recommendationSeverity: recommendationSeverity,
             topSignal: topSignal
         )
+    }
+
+    static func verdictFallbackDetail(_ verdict: Verdict, contextPct: Double?, lastTurnCost: Double) -> String {
+        let pct = Int(((contextPct ?? 0) * 100).rounded())
+        switch verdict {
+        case .healthy:
+            return "Context is \(pct)% and no operational warning needs intervention."
+        case .watch:
+            return "Context is \(pct)% or an operational warning is active."
+        case .intervene:
+            if (contextPct ?? 0) >= 0.85 {
+                return "Context is \(pct)% of the model window; compact now."
+            }
+            return "Last execution cost \(formatMoney(lastTurnCost)); review the spike before continuing."
+        case .idle:
+            return "This is a frozen log view; return to live to follow newest activity."
+        case .disconnected:
+            return "Token Meter server is not reachable."
+        }
     }
 
     var menuTitle: String {
@@ -266,6 +320,11 @@ struct MeterSnapshot {
     var recommendationSummary: String {
         if recommendationDetail.isEmpty { return recommendationLabel }
         return "\(recommendationLabel) - \(recommendationDetail)"
+    }
+
+    var statusTooltip: String {
+        if !connected { return "Token Meter server is not reachable." }
+        return "\(verdict.label): \(verdictDetail)\nAction: \(recommendationSummary)\nNow: \(activitySummary)"
     }
 }
 
@@ -335,18 +394,19 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addRecommendationRow()
             addMetricRow("Cost", "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")")
             addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
-            addMetricRow("Cache", snapshot.cacheLabel)
+            addMetricRow("Cache", snapshot.cacheLabel, toolTip: snapshot.cacheDetail)
             addSignalRow("Cache detail", snapshot.cacheDetail)
-            addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))")
+            addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))",
+                         toolTip: "Context watch starts at 70%; intervene starts at 85%.")
             addContextBar()
             addMetricRow("Last execution", formatMoney(snapshot.lastTurnCost))
         } else {
-            addSignalRow("Connection", snapshot.error, color: .systemOrange)
+            addSignalRow("Connection", snapshot.error, color: .ciscoBlue)
         }
 
         menu.addItem(.separator())
-        addMetricRow("Status", snapshot.verdict.label, valueColor: snapshot.verdict.color, strong: true)
-        addSignalRow("Top signal", snapshot.topSignal)
+        addMetricRow("Status", snapshot.verdict.label, valueColor: snapshot.verdict.color, strong: true,
+                     toolTip: snapshot.verdictDetail)
         menu.addItem(.separator())
 
         addAction("Open Dashboard", #selector(openDashboard))
@@ -361,7 +421,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         ]
         statusItem.button?.attributedTitle = NSAttributedString(string: snapshot.statusTitle, attributes: attrs)
-        statusItem.button?.toolTip = snapshot.connected ? snapshot.activitySummary : "Token Meter server is not reachable."
+        statusItem.button?.toolTip = snapshot.statusTooltip
     }
 
     private func addHeader() {
@@ -404,6 +464,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func addRecommendationRow() {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 52))
+        view.toolTip = snapshot.recommendationSummary
         let nameLabel = label("Action", frame: NSRect(x: 14, y: 31, width: 52, height: 15),
                               font: .systemFont(ofSize: 11.5, weight: .semibold),
                               color: .secondaryLabelColor)
@@ -413,6 +474,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let detail = label(snapshot.recommendationDetail, frame: NSRect(x: 70, y: 6, width: menuWidth - 84, height: 23),
                            font: .systemFont(ofSize: 12, weight: .regular),
                            color: .secondaryLabelColor)
+        nameLabel.toolTip = snapshot.recommendationSummary
+        valueLabel.toolTip = snapshot.recommendationSummary
+        detail.toolTip = snapshot.recommendationSummary
         detail.lineBreakMode = .byWordWrapping
         detail.maximumNumberOfLines = 2
         view.addSubview(nameLabel)
@@ -421,8 +485,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addViewItem(view)
     }
 
-    private func addMetricRow(_ name: String, _ value: String, valueColor: NSColor = .labelColor, strong: Bool = false) {
+    private func addMetricRow(_ name: String, _ value: String, valueColor: NSColor = .labelColor, strong: Bool = false, toolTip: String? = nil) {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 26))
+        view.toolTip = toolTip
         let nameLabel = label(name, frame: NSRect(x: 14, y: 5, width: 112, height: 16),
                               font: .systemFont(ofSize: 12, weight: .regular),
                               color: .secondaryLabelColor)
@@ -430,6 +495,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                font: .monospacedDigitSystemFont(ofSize: 12.5, weight: strong ? .semibold : .medium),
                                color: valueColor)
         valueLabel.alignment = .right
+        nameLabel.toolTip = toolTip
+        valueLabel.toolTip = toolTip
         view.addSubview(nameLabel)
         view.addSubview(valueLabel)
         addViewItem(view)
@@ -588,30 +655,30 @@ private func compactScaled(_ value: Double, suffix: String) -> String {
 
 private func activityColor(_ kind: String) -> NSColor {
     switch kind {
-    case "tool_call": return .systemBlue
+    case "tool_call": return .ciscoBlue
     case "tool_result": return .systemTeal
     case "reasoning": return .systemPurple
     case "complete": return .systemGreen
     case "message": return .labelColor
     case "offline": return .secondaryLabelColor
-    default: return .systemOrange
+    default: return .ciscoBlue
     }
 }
 
 private func recommendationColor(_ severity: String) -> NSColor {
     switch severity {
-    case "bad": return .systemRed
-    case "warn": return .systemOrange
+    case "bad": return .ciscoBlue
+    case "warn": return .ciscoBlue
     case "good": return .systemGreen
-    case "idle": return .secondaryLabelColor
+    case "idle": return .ciscoBlue
     default: return .labelColor
     }
 }
 
 private func contextColor(_ pct: Double) -> NSColor {
-    if pct >= 0.80 { return .systemRed }
-    if pct >= 0.65 { return .systemOrange }
-    return .systemGreen
+    if pct >= 0.85 { return .ciscoBlue }
+    if pct >= 0.70 { return .ciscoBlue }
+    return .ciscoBlue
 }
 
 if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
@@ -626,7 +693,6 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         print(snapshot.verdict.label)
         print(snapshot.activitySummary)
         print(snapshot.recommendationSummary)
-        print(snapshot.topSignal)
         exit(0)
     } catch {
         fputs("Token Meter menubar smoke failed: \(error.localizedDescription)\n", stderr)

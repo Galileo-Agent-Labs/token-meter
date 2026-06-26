@@ -51,6 +51,14 @@ DEFAULT_OPENAI_MODEL = "gpt-5.5"
 CHARS_PER_TOKEN = 4
 TRACE_LIMIT = 220
 EXEC_LIMIT = 180
+MENUBAR_CONTEXT_SOFT_PCT = 0.65
+MENUBAR_CONTEXT_WATCH_PCT = 0.70
+MENUBAR_CONTEXT_INTERVENE_PCT = 0.85
+MENUBAR_COST_SPIKE = 0.50
+LOW_YIELD_RATIO = 0.005
+LOW_YIELD_COST = 0.05
+LOW_YIELD_CONTEXT_PCT = 0.25
+LOW_YIELD_INPUT_TOKENS = 60000
 
 subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
@@ -393,6 +401,98 @@ def user_prompt_preview(texts, limit=220):
     return compact_text(" / ".join(unique), limit)
 
 
+def execution_low_yield(execution):
+    tokens = execution.get("tokens") or {}
+    input_tokens = int(tokens.get("input") or execution.get("context_tokens") or 0)
+    output_tokens = int(tokens.get("output") or 0)
+    cost = float(execution.get("cost") or 0)
+    if input_tokens <= 0:
+        return False
+    return (output_tokens / input_tokens) < LOW_YIELD_RATIO and cost > LOW_YIELD_COST
+
+
+def low_yield_should_warn(executions, context_pct=0):
+    if not executions:
+        return False
+    latest = executions[-1]
+    if not execution_low_yield(latest):
+        return False
+
+    latest_tokens = latest.get("tokens") or {}
+    latest_input = int(latest_tokens.get("input") or latest.get("context_tokens") or 0)
+    consecutive = 0
+    for execution in reversed(executions):
+        if not execution_low_yield(execution):
+            break
+        consecutive += 1
+
+    return (
+        (context_pct or 0) >= LOW_YIELD_CONTEXT_PCT
+        or latest_input >= LOW_YIELD_INPUT_TOKENS
+        or consecutive >= 2
+    )
+
+
+def is_operational_warning(insight):
+    key = insight.get("key") or ""
+    return (
+        key == "context-high"
+        or key == "low-yield-latest" and insight.get("kind") == "warn"
+        or key.startswith("tool-bloat:")
+        or key.startswith("namespace-bloat:")
+    )
+
+
+INSIGHT_CATEGORY_ORDER = {
+    "Context": 0,
+    "Yield": 1,
+    "Spend": 2,
+    "Tools": 3,
+    "Cache": 4,
+    "Reasoning": 5,
+    "Flow": 6,
+    "Pricing": 7,
+}
+INSIGHT_KIND_SCORE = {"warn": 0, "good": 1, "neutral": 2}
+
+
+def insight(key, kind, category, title, text, detail="", action="", priority=50):
+    row = {
+        "key": key,
+        "kind": kind,
+        "category": category,
+        "title": title,
+        "text": text,
+        "priority": priority,
+    }
+    if detail:
+        row["detail"] = detail
+    if action:
+        row["action"] = action
+    return row
+
+
+def insight_sort_key(row):
+    return (
+        INSIGHT_KIND_SCORE.get(row.get("kind"), 2),
+        row.get("priority", 50),
+        INSIGHT_CATEGORY_ORDER.get(row.get("category"), 99),
+        row.get("key") or "",
+    )
+
+
+def normalize_insights(rows, limit=12):
+    normalized = []
+    seen = set()
+    for row in rows or []:
+        key = row.get("key") or row.get("text") or ""
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(row)
+    return sorted(normalized, key=insight_sort_key)[:limit]
+
+
 def claude_user_events(objs):
     events = []
     for obj in objs:
@@ -698,6 +798,7 @@ def recompute_claude(source):
             "tools": len(tools),
             "side": rec["side"],
             "reasoning": out_tok if has_think else 0,
+            "user_message": user_input,
             "user_input": user_input,
         })
         executions.append({
@@ -720,6 +821,7 @@ def recompute_claude(source):
             "context_pct": None,
             "duration_ms": None,
             "summary": f"Turn {idx}: {out_tok:,} out / {in_tok:,} in",
+            "user_message": user_input,
             "user_input": user_input,
         })
         if biggest is None or tc > biggest["cost"]:
@@ -907,7 +1009,6 @@ def recompute_codex(source):
             elif role == "user":
                 txt = compact_text(text_from_content(content), 84)
                 if txt:
-                    pending["user_inputs"].append(compact_text(text_from_content(content), 220))
                     pending["trace"].append(trace_event(ts, "user", "User message", txt, severity="start", model=model))
             continue
 
@@ -1034,6 +1135,7 @@ def recompute_codex(source):
                 "side": False,
                 "reasoning": reasoning,
                 "context_pct": context_pct,
+                "user_message": user_input,
                 "user_input": user_input,
             })
             executions.append({
@@ -1057,6 +1159,7 @@ def recompute_codex(source):
                 "context_pct": context_pct,
                 "duration_ms": None,
                 "summary": f"Execution {idx}: {out_tok:,} out / {in_tok:,} in",
+                "user_message": user_input,
                 "user_input": user_input,
             })
             if biggest is None or tc > biggest["cost"]:
@@ -1198,47 +1301,69 @@ def enrich_insights(insights, executions, tool_data, context_window, context_lat
     if context_window:
         latest_pct = context_latest / context_window if context_window else 0
         peak_pct = context_peak / context_window if context_window else 0
-        if latest_pct > 0.80:
-            out.insert(0, {
-                "text": f"context is {latest_pct * 100:.0f}% of the model window; compact or narrow tool output soon",
-                "kind": "warn",
-                "key": "context-high",
-            })
-        elif peak_pct > 0.65:
-            out.append({
-                "text": f"context peaked at {peak_pct * 100:.0f}% of the model window",
-                "kind": "neutral",
-                "key": "context-peak",
-            })
+        if latest_pct >= MENUBAR_CONTEXT_INTERVENE_PCT:
+            out.insert(0, insight(
+                "context-high", "warn", "Context", "Compact now",
+                f"Context is {latest_pct * 100:.0f}% of the model window.",
+                detail="The next execution is close to the model limit and will replay a large prompt.",
+                action="Summarize, compact, or narrow tool output before continuing.",
+                priority=0,
+            ))
+        elif latest_pct >= MENUBAR_CONTEXT_WATCH_PCT:
+            out.append(insight(
+                "context-watch", "warn", "Context", "Prepare to compact",
+                f"Context is {latest_pct * 100:.0f}% of the model window.",
+                detail="The run is entering the range where summary quality and tool selectivity start to matter.",
+                action="Prepare a summary before the context reaches 85%.",
+                priority=8,
+            ))
+        elif peak_pct > MENUBAR_CONTEXT_SOFT_PCT:
+            out.append(insight(
+                "context-peak", "neutral", "Context", "Context peak",
+                f"Context peaked at {peak_pct * 100:.0f}% of the model window.",
+                detail="This is historical pressure, not necessarily the latest state.",
+                priority=55,
+            ))
     loaded = tool_data.get("loaded") or 0
     unique_used = tool_data.get("unique_used") or 0
     if loaded and tool_data.get("loaded_known"):
         ratio = unique_used / loaded if loaded else 0
         kind = "neutral" if ratio >= 0.25 else "warn"
-        out.append({
-            "text": f"{loaded} tools loaded; {unique_used} used in this log",
-            "kind": kind,
-            "key": "tools-loaded",
-        })
+        out.append(insight(
+            "tools-loaded", kind, "Tools", "Tool surface",
+            f"{loaded} tools loaded; {unique_used} used in this log.",
+            detail="A wide tool surface can make planning noisier, even when most tools are unused.",
+            action="Trim enabled tools if startup or tool selection feels noisy." if kind == "warn" else "",
+            priority=34 if kind == "warn" else 68,
+        ))
     if tool_data.get("by_namespace"):
         top_ns = tool_data["by_namespace"][0]
         if top_ns.get("output_tokens", 0) > 25000:
-            out.append({
-                "text": f"{top_ns['namespace']} tools returned ~{top_ns['output_tokens']:,} tokens",
-                "kind": "warn",
-                "key": f"namespace-bloat:{top_ns['namespace']}",
-            })
+            out.append(insight(
+                f"namespace-bloat:{top_ns['namespace']}", "warn", "Tools", "Namespace payload",
+                f"{top_ns['namespace']} tools returned ~{top_ns['output_tokens']:,} tokens.",
+                detail="Tool result text is reintroduced into context and can dominate later turns.",
+                action="Open the Tools tab and narrow high-volume calls.",
+                priority=18,
+            ))
     if executions:
         latest = executions[-1]
-        if latest.get("tokens", {}).get("input", 0) > 0:
-            out_ratio = latest.get("tokens", {}).get("output", 0) / latest["tokens"]["input"]
-            if out_ratio < 0.005 and latest.get("cost", 0) > 0.05:
-                out.append({
-                    "text": "latest execution replayed a large context for a small output; consider summarizing",
-                    "kind": "warn",
-                    "key": "low-yield-latest",
-                })
-    return out[:8]
+        if low_yield_should_warn(executions, latest_pct if context_window else 0):
+            out.append(insight(
+                "low-yield-latest", "warn", "Yield", "Low-yield execution",
+                "Latest execution replayed large context for a small output.",
+                detail="The run is paying to replay a large prompt without producing much new work.",
+                action="Summarize or restart with a tighter request.",
+                priority=6,
+            ))
+        elif execution_low_yield(latest):
+            out.append(insight(
+                "low-yield-latest", "neutral", "Yield", "Low-yield execution",
+                "Latest execution produced little output from its input.",
+                detail="This is notable, but not yet actionable under the current thresholds.",
+                priority=60,
+            ))
+    return normalize_insights(out)
 
 
 def cache_savings(tot, provider, model):
@@ -1286,31 +1411,110 @@ def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, pro
     labels = {"input": "uncached input", "cache_write": "cache writes",
               "cache_read": "cached input", "output": "output"}
     top = max(cost, key=cost.get)
-    out.append({"text": f"{labels[top]} is {cost[top] / total_cost * 100:.0f}% of spend (${cost[top]:.2f})",
-                "kind": "neutral", "key": f"top:{top}"})
+    top_share = cost[top] / total_cost if total_cost else 0
+    top_kind = "warn" if top_share >= 0.75 and cost[top] >= 0.25 else "neutral"
+    out.append(insight(
+        f"top:{top}", top_kind, "Spend", "Spend driver",
+        f"{labels[top]} is {top_share * 100:.0f}% of spend (${cost[top]:.2f}).",
+        detail="This points to the part of the run that is actually moving cost.",
+        action="Reduce this bucket first if you need to lower spend." if top_kind == "warn" else "",
+        priority=22 if top_kind == "warn" else 46,
+    ))
+
     saved = cache_savings(tot, provider, model)
+    fresh = int(tot.get("input", 0) or 0)
+    read = int(tot.get("cache_read", 0) or 0)
+    write = int(tot.get("cache_write", 0) or 0)
+    cached = read + write
+    input_total = fresh + cached
+    cached_share = cached / input_total if input_total else 0
     if saved > 0.01:
-        out.append({"text": f"caching saved ~${saved:.2f} ({cache_ratio * 100:.0f}% hit ratio)",
-                    "kind": "good", "key": "cache-saved"})
+        out.append(insight(
+            "cache-saved", "good", "Cache", "Cache leverage",
+            f"Caching saved ~${saved:.2f}.",
+            detail=f"Cache read hit ratio is {cache_ratio * 100:.0f}% across {cached:,} cached input tokens.",
+            priority=28,
+        ))
+    elif input_total >= 50000 and cached_share < 0.15:
+        out.append(insight(
+            "cache-low", "warn", "Cache", "Low cache leverage",
+            f"Only {cached_share * 100:.0f}% of input was cached.",
+            detail=f"{fresh:,} tokens were billed as fresh input in this log.",
+            action="Reuse a live thread or trim large repeated context before the next request.",
+            priority=30,
+        ))
+
     rs = an["reasoning"]["share"]
     if rs > 0.6 and an["reasoning"]["think_turns"]:
-        out.append({"text": f"{rs * 100:.0f}% of output came from reasoning turns",
-                    "kind": "warn", "key": "reasoning-high"})
+        out.append(insight(
+            "reasoning-high", "warn", "Reasoning", "Reasoning load",
+            f"{rs * 100:.0f}% of output came from reasoning turns.",
+            detail=f"{an['reasoning']['tokens']:,} reasoning tokens across {an['reasoning']['think_turns']} executions.",
+            action="Split exploratory work from implementation, or ask for a narrower next step.",
+            priority=26,
+        ))
+    elif rs > 0.25 and an["reasoning"]["think_turns"]:
+        out.append(insight(
+            "reasoning-mix", "neutral", "Reasoning", "Reasoning mix",
+            f"{rs * 100:.0f}% of output was reasoning.",
+            detail="This is expected for complex code work, but it is worth watching on long runs.",
+            priority=72,
+        ))
+
     co = an["coordination"]
     if co["share"] > 0.30:
-        out.append({"text": f"coordination tax is {co['share'] * 100:.0f}%",
-                    "kind": "warn", "key": "coordination-high"})
+        out.append(insight(
+            "coordination-high", "warn", "Flow", "Coordination tax",
+            f"Coordination tax is {co['share'] * 100:.0f}% of spend.",
+            detail=f"{co['turns']} coordination executions cost ${co['cost']:.2f}.",
+            action="Use fewer subagents or collapse exploration into one pass.",
+            priority=32,
+        ))
+    elif co["share"] > 0.10 and co["turns"]:
+        out.append(insight(
+            "coordination-mix", "neutral", "Flow", "Coordination mix",
+            f"Coordination used {co['share'] * 100:.0f}% of spend.",
+            detail=f"{co['turns']} coordination executions were detected.",
+            priority=74,
+        ))
+
     if an["tool_bloat"] and an["tool_bloat"][0]["tokens"] > 8000:
         b = an["tool_bloat"][0]
-        out.append({"text": f"{b['name']} returned ~{b['tokens']:,} tokens",
-                    "kind": "warn", "key": f"tool-bloat:{b['name']}"})
+        out.append(insight(
+            f"tool-bloat:{b['name']}", "warn", "Tools", "Tool payload",
+            f"{b['name']} returned ~{b['tokens']:,} tokens.",
+            detail=f"{b['calls']} calls from the {b['namespace']} namespace produced the largest tool payload.",
+            action="Open Tools and inspect whether that output can be narrowed.",
+            priority=16,
+        ))
+    elif an["tool_bloat"] and an["tool_bloat"][0]["tokens"] > 2500:
+        b = an["tool_bloat"][0]
+        out.append(insight(
+            f"tool-heavy:{b['name']}", "neutral", "Tools", "Tool payload",
+            f"{b['name']} returned ~{b['tokens']:,} tokens.",
+            detail="This is the largest tool result stream in the log.",
+            priority=64,
+        ))
+
     if cost_approx:
-        out.append({"text": f"Cost uses {model} public API rates; subscription billing can differ",
-                    "kind": "neutral", "key": "cost-approx"})
+        out.append(insight(
+            "cost-approx", "neutral", "Pricing", "Pricing basis",
+            f"Cost uses {model} public API rates.",
+            detail="Subscription billing, discounts, and non-public pricing can differ.",
+            priority=90,
+        ))
+
     if biggest and biggest["cost"] > 0:
-        out.append({"text": f"priciest execution: ${biggest['cost']:.2f} (#{biggest['idx']} of {n_turns})",
-                    "kind": "neutral", "key": "biggest"})
-    return out
+        biggest_share = biggest["cost"] / total_cost if total_cost else 0
+        kind = "warn" if biggest["cost"] >= MENUBAR_COST_SPIKE or (n_turns > 1 and biggest_share >= 0.55) else "neutral"
+        out.append(insight(
+            "biggest", kind, "Spend", "Largest execution",
+            f"Priciest execution was ${biggest['cost']:.2f} (#{biggest['idx']} of {n_turns}).",
+            detail=f"It accounts for {biggest_share * 100:.0f}% of this log's spend.",
+            action="Inspect that execution before continuing if it was unexpected." if kind == "warn" else "",
+            priority=24 if kind == "warn" else 70,
+        ))
+    return normalize_insights(out)
 
 
 def claude_summary(source, objs):
@@ -1615,7 +1819,9 @@ def menubar_recommendation(st):
     pct = context.get("latest_pct") or 0
     insights = st.get("insights") or []
     warn = next((i for i in insights if i.get("kind") == "warn"), None)
+    operational_warn = next((i for i in insights if i.get("kind") == "warn" and is_operational_warning(i)), None)
     last_cost = st.get("last_turn_cost") or 0
+    low_yield_actionable = low_yield_should_warn(st.get("executions") or [], pct)
 
     if st.get("ended"):
         return {
@@ -1624,46 +1830,49 @@ def menubar_recommendation(st):
             "severity": "idle",
             "target": "summary",
         }
-    if pct >= 0.80:
+    if pct >= MENUBAR_CONTEXT_INTERVENE_PCT:
         return {
             "label": "Compact now",
             "detail": f"Context is {pct * 100:.0f}% of the model window.",
             "severity": "bad",
             "target": "activity",
         }
-    if any(i.get("key") == "low-yield-latest" for i in insights):
-        return {
-            "label": "Summarize soon",
-            "detail": "Latest execution replayed large context for low output.",
-            "severity": "warn",
-            "target": "activity",
-        }
-    if warn and ("tool-bloat" in (warn.get("key") or "") or "namespace-bloat" in (warn.get("key") or "")):
-        return {
-            "label": "Inspect tool output",
-            "detail": warn.get("text") or "Tool output is dominating the log.",
-            "severity": "warn",
-            "target": "tools",
-        }
-    if last_cost >= 0.50:
+    if last_cost >= MENUBAR_COST_SPIKE:
         return {
             "label": "Review spike",
             "detail": f"Last execution cost ${last_cost:.2f}.",
             "severity": "bad",
             "target": "activity",
         }
-    if pct >= 0.70:
+    if low_yield_actionable:
         return {
             "label": "Summarize soon",
-            "detail": f"Context is {pct * 100:.0f}%; prepare to compact.",
+            "detail": "Latest execution replayed large context for low output.",
             "severity": "warn",
             "target": "activity",
         }
-    if pct >= 0.65:
+    if operational_warn and (
+        "tool-bloat" in (operational_warn.get("key") or "")
+        or "namespace-bloat" in (operational_warn.get("key") or "")
+    ):
+        return {
+            "label": "Inspect tool output",
+            "detail": operational_warn.get("text") or "Tool output is dominating the log.",
+            "severity": "warn",
+            "target": "tools",
+        }
+    if pct >= MENUBAR_CONTEXT_WATCH_PCT:
+        return {
+            "label": "Summarize soon",
+            "detail": f"Context is {pct * 100:.0f}%; prepare before 85%.",
+            "severity": "warn",
+            "target": "activity",
+        }
+    if pct >= MENUBAR_CONTEXT_SOFT_PCT:
         return {
             "label": "Watch context",
             "detail": f"Context is {pct * 100:.0f}% of the model window.",
-            "severity": "warn",
+            "severity": "idle",
             "target": "summary",
         }
     if warn:
@@ -1681,12 +1890,58 @@ def menubar_recommendation(st):
     }
 
 
+def menubar_verdict(st, recommendation):
+    context = st.get("context") or {}
+    pct = context.get("latest_pct") or 0
+    last_cost = st.get("last_turn_cost") or 0
+    insights = st.get("insights") or []
+    operational_warn = next((i for i in insights if i.get("kind") == "warn" and is_operational_warning(i)), None)
+
+    def payload(key, detail):
+        labels = {
+            "healthy": ("Healthy", "TM", "good"),
+            "watch": ("Watch closely", "TM !", "warn"),
+            "intervene": ("Intervene now", "TM !!", "bad"),
+            "idle": ("Idle", "TM idle", "idle"),
+        }
+        label, prefix, severity = labels[key]
+        return {"key": key, "label": label, "prefix": prefix, "severity": severity, "detail": detail}
+
+    if st.get("ended"):
+        return payload("idle", "This is a frozen log view; return to live to follow newest activity.")
+    if pct >= MENUBAR_CONTEXT_INTERVENE_PCT:
+        return payload(
+            "intervene",
+            f"Context is {pct * 100:.0f}% of the model window; compact now.",
+        )
+    if last_cost >= MENUBAR_COST_SPIKE:
+        return payload(
+            "intervene",
+            f"Last execution cost ${last_cost:.2f}; review the spike before continuing.",
+        )
+    if pct >= MENUBAR_CONTEXT_WATCH_PCT:
+        return payload(
+            "watch",
+            f"Context is {pct * 100:.0f}% of the model window; prepare to summarize before 85%.",
+        )
+    if operational_warn:
+        detail = operational_warn.get("text") or recommendation.get("detail") or "An operational warning is active."
+        return payload("watch", detail)
+
+    return payload(
+        "healthy",
+        f"Context is {pct * 100:.0f}% and no operational warning needs intervention.",
+    )
+
+
 def menubar_state():
     st = current_state()
     source = st.get("source") or {}
     context = st.get("context") or {}
     cache = st.get("cache") or {}
     activity = menubar_activity(st)
+    recommendation = menubar_recommendation(st)
+    verdict = menubar_verdict(st, recommendation)
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
@@ -1724,7 +1979,8 @@ def menubar_state():
         "idle_s": st.get("idle_s", 0),
         "ended": st.get("ended", False),
         "activity": activity,
-        "recommendation": menubar_recommendation(st),
+        "recommendation": recommendation,
+        "verdict": verdict,
         "insights": (st.get("insights") or [])[:4],
         "ts": st.get("ts"),
     }
@@ -1824,7 +2080,8 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_HEAD(self):
-        if self.path == "/":
+        req_path = urlparse(self.path).path
+        if req_path == "/":
             path = page_path()
             body = b"" if path else missing_page_html().encode()
             self.send_response(200 if path else 503)
@@ -1835,14 +2092,16 @@ class H(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_GET(self):
-        if self.path == "/":
+        parsed = urlparse(self.path)
+        req_path = parsed.path
+        if req_path == "/":
             path = page_path()
             if path:
                 self._send(open(path, encoding="utf-8").read())
             else:
                 self._send(missing_page_html(), status=503)
-        elif self.path.startswith("/session"):
-            sid = (parse_qs(urlparse(self.path).query).get("id") or [""])[0]
+        elif req_path == "/session":
+            sid = (parse_qs(parsed.query).get("id") or [""])[0]
             source = find_session(sid)
             st = recompute(source) if source else None
             if st:
@@ -1851,11 +2110,11 @@ class H(BaseHTTPRequestHandler):
                 if st.get("timing"):
                     st["timing"]["end_label"] = "Last activity"
             self._send(json.dumps(st or {}), "application/json")
-        elif self.path == "/state":
+        elif req_path == "/state":
             self._send(json.dumps(current_state()), "application/json")
-        elif self.path == "/menubar":
+        elif req_path == "/menubar":
             self._send(json.dumps(menubar_state()), "application/json")
-        elif self.path == "/health":
+        elif req_path == "/health":
             path = page_path()
             self._send(json.dumps({
                 "ok": bool(path),
@@ -1866,7 +2125,7 @@ class H(BaseHTTPRequestHandler):
                 "page_path": path,
                 "page_candidates": PAGE_CANDIDATES,
             }), "application/json", status=200 if path else 503)
-        elif self.path == "/events":
+        elif req_path == "/events":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")

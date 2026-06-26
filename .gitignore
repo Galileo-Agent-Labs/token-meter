@@ -17,6 +17,7 @@ htmlcov/
 
 # Swift and local build output
 .build/
+dist/
 DerivedData/
 *.dSYM/
 

@@ -2,8 +2,8 @@
 """
 Token Meter - a live cost and efficiency instrument for Claude Code and Codex.
 
-Tails local agent session logs, parses each execution as it lands, and serves a
-localhost dashboard over SSE with Session and Global views. Stdlib only; nothing
+Tails local agent logs, parses each execution as it lands, and serves a
+localhost dashboard over SSE with Current and Global views. Stdlib only; nothing
 leaves your machine.
 
   python3 meter.py     ->  http://localhost:8722
@@ -365,6 +365,46 @@ def text_from_content(content):
     return ""
 
 
+def claude_user_text(msg):
+    content = msg.get("content") if isinstance(msg, dict) else None
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    pieces = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get("type")
+        if btype in (None, "text"):
+            pieces.append(block.get("text") or block.get("content") or "")
+    return " ".join(p for p in pieces if isinstance(p, str))
+
+
+def user_prompt_preview(texts, limit=220):
+    seen = set()
+    unique = []
+    for text in texts:
+        key = " ".join((text or "").split())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(text)
+    return compact_text(" / ".join(unique), limit)
+
+
+def claude_user_events(objs):
+    events = []
+    for obj in objs:
+        if obj.get("type") != "user":
+            continue
+        msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        txt = compact_text(claude_user_text(msg), 220)
+        if txt:
+            events.append({"ts": parse_iso(obj.get("timestamp", "")) or 0, "text": txt})
+    return sorted(events, key=lambda e: e["ts"])
+
+
 def tool_summary(executions):
     by_name = {}
     by_namespace = {}
@@ -529,6 +569,9 @@ def recompute_claude(source):
         return None
 
     msgs = iter_claude_messages(objs)
+    user_events = claude_user_events(objs)
+    user_event_idx = 0
+    pending_user_texts = []
     result_chars, result_ts = claude_tool_results(objs)
     tool_name_by_id = {}
     for rec in msgs:
@@ -557,6 +600,11 @@ def recompute_claude(source):
         if ts:
             first_ts = ts if first_ts is None else min(first_ts, ts)
             last_ts = ts if last_ts is None else max(last_ts, ts)
+            while user_event_idx < len(user_events) and user_events[user_event_idx]["ts"] <= ts:
+                pending_user_texts.append(user_events[user_event_idx]["text"])
+                user_event_idx += 1
+        user_input = user_prompt_preview(pending_user_texts)
+        pending_user_texts = []
 
         c = cost_of(usage, model, "claude")
         _, approx = price_for(model, "claude")
@@ -612,12 +660,18 @@ def recompute_claude(source):
                                      model=model, output_tokens=out_tok))
 
         cache_tokens = usage.get("cache_read_input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+        fresh_input_tokens = usage.get("input_tokens", 0)
+        cache_read_tokens = usage.get("cache_read_input_tokens", 0)
+        cache_write_tokens = usage.get("cache_creation_input_tokens", 0)
         trace.append(trace_event(
             ts, "message", "Assistant turn",
             f"{out_tok:,} out / {in_tok:,} in",
             idx, tokens=total, cost=tc, severity="usage",
             model=model, input_tokens=in_tok, output_tokens=out_tok,
             cache_tokens=cache_tokens, context_tokens=in_tok,
+            fresh_input_tokens=fresh_input_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
             tool_count=len(tools), reasoning_tokens=out_tok if has_think else 0,
         ))
         for tool in tools:
@@ -636,10 +690,15 @@ def recompute_claude(source):
             "in": in_tok,
             "out": out_tok,
             "cost": round(tc, 4),
+            "fresh_input": fresh_input_tokens,
+            "cache": cache_tokens,
+            "cache_read": cache_read_tokens,
+            "cache_write": cache_write_tokens,
             "think": has_think,
             "tools": len(tools),
             "side": rec["side"],
             "reasoning": out_tok if has_think else 0,
+            "user_input": user_input,
         })
         executions.append({
             "id": rec["id"],
@@ -648,7 +707,8 @@ def recompute_claude(source):
             "time": time.strftime("%H:%M:%S", time.localtime(ts)) if ts else "",
             "model": model,
             "tokens": {"input": in_tok, "output": out_tok, "reasoning": out_tok if has_think else 0,
-                       "retrieval": sum(t["output_tokens"] for t in tools), "cache": cache_tokens,
+                       "retrieval": sum(t["output_tokens"] for t in tools), "fresh_input": fresh_input_tokens,
+                       "cache": cache_tokens, "cache_read": cache_read_tokens, "cache_write": cache_write_tokens,
                        "total": total},
             "cost": round(tc, 6),
             "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
@@ -660,6 +720,7 @@ def recompute_claude(source):
             "context_pct": None,
             "duration_ms": None,
             "summary": f"Turn {idx}: {out_tok:,} out / {in_tok:,} in",
+            "user_input": user_input,
         })
         if biggest is None or tc > biggest["cost"]:
             biggest = {"cost": tc, "idx": idx}
@@ -725,7 +786,8 @@ def analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_to
 
 
 def new_codex_pending():
-    return {"trace": [], "calls": {}, "has_reasoning": False, "start_ts": None, "context_window": None}
+    return {"trace": [], "calls": {}, "has_reasoning": False, "start_ts": None,
+            "context_window": None, "user_inputs": []}
 
 
 def recompute_codex(source):
@@ -803,6 +865,7 @@ def recompute_codex(source):
         if ptype == "user_message":
             txt = compact_text(payload.get("message") or "", 100)
             if txt:
+                pending["user_inputs"].append(compact_text(payload.get("message") or "", 220))
                 pending["trace"].append(trace_event(ts, "user", "User message", txt,
                                                     severity="start", model=model))
             continue
@@ -844,6 +907,7 @@ def recompute_codex(source):
             elif role == "user":
                 txt = compact_text(text_from_content(content), 84)
                 if txt:
+                    pending["user_inputs"].append(compact_text(text_from_content(content), 220))
                     pending["trace"].append(trace_event(ts, "user", "User message", txt, severity="start", model=model))
             continue
 
@@ -923,8 +987,13 @@ def recompute_codex(source):
             reasoning = min(out_tok, usage.get("reasoning_output_tokens", 0))
             total = usage_tokens(usage)
             context_pct = (in_tok / context_window) if context_window else None
+            fresh_input_tokens = usage["input_tokens"]
+            cache_read_tokens = usage["cache_read_input_tokens"]
+            cache_write_tokens = usage["cache_creation_input_tokens"]
+            cache_tokens = cache_read_tokens + cache_write_tokens
             tot["input"] += usage["input_tokens"]
             tot["cache_read"] += usage["cache_read_input_tokens"]
+            tot["cache_write"] += usage["cache_creation_input_tokens"]
             tot["output"] += out_tok
             model_tok[model] += total
             model_cost[model] += tc
@@ -932,6 +1001,7 @@ def recompute_codex(source):
             last_ts = ts if ts else last_ts
 
             tools = [dict(t) for t in pending["calls"].values()]
+            user_input = user_prompt_preview(pending.get("user_inputs") or [])
             observed_tools_loaded = tools_loaded or len(set(t.get("name") for t in call_map.values() if t.get("name")))
             for ev in pending["trace"]:
                 ev["execution"] = idx if ev.get("execution") is None else ev["execution"]
@@ -941,9 +1011,12 @@ def recompute_codex(source):
                 f"{out_tok:,} out / {in_tok:,} in",
                 idx, tokens=total, cost=tc, severity="usage",
                 model=model, input_tokens=in_tok, output_tokens=out_tok,
-                cache_tokens=usage["cache_read_input_tokens"],
+                cache_tokens=cache_tokens,
                 context_tokens=in_tok, context_window=context_window,
                 context_pct=context_pct, tool_count=len(tools),
+                fresh_input_tokens=fresh_input_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
                 reasoning_tokens=reasoning, tools_loaded=observed_tools_loaded or None,
             ))
 
@@ -952,11 +1025,16 @@ def recompute_codex(source):
                 "in": in_tok,
                 "out": out_tok,
                 "cost": round(tc, 4),
+                "fresh_input": fresh_input_tokens,
+                "cache": cache_tokens,
+                "cache_read": cache_read_tokens,
+                "cache_write": cache_write_tokens,
                 "think": bool(reasoning or pending["has_reasoning"]),
                 "tools": len(tools),
                 "side": False,
                 "reasoning": reasoning,
                 "context_pct": context_pct,
+                "user_input": user_input,
             })
             executions.append({
                 "id": f"{source['id']}:{idx}",
@@ -966,7 +1044,9 @@ def recompute_codex(source):
                 "model": model,
                 "tokens": {"input": in_tok, "output": out_tok, "reasoning": reasoning,
                            "retrieval": sum(t["output_tokens"] for t in tools),
-                           "cache": usage["cache_read_input_tokens"], "total": total},
+                           "fresh_input": fresh_input_tokens, "cache": cache_tokens,
+                           "cache_read": cache_read_tokens, "cache_write": cache_write_tokens,
+                           "total": total},
                 "cost": round(tc, 6),
                 "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
                 "tools": tools,
@@ -977,6 +1057,7 @@ def recompute_codex(source):
                 "context_pct": context_pct,
                 "duration_ms": None,
                 "summary": f"Execution {idx}: {out_tok:,} out / {in_tok:,} in",
+                "user_input": user_input,
             })
             if biggest is None or tc > biggest["cost"]:
                 biggest = {"cost": tc, "idx": idx}
@@ -1030,6 +1111,7 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     minutes = max(elapsed / 60.0, 1e-9)
     cache_in = tot["cache_read"] + tot["cache_write"]
     cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
+    cache = cache_block(tot, cost, executions, source["provider"], primary_model)
     tool_data = tool_summary(executions)
     context_window = max((e.get("context_window") or 0 for e in executions), default=0) or None
     context_peak = max((e.get("context_tokens") or e.get("tokens", {}).get("input", 0) for e in executions), default=0)
@@ -1071,7 +1153,8 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
         "turns": len(series),
         "subagent_turns": side_turns,
         "cache_ratio": cache_ratio,
-        "cache_saved": cache_savings(tot, source["provider"], primary_model),
+        "cache_saved": cache["saved"],
+        "cache": cache,
         "burn_tok_min": total_tokens / minutes if elapsed else 0,
         "burn_usd_min": total_cost / minutes if elapsed else 0,
         "timing": {
@@ -1082,7 +1165,7 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
             "duration_s": int(elapsed),
             "duration": duration_label(elapsed),
             "timezone": time.tzname[time.localtime().tm_isdst > 0],
-            "end_label": "Ended" if idle > 90 else "Last activity",
+            "end_label": "Last activity",
         },
         "context": {
             "window": context_window,
@@ -1093,7 +1176,8 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
         },
         "elapsed_s": int(elapsed),
         "idle_s": int(idle),
-        "ended": idle > 90,
+        "idle": idle > 90,
+        "ended": False,
         "biggest_turn": biggest,
         "last_turn_cost": series[-1]["cost"] if series else 0,
         "series": series,
@@ -1132,7 +1216,7 @@ def enrich_insights(insights, executions, tool_data, context_window, context_lat
         ratio = unique_used / loaded if loaded else 0
         kind = "neutral" if ratio >= 0.25 else "warn"
         out.append({
-            "text": f"{loaded} tools loaded; {unique_used} used in this session",
+            "text": f"{loaded} tools loaded; {unique_used} used in this log",
             "kind": kind,
             "key": "tools-loaded",
         })
@@ -1162,11 +1246,44 @@ def cache_savings(tot, provider, model):
     return tot["cache_read"] * max(0, p["input"] - p["cache_read"]) / 1e6
 
 
+def cache_block(tot, cost, executions, provider, model):
+    fresh = int(tot.get("input", 0) or 0)
+    read = int(tot.get("cache_read", 0) or 0)
+    write = int(tot.get("cache_write", 0) or 0)
+    cached = read + write
+    input_total = fresh + cached
+    latest_tokens = (executions[-1].get("tokens") if executions else {}) or {}
+    latest_input = int(latest_tokens.get("input", 0) or 0)
+    latest_cache = int(latest_tokens.get("cache", 0) or 0)
+    latest_read = int(latest_tokens.get("cache_read", latest_cache) or 0)
+    latest_write = int(latest_tokens.get("cache_write", 0) or 0)
+    return {
+        "fresh": fresh,
+        "read": read,
+        "write": write,
+        "total": cached,
+        "input_total": input_total,
+        "hit_ratio": (read / cached) if cached else 0.0,
+        "input_share": (cached / input_total) if input_total else 0.0,
+        "saved": cache_savings(tot, provider, model),
+        "cost": (cost.get("cache_read", 0.0) or 0.0) + (cost.get("cache_write", 0.0) or 0.0),
+        "read_cost": cost.get("cache_read", 0.0) or 0.0,
+        "write_cost": cost.get("cache_write", 0.0) or 0.0,
+        "latest": {
+            "tokens": latest_cache,
+            "read": latest_read,
+            "write": latest_write,
+            "input": latest_input,
+            "share": (latest_cache / latest_input) if latest_input else 0.0,
+        },
+    }
+
+
 def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, provider, model, cost_approx):
     out = []
     if total_cost <= 0:
         return out
-    labels = {"input": "fresh input", "cache_write": "cache writes",
+    labels = {"input": "uncached input", "cache_write": "cache writes",
               "cache_read": "cached input", "output": "output"}
     top = max(cost, key=cost.get)
     out.append({"text": f"{labels[top]} is {cost[top] / total_cost * 100:.0f}% of spend (${cost[top]:.2f})",
@@ -1289,7 +1406,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "provider": source["provider"],
         "label": source["label"],
         "project": source.get("project") or "",
-        "title": title or source.get("title") or "(untitled session)",
+        "title": title or source.get("title") or "(untitled log)",
         "cost": cost,
         "cost_approx": bool(approx),
         "tokens": tokens,
@@ -1391,7 +1508,7 @@ def current_state():
         return st
     return {
         "ok": False,
-        "message": "No Claude Code or Codex session logs found yet.",
+        "message": "No Claude Code or Codex logs found yet.",
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -1502,8 +1619,8 @@ def menubar_recommendation(st):
 
     if st.get("ended"):
         return {
-            "label": "Review summary",
-            "detail": "Session is idle; use the dashboard post-mortem.",
+            "label": "Pinned log",
+            "detail": "This is a frozen log view; return to live to follow newest activity.",
             "severity": "idle",
             "target": "summary",
         }
@@ -1524,7 +1641,7 @@ def menubar_recommendation(st):
     if warn and ("tool-bloat" in (warn.get("key") or "") or "namespace-bloat" in (warn.get("key") or "")):
         return {
             "label": "Inspect tool output",
-            "detail": warn.get("text") or "Tool output is dominating the session.",
+            "detail": warn.get("text") or "Tool output is dominating the log.",
             "severity": "warn",
             "target": "tools",
         }
@@ -1568,6 +1685,7 @@ def menubar_state():
     st = current_state()
     source = st.get("source") or {}
     context = st.get("context") or {}
+    cache = st.get("cache") or {}
     activity = menubar_activity(st)
     return {
         "ok": bool(st.get("source")),
@@ -1585,6 +1703,18 @@ def menubar_state():
         "cost_approx": st.get("cost_approx", False),
         "total_tokens": st.get("total_tokens", 0),
         "turns": st.get("turns", 0),
+        "cache": {
+            "fresh": cache.get("fresh", 0),
+            "read": cache.get("read", 0),
+            "write": cache.get("write", 0),
+            "total": cache.get("total", 0),
+            "input_total": cache.get("input_total", 0),
+            "hit_ratio": cache.get("hit_ratio", 0),
+            "input_share": cache.get("input_share", 0),
+            "saved": cache.get("saved", 0),
+            "cost": cache.get("cost", 0),
+            "latest": cache.get("latest") or {},
+        },
         "context": {
             "latest": context.get("latest"),
             "window": context.get("window"),
@@ -1719,7 +1849,7 @@ class H(BaseHTTPRequestHandler):
                 st["xsession"] = cross_session()
                 st["ended"] = True
                 if st.get("timing"):
-                    st["timing"]["end_label"] = "Ended"
+                    st["timing"]["end_label"] = "Last activity"
             self._send(json.dumps(st or {}), "application/json")
         elif self.path == "/state":
             self._send(json.dumps(current_state()), "application/json")
@@ -1770,7 +1900,7 @@ if __name__ == "__main__":
     ThreadingHTTPServer.allow_reuse_address = True
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
-    print("Auto-following newest ~/.claude and ~/.codex session. Ctrl-C to stop.")
+    print("Auto-following newest ~/.claude and ~/.codex log. Ctrl-C to stop.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -1,8 +1,8 @@
 # Token Meter
 
-A local, live cost and activity dashboard for Claude Code and Codex sessions.
+A local, live cost and activity dashboard for Claude Code and Codex logs.
 
-Token Meter follows the newest local agent session log on your machine, parses
+Token Meter follows the newest local agent log on your machine, parses
 usage as it lands, and streams updates to a localhost dashboard. It is meant for
 the moment when a long agent run is still active and you need to know whether it
 is productive, expensive, stuck, or filling context.
@@ -20,35 +20,36 @@ machine.
 
 ## Features
 
-- **Live session cost**: shows the running session cost as logs are written,
-  with a hover breakdown for fresh input, cached input, cache writes, and
+- **Live log cost**: shows the running log/thread cost as entries are written,
+  with a hover breakdown for uncached input, cached input, cache writes, and
   output tokens.
 - **Token split**: separates input, output, thinking, and tool-result tokens so
   you can tell whether cost is coming from model output, cached context, or
   tool payloads.
-- **Auto-following**: tracks the newest Claude Code or Codex session across
-  local projects without requiring a command per session.
+- **Auto-following**: tracks the newest Claude Code or Codex log across local
+  projects without requiring a command per run.
 - **Execution trace**: normalizes messages, reasoning, tool calls, tool results,
   usage events, coordination events, and completion events into one timeline.
 - **Tool and MCP usage**: groups tools by namespace, call count, returned-token
   volume, and execution so large tool outputs are easy to spot.
 - **Efficiency signals**: highlights reasoning share, tool/retrieval bloat,
   coordination tax, cost per task, context pressure, and spend anomalies.
-- **Global view**: summarizes local spend across sessions, model mix, provider
-  mix, trend, anomalies, and newest sessions.
+- **Global view**: summarizes local spend across logs, model mix, provider mix,
+  trend, anomalies, and newest logs.
 - **Alerts and notifications**: can notify on budget crossings, execution cost
-  spikes, and notable session insights.
+  spikes, and notable log insights.
 - **macOS menu bar companion**: shows a compact live status item backed by the
   same local dashboard endpoint, with actions to open the full dashboard.
 - **Local-only operation**: reads local JSONL logs passively and does not
-  control your agent session or send telemetry anywhere.
+  control your agent or send telemetry anywhere.
 
 ## Requirements
 
-- Python 3.9 or newer.
-- Claude Code and/or Codex if you want live session data.
-- macOS with the Swift toolchain, usually from Xcode Command Line Tools, for
-  the menu bar companion.
+- Python 3.8 or newer. The macOS package first tries `/usr/bin/python3`, then
+  Homebrew and user `python3` installs.
+- Claude Code and/or Codex if you want live log data.
+- macOS with the Swift toolchain, usually from Xcode Command Line Tools, when
+  running from source. The macOS package includes a prebuilt menu bar binary.
 - `curl`, used by the helper scripts.
 
 The web dashboard has no third-party Python packages. `meter.py` uses only the
@@ -58,8 +59,66 @@ bar companion.
 
 ## Quick Start
 
-The recommended setup runs both the local dashboard server and the macOS menu
-bar companion:
+Choose one install path.
+
+### Option 1: Install The macOS Package
+
+This is the easiest path for most macOS users. Download the latest
+`TokenMeter-*.pkg` from the
+[project releases](https://github.com/Galileo-Agent-Labs/token-meter/releases),
+then open it with Finder. The installer may ask for an administrator password
+because it installs under `/Library/Application Support`.
+
+If you built the package locally, open the generated package:
+
+```bash
+open dist/TokenMeter-0.1.0.pkg
+```
+
+The installer:
+
+- installs Token Meter to `/Library/Application Support/Token Meter`
+- installs a per-user LaunchAgent at
+  `~/Library/LaunchAgents/com.token-meter.menubar.plist`
+- starts the local Python server
+- launches the prebuilt menu bar widget
+- writes runtime logs to `~/Library/Logs/Token Meter`
+
+After install, open the full dashboard at:
+
+```text
+http://localhost:8722
+```
+
+If no Claude Code or Codex logs exist yet, the dashboard will show an empty
+state. Start a Claude Code or Codex run, then refresh or leave the dashboard
+open; Token Meter will follow the newest local log automatically.
+
+Check that the local server is healthy:
+
+```bash
+curl http://127.0.0.1:8722/health
+```
+
+Package users do not need the Swift toolchain. They do need Python 3.8 or newer
+available as `/usr/bin/python3`, `/opt/homebrew/bin/python3`,
+`/usr/local/bin/python3`, or on `PATH` as `python3`.
+
+To update, install the newer `.pkg` the same way. The postinstall hook refreshes
+the installed files and restarts the Token Meter LaunchAgent.
+
+To uninstall a package install:
+
+```bash
+sudo "/Library/Application Support/Token Meter/bin/uninstall-token-meter"
+```
+
+Local unsigned packages can trigger macOS security prompts. Public distribution
+should use a Developer ID signed and notarized package.
+
+### Option 2: Traditional Source Method
+
+Use this path for development, local changes, or non-package installs:
 
 ```bash
 git clone https://github.com/Galileo-Agent-Labs/token-meter.git
@@ -74,22 +133,42 @@ dashboard at:
 http://localhost:8722
 ```
 
-If no Claude Code or Codex logs exist yet, the dashboard will show an empty
-state. Start a Claude Code or Codex session, then refresh or leave the dashboard
-open; Token Meter will follow the newest local session automatically.
-
 Check that the local server is healthy:
 
 ```bash
 curl http://127.0.0.1:8722/health
 ```
 
-Stop the server with `Ctrl-C` in the terminal that started it.
+Stop the foreground server with `Ctrl-C` in the terminal that started it.
+
+For source installs that should start automatically, see [Launch At Login](#launch-at-login).
+
+## Build The macOS Installer Package
+
+Maintainers can build a local installer package:
+
+```bash
+./packaging/build-pkg
+```
+
+The package is written to `dist/TokenMeter-0.1.0.pkg` by default. For the
+repeatable build checklist and verification commands, see
+[`packaging/BUILD_RECIPE.md`](packaging/BUILD_RECIPE.md).
+
+For a signed package, set the signing identities while building:
+
+```bash
+TOKEN_METER_CODESIGN_IDENTITY="Developer ID Application: Your Name" \
+TOKEN_METER_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Your Name" \
+./packaging/build-pkg
+```
+
+Public distribution should also be notarized with Apple.
 
 ## Launch At Login
 
-Install a macOS login item that starts both the local server and the menu bar
-companion:
+For source installs, install a macOS login item that starts both the local
+server and the menu bar companion:
 
 ```bash
 ./scripts/install-launch-agent
@@ -111,11 +190,11 @@ python3 meter.py
 ```
 
 The menu bar companion polls the local `/menubar` endpoint and shows compact
-status for the active session. It does not parse logs directly.
+status for the active log. It does not parse logs directly.
 
-## How It Finds Sessions
+## How It Finds Logs
 
-Token Meter reads local session stores:
+Token Meter reads local log stores:
 
 ```text
 Claude Code: ~/.claude/projects/*/*.jsonl
@@ -125,13 +204,12 @@ Codex:       ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 It picks the newest source by modification time and recomputes state whenever
 that source changes.
 
-The Global tab scans both stores and sorts sessions newest first. Clicking a
-session opens it as a frozen post-mortem; `Back to live` returns to the active
-newest session.
+The Global tab scans both stores and sorts logs newest first. Clicking a log
+opens it as a frozen view; `Back to live` returns to the active newest log.
 
 ## What The Dashboard Shows
 
-The Session tab includes:
+The Current tab includes:
 
 - Summary: live cost, tokens, burn rate, cache behavior, context pressure, and
   per-execution input/output trajectory.
@@ -140,15 +218,15 @@ The Session tab includes:
 - Tools: tool and MCP usage by namespace and execution.
 - Efficiency: reasoning share, model mix, tool/retrieval bloat, coordination
   tax, cost per task, and spend anomaly signals.
-- Insights: plain-language session signals.
+- Insights: plain-language log signals.
 - Alerts: budget and spike events.
 
 The Global tab includes:
 
-- Total spend across local Claude Code and Codex sessions.
+- Total spend across local Claude Code and Codex logs.
 - Provider and model mix.
 - 14-day spend trend with anomaly markers.
-- Newest-first session list with provider, project, models, tokens, and cost.
+- Newest-first log list with provider, project, models, tokens, and cost.
 
 ## Cost Notes
 
@@ -164,7 +242,7 @@ execution.
 ## Privacy
 
 Token Meter binds to `127.0.0.1` and serves only a local browser dashboard. It
-does not send session logs, prompts, responses, project paths, token counts, or
+does not send logs, prompts, responses, project paths, token counts, or
 costs to any external service.
 
 The dashboard can display local project paths, tool names, and trace metadata.
@@ -183,7 +261,7 @@ lsof -nP -iTCP:8722 -sTCP:LISTEN
 
 Stop the existing Token Meter process, or edit `PORT` in `meter.py`.
 
-### The dashboard says no sessions were found
+### The dashboard says no logs were found
 
 Confirm that at least one of these directories exists and contains JSONL logs:
 
@@ -249,7 +327,7 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8');
 python3 -c 'import meter; st=meter.recompute(meter.newest_source()); print(st["provider"], st["turns"], len(st["trace"]), st["tools"]["total_calls"])'
 ```
 
-The final command requires at least one local Claude Code or Codex session log.
+The final command requires at least one local Claude Code or Codex log.
 
 ## Repository Layout
 
@@ -262,6 +340,10 @@ The final command requires at least one local Claude Code or Codex session log.
 |   `-- menu-bar-widget.png          # README menu bar screenshot
 |-- menubar/
 |   `-- TokenMeterMenuBar.swift      # native macOS menu bar companion
+|-- packaging/
+|   |-- build-pkg                    # builds a macOS installer package
+|   |-- payload/bin/                 # scripts installed by the package
+|   `-- scripts/postinstall          # package install hook
 |-- scripts/
 |   |-- run-menubar                  # build and run the menu bar companion
 |   |-- start-token-meter            # start server if needed, then menu bar
@@ -286,6 +368,7 @@ page.html
 images/dashboard.png
 images/menu-bar-widget.png
 menubar/TokenMeterMenuBar.swift
+packaging/
 scripts/
 REQUIREMENTS.md
 CONTRIBUTING.md
@@ -294,7 +377,8 @@ SECURITY.md
 ```
 
 Do not commit local runtime artifacts such as `.DS_Store`, `*.log`,
-`__pycache__/`, or `.build/`. The included `.gitignore` covers those files.
+`__pycache__/`, `.build/`, or `dist/`. The included `.gitignore` covers those
+files.
 
 ## License
 

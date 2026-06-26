@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="${TOKEN_METER_VERSION:-0.1.0}"
+IDENTIFIER="${TOKEN_METER_PKG_IDENTIFIER:-com.galileo-agent-labs.token-meter}"
+INSTALL_REL="Library/Application Support/Token Meter"
+DIST="$ROOT/dist"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/token-meter-pkg.XXXXXX")"
+PKG="$DIST/TokenMeter-$VERSION.pkg"
+MENUBAR_SRC="$ROOT/menubar/TokenMeterMenuBar.swift"
+MENUBAR_OUT="$WORK/root/$INSTALL_REL/bin/token-meter-menubar"
+
+export COPYFILE_DISABLE=1
+export DITTONORSRC=1
+
+cleanup() {
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+copy_payload_file() {
+  local mode="$1"
+  local src="$2"
+  local dst="$3"
+  ditto --norsrc --noextattr --noacl "$src" "$dst"
+  chmod "$mode" "$dst"
+}
+
+strip_metadata_artifacts() {
+  local path
+  for path in "$WORK/root" "$WORK/scripts"; do
+    if [[ -d "$path" ]]; then
+      if command -v xattr >/dev/null 2>&1; then
+        xattr -cr "$path" || true
+      fi
+      find "$path" -name '._*' -delete
+    fi
+  done
+}
+
+clean_flat_pkg_metadata() {
+  local expanded="$WORK/expanded"
+  local payload_root="$WORK/payload-root"
+  local clean_pkg="$WORK/clean.pkg"
+
+  command -v pkgutil >/dev/null 2>&1 || return 0
+  command -v gzcat >/dev/null 2>&1 || return 0
+  command -v cpio >/dev/null 2>&1 || return 0
+  command -v mkbom >/dev/null 2>&1 || return 0
+
+  pkgutil --expand "$PKG" "$expanded"
+  mkdir -p "$payload_root"
+  (cd "$payload_root" && gzcat "$expanded/Payload" | cpio -idm >/dev/null 2>&1)
+  find "$payload_root" "$expanded" -name '._*' -delete
+  (cd "$payload_root" && find . | sort | COPYFILE_DISABLE=1 cpio -o --format odc 2>/dev/null | gzip -c > "$expanded/Payload")
+  mkbom "$payload_root" "$expanded/Bom"
+  pkgutil --flatten "$expanded" "$clean_pkg"
+  mv "$clean_pkg" "$PKG"
+}
+
+build_menubar() {
+  local arm64_bin="$WORK/token-meter-menubar-arm64"
+  local x64_bin="$WORK/token-meter-menubar-x86_64"
+  local deployment_target="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+  local module_cache="$WORK/swift-module-cache"
+  local fallback_arch
+
+  mkdir -p "$module_cache"
+  if [[ "$(uname -m)" == "x86_64" ]]; then
+    fallback_arch="x86_64"
+  else
+    fallback_arch="arm64"
+  fi
+
+  if MACOSX_DEPLOYMENT_TARGET="$deployment_target" swiftc -module-cache-path "$module_cache" -target arm64-apple-macosx"$deployment_target" "$MENUBAR_SRC" -o "$arm64_bin" >/dev/null 2>&1 &&
+     MACOSX_DEPLOYMENT_TARGET="$deployment_target" swiftc -module-cache-path "$module_cache" -target x86_64-apple-macosx"$deployment_target" "$MENUBAR_SRC" -o "$x64_bin" >/dev/null 2>&1 &&
+     command -v lipo >/dev/null 2>&1; then
+    lipo -create -output "$MENUBAR_OUT" "$arm64_bin" "$x64_bin"
+  else
+    echo "Universal menubar build failed; building for the current host architecture." >&2
+    MACOSX_DEPLOYMENT_TARGET="$deployment_target" swiftc -module-cache-path "$module_cache" -target "$fallback_arch-apple-macosx$deployment_target" "$MENUBAR_SRC" -o "$MENUBAR_OUT"
+  fi
+}
+
+mkdir -p "$WORK/root/$INSTALL_REL/bin" "$WORK/scripts" "$DIST"
+
+copy_payload_file 0644 "$ROOT/meter.py" "$WORK/root/$INSTALL_REL/meter.py"
+copy_payload_file 0644 "$ROOT/page.html" "$WORK/root/$INSTALL_REL/page.html"
+copy_payload_file 0644 "$ROOT/README.md" "$WORK/root/$INSTALL_REL/README.md"
+copy_payload_file 0644 "$ROOT/LICENSE" "$WORK/root/$INSTALL_REL/LICENSE"
+printf '%s\n' "$VERSION" > "$WORK/root/$INSTALL_REL/VERSION"
+chmod 644 "$WORK/root/$INSTALL_REL/VERSION"
+
+copy_payload_file 0755 "$ROOT/packaging/payload/bin/start-token-meter" "$WORK/root/$INSTALL_REL/bin/start-token-meter"
+copy_payload_file 0755 "$ROOT/packaging/payload/bin/uninstall-token-meter" "$WORK/root/$INSTALL_REL/bin/uninstall-token-meter"
+copy_payload_file 0755 "$ROOT/packaging/scripts/postinstall" "$WORK/scripts/postinstall"
+
+build_menubar
+chmod 0755 "$MENUBAR_OUT"
+
+if command -v codesign >/dev/null 2>&1; then
+  codesign --force --sign "${TOKEN_METER_CODESIGN_IDENTITY:--}" "$MENUBAR_OUT" >/dev/null
+fi
+
+strip_metadata_artifacts
+
+args=(
+  --root "$WORK/root"
+  --scripts "$WORK/scripts"
+  --filter '.*\._.*'
+  --filter '(^|/)\.DS_Store$'
+  --filter '(^|/)CVS(/|$)'
+  --filter '(^|/)\.svn(/|$)'
+  --identifier "$IDENTIFIER"
+  --version "$VERSION"
+  --install-location "/"
+  --ownership recommended
+)
+
+if [[ -n "${TOKEN_METER_INSTALLER_SIGN_IDENTITY:-}" ]]; then
+  args+=(--sign "$TOKEN_METER_INSTALLER_SIGN_IDENTITY")
+fi
+
+COPYFILE_DISABLE=1 pkgbuild "${args[@]}" "$PKG"
+clean_flat_pkg_metadata
+echo "$PKG"

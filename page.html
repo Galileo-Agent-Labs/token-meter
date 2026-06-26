@@ -11,7 +11,10 @@
  --accent:var(--orange); --good:#66d990; --warn:#ffb457; --bad:#ff6f6f;
  --reason:#ffb15c; --output:#ffd3aa; --retrieval:#ff8a3d; --coord:var(--orange2); --toolcall:#ff7045;
  --c-read:#ff7a1a; --c-write:#ff9f2f; --c-input:#ff7a1a; --c-output:#64d8ff;
+ --c-cache-read:#66d990; --c-cache-write:#ffb457; --c-cost:#c7a7ff; --c-context:#f6f8fb;
  --chart-input-fill:rgba(255,122,26,.16); --chart-output-fill:rgba(100,216,255,.16);
+ --chart-fresh-fill:rgba(255,122,26,.14); --chart-cache-read-fill:rgba(102,217,144,.18);
+ --chart-cache-write-fill:rgba(255,180,87,.18); --chart-cost-fill:rgba(199,167,255,.24);
  --chart-axis:#636d7b; --chart-grid:rgba(255,159,47,.18); --chart-label:#a8b3c1;
  --chart-tip:#05070a; --chart-tip-head:rgba(255,122,26,.16); --chart-tip-line:rgba(255,255,255,.42);
  --radius:8px; --shadow:0 1px 0 rgba(255,255,255,.055),0 18px 48px rgba(0,0,0,.36);
@@ -80,18 +83,29 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .costmeta>div{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.035);padding:9px 10px;box-shadow:var(--inset);min-width:0}
 .costmeta .v{font-size:13px;font-weight:780;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .costmeta .sm{font-size:11.5px;color:var(--faint)}
+.costsplit{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);min-width:0}
+.costsplit .splithead{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.costsplit .splithead .hint{font-size:11.5px;color:var(--faint)}
+.costsplit .bar{height:26px}
+.costsplit .legend{gap:10px;margin-top:8px}
 .meter.alert{background:none;color:var(--bad)}
 .subline{margin-top:10px;color:var(--dim);font-size:13px}.subline b{color:var(--fg)}
 .frozen{display:none;margin-top:10px;font-size:12px;color:var(--warn);font-weight:760}.frozen.on{display:block}
 .statgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
 .stat{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));border:1px solid var(--line);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow-soft);min-width:0}
 .stat .v{font-size:23px;font-weight:800;margin-top:4px;overflow:hidden;text-overflow:ellipsis}.stat .sm{font-size:11.5px;color:var(--faint)}
-.overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ov{padding:14px 15px;overflow:hidden;min-height:92px;min-width:0}.ov:before{content:"";position:absolute;left:14px;right:14px;top:0;height:2px;background:linear-gradient(90deg,var(--orange),transparent);opacity:.78}.ov .v{font-size:22px;font-weight:800;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ov.time .v{font-size:13px;line-height:1.35;letter-spacing:0;white-space:normal}.ov .sm{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.banner{display:none;background:linear-gradient(180deg,rgba(91,30,35,.72),rgba(42,23,24,.86));border:1px solid rgba(255,111,111,.38);color:#ffd6d8;padding:11px 14px;border-radius:8px;margin:0 0 14px;font-size:13px;font-weight:720;box-shadow:var(--shadow-soft)}.banner.on{display:block}
+.overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;position:relative;z-index:2}.ov{padding:14px 15px;overflow:visible;min-height:92px;min-width:0}.ov:hover,.ov:focus-within{z-index:24}.ov:before{content:"";position:absolute;left:14px;right:14px;top:0;height:2px;background:linear-gradient(90deg,var(--orange),transparent);opacity:.78}.ov .v{font-size:22px;font-weight:800;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ov.time .v{font-size:13px;line-height:1.35;letter-spacing:0;white-space:normal}.ov .sm{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.banner{display:none;background:linear-gradient(180deg,rgba(91,30,35,.72),rgba(42,23,24,.86));border:1px solid rgba(255,111,111,.38);color:#ffd6d8;padding:11px 14px;border-radius:8px;margin:0 0 14px;font-size:13px;font-weight:720;box-shadow:var(--shadow-soft);align-items:center;gap:12px;flex-wrap:wrap}.banner.on{display:flex}.banner .msg{flex:1 1 280px;min-width:0}.budgetadd{display:none;align-items:center;gap:8px;flex-wrap:wrap;color:var(--dim);font-weight:650}.banner.budget .budgetadd{display:inline-flex}.budgetadd label{display:flex;align-items:center;gap:6px}.budgetadd input{width:78px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:var(--fg);border-radius:8px;padding:6px 8px;font:inherit}.budgetadd input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,122,26,.12)}
 .bar{display:flex;height:32px;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.04);border:1px solid var(--line);box-shadow:inset 0 1px 10px rgba(0,0,0,.22)}
 .bar span{display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:780;min-width:0;transition:width .35s ease;white-space:nowrap}
 #sembar span{color:#07090c}
 .legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px;color:var(--dim)}.dot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
+.fieldtip{position:relative;display:inline-flex;align-items:center;cursor:help;outline:none}
+.fieldtip:focus-visible{color:var(--fg)}
+.fieldtip:after{content:attr(data-tip);position:absolute;left:0;bottom:calc(100% + 9px);z-index:12;display:none;width:max-content;max-width:min(320px,calc(100vw - 40px));white-space:normal;border:1px solid rgba(255,122,26,.42);border-radius:8px;background:linear-gradient(180deg,rgba(6,8,11,.98),rgba(15,21,28,.98));box-shadow:0 14px 32px rgba(0,0,0,.46);padding:8px 10px;color:var(--dim);font-size:12px;line-height:1.35;text-transform:none;font-weight:560}
+.section-h .fieldtip:after{bottom:auto;top:calc(100% + 9px);z-index:30}
+.overview .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}
+.fieldtip:hover:after,.fieldtip:focus:after{display:block}
 .tracebox{position:relative;max-height:380px;overflow:auto;padding:8px 4px 8px 0;scrollbar-color:var(--line2) transparent}
 .tracebox:before{content:"";position:absolute;top:10px;bottom:10px;left:104px;width:1px;background:linear-gradient(180deg,transparent,var(--line2),transparent)}
 .traceitem{display:grid;grid-template-columns:88px 22px minmax(0,1fr);gap:8px;align-items:start;padding:8px 8px 8px 0;margin:1px 0;border:1px solid transparent;border-radius:8px;animation:enter .22s ease;min-width:0}
@@ -101,8 +115,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .traceitem .node{width:10px;height:10px;border-radius:50%;margin-top:5px;background:var(--accent);box-shadow:0 0 0 4px #111820,0 0 18px rgba(255,122,26,.18)}
 .traceitem.reasoning .node{background:var(--reason)}.traceitem.tool .node{background:var(--toolcall)}.traceitem.retrieval .node{background:var(--retrieval)}.traceitem.coordination .node{background:var(--coord)}.traceitem.good .node{background:var(--good)}.traceitem.usage .node{background:var(--fg)}
 .traceitem .title{font-weight:720;font-size:13px}.traceitem .detail{font-size:12px;color:var(--dim);margin-top:1px}
-.chartbar{display:flex;align-items:center;gap:12px;margin-bottom:10px}.chartbar .label{margin-right:auto}
-.chartwrap{position:relative}.chart{height:252px;width:100%;display:block;background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:8px}.chart text{user-select:none}.charttip{position:absolute;z-index:4;display:none;min-width:238px;pointer-events:none;border:1px solid var(--orange);background:linear-gradient(180deg,rgba(5,7,10,.98),rgba(13,18,24,.98));border-radius:8px;box-shadow:0 16px 34px rgba(0,0,0,.55);overflow:hidden;font:12px/1.35 ui-monospace,"SF Mono",Menlo,monospace;color:var(--chart-label)}.charttip .h{padding:7px 10px;background:rgba(255,122,26,.16);font-weight:800;color:var(--fg)}.charttip .r{display:flex;justify-content:space-between;gap:16px;padding:3px 10px}.charttip .in{color:var(--c-input)}.charttip .out{color:var(--c-output)}
+.chartbar{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}.chartbar .label{margin-right:auto}.chartbar .seg{flex-wrap:wrap}
+.chartwrap{position:relative}.chart{height:252px;width:100%;display:block;background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:8px}.chart text{user-select:none}.charttip{position:absolute;z-index:4;display:none;min-width:238px;pointer-events:none;border:1px solid var(--orange);background:linear-gradient(180deg,rgba(5,7,10,.98),rgba(13,18,24,.98));border-radius:8px;box-shadow:0 16px 34px rgba(0,0,0,.55);overflow:hidden;font:12px/1.35 ui-monospace,"SF Mono",Menlo,monospace;color:var(--chart-label)}.charttip .h{padding:7px 10px;background:rgba(255,122,26,.16);font-weight:800;color:var(--fg)}.charttip .r{display:flex;justify-content:space-between;gap:16px;padding:3px 10px}.charttip .prompt{display:block;padding:6px 10px;border-top:1px solid rgba(255,255,255,.08);max-width:360px}.charttip .prompt span{display:block;color:var(--chart-label);margin-bottom:2px}.charttip .prompt b{display:block;color:var(--fg);font-weight:680;white-space:normal}.charttip .in,.charttip .fresh{color:var(--c-input)}.charttip .out{color:var(--c-output)}.charttip .cacheRead{color:var(--c-cache-read)}.charttip .cacheWrite{color:var(--c-cache-write)}.charttip .cost{color:var(--c-cost)}.charttip .context{color:var(--c-context)}
 .analyses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.a-card{padding:16px;overflow:hidden}.a-card h3{margin:0;font-size:13px;font-weight:780;display:flex;align-items:center;gap:8px}.a-card .tag{font-size:10px;color:var(--faint);border:1px solid var(--line);padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.035)}.a-card .big{font-size:30px;font-weight:820;margin:8px 0 2px}.a-card .note{font-size:12px;color:var(--dim)}.a-card.warn{border-color:rgba(242,185,94,.62)}
 .mini{height:8px;border-radius:5px;background:rgba(255,255,255,.045);overflow:hidden;margin:10px 0 4px;border:1px solid var(--line)}.mini>i{display:block;height:100%;border-radius:5px;transition:width .35s ease}
 .toolsgrid{display:grid;grid-template-columns:minmax(320px,.85fr) minmax(420px,1.15fr);gap:14px;align-items:stretch;height:min(500px,64vh);min-height:360px}
@@ -126,7 +140,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
  <div class=top>
   <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><path d="M8 20a8 8 0 0 1 16 0" stroke="#07100f" stroke-width="2.6" stroke-linecap="round"/><path d="M16 20l4.7-7.2" stroke="#07100f" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="20" r="2.3" fill="#07100f"/><path d="M8.4 23.7h15.2" stroke="#07100f" stroke-width="2.6" stroke-linecap="round"/><circle cx="9.8" cy="9.6" r="2.6" fill="#07100f"/><path d="M8.1 9.6h3.4" stroke="#ffb15c" stroke-width="1.1" stroke-linecap="round"/></svg></div> Token Meter</div>
   <div class=tabs>
-   <button class="tab on" id=tab-session>Session</button>
+   <button class="tab on" id=tab-session>Current</button>
    <button class=tab id=tab-global>Global</button>
   </div>
   <div class=spacer></div>
@@ -135,7 +149,13 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
  </div>
 
  <div class="view on" id=view-session>
-  <div class=banner id=banner></div>
+  <div class=banner id=banner>
+   <span class=msg id=banner-msg></span>
+   <span class=budgetadd id=budget-add-row>
+    <label>Add $<input id=budget-add type=number min=0.5 step=0.5 value=5></label>
+    <button class=tbtn id=budget-add-btn type=button>Add budget</button>
+   </span>
+  </div>
   <div class=sessionhead>
    <span class=badge id=s-provider>source</span>
    <span class=repo id=s-repo>--</span>
@@ -158,70 +178,72 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=hero>
    <div class="card costcard" tabindex=0>
     <div>
-     <div class=label>Session cost</div>
+     <div class="label fieldtip" tabindex=0 title="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it." data-tip="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it.">Current log cost</div>
      <div class="meter mono" id=cost>$0.00</div>
      <div class=subline id=sub></div>
     </div>
     <div class=costtip id=cost-tip></div>
     <div class=costmeta>
-     <div><div class=label>Started</div><div class="v mono" id=cost-start>--</div><div class=sm>local time</div></div>
-     <div><div class=label id=cost-end-label>Last activity</div><div class="v mono" id=cost-end>--</div><div class=sm>local time</div></div>
+     <div><div class="label fieldtip" tabindex=0 title="Local timestamp for the first observed event in this log/thread." data-tip="Local timestamp for the first observed event in this log/thread.">Started</div><div class="v mono" id=cost-start>--</div><div class=sm>local time</div></div>
+     <div><div class="label fieldtip" tabindex=0 id=cost-end-label title="Local timestamp for the newest observed event in this log/thread." data-tip="Local timestamp for the newest observed event in this log/thread.">Last activity</div><div class="v mono" id=cost-end>--</div><div class=sm>local time</div></div>
     </div>
-    <div class=frozen id=frozen>session ended - frozen post-mortem</div>
+    <div class=costsplit>
+     <div class=splithead><div class="label fieldtip" tabindex=0 title="Semantic split of where the current log's tokens went." data-tip="Semantic split of where the current log's tokens went.">Where tokens go</div><span class=hint>semantic split</span></div>
+     <div class=bar id=sembar></div>
+     <div class=legend>
+      <span class=fieldtip tabindex=0 title="Tokens associated with model reasoning or thinking output." data-tip="Tokens associated with model reasoning or thinking output."><i class=dot style=background:var(--reason)></i>reasoning</span>
+      <span class=fieldtip tabindex=0 title="Regular assistant output tokens." data-tip="Regular assistant output tokens."><i class=dot style=background:var(--output)></i>output</span>
+      <span class=fieldtip tabindex=0 title="Approximate tokens returned by tool results." data-tip="Approximate tokens returned by tool results."><i class=dot style=background:var(--retrieval)></i>retrieval</span>
+      <span class=fieldtip tabindex=0 title="Tokens and cost attributed to subagent or coordination executions." data-tip="Tokens and cost attributed to subagent or coordination executions."><i class=dot style=background:var(--coord)></i>coordination</span>
+     </div>
+    </div>
+    <div class=frozen id=frozen>pinned log - frozen view</div>
    </div>
    <div class=statgrid>
-    <div class=stat><div class=label>Input tokens</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
-    <div class=stat><div class=label>Output tokens</div><div class="v mono" id=output-tok>0</div><div class=sm id=output-toksm></div></div>
-    <div class=stat><div class=label>Thinking tokens</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
-    <div class=stat><div class=label>Tool result tokens</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
-    <div class=stat><div class=label>Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>cost velocity</div></div>
-    <div class=stat><div class=label>Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Total model input tokens, including uncached input, cache reads, and cache writes." data-tip="Total model input tokens, including uncached input, cache reads, and cache writes.">Input tokens</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Model output tokens produced by assistant executions." data-tip="Model output tokens produced by assistant executions.">Output tokens</div><div class="v mono" id=output-tok>0</div><div class=sm id=output-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking tokens</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool result tokens</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per minute over the observed log duration." data-tip="Estimated spend per minute over the observed log duration.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>cost velocity</div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated average cost per completed task or turn completion." data-tip="Estimated average cost per completed task or turn completion.">Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Input cached</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cached input</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated savings from cache reads versus charging those tokens at the normal input rate." data-tip="Estimated savings from cache reads versus charging those tokens at the normal input rate.">Cache saved</div><div class="v mono" id=cache-saved>$0</div><div class=sm id=cache-savedsm></div></div>
    </div>
   </div>
 
-  <div class=section-h><h2>Execution Overview</h2><span class=hint id=exec-hint></span></div>
+  <div class=section-h><h2><span class=fieldtip tabindex=0 title="High-level metrics for the current log/thread. Executions are individual model turns." data-tip="High-level metrics for the current log/thread. Executions are individual model turns.">Execution Overview</span></h2><span class=hint id=exec-hint></span></div>
   <div class=overview>
-   <div class="card ov"><div class=label>Duration</div><div class="v mono" id=ov-duration>0s</div><div class=sm id=ov-idle></div></div>
-   <div class="card ov"><div class=label>Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
-   <div class="card ov"><div class=label>Tools loaded</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
-   <div class="card ov"><div class=label>Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div></div>
-   <div class="card ov"><div class=label>Avg cost</div><div class="v mono" id=ov-avg>$0</div><div class=sm>per execution</div></div>
-   <div class="card ov"><div class=label>Tool calls</div><div class="v mono" id=ov-tools>0</div><div class=sm id=ov-tooltok></div></div>
-   <div class="card ov"><div class=label>Context peak</div><div class="v mono" id=ov-peak>0</div><div class=sm>max input tokens</div></div>
-   <div class="card ov"><div class=label>Priciest</div><div class="v mono" id=ov-big>$0</div><div class=sm id=ov-bigsm></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Elapsed time between the first and latest observed event in this log/thread." data-tip="Elapsed time between the first and latest observed event in this log/thread.">Duration</div><div class="v mono" id=ov-duration>0s</div><div class=sm id=ov-idle></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Tool definitions available to the agent, or observed unique tools when the loaded count is unknown." data-tip="Tool definitions available to the agent, or observed unique tools when the loaded count is unknown.">Tools loaded</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Number of priced model executions observed in this log/thread." data-tip="Number of priced model executions observed in this log/thread.">Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Estimated log/thread cost divided by execution count." data-tip="Estimated log/thread cost divided by execution count.">Avg cost</div><div class="v mono" id=ov-avg>$0</div><div class=sm>per execution</div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Total tool calls observed in this log/thread." data-tip="Total tool calls observed in this log/thread.">Tool calls</div><div class="v mono" id=ov-tools>0</div><div class=sm id=ov-tooltok></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Highest observed input/context token count in this log/thread." data-tip="Highest observed input/context token count in this log/thread.">Context peak</div><div class="v mono" id=ov-peak>0</div><div class=sm>max input tokens</div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Most expensive single execution in this log/thread." data-tip="Most expensive single execution in this log/thread.">Priciest</div><div class="v mono" id=ov-big>$0</div><div class=sm id=ov-bigsm></div></div>
   </div>
 
-  <div class=section-h><h2>Where Tokens Go</h2><span class=hint>semantic split</span></div>
-  <div class="card pad">
-   <div class=bar id=sembar></div>
-   <div class=legend>
-    <span><i class=dot style=background:var(--reason)></i>reasoning</span>
-    <span><i class=dot style=background:var(--output)></i>output</span>
-    <span><i class=dot style=background:var(--retrieval)></i>retrieval</span>
-    <span><i class=dot style=background:var(--coord)></i>coordination</span>
-   </div>
-  </div>
-
-  <div class=section-h><h2>Input / Output Per Execution</h2></div>
+  <div class=section-h><h2>Execution Profile</h2><span class=hint>per execution</span></div>
   <div class="card pad">
    <div class=chartbar>
-    <div class=label>Y scale</div>
+    <div class=label>Chart</div>
+    <div class=seg id=chart-mode>
+     <button class=fieldtip data-chart=context title="Show input/context pressure as a share of the model context window." data-tip="Show input/context pressure as a share of the model context window.">Context</button>
+     <button class=fieldtip data-chart=cache title="Focus on prompt-cache behavior: cache read, cache write, and uncached input." data-tip="Focus on prompt-cache behavior: cache read, cache write, and uncached input.">Cache</button>
+     <button class=fieldtip data-chart=cost title="Show estimated USD cost for each execution." data-tip="Show estimated USD cost for each execution.">Cost</button>
+    </div>
     <div class=seg id=scale>
-     <button data-scale=linear>Linear</button>
-     <button data-scale=sqrt>Sqrt</button>
-     <button data-scale=log>Log</button>
+     <button class=fieldtip data-scale=linear title="Use a normal proportional token scale." data-tip="Use a normal proportional token scale.">Linear</button>
+     <button class=fieldtip data-scale=sqrt title="Compress large spikes while keeping small values visible." data-tip="Compress large spikes while keeping small values visible.">Sqrt</button>
+     <button class=fieldtip data-scale=log title="Strongly compress large ranges; useful when spikes dominate the chart." data-tip="Strongly compress large ranges; useful when spikes dominate the chart.">Log</button>
     </div>
    </div>
    <div class=chartwrap>
     <svg class=chart id=iochart viewBox="0 0 1040 244" preserveAspectRatio=none></svg>
     <div class=charttip id=chart-tip></div>
    </div>
-   <div class=legend>
-    <span><i class=dot style=background:var(--c-input)></i>input</span>
-    <span><i class=dot style=background:var(--c-output)></i>output</span>
-    <span><i class=dot style=background:var(--toolcall)></i>tool-call execution</span>
-    <span><i class=dot style=background:var(--coord)></i>subagent/coordination</span>
-   </div>
+   <div class=legend id=chart-legend></div>
   </div>
   </div>
 
@@ -236,21 +258,21 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=section-h><h2>Tools &amp; MCP Usage</h2><span class=hint>by namespace and execution</span></div>
   <div class=toolsgrid>
    <div class="card pad">
-    <div class=label>Namespaces</div>
+    <div class="label fieldtip" tabindex=0 title="Tool usage grouped by namespace, such as shell, files, or MCP server namespace." data-tip="Tool usage grouped by namespace, such as shell, files, or MCP server namespace.">Namespaces</div>
     <div class=toolsScroll>
      <div class=subline id=tools-loaded-line style="margin-top:6px"></div>
      <div class=nslist id=namespaces style=margin-top:12px></div>
-     <table class=tbl id=tooltbl style=margin-top:14px><thead><tr><th>Tool</th><th>Namespace</th><th class=num>Calls</th><th class=num>Returned</th></tr></thead><tbody></tbody></table>
+     <table class=tbl id=tooltbl style=margin-top:14px><thead><tr><th title="Tool name observed in the log.">Tool</th><th title="Tool namespace or MCP namespace.">Namespace</th><th class=num title="Number of calls to this tool.">Calls</th><th class=num title="Approximate tokens returned by this tool.">Returned</th></tr></thead><tbody></tbody></table>
     </div>
    </div>
    <div class="card pad">
     <div class=toolhead>
-     <div><div class=label>Tools by execution</div><div class=toolnote id=exec-sort-note></div></div>
+     <div><div class="label fieldtip" tabindex=0 title="Tool calls grouped under each model execution." data-tip="Tool calls grouped under each model execution.">Tools by execution</div><div class=toolnote id=exec-sort-note></div></div>
      <div class="seg sortseg" id=exec-sort>
-      <button data-sort=time-desc>Time desc</button>
-      <button data-sort=time-asc>Time asc</button>
-      <button data-sort=max>Max</button>
-      <button data-sort=min>Min</button>
+      <button class=fieldtip data-sort=time-desc title="Newest executions first." data-tip="Newest executions first.">Time desc</button>
+      <button class=fieldtip data-sort=time-asc title="Oldest executions first." data-tip="Oldest executions first.">Time asc</button>
+      <button class=fieldtip data-sort=max title="Executions with the most returned tool tokens first." data-tip="Executions with the most returned tool tokens first.">Max</button>
+      <button class=fieldtip data-sort=min title="Executions with the fewest returned tool tokens first." data-tip="Executions with the fewest returned tool tokens first.">Min</button>
      </div>
     </div>
     <div class=execTools id=execTools></div>
@@ -262,26 +284,26 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=section-h><h2>Efficiency</h2></div>
   <div class=analyses>
    <div class="card a-card" id=card-reason>
-    <h3>Reasoning Share</h3>
+    <h3><span class=fieldtip tabindex=0 title="Share of output tokens attributed to reasoning or thinking." data-tip="Share of output tokens attributed to reasoning or thinking.">Reasoning Share</span></h3>
     <div class="big mono" id=reason-pct>--</div>
     <div class=mini><i id=reason-bar style=background:var(--reason)></i></div>
     <div class=note id=reason-note></div>
    </div>
    <div class="card a-card" id=card-coord>
-    <h3>Coordination Tax</h3>
+    <h3><span class=fieldtip tabindex=0 title="Share of cost spent on subagent or coordination executions." data-tip="Share of cost spent on subagent or coordination executions.">Coordination Tax</span></h3>
     <div class="big mono" id=coord-pct>--</div>
     <div class=mini><i id=coord-bar style=background:var(--coord)></i></div>
     <div class=note id=coord-note></div>
    </div>
    <div class="card a-card" style="grid-column:1/-1">
-    <h3>Tool Retrieval Bloat <span class=tag>context tax</span></h3>
-    <table class=tbl id=bloat style=margin-top:10px><thead><tr><th>Tool</th><th class=num>Calls</th><th class=num>Returned tokens</th></tr></thead><tbody></tbody></table>
+    <h3><span class=fieldtip tabindex=0 title="Tools that returned the most content back into the log context." data-tip="Tools that returned the most content back into the log context.">Tool Retrieval Bloat</span> <span class=tag>context tax</span></h3>
+    <table class=tbl id=bloat style=margin-top:10px><thead><tr><th title="Tool name.">Tool</th><th class=num title="Number of calls.">Calls</th><th class=num title="Approximate tokens returned into context.">Returned tokens</th></tr></thead><tbody></tbody></table>
    </div>
   </div>
   </div>
 
   <div class=session-panel id=panel-insights>
-  <div class=section-h><h2>Insights</h2><span class=hint>session signals</span></div>
+  <div class=section-h><h2>Insights</h2><span class=hint>log signals</span></div>
   <div class=insights id=insights></div>
   </div>
 
@@ -289,28 +311,28 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=section-h><h2>Alerts</h2><span class=hint>browser notifications and history</span></div>
   <div class=notifygrid>
   <div class=cfg>
-   <label>Budget $<input id=budget type=number min=0 step=0.5 value=5></label>
-   <label>Spike if execution &gt; $<input id=spike type=number min=0 step=0.1 value=0.50></label>
-   <button class=tbtn id=notify-test>Test notification</button>
+   <label><span class=fieldtip tabindex=0 title="Notify when total current-log cost passes this dollar amount." data-tip="Notify when total current-log cost passes this dollar amount.">Budget $</span><input id=budget type=number min=0 step=0.5 value=10></label>
+   <label><span class=fieldtip tabindex=0 title="Notify when a single execution costs more than this dollar amount." data-tip="Notify when a single execution costs more than this dollar amount.">Spike if execution &gt; $</span><input id=spike type=number min=0 step=0.1 value=0.50></label>
+   <button class="tbtn fieldtip" id=notify-test title="Send a browser notification test using the current permission state." data-tip="Send a browser notification test using the current permission state.">Test notification</button>
    <span class=cfgnote id=notify-state></span>
    <span class=spacer></span>
   </div>
   <div class="card pad">
-   <div class=label>Notification log</div>
+   <div class="label fieldtip" tabindex=0 title="Recent Token Meter notifications shown in this browser." data-tip="Recent Token Meter notifications shown in this browser.">Notification log</div>
    <div class=notifylog id=notify-log style=margin-top:10px></div>
   </div>
   </div>
   </div>
-  <div class=foot>Local-only · reads <span class=mono>~/.claude</span> and <span class=mono>~/.codex</span> session logs · settings saved in this browser</div>
+  <div class=foot>Local-only · reads <span class=mono>~/.claude</span> and <span class=mono>~/.codex</span> logs · settings saved in this browser</div>
  </div>
 
  <div class=view id=view-global>
   <div class=glob-hero>
-   <div class="card pad"><div class=label>Total spend</div><div class="meter mono" id=g-cost style=font-size:44px>$0</div><div class=subline id=g-sub></div></div>
-   <div class="card pad"><div class=label>Model mix</div><div id=g-mm style=margin-top:12px></div></div>
-   <div class="card pad"><div class=label>Spend trend · 14d</div><div class=spark id=g-spark></div><div class=subline id=g-trend style=margin-top:8px></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Estimated total spend across discovered local Claude and Codex logs." data-tip="Estimated total spend across discovered local Claude and Codex logs.">Total spend</div><div class="meter mono" id=g-cost style=font-size:44px>$0</div><div class=subline id=g-sub></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Spend split by model across discovered local logs." data-tip="Spend split by model across discovered local logs.">Model mix</div><div id=g-mm style=margin-top:12px></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Daily estimated spend over the most recent logged days." data-tip="Daily estimated spend over the most recent logged days.">Spend trend · 14d</div><div class=spark id=g-spark></div><div class=subline id=g-trend style=margin-top:8px></div></div>
   </div>
-  <div class=section-h><h2>Sessions</h2><span class=hint>newest first</span></div>
+  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint>newest first</span></div>
   <div class=slist id=slist></div>
  </div>
 </div>
@@ -322,6 +344,14 @@ const f=n=>Math.round(n||0).toLocaleString();
 const money=n=>'$'+(Math.abs(n||0)>=1?(n||0).toFixed(2):(n||0).toFixed(3));
 const pct=n=>Math.round((n||0)*100)+'%';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function idleLabel(seconds){
+ seconds=Math.max(0,Math.round(seconds||0));
+ if(seconds<60) return seconds+'s idle';
+ const minutes=Math.floor(seconds/60);
+ if(minutes<60) return minutes+'m idle';
+ const hours=Math.floor(minutes/60), rem=minutes%60;
+ return hours+'h '+String(rem).padStart(2,'0')+'m idle';
+}
 function dt12(v){
  const s=String(v||'');
  if(/\b[ap]m\b/i.test(s)) return s.toLowerCase();
@@ -335,12 +365,12 @@ function costTipHtml(s,tok){
  const rate=(usd,tokens)=>tokens?money((usd||0)*1e6/tokens):'$0.000';
  const row=(name,tokens,usd)=>tokens||usd?`<div class=r><span class=name>${name}</span><span class=formula>${f(tokens)} x ${rate(usd,tokens)} / 1M</span><span class=amt>${money(usd)}</span></div>`:'';
  const rows=[
-  row('Fresh input',tok.input||0,cost.input||0),
+  row('Uncached input',tok.input||0,cost.input||0),
   row('Cached input',tok.cache_read||0,cost.cache_read||0),
   row('Cache write',tok.cache_write||0,cost.cache_write||0),
   row('Output',tok.output||0,cost.output||0),
  ].join('');
- return `<div class=h>Cost calculation</div>${rows}<div class=total><span>Total</span><span>${money(s.total_cost||0)}${s.cost_approx?' est':''}</span></div><div class=note>${s.cost_approx?'Estimated with public API rates. ':''}Cached input is priced separately from fresh input.</div>`;
+ return `<div class=h>Cost calculation</div>${rows}<div class=total><span>Total</span><span>${money(s.total_cost||0)}${s.cost_approx?' est':''}</span></div><div class=note>${s.cost_approx?'Estimated with public API rates. ':''}Cached input is priced separately from uncached input.</div>`;
 }
 let LATEST=null, CURRENT=null, pinned=null;
 
@@ -511,10 +541,39 @@ $('notify-test').onclick=()=>{
  requestNotify('test');
 };
 
+const ALERT_DEFAULTS={budget:'10',spike:'0.50'};
 ['budget','spike'].forEach(id=>{
  const v=localStorage.getItem('tm_'+id); if(v!==null)$(id).value=v;
+ if(!$(id).value&&ALERT_DEFAULTS[id]) $(id).value=ALERT_DEFAULTS[id];
  $(id).addEventListener('input',()=>{ localStorage.setItem('tm_'+id,$(id).value); if(LATEST&&!pinned)renderSession(LATEST); });
 });
+function dollarInputValue(id,fallback=1e9){
+ const n=parseFloat($(id)?.value);
+ return Number.isFinite(n)&&n>0?n:fallback;
+}
+function formatBudgetInput(n){
+ n=Math.max(0,Math.ceil((n||0)*2)/2);
+ return Number.isInteger(n)?String(n):n.toFixed(1);
+}
+function setBudgetCap(n){
+ const value=formatBudgetInput(n);
+ $('budget').value=value;
+ localStorage.setItem('tm_budget',value);
+ return parseFloat(value);
+}
+function extendBudget(){
+ if(!CURRENT) return;
+ const add=parseFloat($('budget-add').value);
+ if(!Number.isFinite(add)||add<=0){ setNotifyState('Enter a positive budget amount.'); return; }
+ const currentCost=+(CURRENT.total_cost||0);
+ const currentCap=dollarInputValue('budget',0);
+ const next=setBudgetCap(Math.max(currentCap,currentCost)+add);
+ setNotifyState('Budget raised to '+money(next)+'.');
+ pushAppNotice('Budget updated','Current log budget raised to '+money(next)+'.','neutral',{status:'Budget updated'});
+ renderSession(CURRENT);
+}
+$('budget-add-btn').onclick=extendBudget;
+$('budget-add').addEventListener('keydown',e=>{ if(e.key==='Enter') extendBudget(); });
 
 let chartScale=localStorage.getItem('tm_chart_scale')||'linear';
 function paintScale(){
@@ -522,6 +581,18 @@ function paintScale(){
 }
 $('scale').onclick=e=>{ if(e.target.dataset.scale){ chartScale=e.target.dataset.scale; localStorage.setItem('tm_chart_scale',chartScale); paintScale(); if(CURRENT) drawIO(CURRENT.series||[]); } };
 paintScale();
+
+const CHART_MODES=['context','cache','cost'];
+let chartMode=localStorage.getItem('tm_chart_mode')||'context';
+if(!CHART_MODES.includes(chartMode)){
+ chartMode='context';
+ localStorage.setItem('tm_chart_mode',chartMode);
+}
+function paintChartMode(){
+ [...$('chart-mode').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.chart===chartMode));
+}
+$('chart-mode').onclick=e=>{ if(e.target.dataset.chart){ chartMode=e.target.dataset.chart; localStorage.setItem('tm_chart_mode',chartMode); paintChartMode(); if(CURRENT) drawIO(CURRENT.series||[]); } };
+paintChartMode();
 
 let execSort=localStorage.getItem('tm_exec_sort')||'time-desc';
 function paintExecSort(){
@@ -535,7 +606,11 @@ paintExecSort();
 const cssVar=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const CHART={
  input:cssVar('--c-input'),output:cssVar('--c-output'),tool:cssVar('--toolcall'),side:cssVar('--orange2'),
+ cacheRead:cssVar('--c-cache-read'),cacheWrite:cssVar('--c-cache-write'),cost:cssVar('--c-cost'),context:cssVar('--c-context'),
+ reason:cssVar('--reason'),muted:'rgba(255,255,255,.26)',
  inputFill:cssVar('--chart-input-fill'),outputFill:cssVar('--chart-output-fill'),
+ freshFill:cssVar('--chart-fresh-fill'),cacheReadFill:cssVar('--chart-cache-read-fill'),
+ cacheWriteFill:cssVar('--chart-cache-write-fill'),costFill:cssVar('--chart-cost-fill'),
  axis:cssVar('--chart-axis'),grid:cssVar('--chart-grid'),lbl:cssVar('--chart-label'),
  tip:cssVar('--chart-tip'),tipHead:cssVar('--chart-tip-head'),tipLine:cssVar('--chart-tip-line')
 };
@@ -558,47 +633,137 @@ function ticks(maxV,scale){
  }
  return [0,.25,.5,.75,1].map(x=>x*maxV);
 }
+function moneyTick(n){
+ n=n||0;
+ return '$'+(Math.abs(n)>=1?n.toFixed(2):(Math.abs(n)>=.01?n.toFixed(3):n.toFixed(4)));
+}
+function tipAttrs(text){
+ const safe=esc(text);
+ return `class=fieldtip tabindex=0 title="${safe}" data-tip="${safe}"`;
+}
+function legendField(label,color,tip){
+ return `<span ${tipAttrs(tip)}><i class=dot style="background:${color}"></i>${esc(label)}</span>`;
+}
+function chartLegendHtml(mode){
+ const eventMarks=[
+  legendField('notable tools','var(--toolcall)','Executions with unusually high tool-call count for this log/thread.'),
+  legendField('notable reasoning','var(--reason)','Executions with unusually high reasoning tokens for this log/thread.'),
+  legendField('coordination','var(--coord)','Subagent or coordination executions when the log marks them separately.'),
+ ].join('');
+ if(mode==='context') return [
+  legendField('context','var(--c-context)','Input tokens as a share of the model context window for each execution.'),
+  legendField('70% watch','var(--warn)','Watch threshold: context is getting large enough to consider summarizing or narrowing tool output.'),
+  legendField('85% high','var(--bad)','High threshold: context is close to the model window limit.'),
+ ].join('')+eventMarks;
+ if(mode==='cache') return [
+  legendField('cache read','var(--c-cache-read)','Input tokens served from the provider prompt cache. These are usually cheaper than uncached input.'),
+  legendField('cache write','var(--c-cache-write)','Input tokens written into the provider prompt cache for possible reuse later. Some providers may report zero.'),
+  legendField('uncached input','var(--c-input)','Input tokens charged as normal input because they were new or did not hit prompt cache.'),
+  legendField('output','var(--c-output)','Model output tokens produced by the execution.'),
+ ].join('')+eventMarks;
+ if(mode==='cost') return legendField('execution cost','var(--c-cost)','Estimated USD cost for this execution using the configured public API rates.')+eventMarks;
+ return chartLegendHtml('context');
+}
+function chartParts(s){
+ let read=+(s.cache_read||0), write=+(s.cache_write||0);
+ const legacyCache=+(s.cache||0);
+ if(!read&&!write&&legacyCache) read=legacyCache;
+ const cache=read+write, rawFresh=s.fresh_input;
+ const fresh=Number.isFinite(+rawFresh)?Math.max(0,+rawFresh):Math.max(0,+(s.in||0)-cache);
+ const total=Math.max(+(s.in||0),fresh+cache);
+ const ctx=s.context_pct===undefined||s.context_pct===null?null:+s.context_pct;
+ return {fresh,read,write,cache,total,out:+(s.out||0),cost:+(s.cost||0),context:ctx,reason:+(s.reasoning||0),tools:+(s.tools||0)};
+}
 function drawIO(series){
- const svg=$('iochart'), VW=1040, VH=244, ML=58, MR=16, MT=14, MB=34, PW=VW-ML-MR, PH=VH-MT-MB;
+ const svg=$('iochart'), VW=1040, VH=244, ML=58, MR=16, MT=14, MB=42, PW=VW-ML-MR, PH=VH-MT-MB;
  const tip=$('chart-tip');
+ const mode=CHART_MODES.includes(chartMode)?chartMode:'context';
+ const legend=$('chart-legend'); if(legend) legend.innerHTML=chartLegendHtml(mode);
  const n=series.length; if(!n){svg.innerHTML='<text x=520 y=122 text-anchor=middle fill="'+CHART.lbl+'">no executions yet</text>'; if(tip)tip.style.display='none'; return;}
- const maxV=Math.max(10,...series.map(s=>Math.max(s.in||0,s.out||0)));
+ const parts=series.map(chartParts), scaleMode=mode==='cache'?chartScale:'linear';
+ const maxCache=Math.max(10,...parts.map(p=>Math.max(p.cache,p.fresh,p.out)));
+ const maxCost=Math.max(.001,...parts.map(p=>p.cost));
+ const maxV=mode==='cost'?maxCost:(mode==='context'?1:maxCache);
  const x=i=>ML+(n<=1?PW/2:i/(n-1)*PW);
- const y=v=>MT+PH-scaledY(v,maxV,chartScale)*PH;
+ const y=v=>MT+PH-scaledY(v,maxV,scaleMode)*PH;
  const T=`font:11px ui-monospace,Menlo,monospace;fill:${CHART.lbl}`;
  let grid='',ylbl='';
- ticks(maxV,chartScale).forEach(v=>{ const yy=y(v).toFixed(1); grid+=`<line x1=${ML} y1=${yy} x2=${VW-MR} y2=${yy} stroke="${CHART.grid}" stroke-dasharray="3 4"/>`; ylbl+=`<text x=${ML-8} y=${(+yy+4).toFixed(1)} text-anchor=end style="${T}">${fmtTick(v)}</text>`; });
+ const fmtY=v=>mode==='cost'?moneyTick(v):(mode==='context'?pct(v):fmtTick(v));
+ ticks(maxV,scaleMode).forEach(v=>{ const yy=y(v).toFixed(1); grid+=`<line x1=${ML} y1=${yy} x2=${VW-MR} y2=${yy} stroke="${CHART.grid}" stroke-dasharray="3 4"/>`; ylbl+=`<text x=${ML-8} y=${(+yy+4).toFixed(1)} text-anchor=end style="${T}">${fmtY(v)}</text>`; });
  const axes=`<line x1=${ML} y1=${MT} x2=${ML} y2=${MT+PH} stroke="${CHART.axis}"/><line x1=${ML} y1=${MT+PH} x2=${VW-MR} y2=${MT+PH} stroke="${CHART.axis}"/>`;
  let xlbl=''; [0,n-1,Math.floor((n-1)/2),Math.floor((n-1)/4),Math.floor(3*(n-1)/4)].forEach(i=>{ if(i>=0&&i<n) xlbl+=`<text x=${x(i).toFixed(1)} y=${VH-16} text-anchor=middle style="${T}">${series[i].i}</text>`; });
- const line=(key,col,w=2.4)=>{ let d=''; series.forEach((s,i)=>{ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(s[key]||0).toFixed(1); }); return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`; };
- const area=(key,col)=>{ let d=`M${ML} ${MT+PH}`; series.forEach((s,i)=>{d+=` L${x(i).toFixed(1)} ${y(s[key]||0).toFixed(1)}`;}); d+=` L${(ML+(n<=1?PW/2:PW)).toFixed(1)} ${MT+PH} Z`; return `<path d="${d}" fill="${col}"/>`; };
- let marks=''; series.forEach((s,i)=>{ if(s.side) marks+=`<circle cx="${x(i).toFixed(1)}" cy="${MT+8}" r="3.2" fill="${CHART.side}"/>`; else if(s.tools) marks+=`<circle cx="${x(i).toFixed(1)}" cy="${MT+8}" r="2.8" fill="${CHART.tool}"/>`; });
- const titles=`<text x=${(ML+PW/2).toFixed(1)} y=${VH-1} text-anchor=middle style="${T}">execution</text><text x=14 y=${(MT+PH/2).toFixed(1)} text-anchor=middle transform="rotate(-90 14 ${(MT+PH/2).toFixed(1)})" style="${T}">tokens</text>`;
+ const lineVals=(vals,col,w=2.4,dash='')=>{
+  let d='',open=false;
+  vals.forEach((v,i)=>{ if(v===null||v===undefined||Number.isNaN(v)){open=false;return;} d+=(open?' L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1); open=true; });
+  return d?`<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${dash?` stroke-dasharray="${dash}"`:''}/>`:'';
+ };
+ const band=(top,bottom,col)=>{
+  let d='';
+  top.forEach((v,i)=>{ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(v||0).toFixed(1); });
+  for(let i=bottom.length-1;i>=0;i--) d+=' L'+x(i).toFixed(1)+' '+y(bottom[i]||0).toFixed(1);
+  return `<path d="${d} Z" fill="${col}"/>`;
+ };
+ const bars=(vals,col)=>{
+  const bw=Math.max(2,Math.min(22,PW/Math.max(1,n)/1.85));
+  return vals.map((v,i)=>{ const yy=y(v||0), h=MT+PH-yy; return `<rect x="${(x(i)-bw/2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" rx="2" fill="${col}"/>`; }).join('');
+ };
+ const zeros=parts.map(()=>0), fresh=parts.map(p=>p.fresh);
+ const cacheRead=parts.map(p=>p.read), cacheTop=parts.map(p=>p.cache), output=parts.map(p=>p.out), costs=parts.map(p=>p.cost), contexts=parts.map(p=>p.context);
+ const nonZeroSorted=(vals)=>vals.filter(v=>v>0).sort((a,b)=>a-b);
+ const percentile=(vals,q,fallback=0)=>{ vals=nonZeroSorted(vals); return vals.length?vals[Math.min(vals.length-1,Math.floor((vals.length-1)*q))]:fallback; };
+ const toolCut=Math.max(3,percentile(parts.map(p=>p.tools),.85,0));
+ const reasonCut=Math.max(1000,percentile(parts.map(p=>p.reason),.85,0));
+ let plot='';
+ if(mode==='context'){
+  plot+=`<rect x="${ML}" y="${y(1).toFixed(1)}" width="${PW}" height="${(y(.85)-y(1)).toFixed(1)}" fill="rgba(255,111,111,.08)"/><rect x="${ML}" y="${y(.85).toFixed(1)}" width="${PW}" height="${(y(.7)-y(.85)).toFixed(1)}" fill="rgba(255,180,87,.07)"/>`;
+  plot+=`<line x1="${ML}" y1="${y(.85).toFixed(1)}" x2="${VW-MR}" y2="${y(.85).toFixed(1)}" stroke="${CHART.cost}" stroke-dasharray="5 5" opacity=".75"/><line x1="${ML}" y1="${y(.7).toFixed(1)}" x2="${VW-MR}" y2="${y(.7).toFixed(1)}" stroke="${CHART.cacheWrite}" stroke-dasharray="5 5" opacity=".75"/>`;
+  plot+=contexts.some(v=>v!==null)?lineVals(contexts,CHART.context,2.7):`<text x=520 y=122 text-anchor=middle fill="${CHART.lbl}">context data unavailable</text>`;
+ }else if(mode==='cache'){
+  plot+=band(cacheRead,zeros,CHART.cacheReadFill)+band(cacheTop,cacheRead,CHART.cacheWriteFill);
+  plot+=lineVals(cacheTop,CHART.cacheRead,2.6)+lineVals(fresh,CHART.input,1.9,'5 4')+lineVals(output,CHART.output,1.9,'4 4');
+ }else{
+  plot+=bars(costs,CHART.costFill)+lineVals(costs,CHART.cost,2.4);
+ }
+ let marks='';
+ series.forEach((s,i)=>{
+  const p=parts[i], xx=x(i), y0=MT+PH+6;
+  if(p.tools>=toolCut) marks+=`<line x1="${(xx-3).toFixed(1)}" y1="${(y0-7).toFixed(1)}" x2="${(xx-3).toFixed(1)}" y2="${y0.toFixed(1)}" stroke="${CHART.tool}" stroke-width="2.2" stroke-linecap="round" opacity=".75"/>`;
+  if(p.reason>=reasonCut) marks+=`<line x1="${(xx+3).toFixed(1)}" y1="${(y0-7).toFixed(1)}" x2="${(xx+3).toFixed(1)}" y2="${y0.toFixed(1)}" stroke="${CHART.reason}" stroke-width="2.2" stroke-linecap="round" opacity=".75"/>`;
+  if(s.side) marks+=`<circle cx="${xx.toFixed(1)}" cy="${(y0-3).toFixed(1)}" r="3" fill="${CHART.side}" opacity=".85"/>`;
+ });
+ const titles=`<text x=${(ML+PW/2).toFixed(1)} y=${VH-1} text-anchor=middle style="${T}">execution</text><text x=14 y=${(MT+PH/2).toFixed(1)} text-anchor=middle transform="rotate(-90 14 ${(MT+PH/2).toFixed(1)})" style="${T}">${mode==='cost'?'usd':(mode==='context'?'context':'tokens')}</text>`;
  const hover=`<rect id=ch-hit x=${ML} y=${MT} width=${PW} height=${PH} fill="transparent" pointer-events="all"/><g id=chart-hover opacity=0 style="pointer-events:none">
   <line id=ch-x y1=${MT} y2=${MT+PH} stroke="${CHART.tipLine}" stroke-dasharray="4 4"/>
-  <circle id=ch-in r=4.5 fill="${CHART.input}" stroke="#07090c" stroke-width=2/>
-  <circle id=ch-out r=4.5 fill="${CHART.output}" stroke="#07090c" stroke-width=2/>
+  <circle id=ch-a r=4.8 fill="${CHART.input}" stroke="#07090c" stroke-width=2/>
+  <circle id=ch-b r=4.4 fill="${CHART.output}" stroke="#07090c" stroke-width=2/>
  </g>`;
- svg.innerHTML=grid+axes+ylbl+xlbl+area('in',CHART.inputFill)+area('out',CHART.outputFill)+line('in',CHART.input,2.6)+line('out',CHART.output,2.4)+marks+titles+hover;
+ svg.innerHTML=grid+axes+ylbl+xlbl+plot+marks+titles+hover;
  const hoverGroup=svg.querySelector('#chart-hover'), hit=svg.querySelector('#ch-hit');
  const setAttr=(id,attrs)=>{const el=svg.querySelector(id); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,v));};
  function hoverAt(clientX,clientY){
   const pt=svg.createSVGPoint(); pt.x=clientX; pt.y=clientY;
   const cur=pt.matrixTransform(svg.getScreenCTM().inverse());
   const idx=Math.max(0,Math.min(n-1,Math.round((cur.x-ML)/PW*(n-1))));
-  const s=series[idx], xx=x(idx), yin=y(s.in||0), yout=y(s.out||0);
+  const s=series[idx], p=parts[idx], xx=x(idx);
+  let primary=p.total, primaryColor=CHART.input, secondary=p.out, secondaryColor=CHART.output;
+  if(mode==='cache'){ primary=p.cache; primaryColor=CHART.cacheRead; secondary=p.fresh; secondaryColor=CHART.input; }
+  if(mode==='cost'){ primary=p.cost; primaryColor=CHART.cost; secondary=null; }
+  if(mode==='context'){ primary=p.context; primaryColor=CHART.context; secondary=null; }
+  const yPrimary=primary===null||primary===undefined?MT+PH:y(primary), ySecondary=secondary===null||secondary===undefined?null:y(secondary);
   hoverGroup.setAttribute('opacity','1');
   setAttr('#ch-x',{x1:xx.toFixed(1),x2:xx.toFixed(1)});
-  setAttr('#ch-in',{cx:xx.toFixed(1),cy:yin.toFixed(1)});
-  setAttr('#ch-out',{cx:xx.toFixed(1),cy:yout.toFixed(1)});
+  setAttr('#ch-a',{cx:xx.toFixed(1),cy:yPrimary.toFixed(1),fill:primaryColor,opacity:primary===null||primary===undefined?0:1});
+  setAttr('#ch-b',{cx:xx.toFixed(1),cy:(ySecondary??yPrimary).toFixed(1),fill:secondaryColor,opacity:ySecondary===null?0:1});
   if(tip){
-   const sx=svg.clientWidth/VW, sy=svg.clientHeight/VH, w=252, h=104;
+   const sx=svg.clientWidth/VW, sy=svg.clientHeight/VH, w=360, h=272;
    const left=Math.min(Math.max(xx*sx+14,8),Math.max(8,svg.clientWidth-w-8));
-   const top=Math.min(Math.max(Math.min(yin,yout)*sy-112,8),Math.max(8,svg.clientHeight-h-8));
+   const top=Math.min(Math.max(Math.min(yPrimary,ySecondary??yPrimary)*sy-112,8),Math.max(8,svg.clientHeight-h-8));
    tip.style.display='block';
    tip.style.left=left+'px';
    tip.style.top=top+'px';
-   tip.innerHTML=`<div class=h>execution #${esc(s.i??idx+1)}</div><div class="r in"><span>input</span><b>${f(s.in||0)}</b></div><div class="r out"><span>output</span><b>${f(s.out||0)}</b></div><div class=r><span>cache</span><b>${f(s.cache||0)}</b></div><div class=r><span>total</span><b>${f((s.in||0)+(s.out||0))}</b></div><div class=r><span>cost</span><b>${money(s.cost||0)}</b></div>`;
+   const markers=[p.tools?`${f(p.tools)} tools`:null,p.reason?`${f(p.reason)} reasoning`:null,s.side?'coordination':null].filter(Boolean).join(' / ');
+   const prompt=s.user_input?esc(s.user_input):'--';
+   tip.innerHTML=`<div class=h>execution #${esc(s.i??idx+1)}</div><div class="r fresh"><span>uncached input</span><b>${f(p.fresh)}</b></div><div class="r cacheRead"><span>cache read</span><b>${f(p.read)}</b></div><div class="r cacheWrite"><span>cache write</span><b>${f(p.write)}</b></div><div class="r in"><span>input total</span><b>${f(p.total)}</b></div><div class="r out"><span>output</span><b>${f(p.out)}</b></div><div class="r cost"><span>cost</span><b>${money(p.cost)}</b></div><div class="r context"><span>context</span><b>${p.context===null?'--':pct(p.context)}</b></div>${markers?`<div class=r><span>markers</span><b>${esc(markers)}</b></div>`:''}<div class=prompt><span>user input</span><b>${prompt}</b></div>`;
   }
  }
  hit.addEventListener('mousemove',e=>hoverAt(e.clientX,e.clientY));
@@ -614,7 +779,7 @@ function renderOverview(s){
  $('cost-end-label').textContent=timing.end_label||'Last activity';
  $('cost-end').textContent=dt12(timing.end_local)||'--';
  $('ov-duration').textContent=timing.duration||'0s';
- $('ov-idle').textContent=s.ended?'post-mortem':(f(s.idle_s||0)+'s idle');
+ $('ov-idle').textContent=s.ended?'pinned log':(f(s.idle_s||0)+'s idle');
  $('ov-context').textContent=f(context.latest||0);
  $('ov-contextsm').textContent=context.window?`${pct(context.latest_pct)} of ${f(context.window)} window`:'latest input tokens';
  $('ov-loaded').textContent=f(tools.loaded||0);
@@ -638,7 +803,8 @@ function renderTrace(trace){
   else if(ev.context_tokens) chips.push(`ctx ${f(ev.context_tokens)}`);
   if(ev.input_tokens) chips.push(`${f(ev.input_tokens)} in`);
   if(ev.output_tokens) chips.push(`${f(ev.output_tokens)} out`);
-  if(ev.cache_tokens) chips.push(`${f(ev.cache_tokens)} cache`);
+  if(ev.cache_read_tokens||ev.cache_write_tokens) chips.push(`${f(ev.cache_read_tokens||0)} read / ${f(ev.cache_write_tokens||0)} write`);
+  else if(ev.cache_tokens) chips.push(`${f(ev.cache_tokens)} cache`);
   if(ev.reasoning_tokens) chips.push(`${f(ev.reasoning_tokens)} reason`);
   if(ev.tool_count) chips.push(`${f(ev.tool_count)} tools`);
   if(ev.tools_loaded) chips.push(`${f(ev.tools_loaded)} loaded`);
@@ -671,15 +837,15 @@ function renderTools(tools){
  const maxT=Math.max(1,...tools.by_name.map(t=>t.output_tokens||0));
  $('tooltbl').querySelector('tbody').innerHTML=tools.by_name.length?tools.by_name.map(t=>`<tr><td class=nm>${esc(t.display||t.name)}<div class=tbar style="width:${100*(t.output_tokens||0)/maxT}%"></div></td><td><span class="chip ${t.kind==='mcp'?'mcp':''}">${esc(t.namespace)}</span></td><td class="num mono">${f(t.calls)}</td><td class="num mono">${f(t.output_tokens)}</td></tr>`).join(''):'<tr><td colspan=4 style=color:var(--faint)>no tool calls yet</td></tr>';
  const execRows=sortExecRows(tools.by_execution);
- $('execTools').innerHTML=execRows.length?execRows.map(e=>`<div class=execRow><div class=head><span>Execution #${e.execution} · ${f(e.tool_calls||0)} calls · ${f(e.unique_tools||0)} tools · ${f(execReturnedTokens(e))} returned</span><span class=mono>${esc(e.model||'')} · ctx ${f(e.context_tokens||0)} · ${money(e.cost)}</span></div><div class=chips>${e.tools.map(t=>`<span class="chip ${t.kind==='mcp'?'mcp':''}">${esc(t.namespace)}:${esc(t.display||t.name)}${t.calls>1?' x'+f(t.calls):''} · ${f(t.output_tokens)} tok</span>`).join('')}</div></div>`).join(''):'<div class=subline>no tool calls for this session</div>';
+ $('execTools').innerHTML=execRows.length?execRows.map(e=>`<div class=execRow><div class=head><span>Execution #${e.execution} · ${f(e.tool_calls||0)} calls · ${f(e.unique_tools||0)} tools · ${f(execReturnedTokens(e))} returned</span><span class=mono>${esc(e.model||'')} · ctx ${f(e.context_tokens||0)} · ${money(e.cost)}</span></div><div class=chips>${e.tools.map(t=>`<span class="chip ${t.kind==='mcp'?'mcp':''}">${esc(t.namespace)}:${esc(t.display||t.name)}${t.calls>1?' x'+f(t.calls):''} · ${f(t.output_tokens)} tok</span>`).join('')}</div></div>`).join(''):'<div class=subline>no tool calls for this log</div>';
 }
 
 function sessionAlert(s){
  const source=s.source||{};
- const budget=parseFloat($('budget').value)||1e9, spike=parseFloat($('spike').value)||1e9;
- if(s.total_cost>budget) return {msg:`Session passed your $${budget} cap - now ${money(s.total_cost)}`,key:`${source.id||s.session}:budget:${budget}`};
- if(s.last_turn_cost>spike) return {msg:`Last execution cost ${money(s.last_turn_cost)} (over $${spike})`,key:`${source.id||s.session}:spike:${s.turns}:${spike}`};
- return {msg:'',key:''};
+ const budget=dollarInputValue('budget',10), spike=dollarInputValue('spike',0.50);
+ if(s.total_cost>budget) return {type:'budget',msg:`Current log passed your ${money(budget)} cap - now ${money(s.total_cost)}`,key:`${source.id||s.session}:budget:${budget}`,budget,current:s.total_cost};
+ if(s.last_turn_cost>spike) return {type:'spike',msg:`Last execution cost ${money(s.last_turn_cost)} (over ${money(spike)})`,key:`${source.id||s.session}:spike:${s.turns}:${spike}`};
+ return {type:'',msg:'',key:''};
 }
 function notifyAlertForSession(s,opts={}){
  if(!s||pinned) return false;
@@ -687,6 +853,16 @@ function notifyAlertForSession(s,opts={}){
  if(!a.msg) return false;
  const key=opts.forceCurrent?a.key+':current:'+Date.now():a.key;
  return fireNotification('Token Meter alert',a.msg,key,{requireInteraction:true,renotify:!!opts.forceCurrent,dedupe:!opts.forceCurrent});
+}
+function renderAlertBanner(alert){
+ const banner=$('banner');
+ banner.classList.toggle('on',!!alert.msg);
+ banner.classList.toggle('budget',alert.type==='budget');
+ $('banner-msg').textContent=alert.msg||'';
+ if(alert.type==='budget'){
+  $('budget-add-btn').textContent='Add budget';
+  $('budget-add').setAttribute('aria-label','Budget to add beyond current spend');
+ }
 }
 
 function renderSession(s){
@@ -700,21 +876,27 @@ function renderSession(s){
  $('unpin').classList.toggle('on',!!pinned);
  $('frozen').classList.toggle('on',frozen);
  $('live').classList.toggle('dead',frozen);
- $('livetxt').textContent=frozen?('ended · '+(pinned?'pinned':'idle')):('live · '+(s.ts||''));
+ $('livetxt').textContent=frozen?(pinned?'pinned log':'frozen log'):('watching · '+idleLabel(s.idle_s));
  $('cost').textContent=money(s.total_cost)+(s.cost_approx?' est':'');
- const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{};
+ const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{};
  $('cost-tip').innerHTML=costTipHtml(s,tok);
  const inputTokens=(tok.input||0)+(tok.cache_read||0)+(tok.cache_write||0), outputTokens=tok.output||0;
  const thinkingTokens=sem.reasoning||0, toolCallTokens=tools.total_output_tokens||0;
  $('sub').innerHTML=`<b>${f(inputTokens)}</b> in · <b>${f(outputTokens)}</b> out · <b>${f(thinkingTokens)}</b> thinking · <b>${f(toolCallTokens)}</b> tool results · <b>${f(s.turns)}</b> executions`;
  $('input-tok').textContent=f(inputTokens);
- $('input-toksm').textContent=`${f(tok.input||0)} fresh · ${f((tok.cache_read||0)+(tok.cache_write||0))} cache`;
+ $('input-toksm').textContent=`${f(tok.input||0)} uncached · ${f((tok.cache_read||0)+(tok.cache_write||0))} cache`;
+ $('cache-hit').textContent=pct(cache.input_share||0);
+ $('cache-hitsm').textContent=`${f(cache.total||0)} cached · ${f(cache.fresh||0)} uncached`;
+ $('cache-tok').textContent=f(cache.total||0);
+ $('cache-toksm').textContent=`${f(cache.read||0)} read · ${f(cache.write||0)} write · latest ${f(latestCache.tokens||0)}`;
  $('output-tok').textContent=f(outputTokens);
  $('output-toksm').textContent='of '+f(s.total_tokens)+' total';
  $('think-tok').textContent=f(thinkingTokens);
  $('think-toksm').textContent=f(s.analyses?.reasoning?.think_turns||0)+' reasoning exec';
  $('toolcall-tok').textContent=f(toolCallTokens);
  $('toolcall-toksm').textContent=f(tools.total_calls||0)+' calls returned';
+ $('cache-saved').textContent=money(cache.saved||s.cache_saved||0);
+ $('cache-savedsm').textContent=`${money(cache.cost||0)} cache cost`;
  $('burn').textContent=money(s.burn_usd_min);
  $('burnsm').textContent=f(s.burn_tok_min)+' tok/min';
  $('cpt').textContent=money(s.analyses?.cost_per_task?.per_task||0);
@@ -742,14 +924,15 @@ function renderSession(s){
  if(liveView) ins.forEach(i=>{ if(i.kind==='warn'||i.kind==='good') fireNotification('Token insight',i.text,`${source.id||s.session}:insight:${i.key||i.text}`); });
 
  const alert=sessionAlert(s);
- $('cost').classList.toggle('alert',!!alert.msg); $('banner').classList.toggle('on',!!alert.msg); $('banner').textContent=alert.msg;
+ $('cost').classList.toggle('alert',!!alert.msg);
+ renderAlertBanner(alert);
  if(alert.msg&&liveView) notifyAlertForSession(s);
 }
 
 function renderGlobal(xs){
  if(!xs)return;
  $('g-cost').textContent=money(xs.total_cost);
- $('g-sub').innerHTML=`<b>${f(xs.total_sessions)}</b> sessions · premium <b>${pct(xs.premium_share??xs.opus_share)}</b> of spend`;
+ $('g-sub').innerHTML=`<b>${f(xs.total_sessions)}</b> logs · premium <b>${pct(xs.premium_share??xs.opus_share)}</b> of spend`;
  const mmTot=xs.model_mix.reduce((a,b)=>a+b.cost,0)||1;
  const pal={'claude-opus-4-8':'var(--reason)','claude-fable-5':'var(--toolcall)','claude-sonnet-4-6':'var(--retrieval)','claude-haiku-4-5':'var(--good)','gpt-5.5':'var(--accent)','gpt-5.4':'var(--retrieval)','gpt-5.4-mini':'var(--good)'};
  $('g-mm').innerHTML=xs.model_mix.map(m=>{const w=100*m.cost/mmTot; return `<div style=margin-bottom:9px><div style="display:flex;justify-content:space-between;font-size:12px;gap:10px"><span>${esc(m.model)}</span><span class=mono>${money(m.cost)} · ${pct(m.cost/mmTot)}</span></div><div class=mini style="margin:4px 0 0"><i style="width:${w}%;background:${pal[m.model]||'var(--dim)'}"></i></div></div>`;}).join('');
@@ -761,7 +944,7 @@ function renderGlobal(xs){
   const active=LATEST&&s.id===(LATEST.source?.id||LATEST.session?.split('.')[0]);
   return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}">
    <div><span class="badge ${s.provider==='codex'?'codex':'claude'}">${esc(s.label||s.provider)}</span></div>
-   <div style=min-width:0><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project)} · ${esc(s.start||'')} → ${esc(s.last)} · ${f(s.turns)} executions</div></div>
+  <div style=min-width:0><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project)} · ${esc(s.start||'')} → ${esc(s.last)} · ${f(s.turns)} executions</div></div>
    <div class="badge models">${esc((s.models||[]).join(', ')||'--')}</div>
    <div class="badge tok">${f(s.tokens)} tok</div>
    <div class="c mono">${money(s.cost)}${s.cost_approx?' est':''}</div></div>`;

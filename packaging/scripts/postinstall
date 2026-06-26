@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LABEL="com.token-meter.menubar"
+INSTALL_DIR="/Library/Application Support/Token Meter"
+START="$INSTALL_DIR/bin/start-token-meter"
+ROOT_URL="http://127.0.0.1:8722/"
+
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
+}
+
+console_user() {
+  stat -f %Su /dev/console 2>/dev/null || true
+}
+
+home_for_user() {
+  dscl . -read "/Users/$1" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true
+}
+
+stop_token_meter_listener() {
+  local body pids pid
+  body="$(curl -s --max-time 2 "$ROOT_URL" 2>/dev/null || true)"
+  if [[ "$body" != *"Token Meter"* && "$body" != *"page.html not found next to meter.py"* && "$body" != *"page.html is missing"* ]]; then
+    return 0
+  fi
+
+  pids="$(lsof -tiTCP:8722 -sTCP:LISTEN 2>/dev/null || true)"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill "$pid" 2>/dev/null || true
+  done <<< "$pids"
+  sleep 0.5
+}
+
+chmod 755 "$INSTALL_DIR/bin/start-token-meter" "$INSTALL_DIR/bin/uninstall-token-meter" "$INSTALL_DIR/bin/token-meter-menubar"
+chmod 644 "$INSTALL_DIR/meter.py" "$INSTALL_DIR/page.html" "$INSTALL_DIR/README.md" "$INSTALL_DIR/LICENSE" "$INSTALL_DIR/VERSION"
+find "$INSTALL_DIR" -name '._*' -type f -delete 2>/dev/null || true
+
+USER_NAME="$(console_user)"
+if [[ -z "$USER_NAME" || "$USER_NAME" == "root" || "$USER_NAME" == "loginwindow" ]]; then
+  exit 0
+fi
+
+USER_UID="$(id -u "$USER_NAME")"
+USER_HOME="$(home_for_user "$USER_NAME")"
+if [[ -z "$USER_HOME" || ! -d "$USER_HOME" ]]; then
+  exit 0
+fi
+
+LAUNCH_DIR="$USER_HOME/Library/LaunchAgents"
+LOG_DIR="$USER_HOME/Library/Logs/Token Meter"
+PLIST="$LAUNCH_DIR/$LABEL.plist"
+mkdir -p "$LAUNCH_DIR" "$LOG_DIR"
+
+START_XML="$(xml_escape "$START")"
+WORKING_DIR_XML="$(xml_escape "$INSTALL_DIR")"
+STDOUT_XML="$(xml_escape "$LOG_DIR/launchd.out.log")"
+STDERR_XML="$(xml_escape "$LOG_DIR/launchd.err.log")"
+
+cat > "$PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$START_XML</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$WORKING_DIR_XML</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$STDOUT_XML</string>
+  <key>StandardErrorPath</key>
+  <string>$STDERR_XML</string>
+</dict>
+</plist>
+PLIST
+
+chown -R "$USER_NAME" "$LAUNCH_DIR" "$LOG_DIR"
+chmod 644 "$PLIST"
+
+launchctl bootout "gui/$USER_UID/$LABEL" >/dev/null 2>&1 || true
+launchctl bootout "gui/$USER_UID" "$PLIST" >/dev/null 2>&1 || true
+stop_token_meter_listener
+launchctl bootstrap "gui/$USER_UID" "$PLIST"
+launchctl kickstart -k "gui/$USER_UID/$LABEL" >/dev/null 2>&1 || true
+
+exit 0

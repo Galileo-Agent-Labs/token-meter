@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/Library/Application Support/Token Meter"
+ROOT_URL="http://127.0.0.1:8722/"
+HEALTH_URL="http://127.0.0.1:8722/health"
+LOG_DIR="${TOKEN_METER_LOG_DIR:-$HOME/Library/Logs/Token Meter}"
+START_LOG="$LOG_DIR/start-token-meter.log"
+SERVER_LOG="$LOG_DIR/meter.log"
+MENUBAR_LOG="$LOG_DIR/menubar.log"
+MENUBAR_BIN="$ROOT/bin/token-meter-menubar"
+
+mkdir -p "$LOG_DIR"
+
+log() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$START_LOG"
+}
+
+python_is_usable() {
+  "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1
+}
+
+find_python() {
+  local candidate path
+  for candidate in "${TOKEN_METER_PYTHON:-}" /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      path="$candidate"
+      [[ -x "$path" ]] || continue
+    else
+      path="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$path" ]] || continue
+    fi
+    if python_is_usable "$path"; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  return 1
+}
+
+stop_token_meter_listener() {
+  local body pids pid
+  body="$(curl -s --max-time 2 "$ROOT_URL" 2>/dev/null || true)"
+  if [[ "$body" != *"Token Meter"* && "$body" != *"page.html not found next to meter.py"* && "$body" != *"page.html is missing"* ]]; then
+    return 0
+  fi
+
+  pids="$(lsof -tiTCP:8722 -sTCP:LISTEN 2>/dev/null || true)"
+  [[ -n "$pids" ]] || return 0
+  log "Stopping existing Token Meter listener on port 8722: $pids"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill "$pid" 2>/dev/null || true
+  done <<< "$pids"
+  sleep 0.5
+}
+
+if [[ ! -f "$ROOT/page.html" || ! -f "$ROOT/meter.py" ]]; then
+  log "Missing installed Token Meter files under $ROOT"
+  exit 1
+fi
+
+PYTHON="$(find_python || true)"
+if [[ -z "$PYTHON" ]]; then
+  log "Python 3.8 or newer was not found. Install Python 3, or set TOKEN_METER_PYTHON."
+  exit 1
+fi
+
+if [[ ! -x "$MENUBAR_BIN" ]]; then
+  log "Missing executable menubar binary: $MENUBAR_BIN"
+  exit 1
+fi
+
+if ! curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+  stop_token_meter_listener
+fi
+
+if ! curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+  log "Starting Token Meter server with $PYTHON"
+  nohup "$PYTHON" "$ROOT/meter.py" >> "$SERVER_LOG" 2>&1 &
+  ready=0
+  for _ in $(seq 1 40); do
+    if curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    sleep 0.25
+  done
+  if [[ "$ready" -ne 1 ]]; then
+    log "Token Meter server did not become healthy at $HEALTH_URL"
+    exit 1
+  fi
+fi
+
+log "Starting Token Meter menubar"
+exec "$MENUBAR_BIN" >> "$MENUBAR_LOG" 2>&1

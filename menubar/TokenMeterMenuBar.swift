@@ -54,6 +54,14 @@ struct MeterSnapshot {
     var estimatedCost: Bool
     var totalTokens: Int
     var turns: Int
+    var cacheInputShare: Double?
+    var cacheFreshTokens: Int
+    var cacheReadTokens: Int
+    var cacheWriteTokens: Int
+    var cacheTotalTokens: Int
+    var cacheSaved: Double
+    var cacheLatestTokens: Int
+    var cacheLatestShare: Double?
     var contextPct: Double?
     var contextTokens: Int
     var contextWindow: Int
@@ -82,6 +90,14 @@ struct MeterSnapshot {
             estimatedCost: false,
             totalTokens: 0,
             turns: 0,
+            cacheInputShare: nil,
+            cacheFreshTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            cacheTotalTokens: 0,
+            cacheSaved: 0,
+            cacheLatestTokens: 0,
+            cacheLatestShare: nil,
             contextPct: nil,
             contextTokens: 0,
             contextWindow: 0,
@@ -93,7 +109,7 @@ struct MeterSnapshot {
             activityDetail: error,
             activityTime: "",
             recommendationLabel: "Start server",
-            recommendationDetail: "Run Token Meter to load live session state.",
+            recommendationDetail: "Run Token Meter to load live log state.",
             recommendationSeverity: "idle",
             topSignal: error
         )
@@ -102,6 +118,8 @@ struct MeterSnapshot {
     static func fromJSON(_ dict: [String: Any]) -> MeterSnapshot {
         let source = dict["source"] as? [String: Any] ?? [:]
         let context = dict["context"] as? [String: Any] ?? [:]
+        let cache = dict["cache"] as? [String: Any] ?? [:]
+        let latestCache = cache["latest"] as? [String: Any] ?? [:]
         let insights = dict["insights"] as? [[String: Any]] ?? []
 
         let provider = string(source["label"]) ?? string(dict["provider"]) ?? "Token Meter"
@@ -112,6 +130,14 @@ struct MeterSnapshot {
         let estimatedCost = bool(dict["cost_approx"]) || bool(source["approximate_cost"])
         let totalTokens = int(dict["total_tokens"])
         let turns = int(dict["turns"])
+        let cacheInputShare = optionalDouble(cache["input_share"])
+        let cacheFreshTokens = int(cache["fresh"])
+        let cacheReadTokens = int(cache["read"])
+        let cacheWriteTokens = int(cache["write"])
+        let cacheTotalTokens = int(cache["total"])
+        let cacheSaved = double(cache["saved"])
+        let cacheLatestTokens = int(latestCache["tokens"])
+        let cacheLatestShare = optionalDouble(latestCache["share"])
         let contextPct = optionalDouble(context["latest_pct"])
         let contextTokens = int(context["latest"])
         let contextWindow = int(context["window"])
@@ -157,6 +183,14 @@ struct MeterSnapshot {
             estimatedCost: estimatedCost,
             totalTokens: totalTokens,
             turns: turns,
+            cacheInputShare: cacheInputShare,
+            cacheFreshTokens: cacheFreshTokens,
+            cacheReadTokens: cacheReadTokens,
+            cacheWriteTokens: cacheWriteTokens,
+            cacheTotalTokens: cacheTotalTokens,
+            cacheSaved: cacheSaved,
+            cacheLatestTokens: cacheLatestTokens,
+            cacheLatestShare: cacheLatestShare,
             contextPct: contextPct,
             contextTokens: contextTokens,
             contextWindow: contextWindow,
@@ -195,8 +229,31 @@ struct MeterSnapshot {
         return "\(Int((pct * 100).rounded()))% ctx"
     }
 
+    var cacheLabel: String {
+        guard cacheTotalTokens > 0 else { return "no cache yet" }
+        let share = Int(((cacheInputShare ?? 0) * 100).rounded())
+        return "\(share)% input cached - \(formatCompactInt(cacheTotalTokens))"
+    }
+
+    var cacheDetail: String {
+        guard cacheTotalTokens > 0 else { return "waiting for cached input" }
+        var parts = [
+            "\(formatCompactInt(cacheFreshTokens)) uncached",
+            "\(formatCompactInt(cacheReadTokens)) read",
+            "\(formatCompactInt(cacheWriteTokens)) write"
+        ]
+        if cacheSaved > 0.005 {
+            parts.append("\(formatMoney(cacheSaved)) saved")
+        }
+        if cacheLatestTokens > 0 {
+            let latest = cacheLatestShare.map { "\(Int(($0 * 100).rounded()))%" } ?? formatCompactInt(cacheLatestTokens)
+            parts.append("latest \(latest) cached")
+        }
+        return parts.joined(separator: " - ")
+    }
+
     var idleLabel: String {
-        if ended { return "ended" }
+        if ended { return "pinned log" }
         if idleSeconds < 60 { return "live - \(idleSeconds)s idle" }
         return "live - \(idleSeconds / 60)m idle"
     }
@@ -278,6 +335,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addRecommendationRow()
             addMetricRow("Cost", "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")")
             addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
+            addMetricRow("Cache", snapshot.cacheLabel)
+            addSignalRow("Cache detail", snapshot.cacheDetail)
             addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))")
             addContextBar()
             addMetricRow("Last execution", formatMoney(snapshot.lastTurnCost))

@@ -63,13 +63,14 @@ Choose one install path.
 
 ### Option 1: Install The macOS Package
 
-This is the easiest path for most macOS users. Download the latest
-`TokenMeter-*.pkg` from the
-[project releases](https://github.com/Galileo-Agent-Labs/token-meter/releases),
-then open it with Finder. The installer may ask for an administrator password
-because it installs under `/Library/Application Support`.
+This is the easiest path for most macOS users. We are not using GitHub Releases
+yet, so open the repository's [`dist/`](dist/) folder, download the latest
+`TokenMeter-*.pkg` there, then open it with Finder. The installer may ask for an
+administrator password because it installs under
+`/Library/Application Support`.
 
-If you built the package locally, open the generated package:
+If you have a local clone, you can open the checked-in package from the
+repository root:
 
 ```bash
 open dist/TokenMeter-0.1.0.pkg
@@ -104,8 +105,9 @@ Package users do not need the Swift toolchain. They do need Python 3.8 or newer
 available as `/usr/bin/python3`, `/opt/homebrew/bin/python3`,
 `/usr/local/bin/python3`, or on `PATH` as `python3`.
 
-To update, install the newer `.pkg` the same way. The postinstall hook refreshes
-the installed files and restarts the Token Meter LaunchAgent.
+To update, download the newer `.pkg` from `dist/` and install it the same way.
+The postinstall hook refreshes the installed files and restarts the Token Meter
+LaunchAgent.
 
 To uninstall a package install:
 
@@ -358,7 +360,8 @@ The final command requires at least one local Claude Code or Codex log.
 
 ## Before Publishing On GitHub
 
-Commit the app source, scripts, images, and public docs:
+Commit the app source, scripts, images, public docs, and the distributable
+installer package:
 
 ```text
 README.md
@@ -373,12 +376,13 @@ scripts/
 REQUIREMENTS.md
 CONTRIBUTING.md
 SECURITY.md
+dist/TokenMeter-*.pkg
 .gitignore
 ```
 
 Do not commit local runtime artifacts such as `.DS_Store`, `*.log`,
-`__pycache__/`, `.build/`, or `dist/`. The included `.gitignore` covers those
-files.
+`__pycache__/`, or `.build/`. The included `.gitignore` covers those files.
+Keep `dist/` limited to package files that users should download.
 
 ## License
 

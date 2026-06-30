@@ -15,11 +15,15 @@ Codex uses token_count events instead; those are already one usage slice.
 """
 import calendar
 import glob
+import hashlib
 import html
 import json
 import os
 import queue
 import re
+import secrets
+import shutil
+import subprocess
 import time
 import threading
 from collections import defaultdict
@@ -27,8 +31,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
+CLAUDE_DESKTOP_DATA_ROOTS = [
+    os.path.expanduser("~/Library/Application Support/Claude"),
+    os.path.expanduser("~/Library/Application Support/Claude-3p"),
+]
+CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
+CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
+CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
+CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
+GHOST_MCP_ROOT = os.path.expanduser("~/.config/ghost/mcp-servers")
 PORT = 8722
 
 CLAUDE_PRICE = {
@@ -59,11 +72,21 @@ LOW_YIELD_RATIO = 0.005
 LOW_YIELD_COST = 0.05
 LOW_YIELD_CONTEXT_PCT = 0.25
 LOW_YIELD_INPUT_TOKENS = 60000
+TOOL_OVERSIZED_TOKENS = 8000
+MCP_SERVER_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
+PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,180}$")
+SKILL_PATH_RE = re.compile(r"(?:^|[/\\])([^/\\\s'\"]+)[/\\]SKILL\.md(?:\b|$)", re.IGNORECASE)
+DATA_URL_RE = re.compile(r"data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+")
+BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512,})(")')
 
 subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
 _xsess = {"data": None, "at": 0.0}
 _XSESS_TTL = 15.0
+_summary_cache = {}
+_ACTION_TOKEN = secrets.token_urlsafe(24)
+_mcp_action_log = []
+_ghost_catalog_cache = {"rows": {}, "at": 0.0}
 
 
 def parse_iso(ts):
@@ -94,6 +117,123 @@ def duration_label(seconds):
     return f"{hours}h {minutes:02d}m"
 
 
+def _merge_execution_intervals(intervals):
+    """Return wall-active seconds after collapsing overlapping execution windows."""
+    clean = sorted(
+        (float(start), float(end))
+        for start, end in intervals
+        if start is not None and end is not None and float(end) > float(start)
+    )
+    merged = []
+    for start, end in clean:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return sum(end - start for start, end in merged)
+
+
+def _claude_user_prompt(obj):
+    if obj.get("type") != "user":
+        return False
+    msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+    content = msg.get("content")
+    if isinstance(content, str):
+        return bool(content.strip())
+    if not isinstance(content, list):
+        return False
+    return any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and str(block.get("text") or "").strip()
+        for block in content
+    )
+
+
+def execution_timing(provider, objs):
+    """Build trace-backed active execution time, excluding idle gaps."""
+    intervals = []
+    reported = observed = 0
+    open_start = open_last = None
+
+    for obj in objs:
+        ts = parse_iso(obj.get("timestamp", ""))
+
+        if provider == "claude":
+            if _claude_user_prompt(obj):
+                if open_start and open_last and open_last > open_start:
+                    intervals.append((open_start, open_last))
+                    observed += 1
+                open_start = ts or open_start
+                open_last = ts or open_last
+                continue
+            if obj.get("type") != "system" or obj.get("subtype") != "turn_duration":
+                if open_start and ts and obj.get("type") == "assistant":
+                    open_last = ts if open_last is None else max(open_last, ts)
+                continue
+            duration_ms = obj.get("durationMs")
+            try:
+                duration_ms = float(duration_ms or 0)
+            except (TypeError, ValueError):
+                duration_ms = 0
+            if ts and duration_ms > 0:
+                intervals.append((ts - duration_ms / 1000.0, ts))
+                reported += 1
+            elif open_start and ts and ts > open_start:
+                intervals.append((open_start, ts))
+                observed += 1
+            open_start = open_last = None
+            continue
+
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        ptype = payload.get("type")
+        if ptype == "task_started":
+            if open_start and open_last and open_last > open_start:
+                intervals.append((open_start, open_last))
+                observed += 1
+            open_start = ts or open_start
+            open_last = ts or open_last
+            continue
+        if ptype != "task_complete":
+            if open_start and ts:
+                open_last = ts if open_last is None else max(open_last, ts)
+            continue
+        duration_ms = payload.get("duration_ms")
+        try:
+            duration_ms = float(duration_ms or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        if ts and duration_ms > 0:
+            intervals.append((ts - duration_ms / 1000.0, ts))
+            reported += 1
+        elif open_start and ts and ts > open_start:
+            intervals.append((open_start, ts))
+            observed += 1
+        open_start = open_last = None
+
+    if open_start and open_last and open_last > open_start:
+        intervals.append((open_start, open_last))
+        observed += 1
+
+    duration_s = _merge_execution_intervals(intervals)
+    if reported and observed:
+        basis = "reported + observed"
+    elif reported:
+        basis = "reported"
+    elif observed:
+        basis = "observed"
+    else:
+        basis = "unavailable"
+    return {
+        "duration_s": duration_s,
+        "available": duration_s > 0,
+        "reported_executions": reported,
+        "observed_executions": observed,
+        "execution_count": reported + observed,
+        "basis": basis,
+    }
+
+
 def load(path):
     out = []
     if not path:
@@ -111,6 +251,55 @@ def load(path):
     return out
 
 
+def load_json(path, default=None):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            value = json.load(fh)
+        return value
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {} if default is None else default
+
+
+def atomic_write_text(path, text):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    tmp = os.path.join(directory, f".{os.path.basename(path)}.token-meter-{os.getpid()}")
+    mode = None
+    try:
+        mode = os.stat(path).st_mode & 0o777
+    except OSError:
+        pass
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def toml_named_sections(path, table):
+    """Read simple enabled state from named TOML sections without a TOML dependency."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return {}
+    header = re.compile(rf'^\[{re.escape(table)}\.(?:"([^"]+)"|([^\.\]]+))\]\s*$', re.MULTILINE)
+    matches = list(header.finditer(text))
+    result = {}
+    for index, match in enumerate(matches):
+        name = (match.group(1) or match.group(2) or "").strip()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end():end]
+        enabled_match = re.search(r'^\s*enabled\s*=\s*(true|false)\s*$', body, re.MULTILINE | re.IGNORECASE)
+        result[name] = {
+            "enabled": enabled_match is None or enabled_match.group(1).lower() == "true",
+            "start": match.start(), "body_start": match.end(), "end": end,
+        }
+    return result
+
+
 def safe_mtime(path):
     try:
         return os.path.getmtime(path)
@@ -121,6 +310,20 @@ def safe_mtime(path):
 def home_shorten(path):
     home = os.path.expanduser("~")
     return path.replace(home, "~", 1) if path and path.startswith(home) else path
+
+
+def ghost_executable():
+    found = shutil.which("ghost")
+    if found:
+        return found
+    for path in (
+        os.path.expanduser("~/.local/bin/ghost"),
+        "/opt/homebrew/bin/ghost",
+        "/usr/local/bin/ghost",
+    ):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
 
 
 def decode_claude_project(name):
@@ -139,9 +342,61 @@ def codex_id_from_path(path, meta=None):
     return match.group(1) if match else base
 
 
+def normalize_dynamic_tools(dynamic_tools):
+    """Flatten old function arrays and newer namespace-grouped tool catalogs."""
+    out = []
+    for item in dynamic_tools or []:
+        if not isinstance(item, dict):
+            out.append({
+                "namespace": "unknown", "name": str(item) or "?", "kind": "tool",
+                "defer_loading": False, "definition_tokens": 0,
+            })
+            continue
+        children = item.get("tools")
+        rows = children if isinstance(children, list) else [item]
+        parent_namespace = item.get("namespace") or item.get("name") or "unknown"
+        parent_deferred = bool(item.get("deferLoading"))
+        for child in rows:
+            if not isinstance(child, dict):
+                child = {"name": str(child)}
+            name = child.get("name") or "?"
+            namespace = child.get("namespace") or parent_namespace or "unknown"
+            raw_identity = name
+            if name.startswith("mcp__"):
+                ident = tool_identity(name)
+                namespace = ident["namespace"]
+                kind = "mcp"
+            elif str(namespace).startswith("mcp__"):
+                parts = str(namespace).split("__")
+                namespace = parts[1] if len(parts) > 1 and parts[1] else "mcp"
+                raw_identity = f"mcp__{namespace}__{name}"
+                kind = "mcp"
+            else:
+                kind = "tool"
+            definition = {
+                "description": child.get("description") or "",
+                "inputSchema": child.get("inputSchema") or child.get("input_schema") or {},
+            }
+            out.append({
+                "namespace": namespace,
+                "name": raw_identity,
+                "kind": kind,
+                "defer_loading": bool(child.get("deferLoading", parent_deferred)),
+                "definition_tokens": len(json.dumps(definition, sort_keys=True)) // CHARS_PER_TOKEN,
+            })
+    return out[:240]
+
+
+def catalog_counts(catalog):
+    advertised = len(catalog or [])
+    deferred = sum(1 for row in catalog or [] if row.get("defer_loading"))
+    return {"advertised": advertised, "eager": max(0, advertised - deferred), "deferred": deferred}
+
+
 def codex_meta(path):
     meta = {"session_id": None, "cwd": None, "model": None, "model_provider": None,
-            "tools_loaded": 0, "tool_catalog": [], "tool_namespaces": []}
+            "tools_loaded": 0, "tools_eager": 0, "tools_deferred": 0,
+            "tool_catalog": [], "tool_namespaces": []}
     try:
         with open(path, encoding="utf-8") as fh:
             for i, line in enumerate(fh):
@@ -160,15 +415,11 @@ def codex_meta(path):
                     meta["model_provider"] = payload.get("model_provider") or meta["model_provider"]
                     dynamic_tools = payload.get("dynamic_tools")
                     if isinstance(dynamic_tools, list):
-                        meta["tools_loaded"] = len(dynamic_tools)
-                        meta["tool_catalog"] = [
-                            {
-                                "namespace": (t.get("namespace") if isinstance(t, dict) else "") or "unknown",
-                                "name": (t.get("name") if isinstance(t, dict) else str(t)) or "?",
-                                "defer_loading": bool(t.get("deferLoading")) if isinstance(t, dict) else False,
-                            }
-                            for t in dynamic_tools
-                        ][:120]
+                        meta["tool_catalog"] = normalize_dynamic_tools(dynamic_tools)
+                        counts = catalog_counts(meta["tool_catalog"])
+                        meta["tools_loaded"] = counts["advertised"]
+                        meta["tools_eager"] = counts["eager"]
+                        meta["tools_deferred"] = counts["deferred"]
                         meta["tool_namespaces"] = sorted(set(t["namespace"] for t in meta["tool_catalog"]))
                 elif obj.get("type") == "turn_context":
                     meta["cwd"] = payload.get("cwd") or meta["cwd"]
@@ -187,22 +438,114 @@ def codex_index():
     return idx
 
 
+def claude_desktop_metadata_paths(root=None):
+    if root:
+        return glob.glob(os.path.join(root, "**", "local_*.json"), recursive=True)
+    paths = []
+    for data_root in CLAUDE_DESKTOP_DATA_ROOTS:
+        paths.extend(glob.glob(os.path.join(data_root, "claude-code-sessions", "*", "*", "local_*.json")))
+        paths.extend(glob.glob(os.path.join(data_root, "local-agent-mode-sessions", "*", "*", "local_*.json")))
+    return paths
+
+
+def claude_desktop_index(root=None):
+    """Map standard and enterprise Claude Desktop metadata onto CLI trace ids."""
+    idx = {}
+    for path in claude_desktop_metadata_paths(root):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                row = json.load(fh)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(row, dict):
+            continue
+        cli_id = row.get("cliSessionId")
+        if not cli_id:
+            continue
+        title = compact_text(row.get("title") or "", 90)
+        if title.lower() in ("untitled", "untitled session"):
+            title = ""
+        source_kind = "agent" if f"{os.sep}local-agent-mode-sessions{os.sep}" in path else "project"
+        origin_cwd = row.get("originCwd") or ""
+        raw_cwd = origin_cwd or row.get("cwd") or ""
+        no_project = bool(source_kind == "agent" and not origin_cwd and os.path.basename(raw_cwd) == "outputs")
+        candidate = {
+            "client": "claude_desktop",
+            "label": "Claude Desktop",
+            "desktop_session_id": row.get("sessionId") or os.path.basename(path).rsplit(".", 1)[0],
+            "cli_session_id": cli_id,
+            "cwd": raw_cwd,
+            "project": "No project" if no_project else home_shorten(raw_cwd),
+            "source_kind": source_kind,
+            "title": title or None,
+            "model": row.get("model"),
+            "metadata_path": path,
+            "metadata_mtime": safe_mtime(path),
+            "last_activity_ms": int(row.get("lastActivityAt") or 0),
+        }
+        previous = idx.get(cli_id)
+        if not previous or (candidate["last_activity_ms"], candidate["metadata_mtime"]) > (
+                previous["last_activity_ms"], previous["metadata_mtime"]):
+            idx[cli_id] = candidate
+    return idx
+
+
+def claude_local_agent_sources(desktop_idx):
+    sources = []
+    for desktop in desktop_idx.values():
+        if desktop.get("source_kind") != "agent":
+            continue
+        metadata_path = desktop.get("metadata_path") or ""
+        session_root = metadata_path.rsplit(".json", 1)[0]
+        trace_pattern = os.path.join(
+            session_root, ".claude", "projects", "*", f"{desktop.get('cli_session_id')}.jsonl"
+        )
+        for path in glob.glob(trace_pattern):
+            sources.append({
+                "provider": "claude", "client": "claude_desktop", "label": "Claude Desktop",
+                "id": desktop.get("cli_session_id"),
+                "desktop_session_id": desktop.get("desktop_session_id"),
+                "session": os.path.basename(path), "path": path,
+                "metadata_path": metadata_path,
+                "project": desktop.get("project") or "No project",
+                "mtime": max(safe_mtime(path), float(desktop.get("metadata_mtime") or 0)),
+                "title": desktop.get("title"), "model": desktop.get("model"),
+                "desktop_source_kind": "agent",
+            })
+    return sources
+
+
 def all_session_sources():
     sources = []
+    desktop_idx = claude_desktop_index()
+    known_paths = set()
 
     for path in glob.glob(os.path.join(CLAUDE_PROJECTS, "*", "*.jsonl")):
         sid = os.path.basename(path).rsplit(".", 1)[0]
         project_raw = os.path.basename(os.path.dirname(path))
-        sources.append({
+        desktop = desktop_idx.get(sid) or {}
+        project = desktop.get("project") or decode_claude_project(project_raw)
+        source = {
             "provider": "claude",
-            "label": "Claude Code",
+            "client": desktop.get("client") or "claude_code",
+            "label": desktop.get("label") or "Claude Code",
             "id": sid,
+            "desktop_session_id": desktop.get("desktop_session_id"),
             "session": os.path.basename(path),
             "path": path,
-            "project": decode_claude_project(project_raw),
-            "mtime": safe_mtime(path),
-            "title": None,
-        })
+            "metadata_path": desktop.get("metadata_path"),
+            "project": project,
+            "mtime": max(safe_mtime(path), float(desktop.get("metadata_mtime") or 0)),
+            "title": desktop.get("title"),
+            "model": desktop.get("model"),
+        }
+        sources.append(source)
+        known_paths.add(path)
+
+    for source in claude_local_agent_sources(desktop_idx):
+        if source["path"] not in known_paths:
+            sources.append(source)
+            known_paths.add(source["path"])
 
     idx = codex_index()
     for path in glob.glob(os.path.join(CODEX_SESSIONS, "*", "*", "*", "*.jsonl")):
@@ -220,6 +563,8 @@ def all_session_sources():
             "title": (idx.get(sid) or {}).get("thread_name"),
             "model": meta.get("model") or DEFAULT_OPENAI_MODEL,
             "tools_loaded": meta.get("tools_loaded") or 0,
+            "tools_eager": meta.get("tools_eager") or 0,
+            "tools_deferred": meta.get("tools_deferred") or 0,
             "tool_catalog": meta.get("tool_catalog") or [],
             "tool_namespaces": meta.get("tool_namespaces") or [],
         })
@@ -239,12 +584,15 @@ def source_from_path(path):
             "path": path, "project": home_shorten(meta.get("cwd") or os.path.dirname(path)),
             "mtime": safe_mtime(path), "title": None, "model": meta.get("model") or DEFAULT_OPENAI_MODEL,
             "tools_loaded": meta.get("tools_loaded") or 0,
+            "tools_eager": meta.get("tools_eager") or 0,
+            "tools_deferred": meta.get("tools_deferred") or 0,
             "tool_catalog": meta.get("tool_catalog") or [],
             "tool_namespaces": meta.get("tool_namespaces") or [],
         }
     sid = os.path.basename(path).rsplit(".", 1)[0]
     return {
-        "provider": "claude", "label": "Claude Code", "id": sid, "session": os.path.basename(path),
+        "provider": "claude", "client": "claude_code", "label": "Claude Code", "id": sid,
+        "session": os.path.basename(path),
         "path": path, "project": decode_claude_project(os.path.basename(os.path.dirname(path))),
         "mtime": safe_mtime(path), "title": None,
     }
@@ -255,10 +603,11 @@ def newest_source():
     return max(sources, key=lambda s: s["mtime"]) if sources else None
 
 
-def find_session(sid):
-    for source in all_session_sources():
+def find_session(sid, sources=None):
+    source_pool = sources if sources is not None else all_session_sources()
+    for source in source_pool:
         stem = os.path.basename(source["path"]).rsplit(".", 1)[0]
-        if sid in (source["id"], source["session"], stem):
+        if sid in (source["id"], source["session"], stem, source.get("desktop_session_id")):
             return source
     return None
 
@@ -529,12 +878,14 @@ def tool_summary(executions):
                 "output_tokens": 0,
                 "output_chars": 0,
                 "args_chars": 0,
+                "errors": 0,
                 "executions": set(),
             })
             n["calls"] += 1
             n["output_tokens"] += tokens
             n["output_chars"] += output_chars
             n["args_chars"] += args_chars
+            n["errors"] += 1 if tool.get("error") else 0
             n["executions"].add(ex["idx"])
 
             ns = by_namespace.setdefault(namespace, {
@@ -542,10 +893,12 @@ def tool_summary(executions):
                 "kind": kind,
                 "calls": 0,
                 "output_tokens": 0,
+                "errors": 0,
                 "executions": set(),
             })
             ns["calls"] += 1
             ns["output_tokens"] += tokens
+            ns["errors"] += 1 if tool.get("error") else 0
             ns["executions"].add(ex["idx"])
 
             key = (namespace, name)
@@ -558,11 +911,13 @@ def tool_summary(executions):
                 "output_tokens": 0,
                 "output_chars": 0,
                 "args_chars": 0,
+                "errors": 0,
             })
             rt["calls"] += 1
             rt["output_tokens"] += tokens
             rt["output_chars"] += output_chars
             rt["args_chars"] += args_chars
+            rt["errors"] += 1 if tool.get("error") else 0
         if row_tools:
             rows = sorted(row_tools.values(), key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))
             by_execution.append({
@@ -594,6 +949,7 @@ def tool_summary(executions):
     return {
         "total_calls": sum(r["calls"] for r in by_name_rows),
         "total_output_tokens": sum(r["output_tokens"] for r in by_name_rows),
+        "total_errors": sum(r["errors"] for r in by_name_rows),
         "unique_used": len(by_name_rows),
         "namespaces_used": len(by_namespace_rows),
         "by_name": sorted(by_name_rows, key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))[:16],
@@ -634,9 +990,59 @@ def iter_claude_messages(objs):
     return [by_id[i] for i in order]
 
 
+def tool_result_is_error(value, explicit=False):
+    if explicit:
+        return True
+    if isinstance(value, dict):
+        if value.get("is_error") is True or value.get("success") is False:
+            return True
+        status = str(value.get("status") or "").lower()
+        if status in ("error", "failed", "failure"):
+            return True
+        exit_code = value.get("exit_code", value.get("exitCode"))
+        if exit_code not in (None, 0, "0"):
+            return True
+        if value.get("error") not in (None, "", False):
+            return True
+        return any(tool_result_is_error(v) for v in value.values() if isinstance(v, (dict, list)))
+    if isinstance(value, list):
+        return any(tool_result_is_error(v) for v in value)
+    text = str(value or "").strip().lower()
+    return text.startswith(("error:", "failed:", "tool error", "process exited with code"))
+
+
+def observable_output_chars(value):
+    """Count trace-visible text while excluding embedded image/base64 bytes."""
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        text = str(value or "")
+    text = DATA_URL_RE.sub("<image-data>", text)
+    text = BASE64_FIELD_RE.sub(r'\1<binary-data>\3', text)
+    return len(text)
+
+
+def argument_fingerprint(value):
+    try:
+        text = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError):
+        text = str(value or "")
+    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16] if text else ""
+
+
+def skill_names_from_value(value):
+    """Infer skill activations only when a trace argument references SKILL.md."""
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        text = str(value or "")
+    return sorted(set(match.group(1) for match in SKILL_PATH_RE.finditer(text)))
+
+
 def claude_tool_results(objs):
     chars_by_id = defaultdict(int)
     ts_by_id = {}
+    errors_by_id = defaultdict(bool)
     for obj in objs:
         if obj.get("type") != "user":
             continue
@@ -647,9 +1053,12 @@ def claude_tool_results(objs):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "tool_result":
                 tid = block.get("tool_use_id")
-                chars_by_id[tid] += len(json.dumps(block.get("content", "")))
+                chars_by_id[tid] += observable_output_chars(block.get("content", ""))
                 ts_by_id[tid] = parse_iso(obj.get("timestamp", ""))
-    return chars_by_id, ts_by_id
+                errors_by_id[tid] = errors_by_id[tid] or tool_result_is_error(
+                    block.get("content"), block.get("is_error") is True
+                )
+    return chars_by_id, ts_by_id, errors_by_id
 
 
 def recompute(source):
@@ -672,7 +1081,7 @@ def recompute_claude(source):
     user_events = claude_user_events(objs)
     user_event_idx = 0
     pending_user_texts = []
-    result_chars, result_ts = claude_tool_results(objs)
+    result_chars, result_ts, result_errors = claude_tool_results(objs)
     tool_name_by_id = {}
     for rec in msgs:
         for block in rec["content"]:
@@ -738,6 +1147,7 @@ def recompute_claude(source):
                 "args_chars": len(json.dumps(block.get("input", ""))),
                 "output_chars": out_chars,
                 "output_tokens": out_chars // CHARS_PER_TOKEN,
+                "error": bool(result_errors.get(tid)),
             }
             tools.append(tool)
 
@@ -781,9 +1191,10 @@ def recompute_claude(source):
             if tool["output_tokens"]:
                 trace.append(trace_event(result_ts.get(tool["id"]) or ts, "tool_result", tool["display"],
                                          f"~{tool['output_tokens']:,} returned tokens", idx,
-                                         tool=tool["name"], tokens=tool["output_tokens"], severity="retrieval",
+                                         tool=tool["name"], tokens=tool["output_tokens"],
+                                         severity="warn" if tool.get("error") else "retrieval",
                                          model=model, output_chars=tool["output_chars"],
-                                         retrieval_tokens=tool["output_tokens"]))
+                                         retrieval_tokens=tool["output_tokens"], error=tool.get("error")))
 
         series.append({
             "i": idx,
@@ -851,7 +1262,7 @@ def recompute_claude(source):
 
     return build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                        analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                       primary_model, "exact Claude API-rate estimate")
+                       primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs))
 
 
 def analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_tok, model_cost,
@@ -913,6 +1324,8 @@ def recompute_codex(source):
     task_start_ts = None
     context_window = None
     tools_loaded = int(source.get("tools_loaded") or 0)
+    tools_eager = int(source.get("tools_eager") or 0)
+    tools_deferred = int(source.get("tools_deferred") or 0)
     tool_catalog = list(source.get("tool_catalog") or [])
     tool_namespaces = list(source.get("tool_namespaces") or [])
 
@@ -926,15 +1339,11 @@ def recompute_codex(source):
             meta_cwd = home_shorten(payload.get("cwd") or meta_cwd)
             dynamic_tools = payload.get("dynamic_tools")
             if isinstance(dynamic_tools, list):
-                tools_loaded = len(dynamic_tools)
-                tool_catalog = [
-                    {
-                        "namespace": (t.get("namespace") if isinstance(t, dict) else "") or "unknown",
-                        "name": (t.get("name") if isinstance(t, dict) else str(t)) or "?",
-                        "defer_loading": bool(t.get("deferLoading")) if isinstance(t, dict) else False,
-                    }
-                    for t in dynamic_tools
-                ][:120]
+                tool_catalog = normalize_dynamic_tools(dynamic_tools)
+                counts = catalog_counts(tool_catalog)
+                tools_loaded = counts["advertised"]
+                tools_eager = counts["eager"]
+                tools_deferred = counts["deferred"]
                 tool_namespaces = sorted(set(t["namespace"] for t in tool_catalog))
             continue
         if otype == "turn_context":
@@ -1023,6 +1432,7 @@ def recompute_codex(source):
                 "args_chars": len(str(payload.get("arguments") or payload.get("input") or "")),
                 "output_chars": 0,
                 "output_tokens": 0,
+                "error": False,
             }
             pending["calls"][call_id] = tool
             call_map[call_id] = tool
@@ -1037,19 +1447,20 @@ def recompute_codex(source):
             if tool is None:
                 ident = tool_identity(payload.get("name") or ptype)
                 tool = {**ident, "id": payload.get("id"), "call_id": call_id,
-                        "args_chars": 0, "output_chars": 0, "output_tokens": 0}
+                        "args_chars": 0, "output_chars": 0, "output_tokens": 0, "error": False}
                 pending["calls"][call_id] = tool
                 call_map[call_id] = tool
             output = payload.get("output") if "output" in payload else payload
-            out_chars = len(str(output or ""))
+            out_chars = observable_output_chars(output)
             tool["output_chars"] += out_chars
             tool["output_tokens"] = tool["output_chars"] // CHARS_PER_TOKEN
+            tool["error"] = bool(tool.get("error") or tool_result_is_error(output, payload.get("status") == "failed"))
             pending["trace"].append(trace_event(ts, "tool_result", tool["display"],
                                                 f"~{tool['output_tokens']:,} returned tokens",
                                                 tool=tool["name"], tokens=tool["output_tokens"],
-                                                severity="retrieval", model=model,
+                                                severity="warn" if tool.get("error") else "retrieval", model=model,
                                                 output_chars=tool["output_chars"],
-                                                retrieval_tokens=tool["output_tokens"]))
+                                                retrieval_tokens=tool["output_tokens"], error=tool.get("error")))
             continue
 
         if ptype == "task_complete":
@@ -1200,18 +1611,23 @@ def recompute_codex(source):
     source = dict(source)
     source["project"] = meta_cwd or source.get("project")
     source["tools_loaded"] = tools_loaded
+    source["tools_eager"] = tools_eager
+    source["tools_deferred"] = tools_deferred
     source["tool_catalog"] = tool_catalog
     source["tool_namespaces"] = tool_namespaces
     return build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                        analyses, insights, first_ts, last_ts, idle, biggest, len(coord_execs), True,
-                       primary_model, "estimated with public OpenAI API rates")
+                       primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs))
 
 
 def build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                 analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                primary_model, pricing_note):
+                primary_model, pricing_note, active_timing=None):
     elapsed = (last_ts - first_ts) if (first_ts and last_ts) else 0
-    minutes = max(elapsed / 60.0, 1e-9)
+    active_timing = active_timing or {}
+    active_seconds = float(active_timing.get("duration_s") or 0)
+    active_available = bool(active_timing.get("available") and active_seconds > 0)
+    minutes = max(active_seconds / 60.0, 1e-9)
     cache_in = tot["cache_read"] + tot["cache_write"]
     cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
     cache = cache_block(tot, cost, executions, source["provider"], primary_model)
@@ -1225,25 +1641,46 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     loaded_known = bool(tools_loaded)
     if not tools_loaded:
         tools_loaded = tool_data["unique_used"]
+    tool_catalog = list(source.get("tool_catalog") or [])[:240]
+    counts = catalog_counts(tool_catalog)
+    advertised = counts["advertised"] if loaded_known else 0
+    eager = int(source.get("tools_eager") or counts["eager"] or 0)
+    deferred = int(source.get("tools_deferred") or counts["deferred"] or 0)
+    catalog_names = {row.get("name") for row in tool_catalog if row.get("name")}
+    used_names = {row.get("name") for row in tool_data.get("by_name", []) if row.get("name")}
+    catalog_coverage = "unavailable"
+    if loaded_known:
+        catalog_coverage = "reported" if used_names.issubset(catalog_names) else "partial"
     tool_data["loaded"] = tools_loaded
     tool_data["loaded_known"] = loaded_known
+    tool_data["advertised"] = advertised
+    tool_data["eager"] = eager
+    tool_data["deferred"] = deferred
+    tool_data["catalog_coverage"] = catalog_coverage
     tool_data["loaded_namespaces"] = list(source.get("tool_namespaces") or [])
-    tool_data["catalog"] = list(source.get("tool_catalog") or [])[:80]
+    tool_data["catalog"] = tool_catalog[:80]
     insights = enrich_insights(insights, executions, tool_data, context_window, context_latest, context_peak,
                                source["provider"])
     source_obj = {
         "provider": source["provider"],
+        "client": source.get("client") or source["provider"],
         "label": source["label"],
         "id": source["id"],
+        "desktop_session_id": source.get("desktop_session_id"),
         "path": source["path"],
         "project": source.get("project") or "",
         "pricing_note": pricing_note,
         "approximate_cost": bool(approx_cost),
         "tools_loaded": tools_loaded,
         "tools_loaded_known": loaded_known,
+        "tools_advertised": advertised,
+        "tools_eager": eager,
+        "tools_deferred": deferred,
+        "tool_catalog_coverage": catalog_coverage,
     }
     return {
         "provider": source["provider"],
+        "client": source.get("client") or source["provider"],
         "source": source_obj,
         "session": source["session"],
         "project": source.get("project") or "",
@@ -1258,15 +1695,21 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
         "cache_ratio": cache_ratio,
         "cache_saved": cache["saved"],
         "cache": cache,
-        "burn_tok_min": total_tokens / minutes if elapsed else 0,
-        "burn_usd_min": total_cost / minutes if elapsed else 0,
+        "burn_tok_min": total_tokens / minutes if active_available else 0,
+        "burn_usd_min": total_cost / minutes if active_available else 0,
         "timing": {
             "start_ts": first_ts or 0,
             "end_ts": last_ts or 0,
             "start_local": local_dt(first_ts),
             "end_local": local_dt(last_ts),
-            "duration_s": int(elapsed),
-            "duration": duration_label(elapsed),
+            "duration_s": int(round(active_seconds)),
+            "duration": duration_label(active_seconds) if active_available else "--",
+            "duration_available": active_available,
+            "duration_basis": active_timing.get("basis") or "unavailable",
+            "execution_count": int(active_timing.get("execution_count") or 0),
+            "reported_executions": int(active_timing.get("reported_executions") or 0),
+            "observed_executions": int(active_timing.get("observed_executions") or 0),
+            "wall_duration_s": int(elapsed),
             "timezone": time.tzname[time.localtime().tm_isdst > 0],
             "end_label": "Last activity",
         },
@@ -1278,6 +1721,7 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
             "peak_pct": context_peak_pct,
         },
         "elapsed_s": int(elapsed),
+        "active_elapsed_s": int(round(active_seconds)),
         "idle_s": int(idle),
         "idle": idle > 90,
         "ended": False,
@@ -1324,16 +1768,17 @@ def enrich_insights(insights, executions, tool_data, context_window, context_lat
                 detail="This is historical pressure, not necessarily the latest state.",
                 priority=55,
             ))
-    loaded = tool_data.get("loaded") or 0
+    loaded = tool_data.get("advertised") or tool_data.get("loaded") or 0
     unique_used = tool_data.get("unique_used") or 0
     if loaded and tool_data.get("loaded_known"):
         ratio = unique_used / loaded if loaded else 0
         kind = "neutral" if ratio >= 0.25 else "warn"
         out.append(insight(
             "tools-loaded", kind, "Tools", "Tool surface",
-            f"{loaded} tools loaded; {unique_used} used in this log.",
-            detail="A wide tool surface can make planning noisier, even when most tools are unused.",
-            action="Trim enabled tools if startup or tool selection feels noisy." if kind == "warn" else "",
+            f"Runtime reported {loaded} tools; {unique_used} were used in this log.",
+            detail=(f"{tool_data.get('eager', 0)} eager and {tool_data.get('deferred', 0)} deferred; "
+                    f"catalog coverage is {tool_data.get('catalog_coverage', 'reported')}."),
+            action="Review rarely used tools or keep them deferred." if kind == "warn" else "",
             priority=34 if kind == "warn" else 68,
         ))
     if tool_data.get("by_namespace"):
@@ -1517,6 +1962,156 @@ def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, pro
     return normalize_insights(out)
 
 
+def summarize_tool_evidence(calls, catalog=None):
+    by_name = {}
+    by_skill = {}
+    previous_key = None
+    previous_ts = 0
+    day_tokens = defaultdict(int)
+    day_flagged = defaultdict(int)
+    totals = {
+        "total_calls": 0,
+        "total_output_tokens": 0,
+        "flagged_tokens": 0,
+        "oversized_calls": 0,
+        "oversized_tokens": 0,
+        "repeat_calls": 0,
+        "repeat_tokens": 0,
+        "errors": 0,
+        "error_tokens": 0,
+    }
+    for call in calls or []:
+        name = call.get("name") or "?"
+        tokens = int(call.get("output_tokens") or 0)
+        error = bool(call.get("error"))
+        oversized = tokens >= TOOL_OVERSIZED_TOKENS
+        ts = int(call.get("ts") or 0)
+        args_fingerprint = call.get("args_fingerprint") or ""
+        call_key = (name, args_fingerprint) if args_fingerprint else None
+        repeated = bool(call_key and previous_key == call_key and
+                        (not ts or not previous_ts or 0 <= ts - previous_ts <= 300))
+        previous_key, previous_ts = call_key, ts
+        flagged = bool(oversized or repeated or error)
+        day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
+        if day:
+            day_tokens[day] += tokens
+            if flagged:
+                day_flagged[day] += tokens
+
+        row = by_name.setdefault(name, {
+            "name": name,
+            "display": call.get("display") or name,
+            "namespace": call.get("namespace") or "unknown",
+            "kind": call.get("kind") or "tool",
+            "calls": 0,
+            "output_tokens": 0,
+            "flagged_tokens": 0,
+            "errors": 0,
+            "oversized_calls": 0,
+            "repeat_calls": 0,
+            "last_ts": 0,
+        })
+        row["calls"] += 1
+        row["output_tokens"] += tokens
+        row["flagged_tokens"] += tokens if flagged else 0
+        row["errors"] += 1 if error else 0
+        row["oversized_calls"] += 1 if oversized else 0
+        row["repeat_calls"] += 1 if repeated else 0
+        row["last_ts"] = max(row["last_ts"], ts)
+
+        totals["total_calls"] += 1
+        totals["total_output_tokens"] += tokens
+        totals["flagged_tokens"] += tokens if flagged else 0
+        totals["oversized_calls"] += 1 if oversized else 0
+        totals["oversized_tokens"] += tokens if oversized else 0
+        totals["repeat_calls"] += 1 if repeated else 0
+        totals["repeat_tokens"] += tokens if repeated else 0
+        totals["errors"] += 1 if error else 0
+        totals["error_tokens"] += tokens if error else 0
+
+        for skill_name in call.get("skills") or []:
+            skill = by_skill.setdefault(skill_name, {"name": skill_name, "activations": 0, "last_ts": 0})
+            skill["activations"] += 1
+            skill["last_ts"] = max(skill["last_ts"], ts)
+
+    totals["tools"] = sorted(by_name.values(), key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))
+    totals["skills"] = sorted(by_skill.values(), key=lambda r: (-r["activations"], r["name"]))
+    totals["day_tokens"] = dict(day_tokens)
+    totals["day_flagged"] = dict(day_flagged)
+    totals["catalog"] = list(catalog or [])
+    used_names = set(by_name)
+    totals["definition_tokens"] = sum(int(row.get("definition_tokens") or 0) for row in totals["catalog"])
+    totals["eager_definition_tokens"] = sum(
+        int(row.get("definition_tokens") or 0) for row in totals["catalog"] if not row.get("defer_loading")
+    )
+    totals["deferred_definition_tokens"] = totals["definition_tokens"] - totals["eager_definition_tokens"]
+    totals["unused_eager_definition_tokens"] = sum(
+        int(row.get("definition_tokens") or 0) for row in totals["catalog"]
+        if not row.get("defer_loading") and row.get("name") not in used_names
+    )
+    return totals
+
+
+def claude_tool_call_evidence(objs, msgs=None):
+    msgs = msgs if msgs is not None else iter_claude_messages(objs)
+    result_chars, result_ts, result_errors = claude_tool_results(objs)
+    calls = []
+    for rec in msgs:
+        for block in rec.get("content") or []:
+            if block.get("type") != "tool_use":
+                continue
+            ident = tool_identity(block.get("name") or "?")
+            tid = block.get("id")
+            calls.append({
+                **ident,
+                "output_tokens": int(result_chars.get(tid, 0)) // CHARS_PER_TOKEN,
+                "error": bool(result_errors.get(tid)),
+                "ts": result_ts.get(tid) or rec.get("ts") or 0,
+                "args_fingerprint": argument_fingerprint(block.get("input")),
+                "skills": skill_names_from_value(block.get("input")),
+            })
+    return calls
+
+
+def codex_tool_call_evidence(objs):
+    calls = {}
+    order = []
+    for obj in objs:
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        ptype = payload.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if ptype in ("function_call", "custom_tool_call", "web_search_call", "tool_search_call"):
+            name = payload.get("name") or ("web.search" if ptype == "web_search_call" else ptype.replace("_call", ""))
+            call_id = payload.get("call_id") or payload.get("id") or f"call-{len(order) + 1}"
+            if call_id not in calls:
+                arguments = payload.get("arguments") or payload.get("input")
+                calls[call_id] = {
+                    **tool_identity(name), "output_chars": 0, "output_tokens": 0,
+                    "error": False, "ts": ts,
+                    "args_fingerprint": argument_fingerprint(arguments),
+                    "skills": skill_names_from_value(arguments),
+                }
+                order.append(call_id)
+            continue
+        if ptype not in ("function_call_output", "custom_tool_call_output", "web_search_end", "tool_search_output", "patch_apply_end"):
+            continue
+        call_id = payload.get("call_id") or payload.get("id") or payload.get("callId")
+        if call_id not in calls:
+            name = payload.get("name") or ptype
+            calls[call_id] = {
+                **tool_identity(name), "output_chars": 0, "output_tokens": 0,
+                "error": False, "ts": ts, "args_fingerprint": "", "skills": [],
+            }
+            order.append(call_id)
+        row = calls[call_id]
+        output = payload.get("output") if "output" in payload else payload
+        row["output_chars"] += observable_output_chars(output)
+        row["output_tokens"] = row["output_chars"] // CHARS_PER_TOKEN
+        row["error"] = bool(row.get("error") or tool_result_is_error(output, payload.get("status") == "failed"))
+        row["ts"] = ts or row.get("ts") or 0
+    return [calls[call_id] for call_id in order]
+
+
 def claude_summary(source, objs):
     msgs = iter_claude_messages(objs)
     cost = 0.0
@@ -1545,16 +2140,20 @@ def claude_summary(source, objs):
             day = time.strftime("%Y-%m-%d", time.localtime(rec["ts"]))
             day_cost[day] += c
 
-    title = None
-    for obj in objs:
-        if obj.get("type") == "user":
-            msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
-            txt = text_from_content(msg.get("content")).strip()
-            if txt and not txt.startswith("<") and "command-" not in txt[:20]:
-                title = compact_text(txt, 60)
-                break
+    title = source.get("title")
+    if not title:
+        for obj in objs:
+            if obj.get("type") == "user":
+                msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+                txt = text_from_content(msg.get("content")).strip()
+                if txt and not txt.startswith("<") and "command-" not in txt[:20]:
+                    title = compact_text(txt, 60)
+                    break
 
-    return summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx)
+    row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
+                      execution_timing("claude", objs))
+    row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
+    return row
 
 
 def codex_summary(source, objs):
@@ -1600,15 +2199,23 @@ def codex_summary(source, objs):
             if payload.get("type") == "user_message":
                 title = compact_text(payload.get("message") or "", 60)
                 break
-    return summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx)
+    row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
+                      execution_timing("codex", objs))
+    row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
+    return row
 
 
-def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx):
+def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
+                active_timing=None):
+    active_timing = active_timing or {}
+    wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     return {
         "id": source["id"],
         "path": source["path"],
         "provider": source["provider"],
+        "client": source.get("client") or source["provider"],
         "label": source["label"],
+        "desktop_session_id": source.get("desktop_session_id"),
         "project": source.get("project") or "",
         "title": title or source.get("title") or "(untitled log)",
         "cost": cost,
@@ -1619,7 +2226,10 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "mtime": source["mtime"],
         "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(first_ts)) if first_ts else "",
         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(last_ts)) if last_ts else "",
-        "duration_s": int((last_ts - first_ts) if (first_ts and last_ts) else 0),
+        "duration_s": int(round(active_timing.get("duration_s") or 0)),
+        "duration_available": bool(active_timing.get("available")),
+        "duration_basis": active_timing.get("basis") or "unavailable",
+        "wall_duration_s": int(wall_duration),
         "_model_cost": dict(model_cost),
         "_model_tok": dict(model_tok),
         "_day_cost": dict(day_cost),
@@ -1627,10 +2237,600 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
 
 
 def session_summary(source):
+    cached = _summary_cache.get(source["path"])
+    mtime = source.get("mtime") or safe_mtime(source["path"])
+    if cached and cached.get("mtime") == mtime:
+        return cached["row"]
     objs = load(source["path"])
     if source["provider"] == "codex":
-        return codex_summary(source, objs)
-    return claude_summary(source, objs)
+        row = codex_summary(source, objs)
+    else:
+        row = claude_summary(source, objs)
+    _summary_cache[source["path"]] = {"mtime": mtime, "row": row}
+    return row
+
+
+def global_tool_waste(session_rows):
+    by_name = {}
+    by_namespace = {}
+    by_skill = {}
+    day_tokens = defaultdict(int)
+    day_flagged = defaultdict(int)
+    totals = {
+        "total_calls": 0, "total_output_tokens": 0, "flagged_tokens": 0,
+        "oversized_calls": 0, "oversized_tokens": 0,
+        "repeat_calls": 0, "repeat_tokens": 0,
+        "errors": 0, "error_tokens": 0,
+        "definition_tokens": 0, "eager_definition_tokens": 0,
+        "deferred_definition_tokens": 0, "unused_eager_definition_tokens": 0,
+    }
+    advertised_names = set()
+    used_advertised_names = set()
+
+    for session in session_rows:
+        evidence = session.get("_tool_evidence") or {}
+        project = session.get("project") or "local"
+        provider = session.get("provider") or "unknown"
+        session_id = session.get("id") or session.get("path")
+        for key in ("total_calls", "total_output_tokens", "flagged_tokens", "oversized_calls",
+                    "oversized_tokens", "repeat_calls", "repeat_tokens", "errors", "error_tokens",
+                    "definition_tokens", "eager_definition_tokens", "deferred_definition_tokens",
+                    "unused_eager_definition_tokens"):
+            totals[key] += int(evidence.get(key) or 0)
+        for day, value in (evidence.get("day_tokens") or {}).items():
+            day_tokens[day] += int(value or 0)
+        for day, value in (evidence.get("day_flagged") or {}).items():
+            day_flagged[day] += int(value or 0)
+
+        for item in evidence.get("tools") or []:
+            name = item.get("name") or "?"
+            row = by_name.setdefault(name, {
+                "name": name,
+                "display": item.get("display") or name,
+                "namespace": item.get("namespace") or "unknown",
+                "kind": item.get("kind") or "tool",
+                "calls": 0, "output_tokens": 0, "flagged_tokens": 0,
+                "errors": 0, "oversized_calls": 0, "repeat_calls": 0,
+                "last_ts": 0, "sessions": set(), "projects": set(),
+                "project_calls": defaultdict(int), "providers": set(),
+                "advertised_sessions": set(), "eager_sessions": set(), "deferred_sessions": set(),
+            })
+            for key in ("calls", "output_tokens", "flagged_tokens", "errors", "oversized_calls", "repeat_calls"):
+                row[key] += int(item.get(key) or 0)
+            row["last_ts"] = max(row["last_ts"], int(item.get("last_ts") or 0))
+            row["sessions"].add(session_id)
+            row["projects"].add(project)
+            row["project_calls"][project] += int(item.get("calls") or 0)
+            row["providers"].add(provider)
+
+            namespace = row["namespace"]
+            ns = by_namespace.setdefault(namespace, {
+                "namespace": namespace, "kind": row["kind"], "calls": 0,
+                "output_tokens": 0, "flagged_tokens": 0, "errors": 0,
+                "sessions": set(), "projects": set(),
+            })
+            ns["calls"] += int(item.get("calls") or 0)
+            ns["output_tokens"] += int(item.get("output_tokens") or 0)
+            ns["flagged_tokens"] += int(item.get("flagged_tokens") or 0)
+            ns["errors"] += int(item.get("errors") or 0)
+            ns["sessions"].add(session_id)
+            ns["projects"].add(project)
+
+        for item in evidence.get("skills") or []:
+            name = item.get("name") or "?"
+            row = by_skill.setdefault(name, {
+                "name": name, "activations": 0, "last_ts": 0,
+                "sessions": set(), "projects": set(), "providers": set(),
+            })
+            row["activations"] += int(item.get("activations") or 0)
+            row["last_ts"] = max(row["last_ts"], int(item.get("last_ts") or 0))
+            row["sessions"].add(session_id)
+            row["projects"].add(project)
+            row["providers"].add(provider)
+
+        session_used = {item.get("name") for item in evidence.get("tools") or []}
+        for item in evidence.get("catalog") or []:
+            name = item.get("name") or "?"
+            advertised_names.add(name)
+            if name in session_used:
+                used_advertised_names.add(name)
+            row = by_name.setdefault(name, {
+                "name": name, "display": name,
+                "namespace": item.get("namespace") or "unknown",
+                "kind": item.get("kind") or "tool",
+                "calls": 0, "output_tokens": 0, "flagged_tokens": 0,
+                "errors": 0, "oversized_calls": 0, "repeat_calls": 0,
+                "last_ts": 0, "sessions": set(), "projects": set(),
+                "project_calls": defaultdict(int), "providers": set(),
+                "advertised_sessions": set(), "eager_sessions": set(), "deferred_sessions": set(),
+            })
+            row["advertised_sessions"].add(session_id)
+            if item.get("defer_loading"):
+                row["deferred_sessions"].add(session_id)
+            else:
+                row["eager_sessions"].add(session_id)
+
+    total_sessions = len(session_rows)
+    tool_rows = []
+    for row in by_name.values():
+        sessions_used = len(row["sessions"])
+        advertised_sessions = len(row["advertised_sessions"])
+        project_calls = dict(row["project_calls"])
+        top_project = max(project_calls, key=project_calls.get) if project_calls else ""
+        top_project_calls = project_calls.get(top_project, 0)
+        project_share = top_project_calls / row["calls"] if row["calls"] else 0.0
+        recommendation = "keep"
+        reason = "Observed usage does not cross a trace-waste threshold."
+        if row["kind"] == "mcp" and advertised_sessions >= 5 and sessions_used == 0:
+            recommendation = "disable"
+            reason = f"Reported in {advertised_sessions} sessions and never called."
+        elif row["errors"] >= 3 and row["errors"] / max(1, row["calls"]) >= 0.5:
+            recommendation = "fix_or_disable"
+            reason = f"{row['errors']} of {row['calls']} calls were errors."
+        elif row["oversized_calls"] or row["output_tokens"] >= 25000:
+            recommendation = "narrow_results"
+            reason = f"Returned ~{row['output_tokens']:,} tokens across {row['calls']} calls."
+        elif row["repeat_calls"] >= 3:
+            recommendation = "reduce_repeats"
+            reason = f"Repeated the same arguments in {row['repeat_calls']} consecutive calls."
+        elif row["kind"] == "mcp" and sessions_used <= max(1, int(total_sessions * 0.05)):
+            recommendation = "scope"
+            reason = f"Used in {sessions_used} of {total_sessions} sessions."
+        elif project_share >= 0.8 and row["calls"] >= 5 and len(row["projects"]) > 0:
+            recommendation = "scope"
+            reason = f"{project_share * 100:.0f}% of calls came from {top_project}."
+
+        tool_rows.append({
+            "name": row["name"], "display": row["display"],
+            "namespace": row["namespace"], "kind": row["kind"],
+            "calls": row["calls"], "output_tokens": row["output_tokens"],
+            "flagged_tokens": row["flagged_tokens"], "errors": row["errors"],
+            "oversized_calls": row["oversized_calls"], "repeat_calls": row["repeat_calls"],
+            "sessions_used": sessions_used, "advertised_sessions": advertised_sessions,
+            "eager_sessions": len(row["eager_sessions"]), "deferred_sessions": len(row["deferred_sessions"]),
+            "projects": sorted(row["projects"]), "top_project": top_project,
+            "project_share": project_share, "providers": sorted(row["providers"]),
+            "last_ts": row["last_ts"],
+            "last_used": time.strftime("%Y-%m-%d", time.localtime(row["last_ts"])) if row["last_ts"] else "Never",
+            "recommendation": recommendation, "reason": reason,
+            "mcp_server": row["namespace"] if row["kind"] == "mcp" else "",
+        })
+
+    tool_rows.sort(key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))
+    namespace_rows = []
+    for row in by_namespace.values():
+        namespace_rows.append({
+            "namespace": row["namespace"], "kind": row["kind"],
+            "calls": row["calls"], "output_tokens": row["output_tokens"],
+            "flagged_tokens": row["flagged_tokens"], "errors": row["errors"],
+            "sessions_used": len(row["sessions"]), "projects": sorted(row["projects"]),
+        })
+    namespace_rows.sort(key=lambda r: (-r["output_tokens"], -r["calls"], r["namespace"]))
+
+    trend = [
+        {"day": day, "tokens": day_tokens[day], "flagged_tokens": day_flagged.get(day, 0)}
+        for day in sorted(set(day_tokens) | set(day_flagged))
+    ][-14:]
+
+    insights = []
+    if tool_rows and tool_rows[0]["output_tokens"]:
+        top = tool_rows[0]
+        insights.append(insight(
+            f"global-tool:{top['name']}", "warn" if top["output_tokens"] >= 25000 else "neutral",
+            "Tools", "Largest tool payload",
+            f"{top['display']} returned ~{top['output_tokens']:,} tokens across {top['sessions_used']} sessions.",
+            detail=f"{top['calls']} calls from {top['namespace']} produced the largest trace-observed payload.",
+            action="Narrow the command or query output." if top["output_tokens"] >= 25000 else "",
+            priority=12,
+        ))
+    if totals["flagged_tokens"]:
+        share = totals["flagged_tokens"] / max(1, totals["total_output_tokens"])
+        insights.append(insight(
+            "global-flagged", "warn" if share >= 0.25 else "neutral", "Tools", "Flagged result volume",
+            f"~{totals['flagged_tokens']:,} returned tokens matched an oversized, repeat, or error signal.",
+            detail=f"That is {share * 100:.0f}% of {totals['total_output_tokens']:,} trace-observed tool-result tokens; categories can overlap.",
+            action="Inspect the ranked tools and repeated calls first." if share >= 0.25 else "",
+            priority=14,
+        ))
+    if totals["repeat_calls"]:
+        insights.append(insight(
+            "global-repeats", "warn" if totals["repeat_calls"] >= 5 else "neutral", "Flow", "Repeated calls",
+            f"{totals['repeat_calls']} calls immediately repeated the same tool arguments.",
+            detail=f"The exact consecutive repeats occurred within five minutes and returned ~{totals['repeat_tokens']:,} tokens.",
+            action="Reuse earlier results or make the next query narrower." if totals["repeat_calls"] >= 5 else "",
+            priority=20,
+        ))
+    if totals["errors"]:
+        insights.append(insight(
+            "global-errors", "warn", "Tools", "Tool errors",
+            f"{totals['errors']} tool calls ended with a structured error signal.",
+            detail=f"Failed calls returned ~{totals['error_tokens']:,} tokens before recovery or retry.",
+            action="Fix authentication or disable persistently failing MCPs.", priority=10,
+        ))
+    disable_candidates = [row for row in tool_rows if row["recommendation"] == "disable"]
+    if disable_candidates:
+        candidate = disable_candidates[0]
+        insights.append(insight(
+            f"global-disable:{candidate['name']}", "warn", "Tools", "MCP disable candidate",
+            f"{candidate['display']} was advertised in {candidate['advertised_sessions']} sessions and never called.",
+            detail=f"Runtime-reported namespace: {candidate['namespace']}.",
+            action="Review and disable the MCP server if it is no longer needed.", priority=8,
+        ))
+
+    catalog_count = len(advertised_names)
+    catalog_used = len(used_advertised_names)
+    if totals["unused_eager_definition_tokens"]:
+        eager = totals["eager_definition_tokens"]
+        share = totals["unused_eager_definition_tokens"] / max(1, eager)
+        insights.append(insight(
+            "global-eager-tax", "warn" if share >= 0.5 else "neutral", "Tools", "Unused eager schema tax",
+            f"~{totals['unused_eager_definition_tokens']:,} eager tool-definition tokens were loaded in sessions that did not call those tools.",
+            detail=f"That is {share * 100:.0f}% of {eager:,} eager definition tokens across runtime-reported catalogs.",
+            action="Move rarely used capabilities to deferred loading or disable their provider." if share >= 0.5 else "",
+            priority=9,
+        ))
+
+    skill_rows = [{
+        "name": row["name"], "activations": row["activations"],
+        "sessions_used": len(row["sessions"]), "projects": sorted(row["projects"]),
+        "providers": sorted(row["providers"]), "last_ts": row["last_ts"],
+        "last_used": time.strftime("%Y-%m-%d", time.localtime(row["last_ts"])) if row["last_ts"] else "Never",
+    } for row in by_skill.values()]
+    skill_rows.sort(key=lambda row: (-row["activations"], row["name"]))
+
+    return {
+        **dict(totals),
+        "sessions_with_tools": sum(1 for row in session_rows if (row.get("_tool_evidence") or {}).get("total_calls")),
+        "by_name": (tool_rows[:20] + [
+            row for row in tool_rows[20:] if row["recommendation"] in ("disable", "fix_or_disable")
+        ])[:24],
+        "inventory_tools": tool_rows[:240],
+        "by_namespace": namespace_rows[:16],
+        "skills": skill_rows[:80],
+        "catalog_unique": catalog_count,
+        "catalog_used_unique": catalog_used,
+        "catalog_utilization": (catalog_used / catalog_count) if catalog_count else 0.0,
+        "trend": trend,
+        "insights": normalize_insights(insights, limit=8),
+    }
+
+
+def codex_mcp_states():
+    return {name: bool(row.get("enabled")) for name, row in toml_named_sections(CODEX_CONFIG, "mcp_servers").items()}
+
+
+def claude_mcp_states():
+    states = {}
+    desktop_configs = [os.path.join(root, "claude_desktop_config.json") for root in CLAUDE_DESKTOP_DATA_ROOTS]
+    for path in (CLAUDE_ROOT_CONFIG, *desktop_configs):
+        data = load_json(path, {})
+        for name in (data.get("mcpServers") or {}) if isinstance(data, dict) else {}:
+            states[name] = True
+    return states
+
+
+def ghost_mcp_catalog():
+    rows = {}
+    remote_root = os.path.join(GHOST_MCP_ROOT, "remote")
+    for path in glob.glob(os.path.join(remote_root, "*.yaml")):
+        name = os.path.basename(path).rsplit(".", 1)[0]
+        try:
+            with open(path, encoding="utf-8") as fh:
+                content = fh.read()
+            match = re.search(r'^name:\s*([A-Za-z0-9_.:-]+)\s*$', content, re.MULTILINE)
+            name = match.group(1) if match else name
+        except OSError:
+            pass
+        rows[name] = {"name": name, "transport": "remote"}
+    local_root = os.path.join(GHOST_MCP_ROOT, "dist", "servers")
+    aliases = {"cisco-directory": "cisco_directory", "splunk-docs": "splunk_docs"}
+    for path in glob.glob(os.path.join(local_root, "*")):
+        if not os.path.isdir(path):
+            continue
+        raw = os.path.basename(path)
+        name = aliases.get(raw, raw)
+        rows[name] = {"name": name, "transport": "local"}
+    rows.update(_ghost_catalog_cache.get("rows") or {})
+    return rows
+
+
+def refresh_ghost_mcp_catalog(runner=None):
+    ghost_path = ghost_executable()
+    if not ghost_path:
+        return {}
+    runner = runner or subprocess.run
+    try:
+        completed = runner([ghost_path, "mcp", "codex", "list"], capture_output=True,
+                           text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    if completed.returncode != 0:
+        return {}
+    rows = {}
+    for line in (completed.stdout or "").splitlines():
+        match = re.match(r'^\s{2}([A-Za-z0-9_.:-]+)\s+(remote|local)\s+', line)
+        if match:
+            rows[match.group(1)] = {"name": match.group(1), "transport": match.group(2)}
+    if rows:
+        _ghost_catalog_cache["rows"], _ghost_catalog_cache["at"] = rows, time.time()
+        _xsess["data"], _xsess["at"] = None, 0.0
+        if STATE:
+            updated = dict(STATE)
+            updated["xsession"] = cross_session()
+            publish(updated)
+    return rows
+
+
+def codex_plugin_states():
+    return {name: bool(row.get("enabled")) for name, row in toml_named_sections(CODEX_CONFIG, "plugins").items()}
+
+
+def claude_plugin_installations():
+    data = load_json(os.path.expanduser("~/.claude/plugins/installed_plugins.json"), {})
+    plugins = data.get("plugins") if isinstance(data, dict) else {}
+    result = {}
+    for plugin_id, installs in (plugins or {}).items():
+        if not isinstance(installs, list) or not installs:
+            continue
+        valid = [row for row in installs if isinstance(row, dict) and row.get("installPath")]
+        if valid:
+            result[plugin_id] = valid[-1]
+    return result
+
+
+def discovered_skills(skill_usage=None):
+    usage = {str(row.get("name") or "").lower(): row for row in (skill_usage or [])}
+    rows = []
+
+    def add(path, runtime, source, enabled=True, plugin_id="", mutable=False, control_scope=""):
+        name = os.path.basename(os.path.dirname(path))
+        used = usage.get(name.lower()) or {}
+        rows.append({
+            "id": f"{runtime}:{plugin_id or source}:{name}",
+            "type": "skill", "name": name, "runtime": runtime, "source": source,
+            "path": home_shorten(path), "enabled": bool(enabled), "plugin_id": plugin_id,
+            "mutable": bool(mutable), "control_scope": control_scope,
+            "used": bool(used), "activations": int(used.get("activations") or 0),
+            "sessions_used": int(used.get("sessions_used") or 0), "last_used": used.get("last_used") or "Never",
+        })
+
+    for path in glob.glob(os.path.expanduser("~/.codex/skills/**/SKILL.md"), recursive=True):
+        if "/plugins/" not in path:
+            add(path, "Codex", "local skill", True)
+
+    codex_plugins = codex_plugin_states()
+    codex_cache = os.path.expanduser("~/.codex/plugins/cache")
+    for path in glob.glob(os.path.join(codex_cache, "*", "*", "*", "skills", "*", "SKILL.md")):
+        rel = os.path.relpath(path, codex_cache).split(os.sep)
+        if len(rel) < 6:
+            continue
+        market, plugin = rel[0], rel[1]
+        plugin_id = f"{plugin}@{market}"
+        configured = plugin_id in codex_plugins
+        add(path, "Codex", plugin_id, codex_plugins.get(plugin_id, True), plugin_id, configured, "plugin pack" if configured else "")
+
+    claude_settings = load_json(CLAUDE_SETTINGS, {})
+    claude_enabled = claude_settings.get("enabledPlugins") if isinstance(claude_settings, dict) else {}
+    for plugin_id, install in claude_plugin_installations().items():
+        root = install.get("installPath") or ""
+        for path in glob.glob(os.path.join(root, "skills", "*", "SKILL.md")):
+            add(path, "Claude", plugin_id, bool((claude_enabled or {}).get(plugin_id)), plugin_id, True, "plugin pack")
+
+    for data_root in CLAUDE_DESKTOP_DATA_ROOTS:
+        desktop_root = os.path.join(data_root, "local-agent-mode-sessions", "skills-plugin")
+        for path in glob.glob(os.path.join(desktop_root, "**", "skills", "*", "SKILL.md"), recursive=True):
+            add(path, "Claude Desktop", "Cowork built-in", True)
+
+    deduped = {}
+    for row in rows:
+        deduped[row["id"]] = row
+    return sorted(deduped.values(), key=lambda row: (row["runtime"], row["name"], row["source"]))
+
+
+def capability_inventory(waste=None):
+    waste = waste or {}
+    tool_evidence = waste.get("inventory_tools") or waste.get("by_name") or []
+    tool_items = []
+    for row in tool_evidence:
+        if row.get("kind") == "mcp":
+            continue
+        advertised = int(row.get("advertised_sessions") or 0)
+        eager = int(row.get("eager_sessions") or 0)
+        deferred = int(row.get("deferred_sessions") or 0)
+        state = "Observed only"
+        if advertised:
+            state = "Eager" if eager and not deferred else ("Deferred" if deferred and not eager else "Mixed")
+        tool_items.append({
+            "id": f"tool:{row.get('name')}", "type": "tool", "name": row.get("display") or row.get("name"),
+            "identity": row.get("name"), "runtime": ", ".join(row.get("providers") or []) or "trace",
+            "source": row.get("namespace") or "unknown", "state": state,
+            "enabled": True, "mutable": False, "used": bool(row.get("calls")),
+            "calls": int(row.get("calls") or 0), "returned_tokens": int(row.get("output_tokens") or 0),
+            "advertised_sessions": advertised, "eager_sessions": eager, "deferred_sessions": deferred,
+            "last_used": row.get("last_used") or "Never", "recommendation": row.get("recommendation") or "keep",
+        })
+
+    mcp_catalog = ghost_mcp_catalog()
+    codex_states, claude_states = codex_mcp_states(), claude_mcp_states()
+    mcp_usage = defaultdict(lambda: {"calls": 0, "tokens": 0, "last_used": "Never", "used": False})
+    for row in tool_evidence:
+        if row.get("kind") != "mcp":
+            continue
+        name = row.get("mcp_server") or row.get("namespace") or "mcp"
+        u = mcp_usage[name]
+        u["calls"] += int(row.get("calls") or 0)
+        u["tokens"] += int(row.get("output_tokens") or 0)
+        u["used"] = u["used"] or bool(row.get("calls"))
+        if row.get("last_ts") and row.get("last_used"):
+            u["last_used"] = row["last_used"]
+    all_mcp_names = set(mcp_catalog) | set(codex_states) | set(claude_states) | set(mcp_usage)
+    mcp_items = []
+    for name in sorted(all_mcp_names):
+        codex_on = bool(codex_states.get(name))
+        claude_on = bool(claude_states.get(name))
+        usage_row = mcp_usage[name]
+        enabled = codex_on or claude_on
+        mcp_items.append({
+            "id": f"mcp:{name}", "type": "mcp", "name": name, "runtime": "Codex + Claude",
+            "source": (mcp_catalog.get(name) or {}).get("transport") or "trace/config",
+            "state": "Enabled" if enabled else "Disabled", "enabled": enabled,
+            "mutable": bool(ghost_executable() and name in mcp_catalog),
+            "codex_enabled": codex_on, "claude_enabled": claude_on, "used": usage_row["used"],
+            "calls": usage_row["calls"], "returned_tokens": usage_row["tokens"], "last_used": usage_row["last_used"],
+        })
+
+    skill_items = discovered_skills(waste.get("skills") or [])
+    tool_reported = sum(1 for row in tool_items if row["advertised_sessions"])
+    tool_reported_used = sum(1 for row in tool_items if row["advertised_sessions"] and row["used"])
+    mcp_enabled = sum(1 for row in mcp_items if row["enabled"])
+    mcp_enabled_used = sum(1 for row in mcp_items if row["enabled"] and row["used"])
+    skills_enabled = sum(1 for row in skill_items if row["enabled"])
+    skills_used = sum(1 for row in skill_items if row["enabled"] and row["used"])
+    desktop_index = claude_desktop_index()
+    local_agents = [row for row in desktop_index.values() if row.get("source_kind") == "agent"]
+    traceable_agents = claude_local_agent_sources(desktop_index)
+    latest_desktop = max((row.get("metadata_mtime") or 0 for row in local_agents), default=0)
+    summary = {
+        "tools": {"available": len(tool_items), "reported": tool_reported, "enabled": tool_reported,
+                  "used": tool_reported_used, "utilization": tool_reported_used / tool_reported if tool_reported else 0.0,
+                  "observed_only": sum(1 for row in tool_items if not row["advertised_sessions"])},
+        "mcps": {"available": len(mcp_items), "enabled": mcp_enabled, "used": mcp_enabled_used,
+                 "historically_used": sum(1 for row in mcp_items if row["used"]),
+                 "utilization": mcp_enabled_used / mcp_enabled if mcp_enabled else 0.0},
+        "skills": {"available": len(skill_items), "enabled": skills_enabled, "used": skills_used,
+                   "utilization": skills_used / skills_enabled if skills_enabled else 0.0},
+        "definitions": {key: int(waste.get(key) or 0) for key in (
+            "definition_tokens", "eager_definition_tokens", "deferred_definition_tokens", "unused_eager_definition_tokens"
+        )},
+    }
+    return {
+        "summary": summary, "items": tool_items + mcp_items + skill_items,
+        "actions": {**mcp_action_capability(), "skill_pack_toggle": True},
+        "claude_desktop": {
+            "local_agent_sessions": len(local_agents),
+            "traceable_agent_sessions": len(traceable_agents),
+            "latest_local_agent": local_dt(latest_desktop) if latest_desktop else "Never",
+            "cloud_trace_available": False,
+            "roots": [home_shorten(root) for root in CLAUDE_DESKTOP_DATA_ROOTS if os.path.isdir(root)],
+            "note": "Scanning standard and enterprise Claude Desktop Agent/Cowork traces.",
+        },
+        "generated_at": int(time.time()),
+    }
+
+
+def mcp_action_capability():
+    ghost_path = ghost_executable()
+    return {
+        "available": bool(ghost_path),
+        "token": _ACTION_TOKEN,
+        "scope": "Codex and Claude",
+        "command_template": "ghost mcp all remove <server>",
+        "enable_command_template": "ghost mcp all add <server>",
+    }
+
+
+def set_mcp_server_enabled(server, enabled, ghost_path=None, runner=None):
+    server = str(server or "").strip()
+    if not MCP_SERVER_RE.fullmatch(server):
+        return {"ok": False, "error": "Invalid MCP server name."}
+    ghost_path = ghost_path or ghost_executable()
+    if not ghost_path:
+        return {"ok": False, "error": "Ghost CLI is not available on PATH."}
+    runner = runner or subprocess.run
+    operation = "add" if enabled else "remove"
+    command = [ghost_path, "mcp", "all", operation, server]
+    try:
+        completed = runner(command, capture_output=True, text=True, timeout=60, check=False)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": f"Ghost timed out while trying to {operation} the MCP server.", "command": command[1:]}
+    except OSError as exc:
+        return {"ok": False, "error": compact_text(str(exc), 240), "command": command[1:]}
+
+    output = compact_text((completed.stdout or completed.stderr or "").strip(), 600)
+    result = {
+        "ok": completed.returncode == 0,
+        "server": server,
+        "enabled": bool(enabled),
+        "command": ["ghost", "mcp", "all", operation, server],
+        "message": output or (f"MCP server {'enabled' if enabled else 'disabled'}." if completed.returncode == 0 else f"Ghost could not {operation} the MCP server."),
+        "restart_required": completed.returncode == 0,
+    }
+    if completed.returncode != 0:
+        result["error"] = result["message"]
+    _mcp_action_log.insert(0, {
+        "ts": int(time.time()), "server": server, "ok": result["ok"], "message": result["message"],
+    })
+    del _mcp_action_log[20:]
+    if result["ok"]:
+        _xsess["data"], _xsess["at"] = None, 0.0
+    return result
+
+
+def disable_mcp_server(server, ghost_path=None, runner=None):
+    return set_mcp_server_enabled(server, False, ghost_path=ghost_path, runner=runner)
+
+
+def set_codex_plugin_enabled(plugin_id, enabled):
+    if not PLUGIN_ID_RE.fullmatch(str(plugin_id or "")):
+        return {"ok": False, "error": "Invalid plugin id."}
+    states = codex_plugin_states()
+    if plugin_id not in states:
+        return {"ok": False, "error": "Codex plugin is not configured."}
+    try:
+        with open(CODEX_CONFIG, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError as exc:
+        return {"ok": False, "error": compact_text(str(exc), 240)}
+    quoted = re.escape(plugin_id)
+    header = re.search(rf'^\[plugins\."{quoted}"\]\s*$', text, re.MULTILINE)
+    if not header:
+        header = re.search(rf'^\[plugins\.{quoted}\]\s*$', text, re.MULTILINE)
+    if not header:
+        return {"ok": False, "error": "Codex plugin section was not found."}
+    next_header = re.search(r'^\[', text[header.end():], re.MULTILINE)
+    end = header.end() + next_header.start() if next_header else len(text)
+    body = text[header.end():end]
+    value = "true" if enabled else "false"
+    if re.search(r'^\s*enabled\s*=\s*(?:true|false)\s*$', body, re.MULTILINE | re.IGNORECASE):
+        body = re.sub(r'(^\s*enabled\s*=\s*)(?:true|false)(\s*$)', rf'\g<1>{value}\g<2>', body,
+                      count=1, flags=re.MULTILINE | re.IGNORECASE)
+    else:
+        body = f"\nenabled = {value}" + body
+    try:
+        atomic_write_text(CODEX_CONFIG, text[:header.end()] + body + text[end:])
+    except OSError as exc:
+        return {"ok": False, "error": compact_text(str(exc), 240)}
+    _xsess["data"], _xsess["at"] = None, 0.0
+    return {"ok": True, "plugin_id": plugin_id, "runtime": "Codex", "enabled": bool(enabled), "restart_required": True}
+
+
+def set_claude_plugin_enabled(plugin_id, enabled):
+    if not PLUGIN_ID_RE.fullmatch(str(plugin_id or "")):
+        return {"ok": False, "error": "Invalid plugin id."}
+    if plugin_id not in claude_plugin_installations():
+        return {"ok": False, "error": "Claude plugin is not installed."}
+    settings = load_json(CLAUDE_SETTINGS, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    enabled_plugins = settings.setdefault("enabledPlugins", {})
+    enabled_plugins[plugin_id] = bool(enabled)
+    try:
+        atomic_write_text(CLAUDE_SETTINGS, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        return {"ok": False, "error": compact_text(str(exc), 240)}
+    _xsess["data"], _xsess["at"] = None, 0.0
+    return {"ok": True, "plugin_id": plugin_id, "runtime": "Claude", "enabled": bool(enabled), "restart_required": True}
+
+
+def set_skill_pack_enabled(runtime, plugin_id, enabled):
+    runtime = str(runtime or "").strip().lower()
+    if runtime == "codex":
+        result = set_codex_plugin_enabled(plugin_id, enabled)
+    elif runtime == "claude":
+        result = set_claude_plugin_enabled(plugin_id, enabled)
+    else:
+        return {"ok": False, "error": "Only Codex and Claude plugin packs can be changed."}
+    return result
 
 
 def cross_session():
@@ -1639,6 +2839,7 @@ def cross_session():
         return _xsess["data"]
 
     sessions = []
+    internal_rows = []
     model_cost, model_tok = defaultdict(float), defaultdict(int)
     day_cost = defaultdict(float)
     provider_cost, provider_sessions = defaultdict(float), defaultdict(int)
@@ -1647,14 +2848,15 @@ def cross_session():
         row = session_summary(source)
         if row["turns"] == 0:
             continue
-        sessions.append(row)
+        internal_rows.append(row)
+        sessions.append({key: value for key, value in row.items() if not key.startswith("_")})
         provider_cost[row["provider"]] += row["cost"]
         provider_sessions[row["provider"]] += 1
-        for model, val in row.pop("_model_cost").items():
+        for model, val in row.get("_model_cost", {}).items():
             model_cost[model] += val
-        for model, val in row.pop("_model_tok").items():
+        for model, val in row.get("_model_tok", {}).items():
             model_tok[model] += val
-        for day, val in row.pop("_day_cost").items():
+        for day, val in row.get("_day_cost", {}).items():
             day_cost[day] += val
 
     sessions.sort(key=lambda s: -s["mtime"])
@@ -1670,6 +2872,7 @@ def cross_session():
     total = sum(model_cost.values())
     premium = (model_cost.get("claude-opus-4-8", 0) + model_cost.get("claude-fable-5", 0)
                + model_cost.get("gpt-5.5", 0))
+    tool_waste = global_tool_waste(internal_rows)
     data = {
         "sessions": sessions[:60],
         "model_mix": mm,
@@ -1682,6 +2885,9 @@ def cross_session():
             {"provider": k, "cost": provider_cost[k], "sessions": provider_sessions[k]}
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
+        "tool_waste": tool_waste,
+        "capabilities": capability_inventory(tool_waste),
+        "mcp_actions": mcp_action_capability(),
     }
     _xsess["data"], _xsess["at"] = data, now
     return data
@@ -1934,14 +3140,58 @@ def menubar_verdict(st, recommendation):
     )
 
 
-def menubar_state():
-    st = current_state()
+def menubar_session_name(source):
+    title = compact_text(source.get("title") or "", 52).strip()
+    if title and title.lower() not in ("untitled", "untitled session"):
+        return title
+    project = str(source.get("project") or "").rstrip("/\\")
+    if project and project != "No project":
+        return compact_text(project.replace("\\", "/").rsplit("/", 1)[-1], 52)
+    return str(source.get("id") or "session")[:12]
+
+
+def menubar_recent_sessions(sources, selected_id=None, limit=5):
+    ordered, seen = [], set()
+    for source in sorted(sources or [], key=lambda row: -(row.get("mtime") or 0)):
+        sid = str(source.get("id") or "")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        ordered.append(source)
+
+    selected = next((row for row in ordered if row.get("id") == selected_id), None)
+    choices = ordered[:max(0, limit)]
+    if selected and selected not in choices and limit > 0:
+        choices = [selected] + [row for row in ordered if row is not selected][:limit - 1]
+
+    return [{
+        "id": row.get("id"),
+        "provider": row.get("provider"),
+        "client": row.get("client") or row.get("provider"),
+        "label": row.get("label"),
+        "name": menubar_session_name(row),
+        "project": row.get("project") or "",
+        "mtime": row.get("mtime") or 0,
+    } for row in choices]
+
+
+def menubar_state(session_id=None):
+    requested_id = str(session_id or "").strip()
+    sources = all_session_sources()
+    selected_source = find_session(requested_id, sources=sources) if requested_id else None
+    missing = bool(requested_id and not selected_source)
+    st = recompute(selected_source) if selected_source else current_state()
+    if selected_source and not st:
+        missing = True
+        selected_source = None
+        st = current_state()
     source = st.get("source") or {}
     context = st.get("context") or {}
     cache = st.get("cache") or {}
     activity = menubar_activity(st)
     recommendation = menubar_recommendation(st)
     verdict = menubar_verdict(st, recommendation)
+    selected_id = source.get("id")
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
@@ -1982,6 +3232,15 @@ def menubar_state():
         "recommendation": recommendation,
         "verdict": verdict,
         "insights": (st.get("insights") or [])[:4],
+        "selection": {
+            "requested_id": requested_id or None,
+            "selected_id": selected_id,
+            "pinned": bool(requested_id and selected_source),
+            "missing": missing,
+        },
+        "recent_sessions": menubar_recent_sessions(
+            sources, selected_id=requested_id if selected_source else selected_id, limit=5
+        ),
         "ts": st.get("ts"),
     }
 
@@ -2036,6 +3295,10 @@ def page_path():
     return None
 
 
+def is_dashboard_page_path(req_path):
+    return req_path == "/" or bool(re.fullmatch(r"/sessions/[^/]{1,240}/?", req_path or ""))
+
+
 def missing_page_html():
     candidates = "\n".join(
         f"<li><code>{html.escape(path)}</code></li>" for path in PAGE_CANDIDATES
@@ -2081,7 +3344,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         req_path = urlparse(self.path).path
-        if req_path == "/":
+        if is_dashboard_page_path(req_path):
             path = page_path()
             body = b"" if path else missing_page_html().encode()
             self.send_response(200 if path else 503)
@@ -2091,10 +3354,66 @@ class H(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_POST(self):
+        req_path = urlparse(self.path).path
+        if req_path not in ("/mcp/disable", "/capability/toggle"):
+            self.send_error(404)
+            return
+        origin = self.headers.get("Origin") or ""
+        if origin and (urlparse(origin).hostname or "") not in ("localhost", "127.0.0.1", "::1"):
+            self._send(json.dumps({"ok": False, "error": "Local dashboard origin required."}),
+                       "application/json", status=403)
+            return
+        content_type = self.headers.get("Content-Type") or ""
+        if not content_type.startswith("application/json"):
+            self._send(json.dumps({"ok": False, "error": "JSON request required."}),
+                       "application/json", status=415)
+            return
+        action_token = self.headers.get("X-Token-Meter-Action") or ""
+        if not action_token or not secrets.compare_digest(action_token, _ACTION_TOKEN):
+            self._send(json.dumps({"ok": False, "error": "Invalid action token."}),
+                       "application/json", status=403)
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 4096:
+            self._send(json.dumps({"ok": False, "error": "Invalid request size."}),
+                       "application/json", status=400)
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send(json.dumps({"ok": False, "error": "Invalid JSON."}),
+                       "application/json", status=400)
+            return
+        if req_path == "/mcp/disable":
+            result = disable_mcp_server(payload.get("server"))
+        else:
+            capability_type = str(payload.get("type") or "").strip().lower()
+            enabled = payload.get("enabled") is True
+            if capability_type == "mcp":
+                known = {
+                    row["name"] for row in capability_inventory().get("items") or []
+                    if row.get("type") == "mcp" and row.get("mutable")
+                }
+                server = str(payload.get("name") or "").strip()
+                if server not in known:
+                    result = {"ok": False, "error": "MCP server is not in the discovered inventory."}
+                else:
+                    result = set_mcp_server_enabled(server, enabled)
+            elif capability_type == "skill":
+                result = set_skill_pack_enabled(payload.get("runtime"), payload.get("plugin_id"), enabled)
+            else:
+                result = {"ok": False, "error": "Unsupported capability type."}
+        status = 200 if result.get("ok") else (503 if "not available" in result.get("error", "") else 400)
+        self._send(json.dumps(result), "application/json", status=status)
+
     def do_GET(self):
         parsed = urlparse(self.path)
         req_path = parsed.path
-        if req_path == "/":
+        if is_dashboard_page_path(req_path):
             path = page_path()
             if path:
                 self._send(open(path, encoding="utf-8").read())
@@ -2113,13 +3432,19 @@ class H(BaseHTTPRequestHandler):
         elif req_path == "/state":
             self._send(json.dumps(current_state()), "application/json")
         elif req_path == "/menubar":
-            self._send(json.dumps(menubar_state()), "application/json")
+            sid = (parse_qs(parsed.query).get("session") or [""])[0][:240]
+            self._send(json.dumps(menubar_state(sid)), "application/json")
         elif req_path == "/health":
             path = page_path()
+            sources = all_session_sources()
+            clients = defaultdict(int)
+            for source in sources:
+                clients[source.get("client") or source.get("provider") or "unknown"] += 1
             self._send(json.dumps({
                 "ok": bool(path),
                 "state_ready": bool(STATE),
-                "sources": len(all_session_sources()),
+                "sources": len(sources),
+                "source_clients": dict(clients),
                 "port": PORT,
                 "page_ready": bool(path),
                 "page_path": path,
@@ -2156,6 +3481,7 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     threading.Thread(target=watcher, daemon=True).start()
+    threading.Thread(target=refresh_ghost_mcp_catalog, daemon=True).start()
     ThreadingHTTPServer.allow_reuse_address = True
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")

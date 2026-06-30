@@ -2,7 +2,9 @@ import Cocoa
 import Foundation
 
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
-private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/")!
+private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#summary")!
+private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
+private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
 
 // Cisco brand accent — Cisco Blue (#00BCEB)
 extension NSColor {
@@ -69,6 +71,49 @@ enum Verdict {
     }
 }
 
+struct RecentSession {
+    var id: String
+    var provider: String
+    var label: String
+    var name: String
+    var project: String
+
+    static func fromJSON(_ dict: [String: Any]) -> RecentSession? {
+        guard let id = string(dict["id"]), !id.isEmpty else { return nil }
+        return RecentSession(
+            id: id,
+            provider: string(dict["provider"]) ?? "",
+            label: string(dict["label"]) ?? "",
+            name: string(dict["name"]) ?? "",
+            project: string(dict["project"]) ?? ""
+        )
+    }
+
+    var providerName: String {
+        provider.lowercased() == "codex" ? "Codex" : "Claude"
+    }
+
+    var identifier: String {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanName.isEmpty { return cleanName }
+        let cleanProject = project.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanProject.isEmpty {
+            return URL(fileURLWithPath: cleanProject.replacingOccurrences(of: "~", with: NSHomeDirectory())).lastPathComponent
+        }
+        return String(id.prefix(12))
+    }
+
+    var menuTitle: String { "\(providerName) · \(identifier)" }
+
+    var toolTip: String {
+        [label.isEmpty ? providerName : label, project, String(id.prefix(12))]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    var symbolName: String { provider.lowercased() == "codex" ? "terminal" : "sparkles" }
+}
+
 struct MeterSnapshot {
     var connected: Bool
     var error: String
@@ -83,13 +128,7 @@ struct MeterSnapshot {
     var totalTokens: Int
     var turns: Int
     var cacheInputShare: Double?
-    var cacheFreshTokens: Int
-    var cacheReadTokens: Int
-    var cacheWriteTokens: Int
     var cacheTotalTokens: Int
-    var cacheSaved: Double
-    var cacheLatestTokens: Int
-    var cacheLatestShare: Double?
     var contextPct: Double?
     var contextTokens: Int
     var contextWindow: Int
@@ -120,13 +159,7 @@ struct MeterSnapshot {
             totalTokens: 0,
             turns: 0,
             cacheInputShare: nil,
-            cacheFreshTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
             cacheTotalTokens: 0,
-            cacheSaved: 0,
-            cacheLatestTokens: 0,
-            cacheLatestShare: nil,
             contextPct: nil,
             contextTokens: 0,
             contextWindow: 0,
@@ -148,7 +181,6 @@ struct MeterSnapshot {
         let source = dict["source"] as? [String: Any] ?? [:]
         let context = dict["context"] as? [String: Any] ?? [:]
         let cache = dict["cache"] as? [String: Any] ?? [:]
-        let latestCache = cache["latest"] as? [String: Any] ?? [:]
         let insights = dict["insights"] as? [[String: Any]] ?? []
 
         let provider = string(source["label"]) ?? string(dict["provider"]) ?? "Token Meter"
@@ -160,13 +192,7 @@ struct MeterSnapshot {
         let totalTokens = int(dict["total_tokens"])
         let turns = int(dict["turns"])
         let cacheInputShare = optionalDouble(cache["input_share"])
-        let cacheFreshTokens = int(cache["fresh"])
-        let cacheReadTokens = int(cache["read"])
-        let cacheWriteTokens = int(cache["write"])
         let cacheTotalTokens = int(cache["total"])
-        let cacheSaved = double(cache["saved"])
-        let cacheLatestTokens = int(latestCache["tokens"])
-        let cacheLatestShare = optionalDouble(latestCache["share"])
         let contextPct = optionalDouble(context["latest_pct"])
         let contextTokens = int(context["latest"])
         let contextWindow = int(context["window"])
@@ -219,13 +245,7 @@ struct MeterSnapshot {
             totalTokens: totalTokens,
             turns: turns,
             cacheInputShare: cacheInputShare,
-            cacheFreshTokens: cacheFreshTokens,
-            cacheReadTokens: cacheReadTokens,
-            cacheWriteTokens: cacheWriteTokens,
             cacheTotalTokens: cacheTotalTokens,
-            cacheSaved: cacheSaved,
-            cacheLatestTokens: cacheLatestTokens,
-            cacheLatestShare: cacheLatestShare,
             contextPct: contextPct,
             contextTokens: contextTokens,
             contextWindow: contextWindow,
@@ -289,23 +309,6 @@ struct MeterSnapshot {
         return "\(share)% input cached - \(formatCompactInt(cacheTotalTokens))"
     }
 
-    var cacheDetail: String {
-        guard cacheTotalTokens > 0 else { return "waiting for cached input" }
-        var parts = [
-            "\(formatCompactInt(cacheFreshTokens)) uncached",
-            "\(formatCompactInt(cacheReadTokens)) read",
-            "\(formatCompactInt(cacheWriteTokens)) write"
-        ]
-        if cacheSaved > 0.005 {
-            parts.append("\(formatMoney(cacheSaved)) saved")
-        }
-        if cacheLatestTokens > 0 {
-            let latest = cacheLatestShare.map { "\(Int(($0 * 100).rounded()))%" } ?? formatCompactInt(cacheLatestTokens)
-            parts.append("latest \(latest) cached")
-        }
-        return parts.joined(separator: " - ")
-    }
-
     var idleLabel: String {
         if ended { return "pinned log" }
         if idleSeconds < 60 { return "live - \(idleSeconds)s idle" }
@@ -335,6 +338,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menuWidth: CGFloat = 340
     private var statusItem: NSStatusItem!
     private var timer: Timer?
+    private var pinnedSessionID = tokenMeterDefaults.string(forKey: pinnedSessionDefaultsKey)
+    private var recentSessions: [RecentSession] = []
+    private var menuIsOpen = false
+    private var menuRefreshPending = false
     private var snapshot = MeterSnapshot.disconnected("Waiting for http://127.0.0.1:8722/menubar")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -358,13 +365,28 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildMenu()
     }
 
+    func menuWillOpen(_ menu: NSMenu) {
+        menuIsOpen = true
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        menuIsOpen = false
+        if menuRefreshPending {
+            menuRefreshPending = false
+            rebuildMenu()
+        }
+    }
+
     private func fetchState() {
-        URLSession.shared.dataTask(with: stateURL) { [weak self] data, _, error in
+        let requestedSessionID = pinnedSessionID
+        let requestURL = menubarRequestURL(sessionID: requestedSessionID)
+        URLSession.shared.dataTask(with: requestURL) { [weak self] data, _, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                guard requestedSessionID == self.pinnedSessionID else { return }
                 if let error = error {
                     self.snapshot = MeterSnapshot.disconnected(error.localizedDescription)
-                    self.rebuildMenu()
+                    self.refreshMenu()
                     return
                 }
                 guard
@@ -373,13 +395,36 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let dict = obj as? [String: Any]
                 else {
                     self.snapshot = MeterSnapshot.disconnected("Token Meter returned unreadable state.")
-                    self.rebuildMenu()
+                    self.refreshMenu()
                     return
                 }
+                let selection = dict["selection"] as? [String: Any] ?? [:]
+                if bool(selection["missing"]) {
+                    self.persistPinnedSession(nil)
+                }
+                self.recentSessions = (dict["recent_sessions"] as? [[String: Any]] ?? [])
+                    .compactMap(RecentSession.fromJSON)
                 self.snapshot = MeterSnapshot.fromJSON(dict)
-                self.rebuildMenu()
+                self.refreshMenu()
             }
         }.resume()
+    }
+
+    private func menubarRequestURL(sessionID: String?) -> URL {
+        guard let sessionID = sessionID, !sessionID.isEmpty,
+              var components = URLComponents(url: stateURL, resolvingAgainstBaseURL: false)
+        else { return stateURL }
+        components.queryItems = [URLQueryItem(name: "session", value: sessionID)]
+        return components.url ?? stateURL
+    }
+
+    private func refreshMenu() {
+        if menuIsOpen {
+            updateStatusTitle()
+            menuRefreshPending = true
+        } else {
+            rebuildMenu()
+        }
     }
 
     private func rebuildMenu() {
@@ -389,13 +434,20 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addHeader()
         menu.addItem(.separator())
 
+        addAction("Open Dashboard", #selector(openDashboard))
+        addAction("Open Trace", #selector(openTrace), enabled: snapshot.connected)
+        addAction("Open Tools & Skills", #selector(openToolsAndSkills))
+        menu.addItem(.separator())
+
+        addSessionPicker()
+        menu.addItem(.separator())
+
         if snapshot.connected {
             addActivityRow()
             addRecommendationRow()
             addMetricRow("Cost", "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")")
             addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
-            addMetricRow("Cache", snapshot.cacheLabel, toolTip: snapshot.cacheDetail)
-            addSignalRow("Cache detail", snapshot.cacheDetail)
+            addMetricRow("Cache", snapshot.cacheLabel)
             addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))",
                          toolTip: "Context watch starts at 70%; intervene starts at 85%.")
             addContextBar()
@@ -407,10 +459,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         addMetricRow("Status", snapshot.verdict.label, valueColor: snapshot.verdict.color, strong: true,
                      toolTip: snapshot.verdictDetail)
-        menu.addItem(.separator())
-
-        addAction("Open Dashboard", #selector(openDashboard))
-        addAction("Open Current Execution", #selector(openCurrentExecution), enabled: snapshot.connected)
         menu.addItem(.separator())
         addAction("Quit Token Meter Menubar", #selector(quit))
     }
@@ -429,12 +477,45 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let title = label(snapshot.menuTitle, frame: NSRect(x: 14, y: 23, width: menuWidth - 28, height: 18),
                           font: .systemFont(ofSize: 13, weight: .semibold),
                           color: .labelColor)
-        let subtitle = label(snapshot.idleLabel, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 16),
+        let subtitleText = pinnedSessionID == nil ? snapshot.idleLabel : "pinned · \(snapshot.idleLabel)"
+        let subtitle = label(subtitleText, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 16),
                              font: .systemFont(ofSize: 12, weight: .regular),
                              color: .secondaryLabelColor)
         view.addSubview(title)
         view.addSubview(subtitle)
         addViewItem(view)
+    }
+
+    private func addSessionPicker() {
+        let heading = NSMenuItem(title: "Recent sessions", action: nil, keyEquivalent: "")
+        heading.isEnabled = false
+        menu.addItem(heading)
+
+        let follow = NSMenuItem(title: "Follow Latest", action: #selector(followLatest), keyEquivalent: "")
+        follow.target = self
+        follow.state = pinnedSessionID == nil ? .on : .off
+        follow.toolTip = "Automatically follow whichever session was active most recently."
+        follow.image = menuSymbol("arrow.triangle.2.circlepath", description: "Follow latest")
+        menu.addItem(follow)
+
+        for session in recentSessions {
+            let item = NSMenuItem(title: session.menuTitle, action: #selector(pinSession(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = session.id
+            item.state = pinnedSessionID == session.id ? .on : .off
+            item.toolTip = "Click to pin · \(session.toolTip)"
+            item.image = menuSymbol(session.symbolName, description: session.providerName)
+            menu.addItem(item)
+        }
+    }
+
+    private func menuSymbol(_ name: String, description: String) -> NSImage? {
+        if #available(macOS 11.0, *) {
+            let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
+            image?.isTemplate = true
+            return image
+        }
+        return nil
     }
 
     private func addActivityRow() {
@@ -558,17 +639,47 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item)
     }
 
-    @objc private func openDashboard() {
-        NSWorkspace.shared.open(dashboardURL)
+    private func persistPinnedSession(_ sessionID: String?) {
+        pinnedSessionID = sessionID
+        if let sessionID = sessionID {
+            tokenMeterDefaults.set(sessionID, forKey: pinnedSessionDefaultsKey)
+        } else {
+            tokenMeterDefaults.removeObject(forKey: pinnedSessionDefaultsKey)
+        }
     }
 
-    @objc private func openCurrentExecution() {
+    @objc private func followLatest() {
+        persistPinnedSession(nil)
+        refreshMenu()
+        fetchState()
+    }
+
+    @objc private func pinSession(_ sender: NSMenuItem) {
+        guard let sessionID = sender.representedObject as? String, !sessionID.isEmpty else { return }
+        persistPinnedSession(sessionID)
+        refreshMenu()
+        fetchState()
+    }
+
+    @objc private func openDashboard() {
+        openDashboardPanel("summary")
+    }
+
+    @objc private func openTrace() {
         openDashboardPanel("activity")
     }
 
-    private func openDashboardPanel(_ panel: String) {
-        let url = URL(string: "http://127.0.0.1:8722/#\(panel)") ?? dashboardURL
-        NSWorkspace.shared.open(url)
+    @objc private func openToolsAndSkills() {
+        openDashboardPanel("capabilities", includePinnedSession: false)
+    }
+
+    private func openDashboardPanel(_ panel: String, includePinnedSession: Bool = true) {
+        var components = URLComponents(string: "http://127.0.0.1:8722/")
+        if includePinnedSession, let sessionID = pinnedSessionID, !sessionID.isEmpty {
+            components?.path = "/sessions/\(sessionID)"
+        }
+        components?.fragment = panel
+        NSWorkspace.shared.open(components?.url ?? dashboardURL)
     }
 
     @objc private func quit() {

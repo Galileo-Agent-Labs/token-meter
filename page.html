@@ -51,9 +51,10 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .notify.on .sw{background:var(--good)} .notify.on .sw:after{left:16px}
 .notify.hasnew{border-color:rgba(0,188,235,.52);box-shadow:0 0 0 1px rgba(0,188,235,.12),var(--inset)}
 .view{display:none}.view.on{display:block}
-.session-tabs{margin:14px 0 16px;max-width:100%;overflow-x:auto;scrollbar-color:var(--line2) transparent}
-.session-tabs button{white-space:nowrap}
+.session-tabs,.global-tabs{margin:14px 0 16px;max-width:100%;overflow-x:auto;scrollbar-color:var(--line2) transparent}
+.session-tabs button,.global-tabs button{white-space:nowrap}
 .session-panel{display:none}.session-panel.on{display:block}
+.global-panel{display:none}.global-panel.on{display:block}
 .card{background:linear-gradient(180deg,rgba(20,28,37,.95),rgba(13,18,24,.96));border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);position:relative;min-width:0}
 .card:hover{border-color:rgba(255,255,255,.12)}
 .pad{padding:18px}
@@ -131,10 +132,13 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .toastbox{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:9px;width:min(360px,calc(100vw - 28px));pointer-events:none}.toast{pointer-events:auto;border:1px solid rgba(0,188,235,.38);border-left:4px solid var(--orange);border-radius:8px;background:linear-gradient(180deg,rgba(24,34,44,.98),rgba(13,18,24,.98));box-shadow:0 16px 42px rgba(0,0,0,.42);padding:10px 12px;animation:enter .18s ease}.toast.warn{border-left-color:var(--warn);border-color:rgba(255,180,87,.42)}.toast.bad{border-left-color:var(--bad);border-color:rgba(255,111,111,.42)}.toast .th{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;font-size:13px;font-weight:780}.toast .tb{font-size:12px;color:var(--dim);margin-top:2px}.toast button{border:0;background:transparent;color:var(--faint);font:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0}.toast button:hover{color:var(--fg)}
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
 .glob-hero{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.spark{display:flex;align-items:flex-end;gap:5px;height:84px;margin-top:8px;padding:0 2px}.spark .b{flex:1;background:linear-gradient(180deg,var(--orange),rgba(0,188,235,.55));border-radius:3px 3px 0 0;min-height:3px;position:relative;box-shadow:0 -8px 18px rgba(0,188,235,.08)}.spark .b.anom{background:linear-gradient(180deg,var(--bad),rgba(255,111,111,.58))}.spark .b:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5;box-shadow:var(--shadow-soft)}
+.wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDisable{border:1px solid rgba(255,180,87,.4);background:rgba(255,180,87,.08);color:var(--warn);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.mcpDisable:hover{background:rgba(255,180,87,.15)}.mcpDisable:disabled{opacity:.45;cursor:not-allowed}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
 .globalControls{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}.searchbox{width:100%;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.searchbox:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
+.capHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.capHero .pad{padding:13px 15px;overflow:hidden}.capHero .meter{font-size:28px;margin-top:4px}.capHero .subline{font-size:12px;margin-top:5px}.capStatBar{height:8px;margin-top:9px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.42)}.capStatBar i{display:block;width:0;height:100%;border-radius:999px;transition:width .35s ease;background:linear-gradient(90deg,var(--good),var(--accent));box-shadow:0 0 14px rgba(102,217,144,.3)}.capStatBar.mcp i{background:linear-gradient(90deg,#9d72f1,#c2a5ff);box-shadow:0 0 14px rgba(183,140,255,.3)}.capStatBar.skill i{background:linear-gradient(90deg,var(--accent),var(--orange3));box-shadow:0 0 14px rgba(0,188,235,.3)}.capStatBar.warn i{background:linear-gradient(90deg,var(--warn),var(--orange));box-shadow:0 0 14px rgba(255,180,87,.3)}.capCharts{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}.capCharts .pad{padding:13px 17px}.defBar{height:12px;margin-top:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:flex}.defBar i{display:block;height:100%}.defBar .used{background:var(--good)}.defBar .unused{background:var(--warn)}.defBar .deferred{background:rgba(127,219,242,.42)}.capSource{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:rgba(255,255,255,.03);white-space:nowrap}.capFilters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:10px 0}.capTableWrap{overflow:auto;max-height:620px}.capTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.capTableWrap .tbl th.sortable{cursor:pointer;user-select:none;white-space:nowrap}.capTableWrap .tbl th.sortable:after{content:"\2195";display:inline-block;margin-left:6px;color:var(--faint);font-size:10px}.capTableWrap .tbl th.sortable.sort-asc:after{content:"\2191";color:var(--accent)}.capTableWrap .tbl th.sortable.sort-desc:after{content:"\2193";color:var(--accent)}.capTableWrap .tbl th.sortable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}.stateDot{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.stateDot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}.stateDot.on:before{background:var(--good)}.stateDot.off:before{background:var(--bad)}.stateDot.lazy:before{background:var(--orange3)}.capAction{border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.capAction:hover{border-color:var(--accent)}.capAction.disable{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}.capAction:disabled{opacity:.45;cursor:not-allowed}.capPath{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
 .slist{display:flex;flex-direction:column;gap:8px}.srow{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto auto;gap:12px;align-items:center;background:linear-gradient(180deg,rgba(20,28,37,.94),rgba(13,18,24,.94));border:1px solid var(--line);border-radius:8px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow-soft);transition:border-color .16s,background .16s,transform .16s;min-width:0}.srow:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(24,34,44,.96),rgba(14,20,27,.96));transform:translateY(-1px)}.srow.active{border-color:rgba(0,188,235,.62);box-shadow:0 0 0 1px rgba(0,188,235,.12),var(--shadow-soft)}.srow .t{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.srow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.srow .c{font-weight:820;font-size:15px;text-align:right}.sMain{min-width:0}.sbar{height:4px;border-radius:4px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:8px}.sbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--orange));border-radius:4px}.smetrics{text-align:right;min-width:88px}.smetrics .meta{font-size:11px}.badge{font-size:10.5px;color:var(--dim);background:rgba(255,255,255,.045);border:1px solid var(--line);padding:3px 7px;border-radius:6px;box-shadow:var(--inset)}.badge.codex{color:var(--orange3);border-color:rgba(0,188,235,.42);background:rgba(0,188,235,.12)}.badge.claude{color:#d4c0ff;border-color:rgba(183,140,255,.42);background:rgba(183,140,255,.12)}
+@media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:center;width:100%;max-width:100%}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.toolsgrid,.notifygrid,.insightBoard,.globalControls{grid-template-columns:1fr}.globalControls .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.analyses,.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:center;width:100%;max-width:100%}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters{grid-template-columns:1fr}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.analyses,.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.overview{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}}
 </style></head><body>
 <div class=wrap>
@@ -143,6 +147,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=tabs>
    <button class="tab on" id=tab-session>Current</button>
    <button class=tab id=tab-global>Global</button>
+   <button class=tab id=tab-capabilities>Tools &amp; Skills</button>
   </div>
   <div class=spacer></div>
   <div class=live id=live><span class=pulse></span><span id=livetxt>connecting</span></div>
@@ -205,7 +210,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
     <div class=stat><div class="label fieldtip" tabindex=0 title="Model output tokens produced by assistant executions." data-tip="Model output tokens produced by assistant executions.">Output tokens</div><div class="v mono" id=output-tok>0</div><div class=sm id=output-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking tokens</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool result tokens</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per minute over the observed log duration." data-tip="Estimated spend per minute over the observed log duration.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>cost velocity</div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>active execution time</div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated average cost per completed task or turn completion." data-tip="Estimated average cost per completed task or turn completion.">Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Input cached</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cached input</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
@@ -215,9 +220,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="High-level metrics for the current log/thread. Executions are individual model turns." data-tip="High-level metrics for the current log/thread. Executions are individual model turns.">Execution Overview</span></h2><span class=hint id=exec-hint></span></div>
   <div class=overview>
-   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Elapsed time between the first and latest observed event in this log/thread." data-tip="Elapsed time between the first and latest observed event in this log/thread.">Duration</div><div class="v mono" id=ov-duration>0s</div><div class=sm id=ov-idle></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Active execution time from reported turn or task durations. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Active execution time from reported turn or task durations. Idle gaps are excluded and overlapping execution windows are counted once.">Active duration</div><div class="v mono" id=ov-duration>--</div><div class=sm id=ov-idle></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
-   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Tool definitions available to the agent, or observed unique tools when the loaded count is unknown." data-tip="Tool definitions available to the agent, or observed unique tools when the loaded count is unknown.">Tools loaded</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Dynamic tool definitions reported by the runtime, or observed unique tools when no catalog is available." data-tip="Dynamic tool definitions reported by the runtime, or observed unique tools when no catalog is available.">Tools reported</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Number of priced model executions observed in this log/thread." data-tip="Number of priced model executions observed in this log/thread.">Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Estimated log/thread cost divided by execution count." data-tip="Estimated log/thread cost divided by execution count.">Avg cost</div><div class="v mono" id=ov-avg>$0</div><div class=sm>per execution</div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Total tool calls observed in this log/thread." data-tip="Total tool calls observed in this log/thread.">Tool calls</div><div class="v mono" id=ov-tools>0</div><div class=sm id=ov-tooltok></div></div>
@@ -335,6 +340,13 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Spend split by model across discovered local logs." data-tip="Spend split by model across discovered local logs.">Model mix</div><div id=g-mm style=margin-top:12px></div></div>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Daily estimated spend over the most recent logged days." data-tip="Daily estimated spend over the most recent logged days.">Spend trend · 14d</div><div class=spark id=g-spark></div><div class=subline id=g-trend style=margin-top:8px></div></div>
   </div>
+  <div class="seg global-tabs" id=global-tabs>
+   <button data-global-panel=logs>Logs</button>
+   <button data-global-panel=insights>Global insights</button>
+   <button data-global-panel=evidence>Capability evidence</button>
+  </div>
+
+  <div class="global-panel on" id=global-panel-logs>
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
   <div class=globalControls>
    <input class=searchbox id=g-search type=search placeholder="Search title, project, model, provider">
@@ -347,8 +359,62 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <div class=globalMeta id=g-count></div>
   </div>
   <div class=slist id=slist></div>
+  </div>
+
+  <div class=global-panel id=global-panel-insights>
+  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule." data-tip="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule.">Global tool waste</span></h2><span class=hint>trace-backed · categories can overlap</span></div>
+  <div class=wasteHero>
+   <div class="card pad"><div class=label>Returned tokens</div><div class="meter mono" id=g-tool-tokens>0</div><div class=subline id=g-tool-token-note></div></div>
+   <div class="card pad"><div class=label>Flagged tokens</div><div class="meter mono" id=g-flagged-tokens>0</div><div class=subline id=g-flagged-note></div></div>
+   <div class="card pad"><div class=label>Oversized calls</div><div class="meter mono" id=g-oversized>0</div><div class=subline>at least 8k returned tokens</div></div>
+   <div class="card pad"><div class=label>Errors &amp; exact repeats</div><div class="meter mono" id=g-errors-repeats>0</div><div class=subline id=g-errors-repeat-note></div></div>
+  </div>
+  <div class=globalWasteGrid>
+   <div class="card pad"><div class=label>Returned tokens by capability</div><div class=subline>largest trace-observed result streams</div><div class=wasteBars id=g-tool-bars></div></div>
+   <div class="card pad"><div class=label>Tool-result trend · 14d</div><div class=subline>blue total · amber flagged by at least one rule</div><div class=wasteTrend id=g-tool-waste-trend></div></div>
+  </div>
+  <div class="card pad" style="margin-top:12px"><div class=label>Global insights</div><div class=globalInsightList id=g-waste-insights></div></div>
+  </div>
+
+  <div class=global-panel id=global-panel-evidence>
+  <div class=section-h><h2>Capability evidence</h2><span class=hint>usage, payloads, failures, and recommendations</span></div>
+  <div class="card pad wasteTableWrap">
+   <table class=tbl id=g-tool-table><thead><tr><th>Tool / MCP</th><th>Namespace</th><th class=num>Sessions</th><th class=num>Calls</th><th class=num>Returned</th><th class=num>Flagged</th><th class=num>Errors</th><th>Last used</th><th>Recommendation</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  </div>
+ </div>
+
+ <div class=view id=view-capabilities>
+  <div class=capHero>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Runtime-reported tools called at least once divided by runtime-reported tools advertised in local traces." data-tip="Runtime-reported tools called at least once divided by runtime-reported tools advertised in local traces.">Tool use</div><div class="meter mono" id=c-tool-pct>0%</div><div class=capStatBar id=c-tool-bar role=progressbar aria-label="Tool use" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-tool-note></div></div>
+   <div class="card pad"><div class=label>MCP use</div><div class="meter mono" id=c-mcp-pct>0%</div><div class="capStatBar mcp" id=c-mcp-bar role=progressbar aria-label="MCP use" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-mcp-note></div></div>
+   <div class="card pad"><div class=label>Skill use</div><div class="meter mono" id=c-skill-pct>0%</div><div class="capStatBar skill" id=c-skill-bar role=progressbar aria-label="Skill use" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-skill-note></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Approximate eager tool-definition tokens loaded in sessions where the corresponding tool was not called." data-tip="Approximate eager tool-definition tokens loaded in sessions where the corresponding tool was not called.">Unused eager tax</div><div class="meter mono" id=c-eager-tax>0</div><div class="capStatBar warn" id=c-eager-bar role=progressbar aria-label="Unused eager schema share" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-eager-note></div></div>
+  </div>
+  <div class=capCharts>
+   <div class="card pad"><div class=label>Tool-definition tokens</div><div class=subline><span class=fieldtip tabindex=0 title="Useful eager: schema loaded up front and the tool was called. Unused eager: schema loaded up front but the tool was never called. Deferred: schema kept out of the initial prompt and loaded only on demand." data-tip="Useful eager: schema loaded up front and the tool was called. Unused eager: schema loaded up front but the tool was never called. Deferred: schema kept out of the initial prompt and loaded only on demand.">useful eager · unused eager · deferred schemas</span></div><div class=defBar id=c-def-chart></div><div class=legend id=c-def-legend></div><div class=subline id=c-def-note></div></div>
+  </div>
+  <div class=section-h><h2>Available tools, MCPs, and skills</h2><span class=hint id=c-count>trace + local configuration</span><span class=capSource id=c-claude-status></span></div>
+  <div class=capFilters>
+   <input class=searchbox id=c-search type=search placeholder="Search tools, MCPs, skills, runtime, source">
+   <div class="seg sortseg" id=c-type-filter><button data-ctype=all>All</button><button data-ctype=tool>Tools</button><button data-ctype=mcp>MCPs</button><button data-ctype=skill>Skills</button></div>
+   <div class="seg sortseg" id=c-state-filter><button data-cstate=all>Any state</button><button data-cstate=enabled>Enabled</button><button data-cstate=unused>Unused</button></div>
+  </div>
+  <div class="card pad capTableWrap"><table class=tbl id=c-table><thead><tr><th class=sortable data-csort=name tabindex=0 aria-sort=none>Capability</th><th class=sortable data-csort=type tabindex=0 aria-sort=none>Type</th><th class=sortable data-csort=runtime tabindex=0 aria-sort=none>Runtime / source</th><th class=sortable data-csort=state tabindex=0 aria-sort=none>State</th><th class="num sortable" data-csort=use tabindex=0 aria-sort=none>Use</th><th class="num sortable" data-csort=returned tabindex=0 aria-sort=none>Returned</th><th class=sortable data-csort=last tabindex=0 aria-sort=none>Last used</th><th class=sortable data-csort=control tabindex=0 aria-sort=none>Control</th></tr></thead><tbody></tbody></table></div>
+  <div class=foot>Eager = schema loaded up front · Deferred = schema loaded on demand · changes require restarting the IDE or agent</div>
  </div>
 </div>
+<dialog class=mcpDialog id=mcp-dialog>
+ <div class=inner>
+  <h3>Disable MCP server?</h3>
+  <div class=subline id=mcp-dialog-sub></div>
+  <div class=evidence id=mcp-dialog-evidence></div>
+  <div class=label>Command</div>
+  <code id=mcp-dialog-command></code>
+  <div class=subline>This changes Codex and Claude configuration for future sessions. Restart the IDE or agent after it succeeds.</div>
+  <div class=actions><button class=tbtn id=mcp-cancel>Cancel</button><button class="tbtn danger" id=mcp-confirm>Disable MCP</button></div>
+ </div>
+</dialog>
 <div class=toastbox id=toastbox></div>
 
 <script>
@@ -395,17 +461,35 @@ function costTipHtml(s,tok){
  ].join('');
  return `<div class=h>Cost calculation</div>${rows}<div class=total><span>Total</span><span>${money(s.total_cost||0)}${s.cost_approx?' est':''}</span></div><div class=note>${s.cost_approx?'Estimated with public API rates. ':''}Cached input is priced separately from uncached input.</div>`;
 }
-let LATEST=null, CURRENT=null, pinned=null;
+let LATEST=null, CURRENT=null, pinned=null, sessionRequest=0;
+
+function routedSessionId(){
+ const match=(location.pathname||'').match(/^\/sessions\/([^/]+)\/?$/);
+ if(!match)return null;
+ try{return decodeURIComponent(match[1]);}catch(e){return null;}
+}
+function sessionRoute(id){return `/sessions/${encodeURIComponent(id)}#summary`;}
+function stateSessionId(state){return state?.source?.id||String(state?.session||'').split('.')[0]||null;}
+
+function setHashRoute(route,{replace=false,apply=true}={}){
+ const url=`${location.pathname}${location.search||''}#${route}`;
+ if(history.pushState){
+  history[replace?'replaceState':'pushState'](null,'',url);
+  if(apply)applyHashRoute();
+ }else location.hash=route;
+}
 
 function showTab(t){
  $('tab-session').classList.toggle('on',t==='session');
  $('tab-global').classList.toggle('on',t==='global');
+ $('tab-capabilities').classList.toggle('on',t==='capabilities');
  $('view-session').classList.toggle('on',t==='session');
  $('view-global').classList.toggle('on',t==='global');
- if(history.replaceState) history.replaceState(null,'','#'+t);
+ $('view-capabilities').classList.toggle('on',t==='capabilities');
 }
-$('tab-session').onclick=()=>showTab('session');
-$('tab-global').onclick=()=>{showTab('global'); if(LATEST) renderGlobal(LATEST.xsession);};
+$('tab-session').onclick=()=>goToLatestSession();
+$('tab-global').onclick=()=>setHashRoute('global-logs');
+$('tab-capabilities').onclick=()=>setHashRoute('capabilities');
 
 const PANEL_KEYS=['summary','activity','tools','efficiency','insights','alerts'];
 const PANEL_ALIAS={overview:'summary',flow:'activity',analysis:'efficiency',settings:'alerts'};
@@ -419,16 +503,66 @@ function showSessionPanel(p){
  PANEL_KEYS.forEach(k=>$('panel-'+k).classList.toggle('on',k===p));
  if(p==='alerts') $('notify').classList.remove('hasnew');
 }
-$('session-tabs').onclick=e=>{ if(e.target.dataset.panel) showSessionPanel(e.target.dataset.panel); };
+$('session-tabs').onclick=e=>{ if(e.target.dataset.panel) setHashRoute(e.target.dataset.panel); };
 showSessionPanel(sessionPanel);
+
+const GLOBAL_PANEL_KEYS=['logs','insights','evidence'];
+let globalPanel=localStorage.getItem('tm_global_panel')||'logs';
+function showGlobalPanel(p){
+ if(!GLOBAL_PANEL_KEYS.includes(p))p='logs';
+ globalPanel=p;
+ localStorage.setItem('tm_global_panel',p);
+ [...$('global-tabs').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.globalPanel===p));
+ GLOBAL_PANEL_KEYS.forEach(k=>$('global-panel-'+k).classList.toggle('on',k===p));
+}
+$('global-tabs').onclick=e=>{if(e.target.dataset.globalPanel)setHashRoute(`global-${e.target.dataset.globalPanel}`);};
+showGlobalPanel(globalPanel);
+
 function applyHashRoute(){
  const h=(location.hash||'').replace(/^#/,'');
  const panel=PANEL_ALIAS[h]||h;
- if(h==='global'){ showTab('global'); return; }
- if(PANEL_KEYS.includes(panel)){ showTab('session'); showSessionPanel(panel); }
+ const globalMatch=h.match(/^global-(logs|insights|evidence)$/);
+ if(h==='global'||globalMatch){
+  showTab('global');
+  showGlobalPanel(globalMatch?globalMatch[1]:'logs');
+  if(h==='global')setHashRoute('global-logs',{replace:true,apply:false});
+  if(LATEST)renderGlobal(LATEST.xsession);
+  return;
+ }
+ if(h==='capabilities'){
+  showTab('capabilities');
+  if(LATEST)renderCapabilities(LATEST.xsession?.capabilities);
+  return;
+ }
+ if(!h||h==='session'){
+  showTab('session');
+  showSessionPanel('summary');
+  setHashRoute('summary',{replace:true,apply:false});
+  return;
+ }
+ if(PANEL_KEYS.includes(panel)){
+  showTab('session');
+  showSessionPanel(panel);
+  if(h!==panel)setHashRoute(panel,{replace:true,apply:false});
+ }
+ else{
+  showTab('session');
+  showSessionPanel('summary');
+  setHashRoute('summary',{replace:true,apply:false});
+ }
 }
-applyHashRoute();
+function applyLocationRoute(){
+ applyHashRoute();
+ const id=routedSessionId();
+ if(id){selectSession(id,{updateUrl:false,show:$('view-session').classList.contains('on')});return;}
+ if(pinned){
+  pinned=null;
+  if(LATEST&&$('view-session').classList.contains('on'))renderSession(LATEST);
+ }
+}
+applyLocationRoute();
 window.addEventListener('hashchange',applyHashRoute);
+window.addEventListener('popstate',applyLocationRoute);
 
 const canNotify=('Notification' in window);
 const notifySecure=window.isSecureContext||['localhost','127.0.0.1','::1'].includes(location.hostname);
@@ -564,12 +698,31 @@ $('notify-test').onclick=()=>{
  requestNotify('test');
 };
 
-const ALERT_DEFAULTS={budget:'10',spike:'0.50'};
-['budget','spike'].forEach(id=>{
- const v=localStorage.getItem('tm_'+id); if(v!==null)$(id).value=v;
- if(!$(id).value&&ALERT_DEFAULTS[id]) $(id).value=ALERT_DEFAULTS[id];
- $(id).addEventListener('input',()=>{ localStorage.setItem('tm_'+id,$(id).value); if(LATEST&&!pinned)renderSession(LATEST); });
-});
+const SESSION_BUDGET_DEFAULT=10;
+let sessionBudgets={};
+try{sessionBudgets=JSON.parse(localStorage.getItem('tm_session_budgets')||'{}')||{};}catch(e){sessionBudgets={};}
+localStorage.removeItem('tm_budget');
+function budgetSessionKey(s){return String(s?.source?.id||s?.session||'unknown');}
+function saveSessionBudgets(){try{localStorage.setItem('tm_session_budgets',JSON.stringify(sessionBudgets));}catch(e){}}
+function loadBudgetForSession(s){
+ const saved=parseFloat(sessionBudgets[budgetSessionKey(s)]);
+ $('budget').value=formatBudgetInput(Number.isFinite(saved)&&saved>0?saved:SESSION_BUDGET_DEFAULT);
+}
+function saveBudgetForSession(value){
+ if(!CURRENT)return;
+ const n=parseFloat(value);
+ if(!Number.isFinite(n)||n<=0)return;
+ sessionBudgets[budgetSessionKey(CURRENT)]=n;
+ saveSessionBudgets();
+}
+$('budget').value=String(SESSION_BUDGET_DEFAULT);
+$('budget').addEventListener('input',()=>saveBudgetForSession($('budget').value));
+$('budget').addEventListener('change',()=>{if(CURRENT)renderSession(CURRENT);});
+const savedSpike=localStorage.getItem('tm_spike');
+if(savedSpike!==null)$('spike').value=savedSpike;
+if(!$('spike').value)$('spike').value='0.50';
+$('spike').addEventListener('input',()=>localStorage.setItem('tm_spike',$('spike').value));
+$('spike').addEventListener('change',()=>{if(CURRENT)renderSession(CURRENT);});
 function dollarInputValue(id,fallback=1e9){
  const n=parseFloat($(id)?.value);
  return Number.isFinite(n)&&n>0?n:fallback;
@@ -581,7 +734,7 @@ function formatBudgetInput(n){
 function setBudgetCap(n){
  const value=formatBudgetInput(n);
  $('budget').value=value;
- localStorage.setItem('tm_budget',value);
+ saveBudgetForSession(value);
  return parseFloat(value);
 }
 function extendBudget(){
@@ -945,12 +1098,12 @@ function renderOverview(s){
  $('cost-start').textContent=dt12(timing.start_local)||'--';
  $('cost-end-label').textContent=timing.end_label||'Last activity';
  $('cost-end').textContent=dt12(timing.end_local)||'--';
- $('ov-duration').textContent=timing.duration||'0s';
- $('ov-idle').textContent=s.ended?'pinned log':(f(s.idle_s||0)+'s idle');
+ $('ov-duration').textContent=timing.duration||'--';
+ $('ov-idle').textContent=timing.duration_available?`${f(timing.execution_count)} execution window${timing.execution_count===1?'':'s'} · idle excluded`:'execution timing unavailable';
  $('ov-context').textContent=f(context.latest||0);
  $('ov-contextsm').textContent=context.window?`${pct(context.latest_pct)} of ${f(context.window)} window`:'latest input tokens';
  $('ov-loaded').textContent=f(tools.loaded||0);
- $('ov-loadedsm').textContent=tools.loaded_known?`${f(tools.unique_used||0)} used · ${f(tools.namespaces_used||0)} namespaces`:`${f(tools.unique_used||0)} observed`;
+ $('ov-loadedsm').textContent=tools.loaded_known?`${f(tools.eager||0)} eager · ${f(tools.deferred||0)} deferred · ${f(tools.unique_used||0)} used`:`${f(tools.unique_used||0)} observed`;
  $('ov-exec').textContent=f(s.turns); $('ov-model').textContent=s.primary_model||'';
  $('ov-avg').textContent=money(avg);
  $('ov-tools').textContent=f(tools.total_calls||0); $('ov-tooltok').textContent=f(tools.total_output_tokens||0)+' returned tok';
@@ -998,7 +1151,7 @@ function sortExecRows(rows){
 }
 function renderTools(tools){
  tools=tools||{by_namespace:[],by_name:[],by_execution:[],total_calls:0,total_output_tokens:0};
- $('tools-loaded-line').textContent=(tools.loaded_known?`${f(tools.loaded)} tools loaded`:`${f(tools.unique_used||0)} tools observed`) + ` · ${f(tools.unique_used||0)} used · ${f(tools.namespaces_used||0)} namespaces`;
+ $('tools-loaded-line').textContent=(tools.loaded_known?`${f(tools.advertised||tools.loaded)} tools reported · ${f(tools.eager||0)} eager · ${f(tools.deferred||0)} deferred`:`${f(tools.unique_used||0)} tools observed`) + ` · ${f(tools.unique_used||0)} used · ${f(tools.namespaces_used||0)} namespaces`;
  const nsMax=Math.max(1,...tools.by_namespace.map(n=>n.output_tokens||n.calls||0));
  $('namespaces').innerHTML=tools.by_namespace.length?tools.by_namespace.map(n=>`<div class=nsrow><div class=name>${esc(n.namespace)}</div><div class=track><i style="width:${100*(n.output_tokens||n.calls||0)/nsMax}%"></i></div><div class=mono>${f(n.calls)}</div></div>`).join(''):'<div class=subline>no tool namespaces yet</div>';
  const maxT=Math.max(1,...tools.by_name.map(t=>t.output_tokens||0));
@@ -1082,6 +1235,7 @@ function renderAlertBanner(alert){
 
 function renderSession(s){
  CURRENT=s;
+ loadBudgetForSession(s);
  const frozen=!!s.ended, source=s.source||{};
  $('s-provider').textContent=source.label||s.provider||'source';
  $('s-provider').className='badge '+(s.provider==='codex'?'codex':'claude');
@@ -1093,7 +1247,7 @@ function renderSession(s){
  $('live').classList.toggle('dead',frozen);
  $('livetxt').textContent=frozen?(pinned?'pinned log':'frozen log'):('watching · '+idleLabel(s.idle_s));
  $('cost').textContent=money(s.total_cost)+(s.cost_approx?' est':'');
- const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{};
+ const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
  $('cost-tip').innerHTML=costTipHtml(s,tok);
  const inputTokens=(tok.input||0)+(tok.cache_read||0)+(tok.cache_write||0), outputTokens=tok.output||0;
  const thinkingTokens=sem.reasoning||0, toolCallTokens=tools.total_output_tokens||0;
@@ -1112,8 +1266,8 @@ function renderSession(s){
  $('toolcall-toksm').textContent=f(tools.total_calls||0)+' calls returned';
  $('cache-saved').textContent=money(cache.saved||s.cache_saved||0);
  $('cache-savedsm').textContent=`${money(cache.cost||0)} cache cost`;
- $('burn').textContent=money(s.burn_usd_min);
- $('burnsm').textContent=f(s.burn_tok_min)+' tok/min';
+ $('burn').textContent=timing.duration_available?money(s.burn_usd_min):'--';
+ $('burnsm').textContent=timing.duration_available?`${f(s.burn_tok_min)} tok/min · active`:'execution timing unavailable';
  $('cpt').textContent=money(s.analyses?.cost_per_task?.per_task||0);
  $('cptsm').textContent=f(s.analyses?.cost_per_task?.completed||0)+' completed';
  renderOverview(s); renderTrace(s.trace); renderTools(s.tools);
@@ -1144,6 +1298,220 @@ function renderSession(s){
  if(alert.msg&&liveView) notifyAlertForSession(s);
 }
 
+let pendingMcpAction=null;
+function recommendationLabel(value){
+ return ({disable:'disable candidate',fix_or_disable:'fix or disable',narrow_results:'narrow results',reduce_repeats:'reduce repeats',scope:'scope to project',keep:'keep'})[value]||String(value||'review').replaceAll('_',' ');
+}
+function openMcpDialog(row,actions){
+ if(!row?.mcp_server||!actions?.available) return;
+ pendingMcpAction={row,actions};
+ $('mcp-dialog-sub').textContent=`${row.mcp_server} · ${row.sessions_used||0} sessions used · ${f(row.calls||0)} calls`;
+ $('mcp-dialog-evidence').innerHTML=`<div>${esc(row.reason||'Review the trace evidence before disabling.')}</div><div>${f(row.output_tokens||0)} returned tokens · ${f(row.errors||0)} errors · last used ${esc(row.last_used||'Never')}</div>`;
+ $('mcp-dialog-command').textContent=`ghost mcp all remove ${row.mcp_server}`;
+ $('mcp-confirm').disabled=false;
+ $('mcp-confirm').textContent='Disable MCP';
+ $('mcp-dialog').showModal();
+}
+function renderGlobalWaste(waste,actions){
+ waste=waste||{}; actions=actions||{};
+ const total=waste.total_output_tokens||0, flagged=waste.flagged_tokens||0;
+ $('g-tool-tokens').textContent=f(total);
+ $('g-tool-token-note').textContent=`${f(waste.total_calls||0)} calls · ${f(waste.sessions_with_tools||0)} sessions`;
+ $('g-flagged-tokens').textContent=f(flagged);
+ $('g-flagged-note').textContent=total?`${pct(flagged/total)} of returned tokens matched a rule`:'no tool results yet';
+ $('g-oversized').textContent=f(waste.oversized_calls||0);
+ $('g-errors-repeats').textContent=f((waste.errors||0)+(waste.repeat_calls||0));
+ $('g-errors-repeat-note').textContent=`${f(waste.errors||0)} errors · ${f(waste.repeat_calls||0)} exact repeats`;
+
+ const bars=(waste.by_name||[]).filter(r=>r.output_tokens>0).slice(0,8), mx=Math.max(1,...bars.map(r=>r.output_tokens||0));
+ $('g-tool-bars').innerHTML=bars.length?bars.map(r=>`<div class=wasteBar><div class=head><span>${esc(r.display||r.name)} <span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></span><span class=mono>${f(r.output_tokens)}</span></div><div class=track><i style="width:${100*(r.output_tokens||0)/mx}%"></i></div></div>`).join(''):'<div class=subline>no tool results yet</div>';
+
+ const trend=waste.trend||[], tmax=Math.max(1,...trend.map(r=>r.tokens||0));
+ $('g-tool-waste-trend').innerHTML=trend.length?trend.map(r=>{const th=Math.max(2,100*(r.tokens||0)/tmax), fh=r.tokens?100*(r.flagged_tokens||0)/r.tokens:0; return `<div class=wasteDay data-l="${esc(r.day.slice(5))}: ${f(r.tokens)} total · ${f(r.flagged_tokens)} flagged"><div class=total style="height:${th}%"><div class=flagged style="height:${fh}%"></div></div></div>`;}).join(''):'<div class=subline>no daily tool-result history</div>';
+
+ const icon={good:'✓',warn:'!',neutral:'›'};
+ $('g-waste-insights').innerHTML=(waste.insights||[]).length?(waste.insights||[]).map(i=>`<div class="ins ${esc(i.kind||'neutral')}"><div class=glyph>${icon[i.kind]||'›'}</div><div class=copy><div class=title>${esc(i.title||'Signal')}</div><div class=text>${esc(i.text||'')}</div>${i.detail?`<div class=detail>${esc(i.detail)}</div>`:''}${i.action?`<div class=action>${esc(i.action)}</div>`:''}</div><div class=meta>${i.action?'action':'signal'}</div></div>`).join(''):'<div class="ins empty">No global tool-waste signals yet</div>';
+
+ const rows=waste.by_name||[];
+ $('g-tool-table').querySelector('tbody').innerHTML=rows.length?rows.map((r,idx)=>{
+  const used=r.advertised_sessions?`${f(r.sessions_used)}/${f(r.advertised_sessions)} reported`:f(r.sessions_used);
+  const disable=r.kind==='mcp'&&r.mcp_server?`<button class=mcpDisable data-mcp-row="${idx}" ${actions.available?'':`disabled title="Ghost CLI is not available"`}>Disable MCP</button>`:'';
+  return `<tr><td class=nm>${esc(r.display||r.name)}<div class=subline>${esc(r.reason||'')}</div></td><td><span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></td><td class="num mono">${used}</td><td class="num mono">${f(r.calls)}</td><td class="num mono">${f(r.output_tokens)}</td><td class="num mono">${f(r.flagged_tokens)}</td><td class="num mono">${f(r.errors)}</td><td>${esc(r.last_used||'Never')}</td><td><span class="reco ${esc(r.recommendation)}">${esc(recommendationLabel(r.recommendation))}</span></td><td>${disable}</td></tr>`;
+ }).join(''):'<tr><td colspan=10 style=color:var(--faint)>no tool evidence yet</td></tr>';
+ [...$('g-tool-table').querySelectorAll('[data-mcp-row]')].forEach(btn=>btn.onclick=()=>openMcpDialog(rows[Number(btn.dataset.mcpRow)],actions));
+}
+$('mcp-cancel').onclick=()=>{$('mcp-dialog').close(); pendingMcpAction=null;};
+$('mcp-dialog').addEventListener('cancel',()=>{pendingMcpAction=null;});
+$('mcp-confirm').onclick=async()=>{
+ if(!pendingMcpAction)return;
+ const {row,actions}=pendingMcpAction, button=$('mcp-confirm');
+ button.disabled=true; button.textContent='Disabling…';
+ try{
+  const response=await fetch('/mcp/disable',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':actions.token},body:JSON.stringify({server:row.mcp_server})});
+  const result=await response.json();
+  if(!response.ok||!result.ok) throw new Error(result.error||'Could not disable MCP server.');
+  $('mcp-dialog').close(); pendingMcpAction=null;
+  showAppToast({title:'MCP disabled',body:`${row.mcp_server} was removed from Codex and Claude. Restart the IDE or agent to load the change.`,kind:'warn',sticky:true});
+ }catch(error){
+  button.disabled=false; button.textContent='Disable MCP';
+  showAppToast({title:'MCP change failed',body:error.message||String(error),kind:'warn',sticky:true});
+ }
+};
+
+const CAPABILITY_SORT_KEYS=new Set(['name','type','runtime','state','use','returned','last','control']);
+let capabilityType='all', capabilityState='all', capabilitySearch='';
+let capabilitySort=localStorage.getItem('tm_capability_sort')||'name';
+let capabilitySortDir=localStorage.getItem('tm_capability_sort_dir')||'asc';
+if(!CAPABILITY_SORT_KEYS.has(capabilitySort))capabilitySort='name';
+if(!['asc','desc'].includes(capabilitySortDir))capabilitySortDir='asc';
+function capabilityUseCount(row){ return row.type==='skill'?(row.activations||0):(row.calls||0); }
+function capabilityStateText(row){ return row.type==='tool'?(row.state||'Observed'):(row.enabled?'Enabled':'Disabled'); }
+function capabilityControlText(row){
+ if(!row.mutable)return 'read-only';
+ const action=row.enabled?'Disable':'Enable';
+ return row.type==='skill'?`${action} pack`:action;
+}
+function capabilitySortValue(row,key){
+ if(key==='name')return row.name||row.identity||'';
+ if(key==='type')return {tool:'Tool',mcp:'MCP',skill:'Skill'}[row.type]||row.type||'';
+ if(key==='runtime')return [row.runtime,row.source,row.plugin_id,row.path].filter(Boolean).join(' · ');
+ if(key==='state')return capabilityStateText(row);
+ if(key==='use')return Number(capabilityUseCount(row))||0;
+ if(key==='returned')return Number(row.returned_tokens)||0;
+ if(key==='last'){
+  if(!row.last_used||row.last_used==='Never')return 0;
+  const parsed=Date.parse(row.last_used);
+  return Number.isFinite(parsed)?parsed:0;
+ }
+ if(key==='control')return capabilityControlText(row);
+ return '';
+}
+function compareCapabilityRows(a,b){
+ const av=capabilitySortValue(a,capabilitySort), bv=capabilitySortValue(b,capabilitySort);
+ const cmp=typeof av==='number'&&typeof bv==='number'
+  ? av-bv
+  : String(av).localeCompare(String(bv),undefined,{numeric:true,sensitivity:'base'});
+ return capabilitySortDir==='desc'?-cmp:cmp;
+}
+function paintCapabilitySort(){
+ [...$('c-table').querySelectorAll('th[data-csort]')].forEach(th=>{
+  const active=th.dataset.csort===capabilitySort;
+  th.classList.toggle('sort-asc',active&&capabilitySortDir==='asc');
+  th.classList.toggle('sort-desc',active&&capabilitySortDir==='desc');
+  th.setAttribute('aria-sort',active?(capabilitySortDir==='asc'?'ascending':'descending'):'none');
+  th.title=`Sort by ${th.textContent.trim()}${active?` (${capabilitySortDir==='asc'?'ascending':'descending'})`:''}`;
+ });
+}
+function setCapabilitySort(key){
+ if(!CAPABILITY_SORT_KEYS.has(key))return;
+ if(capabilitySort===key)capabilitySortDir=capabilitySortDir==='asc'?'desc':'asc';
+ else{
+  capabilitySort=key;
+  capabilitySortDir=['use','returned','last'].includes(key)?'desc':'asc';
+ }
+ localStorage.setItem('tm_capability_sort',capabilitySort);
+ localStorage.setItem('tm_capability_sort_dir',capabilitySortDir);
+ paintCapabilitySort();
+ if(LATEST)renderCapabilityTable(LATEST.xsession?.capabilities);
+}
+function capabilityStateClass(row){
+ if(row.type==='tool'&&/Deferred|Mixed/.test(row.state||'')) return 'lazy';
+ return row.enabled?'on':'off';
+}
+function capabilityAction(row){
+ if(!row.mutable) return '<span class=subline>read-only</span>';
+ const next=!row.enabled;
+ const label=row.type==='skill'?`${next?'Enable':'Disable'} pack`:(next?'Enable':'Disable');
+ return `<button class="capAction ${next?'':'disable'}" data-cap-id="${esc(row.id)}">${label}</button>`;
+}
+function renderCapabilityTable(cap){
+ const all=cap?.items||[], q=capabilitySearch.trim().toLowerCase();
+ const rows=all.filter(row=>{
+  if(capabilityType!=='all'&&row.type!==capabilityType)return false;
+  if(capabilityState==='enabled'&&!row.enabled)return false;
+  if(capabilityState==='unused'&&row.used)return false;
+  if(q&&![row.name,row.identity,row.runtime,row.source,row.plugin_id,row.path,row.state].join(' ').toLowerCase().includes(q))return false;
+  return true;
+ }).map((row,index)=>({row,index})).sort((a,b)=>compareCapabilityRows(a.row,b.row)||a.index-b.index).map(item=>item.row);
+ $('c-count').textContent=`${f(rows.length)} shown · ${f(all.length)} discovered`;
+ $('c-table').querySelector('tbody').innerHTML=rows.length?rows.map(row=>{
+  const source=[row.runtime,row.source].filter(Boolean).join(' · ');
+  const detail=row.path?`<div class=capPath title="${esc(row.path)}">${esc(row.path)}</div>`:(row.plugin_id?`<div class=capPath>${esc(row.plugin_id)}</div>`:'');
+  const state=capabilityStateText(row);
+  const typeLabel={tool:'Tool',mcp:'MCP',skill:'Skill'}[row.type]||row.type;
+  const use=capabilityUseCount(row);
+  return `<tr><td class=nm>${esc(row.name)}${row.identity&&row.identity!==row.name?`<div class=capPath>${esc(row.identity)}</div>`:''}</td><td><span class="chip ${row.type==='mcp'?'mcp':''}">${typeLabel}</span></td><td>${esc(source)}${detail}</td><td><span class="stateDot ${capabilityStateClass(row)}">${esc(state)}</span>${row.type==='mcp'?`<div class=capPath>Codex ${row.codex_enabled?'on':'off'} · Claude ${row.claude_enabled?'on':'off'}</div>`:''}</td><td class="num mono">${f(use)}</td><td class="num mono">${row.type==='skill'?'—':f(row.returned_tokens||0)}</td><td>${esc(row.last_used||'Never')}</td><td>${capabilityAction(row)}</td></tr>`;
+ }).join(''):'<tr><td colspan=8 style=color:var(--faint)>No tools, MCPs, or skills match these filters</td></tr>';
+ paintCapabilitySort();
+ [...$('c-table').querySelectorAll('[data-cap-id]')].forEach(button=>button.onclick=()=>toggleCapability(all.find(row=>row.id===button.dataset.capId),cap));
+}
+function setCapabilityStatBar(id,value){
+ const bar=$(id), normalized=Math.min(1,Math.max(0,Number(value)||0)), label=pct(normalized);
+ bar.querySelector('i').style.width=`${normalized*100}%`;
+ bar.setAttribute('aria-valuenow',String(Math.round(normalized*100)));
+ bar.setAttribute('aria-valuetext',label);
+ bar.title=label;
+}
+async function toggleCapability(row,cap){
+ if(!row||!row.mutable)return;
+ const enabled=!row.enabled;
+ const payload={type:row.type,enabled};
+ if(row.type==='mcp')payload.name=row.name;
+ else{payload.runtime=row.runtime;payload.plugin_id=row.plugin_id;}
+ const buttons=[...document.querySelectorAll(`[data-cap-id="${CSS.escape(row.id)}"]`)];
+ buttons.forEach(button=>{button.disabled=true;button.textContent=enabled?'Enabling…':'Disabling…';});
+ try{
+  const response=await fetch('/capability/toggle',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':cap.actions.token},body:JSON.stringify(payload)});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Capability change failed.');
+  (cap.items||[]).forEach(item=>{
+   if(item.id===row.id||(row.type==='skill'&&item.runtime===row.runtime&&item.plugin_id===row.plugin_id)){
+    item.enabled=enabled; item.state=enabled?'Enabled':'Disabled';
+    if(item.type==='mcp'){item.codex_enabled=enabled;item.claude_enabled=enabled;}
+   }
+  });
+  renderCapabilities(cap);
+  showAppToast({title:`${row.type==='mcp'?'MCP':'Skill pack'} ${enabled?'enabled':'disabled'}`,body:`${row.type==='skill'?row.plugin_id:row.name} changed for future sessions. Restart the IDE or agent to load the change.`,kind:enabled?'neutral':'warn',sticky:true});
+ }catch(error){
+  buttons.forEach(button=>{button.disabled=false;});
+  showAppToast({title:'Capability change failed',body:error.message||String(error),kind:'warn',sticky:true});
+  renderCapabilityTable(cap);
+ }
+}
+function renderCapabilities(cap){
+ if(!cap)return;
+ const sum=cap.summary||{}, tools=sum.tools||{}, mcps=sum.mcps||{}, skills=sum.skills||{}, defs=sum.definitions||{};
+ const toolUse=tools.utilization||0, mcpUse=mcps.utilization||0, skillUse=skills.utilization||0;
+ $('c-tool-pct').textContent=pct(toolUse);
+ setCapabilityStatBar('c-tool-bar',toolUse);
+ $('c-tool-note').textContent=`${f(tools.used)}/${f(tools.reported)} runtime-reported used · ${f(tools.observed_only)} observed-only`;
+ $('c-mcp-pct').textContent=pct(mcpUse);
+ setCapabilityStatBar('c-mcp-bar',mcpUse);
+ $('c-mcp-note').textContent=`${f(mcps.used)}/${f(mcps.enabled)} enabled used · ${f(mcps.available)} available`;
+ $('c-skill-pct').textContent=pct(skillUse);
+ setCapabilityStatBar('c-skill-bar',skillUse);
+ $('c-skill-note').textContent=`${f(skills.used)}/${f(skills.enabled)} enabled activated · trace inferred`;
+ const eager=defs.eager_definition_tokens||0, unused=defs.unused_eager_definition_tokens||0, deferred=defs.deferred_definition_tokens||0, total=defs.definition_tokens||0, useful=Math.max(0,eager-unused);
+ $('c-eager-tax').textContent=f(unused);
+ $('c-eager-note').textContent=eager?`${pct(unused/eager)} of ${f(eager)} eager schema tokens`:'no eager schemas reported';
+ setCapabilityStatBar('c-eager-bar',eager?unused/eager:0);
+ const denom=Math.max(1,total);
+ $('c-def-chart').innerHTML=`<i class=used style="width:${100*useful/denom}%"></i><i class=unused style="width:${100*unused/denom}%"></i><i class=deferred style="width:${100*deferred/denom}%"></i>`;
+ $('c-def-legend').innerHTML=`<span><i class=dot style="background:var(--good)"></i>useful eager ${f(useful)}</span><span><i class=dot style="background:var(--warn)"></i>unused eager ${f(unused)}</span><span><i class=dot style="background:rgba(127,219,242,.42)"></i>deferred ${f(deferred)}</span>`;
+ $('c-def-note').textContent=`${f(total)} schema tokens across runtime-reported session catalogs; repeated across sessions, not API billing tokens.`;
+ const desktop=cap.claude_desktop||{};
+ $('c-claude-status').textContent=`Claude Desktop: ${f(desktop.traceable_agent_sessions??desktop.local_agent_sessions)} traceable · latest ${desktop.latest_local_agent||'Never'}`;
+ renderCapabilityTable(cap);
+}
+$('c-search').oninput=e=>{capabilitySearch=e.target.value; if(LATEST)renderCapabilityTable(LATEST.xsession?.capabilities);};
+$('c-type-filter').onclick=e=>{if(!e.target.dataset.ctype)return;capabilityType=e.target.dataset.ctype;[...$('c-type-filter').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.ctype===capabilityType));if(LATEST)renderCapabilityTable(LATEST.xsession?.capabilities);};
+$('c-state-filter').onclick=e=>{if(!e.target.dataset.cstate)return;capabilityState=e.target.dataset.cstate;[...$('c-state-filter').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.cstate===capabilityState));if(LATEST)renderCapabilityTable(LATEST.xsession?.capabilities);};
+$('c-table').querySelector('thead').onclick=e=>{const th=e.target.closest('th[data-csort]');if(th)setCapabilitySort(th.dataset.csort);};
+$('c-table').querySelector('thead').onkeydown=e=>{if(!['Enter',' '].includes(e.key))return;const th=e.target.closest('th[data-csort]');if(!th)return;e.preventDefault();setCapabilitySort(th.dataset.csort);};
+$('c-type-filter').querySelector('[data-ctype=all]').classList.add('on');
+$('c-state-filter').querySelector('[data-cstate=all]').classList.add('on');
+paintCapabilitySort();
+
 function renderGlobal(xs){
  if(!xs)return;
  $('g-cost').textContent=money(xs.total_cost);
@@ -1156,6 +1524,7 @@ function renderGlobal(xs){
  $('g-spark').innerHTML=tr.map(t=>`<div class="b${t.anomaly?' anom':''}" style="height:${100*t.cost/tmax}%" data-l="${esc(t.day.slice(5))}: ${money(t.cost)}"></div>`).join('');
  const an=tr.filter(t=>t.anomaly).length;
  $('g-trend').textContent=tr.length?`${money(tr.reduce((a,b)=>a+b.cost,0))} over ${tr.length} days`+(an?` · ${an} spike(s)`:''):'no history';
+ renderGlobalWaste(xs.tool_waste||{},xs.mcp_actions||{});
  const q=globalSearch.trim().toLowerCase();
  const all=xs.sessions||[];
  let sessions=all.filter(s=>{
@@ -1173,7 +1542,7 @@ function renderGlobal(xs){
  $('g-count').textContent=`${f(sessions.length)} shown · ${money(shownCost)}`;
  const maxCost=Math.max(.001,...sessions.map(s=>s.cost||0));
  $('slist').innerHTML=sessions.length?sessions.map(s=>{
-  const active=LATEST&&s.id===(LATEST.source?.id||LATEST.session?.split('.')[0]);
+  const active=pinned?s.id===pinned:(LATEST&&s.id===stateSessionId(LATEST));
   const avg=s.turns?money((s.cost||0)/s.turns):'$0.000';
   const dur=durationShort(s.duration_s||0);
   const modelText=(s.models||[]).join(', ')||'--';
@@ -1186,14 +1555,43 @@ function renderGlobal(xs){
  }).join(''):'<div class="ins empty">No logs match the current search</div>';
  [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onclick=()=>selectSession(el.dataset.id));
 }
-function selectSession(id){
- if(LATEST && id===(LATEST.source?.id||LATEST.session?.split('.')[0])){ pinned=null; showTab('session'); renderSession(LATEST); return; }
+function selectSession(id,{updateUrl=true,replace=false,show=true}={}){
+ id=String(id||'').trim();
+ if(!id)return Promise.resolve();
+ if(updateUrl&&history.pushState)history[replace?'replaceState':'pushState'](null,'',sessionRoute(id));
  pinned=id;
- fetch('/session?id='+encodeURIComponent(id)).then(r=>r.json()).then(st=>{ showTab('session'); renderSession(st); });
+ const request=++sessionRequest;
+ if(CURRENT?.ended&&stateSessionId(CURRENT)===id){
+  if(show){applyHashRoute();renderSession(CURRENT);}
+  return Promise.resolve(CURRENT);
+ }
+ return fetch('/session?id='+encodeURIComponent(id),{cache:'no-store'}).then(r=>{
+  if(!r.ok)throw new Error(`Session request failed (${r.status}).`);
+  return r.json();
+ }).then(st=>{
+  if(request!==sessionRequest||pinned!==id)return null;
+  if(!st||!stateSessionId(st))throw new Error('Session was not found.');
+  CURRENT=st;
+  if(show){applyHashRoute();renderSession(st);}
+  return st;
+ }).catch(error=>{
+  if(request!==sessionRequest)return null;
+  pinned=null;
+  if(routedSessionId()===id&&history.replaceState)history.replaceState(null,'','/#summary');
+  if(show&&LATEST){applyHashRoute();renderSession(LATEST);}
+  showAppToast({title:'Session could not be opened',body:error.message||String(error),kind:'warn',sticky:true});
+  return null;
+ });
 }
-$('unpin').onclick=()=>{ pinned=null; if(LATEST) renderSession(LATEST); };
+function goToLatestSession(){
+ sessionRequest++; pinned=null; CURRENT=LATEST;
+ if(history.pushState)history.pushState(null,'','/#summary');
+ applyHashRoute();
+ if(LATEST)renderSession(LATEST);
+}
+$('unpin').onclick=goToLatestSession;
 
 const es=new EventSource('/events');
-es.onmessage=e=>{ LATEST=JSON.parse(e.data); if(!pinned&&$('view-session').classList.contains('on')) renderSession(LATEST); if($('view-global').classList.contains('on')) renderGlobal(LATEST.xsession); };
+es.onmessage=e=>{ LATEST=JSON.parse(e.data); if(!pinned&&$('view-session').classList.contains('on')) renderSession(LATEST); if($('view-global').classList.contains('on')) renderGlobal(LATEST.xsession); if($('view-capabilities').classList.contains('on')) renderCapabilities(LATEST.xsession?.capabilities); };
 es.onerror=()=>{$('livetxt').textContent='reconnecting';};
 </script></body></html>

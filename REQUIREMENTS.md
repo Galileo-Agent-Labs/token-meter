@@ -175,7 +175,8 @@ moment is already on screen the instant you stop. No second tool.
 - **FR4 Burn rate** — tokens/min and $/min over session elapsed time.
 - **FR5 Cache hit ratio** — `cache_read / (cache_read + cache_write)`.
 - **FR6 Turn + subagent counts** — total turns and `isSidechain` turns.
-- **FR7 Budget alert** — page + notification when session cost crosses a cap.
+- **FR7 Budget alert** — page + notification when session cost crosses a cap;
+  every newly observed session starts with its own $10 cap.
 - **FR8 Spike alert** — page + notification when a single turn exceeds a threshold.
 - **FR9 Insights** — plain-language readouts derived from the numbers (e.g.
   "output is 44% of spend", "cache saved you ~$X", "most expensive turn = $Y").
@@ -183,12 +184,31 @@ moment is already on screen the instant you stop. No second tool.
   it reaches you when the tab is backgrounded.
 - **FR11 Post-mortem freeze** — when the session goes idle, present a static
   summary with the most expensive moment highlighted.
+- **FR12 Global trace-waste evidence** — aggregate tool calls, returned text
+  tokens, oversized results, exact immediate repeats, structured errors,
+  project concentration, and last use across local sessions.
+- **FR13 MCP disable review** — for traced MCP servers, show a confirmed
+  server-level disable action that invokes Ghost with a fixed argument vector
+  and tells the user to restart Codex, Claude, or the IDE.
+- **FR14 Claude Desktop attribution** — join Claude Desktop `local_*.json`
+  metadata to the authoritative Claude project trace through `cliSessionId`,
+  then show Desktop title, project, model, and source label without duplicating
+  the underlying session.
+- **FR15 Capability inventory** — keep a searchable Tools, MCPs, and Skills view
+  with runtime, source, state, observed use, returned tokens, and last use.
+- **FR16 Capability utilization** — show trace-backed use percentages for
+  runtime-reported tools, enabled MCP servers, and enabled installed skills,
+  with partial-catalog and inferred-skill labels.
+- **FR17 Capability controls** — enable or disable MCP servers through Ghost and
+  configured skill packs through their native Codex/Claude enabled state;
+  runtime-owned tools and standalone skills remain read-only.
 
 ## 5. Non-functional requirements
 
 - **NFR1 Local-only** — no network egress; nothing leaves the machine.
 - **NFR2 Zero-install** — Python stdlib only; one file; `python3 meter.py`.
-- **NFR3 Passive** — no command to run per session; it finds you.
+- **NFR3 Passive by default** — no command to run per session; it finds you.
+  Configuration changes occur only after an explicit dashboard confirmation.
 - **NFR4 Calm** — silent/neutral when normal; loud only on real events.
 - **NFR5 Cheap to run** — negligible CPU; tails by mtime + reparse.
 
@@ -198,6 +218,8 @@ moment is already on screen the instant you stop. No second tool.
 
 ```
 ~/.claude/projects/*/*.jsonl   (Claude writes per-turn)
+~/Library/Application Support/Claude/claude-code-sessions/**/local_*.json
+                              (Claude Desktop attribution metadata)
         │  tail newest by mtime, reparse on change
         ▼
    watcher thread ──► recompute(state) ──► publish()
@@ -436,7 +458,19 @@ It shows provider/project, live or idle state, current activity from the latest
 trace event, recommended action, cost, compact token count, context pressure, a
 small context bar, last execution cost, a verdict (`Healthy`, `Watch closely`,
 `Intervene now`, `Idle`, or `Server offline`), the top signal, and actions to
-open the dashboard, jump to the current execution, or quit the companion.
+open the dashboard, open the current trace, open Tools & Skills, or quit the
+companion. These navigation actions stay together at the top of the menu.
+Their URLs are deterministic: Open Dashboard targets `#summary`, Open Trace
+targets `#activity`, and Tools & Skills targets `#capabilities`. Dashboard tab
+changes preserve the selected panel in the URL for direct links and reloads.
+The dropdown also lists up to five recently active sessions with a Claude or
+Codex icon, provider label, and title/project identifier. Selecting a row pins
+the native companion to that session across polls and restarts; `Follow Latest`
+clears the pin. A pinned session remains visible alongside four newer sessions
+if it falls outside the newest five, and Dashboard/Trace actions preserve the
+pinned session path.
+Cache remains a single compact summary row; the detailed read/write/saved/latest
+breakdown is intentionally omitted from the menu bar.
 
 ### 12.2 Server interface
 
@@ -447,8 +481,13 @@ that need it. `GET /menubar` returns a compact subset for frequent polling:
 ok, provider, source.label, source.id, source.project, source.pricing_note,
 session, project, total_cost, cost_approx, total_tokens, turns,
 context.latest, context.window, context.latest_pct, last_turn_cost,
-idle_s, ended, activity, recommendation, insights[0..3], ts
+idle_s, ended, activity, recommendation, insights[0..3], selection,
+recent_sessions[0..4], ts
 ```
+
+`GET /menubar?session=<id>` returns the same compact payload recomputed for one
+specific session. The server does not persist a pin; the native client stores
+the selected ID locally and includes it on subsequent polls.
 
 The compact endpoint exists because the full dashboard payload can include
 trace, execution rows, chart series, tools, and global history. A native menu
@@ -472,3 +511,120 @@ want the menu bar companion. `scripts/run-menubar` compiles the Swift file into
 and then runs the menu bar companion. `scripts/install-launch-agent` writes a
 user LaunchAgent for that entrypoint, and `scripts/uninstall-launch-agent`
 removes it.
+
+---
+
+## 13. v5 — global trace-waste insights and MCP actions (2026-06-30)
+
+The Global view now answers a narrower, evidence-backed question: which tools
+and MCP namespaces create the most observable result volume across sessions,
+and which calls show straightforward waste signals in the logs? The feature
+does not attempt to reconstruct the complete system prompt or attribute exact
+billing tokens to schemas.
+
+### 13.1 Observable evidence
+
+Claude and Codex traces provide tool identity, call order, arguments, result
+payloads, timestamps, projects, and token-count events. Token Meter derives:
+
+- Approximate returned text tokens using four characters per token.
+- Oversized calls with at least 8,000 returned text tokens.
+- Exact immediate repeats when consecutive calls to the same tool have the same
+  hashed arguments within five minutes. Raw arguments are not stored in the
+  Global aggregate.
+- Structured errors from Claude `is_error` and conservative Codex status,
+  success, exit-code, and error fields.
+- Sessions used, projects used, last use, and runtime-reported catalog exposure.
+
+Embedded image data and long base64 fields are removed before text-token
+estimation. A result can be oversized, repeated, and failed simultaneously;
+the headline `flagged_tokens` total includes that result once, while the reason
+counts remain separate.
+
+### 13.2 Global interface
+
+The Global page keeps its spend summary visible, then uses Logs-first subtabs
+for `Logs`, `Global insights`, and `Capability evidence`. The insight panel adds:
+
+- Returned tokens, uniquely flagged tokens, oversized calls, errors, and exact
+  repeats.
+- A ranked horizontal capability payload chart.
+- A 14-day total-versus-flagged tool-result chart.
+- Plain-language Global insights using the same insight schema as Session.
+- A bounded capability table with usage, returned tokens, errors, last use,
+  project concentration, and recommendation.
+
+Recommendations are limited to what the trace supports: narrow large results,
+reduce exact repeats, fix repeated failures, scope project-concentrated tools,
+or review an MCP function that a runtime catalog reported across at least five
+sessions without any observed call.
+
+### 13.3 MCP configuration action
+
+For `mcp__server__tool` evidence, Token Meter can present `Disable MCP`. The
+review dialog shows the evidence and exact `ghost mcp all remove <server>`
+command. `POST /mcp/disable` accepts JSON from the localhost dashboard, validates
+the server name, requires the same-origin action token, and calls Ghost through
+`subprocess.run()` without a shell. It does not disable built-in tools,
+individual functions within a server, or skills. Successful configuration
+changes affect future sessions and require an IDE or agent restart.
+
+---
+
+## 14. v6 — Claude Desktop project attribution (2026-06-30)
+
+Claude Desktop project sessions have two local records. Standard project usage
+and tool traces remain normal Claude JSONL under `~/.claude/projects` with
+metadata beneath `~/Library/Application Support/Claude/claude-code-sessions`.
+Agent/Cowork sessions can instead live beneath either the standard `Claude`
+data root or the enterprise `Claude-3p` root. Their metadata is stored under
+`local-agent-mode-sessions`, and the authoritative JSONL is nested inside that
+session's `.claude/projects` directory. Metadata holds the Desktop session id,
+title, cwd, model, timestamps, and a `cliSessionId` which identifies the JSONL.
+
+Token Meter indexes the targeted metadata locations, joins by `cliSessionId`,
+and parses only the authoritative JSONL. This keeps one logical session and one
+cost total while allowing Current and Global views to show `Claude Desktop`,
+the Desktop title, and the actual project directory. Agent sessions whose cwd
+is only their managed `outputs` folder are labeled `No project`. A missing
+metadata file remains a normal `Claude Code` source, and malformed Desktop
+metadata is skipped without affecting other logs.
+
+Regular Claude Desktop cloud conversations are outside this join: Claude does
+not write their billable usage and tool trace to the local agent JSONL store.
+The dashboard therefore reports this source boundary and the latest local
+Agent/Cowork metadata instead of inventing token totals for a cloud chat.
+
+---
+
+## 15. v7 — capability inventory, utilization, and controls (2026-06-30)
+
+The Tools & Skills tab combines trace evidence with local runtime configuration.
+It intentionally keeps three evidence levels separate:
+
+- Tools are runtime-reported when present in Codex `dynamic_tools`; built-in
+  tools absent from that partial catalog can still be listed as observed-only.
+- MCP server availability comes from the local Ghost server installation and
+  Codex/Claude configuration; historical use comes from traced MCP calls.
+- Skills come from installed Codex skill descriptors and Codex/Claude plugin
+  caches. Activation is inferred only when a tool-call argument references a
+  concrete `SKILL.md` path, so the UI labels skill utilization as inferred.
+
+Tool use percentage is the number of unique runtime-reported non-MCP tools
+called at least once divided by unique runtime-reported non-MCP tools. MCP and
+skill percentages use enabled capabilities as the denominator. Counts are
+global across discovered local sessions.
+
+Runtime catalogs expose descriptions and input schemas. Token Meter estimates
+their definition size with four characters per token, then aggregates total,
+eager, deferred, and unused-eager definition tokens. An eager definition is
+unused for a session when that runtime advertised it without deferred loading
+and the trace never called the same tool name. These are prompt-overhead
+estimates repeated across sessions, not provider billing-token claims.
+
+`POST /capability/toggle` requires the same local-origin action token as the
+existing MCP review action. MCP changes call `ghost mcp all add/remove` with a
+fixed argument vector. Skill actions update the containing configured plugin
+pack because neither runtime exposes a safe universal per-skill switch.
+Standalone skills, Cowork built-ins, unmanaged plugin caches, and native tools
+are displayed as read-only. All successful changes require a runtime restart.

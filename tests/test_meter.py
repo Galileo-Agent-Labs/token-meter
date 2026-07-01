@@ -50,6 +50,18 @@ class ExecutionTimingTests(unittest.TestCase):
         self.assertEqual(timing["basis"], "reported + observed")
 
 
+class PricingTests(unittest.TestCase):
+    def test_sonnet_5_uses_introductory_api_rates(self):
+        price, approximate = meter.price_for("claude-sonnet-5", "claude")
+        self.assertEqual(price, {"input": 2.0, "output": 10.0, "cache_write": 2.5, "cache_read": 0.2})
+        self.assertFalse(approximate)
+
+    def test_gpt_5_6_uses_sol_api_rates(self):
+        price, approximate = meter.price_for("gpt-5.6", "codex")
+        self.assertEqual(price, {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.5})
+        self.assertFalse(approximate)
+
+
 class SessionRouteTests(unittest.TestCase):
     def test_dashboard_accepts_root_and_unique_session_paths(self):
         self.assertTrue(meter.is_dashboard_page_path("/"))
@@ -62,6 +74,43 @@ class SessionRouteTests(unittest.TestCase):
         self.assertFalse(meter.is_dashboard_page_path("/sessions/one/two"))
 
 
+class LiveCrossSessionRefreshTests(unittest.TestCase):
+    def test_full_sse_queue_keeps_subscriber_and_coalesces_to_latest_state(self):
+        q_ = meter.queue.Queue(maxsize=2)
+        q_.put_nowait("stale-one")
+        q_.put_nowait("stale-two")
+        self.assertTrue(meter.enqueue_latest(q_, "latest"))
+        self.assertEqual(q_.qsize(), 1)
+        self.assertEqual(q_.get_nowait(), "latest")
+
+    def test_source_signature_changes_when_a_background_log_changes(self):
+        before = meter.source_mtime_signature([
+            {"path": "/logs/current.jsonl", "mtime": 20},
+            {"path": "/logs/background.jsonl", "mtime": 10},
+        ])
+        after = meter.source_mtime_signature([
+            {"path": "/logs/current.jsonl", "mtime": 20},
+            {"path": "/logs/background.jsonl", "mtime": 11},
+        ])
+        self.assertNotEqual(before, after)
+
+    def test_cross_session_refresh_replaces_cached_snapshot_before_publish(self):
+        saved_cache = dict(meter._xsess)
+        published = []
+        fresh = {"sessions": [{"id": "fresh"}], "capabilities": {}}
+        state = {"provider": "codex", "tools": {}, "source": {"id": "current"}}
+        try:
+            meter._xsess["data"], meter._xsess["at"] = {"sessions": [{"id": "stale"}]}, 123
+            result = meter.refresh_cross_session_state(
+                state, builder=lambda: fresh, publisher=published.append,
+            )
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+        self.assertIs(result, fresh)
+        self.assertEqual(published[0]["xsession"]["sessions"][0]["id"], "fresh")
+
+
 class DashboardLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -72,6 +121,13 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=panel-efficiency", self.page)
         self.assertIn("const PANEL_KEYS=['summary','activity','tools','insights','alerts'];", self.page)
         self.assertIn("efficiency:'summary'", self.page)
+
+    def test_current_header_keeps_session_start_message_visible(self):
+        self.assertIn("id=session-start", self.page)
+        self.assertIn("id=session-start-text", self.page)
+        self.assertIn("function sessionStartMessage(s)", self.page)
+        self.assertIn("$('session-start-text').textContent=startMessage", self.page)
+        self.assertLess(self.page.index("id=session-start"), self.page.index("id=session-tabs"))
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-avoidable-tokens"):
@@ -99,15 +155,25 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("row.reviewable!==false", self.page)
         self.assertNotIn("...group,id:group.item_id", self.page)
 
-    def test_global_daily_and_learn_views_are_first_class_routes(self):
-        for marker in ("id=tab-daily", "id=view-daily", "id=tab-learn", "id=view-learn"):
+    def test_global_daily_learn_and_settings_views_are_first_class_routes(self):
+        for marker in ("id=tab-logs", "id=view-logs", "id=tab-daily", "id=view-daily", "id=tab-learn", "id=view-learn",
+                       "id=tab-settings", "id=view-settings"):
             self.assertIn(marker, self.page)
         self.assertIn("data-global-panel=overview", self.page)
         self.assertIn("id=global-panel-overview", self.page)
+        self.assertNotIn("data-global-panel=logs", self.page)
+        self.assertNotIn("id=global-panel-logs", self.page)
+        self.assertIn("const GLOBAL_PANEL_KEYS=['overview','insights','evidence'];", self.page)
+        self.assertIn("h==='logs'||h==='global-logs'", self.page)
+        self.assertIn("live · updated ${new Date(generatedAt*1000).toLocaleTimeString", self.page)
+        self.assertLess(self.page.index("id=tab-global"), self.page.index("id=tab-logs"))
+        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-daily"))
         self.assertIn("id=d-day-select", self.page)
         self.assertIn("id=learn-glossary", self.page)
         self.assertIn("if(h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
+        self.assertIn("if(h==='settings')", self.page)
+        self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
 
     def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
         self.assertIn("id=c-disable-unused", self.page)
@@ -115,6 +181,24 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("/capability/disable-unused", self.page)
         self.assertIn("control_ids:groups.map(row=>row.id)", self.page)
         self.assertIn("Runtime packs, built-ins, standalone skills, and used groups are excluded.", self.page)
+
+    def test_agent_access_has_a_dedicated_settings_tab(self):
+        for marker in ("id=agent-discovery", "id=agent-access", "id=agent-clients",
+                       "id=agent-dialog", "/agent-access/status", "/agent-access/toggle"):
+            self.assertIn(marker, self.page)
+        for tool in ("mcp__tokenmeter__check", "mcp__tokenmeter__usage",
+                     "mcp__tokenmeter__capabilities"):
+            self.assertIn(tool, self.page)
+        self.assertLess(self.page.index("id=view-capabilities"), self.page.index("id=view-settings"))
+        self.assertLess(self.page.index("id=view-settings"), self.page.index("id=agent-access"))
+        self.assertIn("setHashRoute('settings')", self.page)
+        self.assertIn("After connecting Token Meter in Settings", self.page)
+        self.assertIn("tm_agent_discovery_dismissed", self.page)
+
+    def test_learn_has_user_question_starters(self):
+        self.assertIn("Should I keep this run going?", self.page)
+        self.assertIn("Why was the last phase expensive?", self.page)
+        self.assertIn("What should I change before the next phase?", self.page)
 
 
 class MenubarSourceTests(unittest.TestCase):
@@ -313,6 +397,165 @@ class ToolEvidenceTests(unittest.TestCase):
         value = {"cmd": "sed -n '1,80p' /tmp/skills/execution-plan/SKILL.md"}
         self.assertEqual(meter.skill_names_from_value(value), ["execution-plan"])
 
+    def test_token_meter_diagnostics_are_accounted_but_never_recommended_for_cleanup(self):
+        calls = [{**meter.tool_identity("mcp__tokenmeter__check"), "output_tokens": 50000,
+                  "ts": 100, "args_fingerprint": "one", "error": False}]
+        rows = [{
+            "id": "s1", "path": "/tmp/s1", "provider": "codex", "project": "/repo",
+            "_tool_evidence": meter.summarize_tool_evidence(calls),
+        }]
+        waste = meter.global_tool_waste(rows)
+        diagnostic = next(row for row in waste["by_name"] if row["namespace"] == "tokenmeter")
+        self.assertTrue(diagnostic["diagnostic"])
+        self.assertEqual(diagnostic["recommendation"], "keep")
+        self.assertFalse(any("tokenmeter" in row.get("key", "") for row in waste["insights"]))
+
+
+class AgentDataContractTests(unittest.TestCase):
+    def setUp(self):
+        self.source = {
+            "id": "safe-session", "provider": "codex", "client": "codex", "label": "Codex",
+            "path": "/private/logs/secret.jsonl", "session": "secret.jsonl",
+            "project": "/Users/test/work/repository", "mtime": meter.time.time(),
+        }
+        self.state = {
+            "provider": "codex", "source": self.source, "session": "secret.jsonl",
+            "project": self.source["project"], "total_cost": 1.25, "cost_approx": True,
+            "total_tokens": 120000, "turns": 4, "last_turn_cost": 0.21,
+            "context": {"latest": 40000, "window": 200000, "latest_pct": 0.2},
+            "tools": {"total_output_tokens": 9000, "flagged_tokens": 1000, "by_name": []},
+            "executions": [{"idx": 4, "cost": 0.21, "tokens": {
+                "input": 40000, "output": 900, "retrieval": 1000,
+            }, "context_pct": 0.2}],
+            "trace": [
+                {"execution": 4, "kind": "user", "label": "User message", "detail": "private prompt"},
+                {"execution": 4, "kind": "tool_call", "label": "search", "detail": "private args"},
+                {"execution": 4, "kind": "tool_result", "label": "search", "detail": "private result", "tokens": 1000},
+            ],
+            "insights": [], "ended": False,
+        }
+
+    def test_check_matches_runtime_and_project_and_omits_content(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(execution=4, caller={
+                "runtime": "codex", "project": "/Users/test/work/repository/subdir",
+            })
+        encoded = json.dumps(result)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["selected_session"]["project"], "repository")
+        self.assertEqual(result["data_scope"], "matched_current_run")
+        self.assertNotIn("private prompt", encoded)
+        self.assertNotIn("private args", encoded)
+        self.assertNotIn("private result", encoded)
+        self.assertNotIn("/private/logs", encoded)
+        self.assertLessEqual(len(result["evidence"]), 3)
+        self.assertLessEqual(len(result["execution"]["activity"]), 5)
+        selected_tools = next(row for row in result["evidence"] if row["label"] == "Selected execution tool results")
+        self.assertEqual(selected_tools["value"], 1000)
+
+    def test_default_check_does_not_present_run_wide_tool_tokens_as_latest(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+        latest_tools = next(row for row in result["evidence"] if row["label"] == "Latest execution tool results")
+        self.assertEqual(latest_tools["value"], 1000)
+        self.assertNotEqual(latest_tools["value"], self.state["tools"]["total_output_tokens"])
+
+    def test_missing_context_percentage_is_not_described_as_zero(self):
+        state = {"context": {"latest_pct": None}, "last_turn_cost": 0,
+                 "insights": [], "executions": [], "ended": False}
+        recommendation = meter.menubar_recommendation(state)
+        verdict = meter.menubar_verdict(state, recommendation)
+        self.assertIn("not reported", verdict["detail"])
+        self.assertNotIn("Context is 0%", verdict["detail"])
+
+    def test_check_refuses_to_fall_back_across_projects(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]):
+            result = meter.agent_check(caller={"runtime": "codex", "project": "/another/repository"})
+        self.assertFalse(result["ok"])
+        self.assertIn("did not fall back", result["caveat"])
+
+    def test_claude_trace_cwd_preserves_hyphenated_project_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            path.write_text(json.dumps({
+                "type": "user", "cwd": "/Users/test/Documents/github/token-meter",
+            }) + "\n")
+            cwd = meter.claude_trace_cwd(str(path))
+        self.assertEqual(cwd, "/Users/test/Documents/github/token-meter")
+
+    def test_current_run_resolution_prefers_exact_project_over_newer_parent(self):
+        now = meter.time.time()
+        exact = {**self.source, "id": "exact", "project": "/Users/test/work/repository", "mtime": now - 10}
+        parent = {**self.source, "id": "parent", "project": "/Users/test/work", "mtime": now}
+        selected, resolution = meter.resolve_agent_source(
+            caller={"runtime": "codex", "project": "/Users/test/work/repository"},
+            sources=[parent, exact],
+        )
+        self.assertEqual(selected["id"], "exact")
+        self.assertEqual(resolution, "matched")
+
+    def test_current_run_resolution_rejects_stale_implicit_match(self):
+        stale = {**self.source, "mtime": meter.time.time() - meter.AGENT_CURRENT_MAX_AGE_S - 1}
+        selected, resolution = meter.resolve_agent_source(
+            caller={"runtime": "codex", "project": "/Users/test/work/repository"},
+            sources=[stale],
+        )
+        self.assertIsNone(selected)
+        self.assertIn("No recent Codex run", resolution)
+
+    def test_usage_is_aggregate_only_and_ranked_categories_are_bounded(self):
+        cross = {
+            "daily": [{"day": time_day, "cost": 2.0, "sessions": 2,
+                       "providers": [{"provider": "codex", "cost": 2.0}],
+                       "tool_tokens": 1000, "flagged_tokens": 300}
+                      for time_day in ("2026-07-01", "2026-06-30")],
+            "sessions": [{"cost_approx": True, "title": "private title", "project": "/private/repo"}],
+            "model_mix": [{"model": f"model-{idx}", "cost": idx, "tokens": idx * 100}
+                          for idx in range(8)],
+            "tool_waste": {"by_name": [
+                {"name": f"tool-{idx}", "namespace": "safe", "output_tokens": idx * 100, "calls": idx}
+                for idx in range(8)
+            ]},
+        }
+        with mock.patch.object(meter, "cross_session", return_value=cross):
+            result = meter.agent_usage(window="7d", focus="models")
+        encoded = json.dumps(result)
+        self.assertEqual(result["data_scope"], "anonymous_aggregate_history")
+        self.assertLessEqual(len(result["categories"]), 5)
+        self.assertNotIn("private title", encoded)
+        self.assertNotIn("/private/repo", encoded)
+
+    def test_capability_result_names_only_requested_evidence(self):
+        cross = {"capabilities": {
+            "summary": {"optional": {"enabled": 2, "unused": 1,
+                "avoidable_eager_definition_tokens": 120}},
+            "control_groups": [
+                {"name": "context7", "control_type": "mcp", "runtime": "Codex + Claude",
+                 "used": False, "enabled": True, "calls": 0, "unused_eager_definition_tokens": 120,
+                 "environment": {"TOKEN": "secret"}},
+                {"name": "tokenmeter", "control_type": "mcp", "runtime": "Codex",
+                 "used": False, "enabled": True},
+            ],
+        }}
+        with mock.patch.object(meter, "cross_session", return_value=cross):
+            result = meter.agent_capabilities(scope="all", limit=5)
+        encoded = json.dumps(result)
+        self.assertEqual([row["name"] for row in result["candidates"]], ["context7"])
+        self.assertNotIn("TOKEN", encoded)
+        self.assertNotIn("secret", encoded)
+
+    def test_agent_result_has_a_hard_serialized_bound(self):
+        result = meter.bounded_agent_result({
+            "answer": "a" * 10000, "evidence": [{"label": "x", "value": "y" * 10000}] * 10,
+            "recommended_action": "z" * 10000, "caveat": "c" * 10000,
+        })
+        self.assertTrue(result["truncated"])
+        self.assertLessEqual(len(result["evidence"]), 2)
+
 
 class McpActionTests(unittest.TestCase):
     def test_disable_uses_fixed_argument_vector_without_shell(self):
@@ -354,6 +597,140 @@ class McpActionTests(unittest.TestCase):
         result = meter.set_mcp_server_enabled("context7", True, ghost_path="/usr/local/bin/ghost", runner=fake_runner)
         self.assertTrue(result["ok"])
         self.assertEqual(observed["argv"], ["/usr/local/bin/ghost", "mcp", "all", "add", "context7"])
+
+
+class AgentAccessTests(unittest.TestCase):
+    def test_client_environment_prepends_wrapper_runtime_directory(self):
+        with mock.patch.dict(meter.os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
+            env = meter.agent_client_environment("/Users/test/.nvm/versions/node/v24/bin/codex")
+        self.assertEqual(env["PATH"].split(":" )[0], "/Users/test/.nvm/versions/node/v24/bin")
+        self.assertIn("/usr/bin", env["PATH"].split(":"))
+
+    def test_client_environment_keeps_symlink_directory_for_sibling_node(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wrapper_dir = Path(tmp) / "node" / "bin"
+            target_dir = Path(tmp) / "package" / "bin"
+            wrapper_dir.mkdir(parents=True)
+            target_dir.mkdir(parents=True)
+            target = target_dir / "codex.js"
+            target.write_text("#!/usr/bin/env node\n")
+            wrapper = wrapper_dir / "codex"
+            wrapper.symlink_to(target)
+            env = meter.agent_client_environment(str(wrapper))
+        self.assertEqual(env["PATH"].split(":")[0], str(wrapper_dir))
+
+    def test_client_discovery_checks_user_bin_when_service_path_is_minimal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / ".local" / "bin" / "claude"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("#!/bin/sh\n")
+            binary.chmod(0o755)
+            with mock.patch.object(meter.os.path, "expanduser",
+                                   side_effect=lambda value: tmp if value == "~" else value):
+                found = meter.agent_client_executable("claude", which=lambda name: None)
+        self.assertEqual(found, str(binary))
+
+    def test_connection_commands_use_fixed_vectors_and_user_scope(self):
+        launcher = "/Applications/Token Meter/bin/token-meter-mcp"
+        codex = meter.agent_access_command("codex", True, launcher=launcher, cli_path="/usr/bin/codex")
+        claude = meter.agent_access_command("claude", True, launcher=launcher, cli_path="/usr/bin/claude")
+        self.assertEqual(codex, ["/usr/bin/codex", "mcp", "add", "--env",
+                                "TOKEN_METER_CALLER=codex", "tokenmeter", "--", launcher])
+        self.assertEqual(claude, ["/usr/bin/claude", "mcp", "add", "--transport", "stdio",
+                                 "--scope", "user", "tokenmeter", "--env",
+                                 "TOKEN_METER_CALLER=claude", "--", launcher])
+
+    def test_codex_status_requires_exact_launcher_and_caller_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "token-meter-mcp"
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+
+            class Completed:
+                returncode = 0
+                stdout = json.dumps({"enabled": True, "transport": {
+                    "type": "stdio", "command": str(launcher), "args": [],
+                    "env": {"TOKEN_METER_CALLER": "codex"},
+                }})
+                stderr = ""
+
+            status = meter.agent_access_client_status(
+                "codex", launcher=str(launcher), runner=lambda *a, **k: Completed(),
+                which=lambda name: f"/usr/bin/{name}")
+        self.assertTrue(status["connected"])
+        self.assertFalse(status["conflict"])
+        self.assertNotIn("/usr/bin/codex", status["connect_command"])
+
+    def test_claude_status_reads_only_the_user_scope_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "token-meter-mcp"
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+            config = Path(tmp) / ".claude.json"
+            config.write_text(json.dumps({"mcpServers": {"tokenmeter": {
+                "type": "stdio", "command": str(launcher), "args": [],
+                "env": {"TOKEN_METER_CALLER": "claude"},
+            }}}))
+            status = meter.agent_access_client_status(
+                "claude", launcher=str(launcher), claude_config_path=str(config),
+                which=lambda name: f"/usr/bin/{name}")
+        self.assertTrue(status["connected"])
+
+    def test_different_existing_entry_is_reported_as_conflict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "token-meter-mcp"
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+            config = Path(tmp) / ".claude.json"
+            config.write_text(json.dumps({"mcpServers": {"tokenmeter": {
+                "type": "stdio", "command": "/tmp/different", "args": [], "env": {},
+            }}}))
+            status = meter.agent_access_client_status(
+                "claude", launcher=str(launcher), claude_config_path=str(config),
+                which=lambda name: f"/usr/bin/{name}")
+        self.assertFalse(status["connected"])
+        self.assertTrue(status["conflict"])
+
+    def test_connection_change_is_verified_after_cli_success(self):
+        before = {"label": "Codex", "detected": True, "available": True,
+                  "configured": False, "connected": False, "conflict": False}
+        after = {**before, "configured": True, "connected": True}
+        states = iter((before, after))
+        observed = {}
+
+        class Completed:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def runner(argv, **kwargs):
+            observed["argv"] = argv
+            observed["kwargs"] = kwargs
+            return Completed()
+
+        with mock.patch.object(meter, "agent_access_launcher", return_value="/tmp/token-meter-mcp"):
+            result = meter.set_agent_access("codex", True, runner=runner,
+                                            status_getter=lambda client: next(states))
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["restart_required"])
+        self.assertEqual(observed["argv"][-3:], ["tokenmeter", "--", "/tmp/token-meter-mcp"])
+        self.assertNotIn("shell", observed["kwargs"])
+
+    def test_connection_failure_includes_bounded_cli_reason(self):
+        before = {"label": "Codex", "detected": True, "available": True,
+                  "configured": False, "connected": False, "conflict": False}
+
+        class Completed:
+            returncode = 127
+            stdout = ""
+            stderr = "env: node: No such file or directory\n"
+
+        with mock.patch.object(meter, "agent_access_launcher", return_value="/tmp/token-meter-mcp"), \
+                mock.patch.object(meter, "agent_client_executable", return_value="/tmp/codex"):
+            result = meter.set_agent_access("codex", True, runner=lambda *a, **k: Completed(),
+                                            status_getter=lambda client: before)
+        self.assertFalse(result["ok"])
+        self.assertIn("env: node", result["error"])
 
 
 class CapabilityConfigTests(unittest.TestCase):

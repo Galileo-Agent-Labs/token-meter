@@ -212,6 +212,17 @@ moment is already on screen the instant you stop. No second tool.
 - **FR19 Global guidance views** — open Global on an operational overview, add a
   date-selectable Daily summary from trace-backed day attribution, and provide a
   Learn view with a practical workflow and searchable glossary.
+- **FR20 Read-only agent access** — expose a local stdio MCP server named
+  `tokenmeter` with exactly three tools: `check` for matched-current-run
+  decisions, `usage` for anonymous aggregate history, and `capabilities` for
+  named optional setup evidence. Results must be verdict-first, bounded to
+  three evidence points and one action, and link back to dashboard evidence.
+- **FR21 User-scoped connection management** — let users connect Codex and
+  Claude Code independently from a dedicated Settings tab, show the exact native CLI
+  command before confirmation, manage only an exact Token Meter entry, refuse
+  collisions, and show restart guidance. A dismissible Current callout may
+  provide one-time discovery and routes directly to Settings. Tools & Skills
+  remains focused on capability evidence, optimization, and controls.
 
 ## 5. Non-functional requirements
 
@@ -221,6 +232,15 @@ moment is already on screen the instant you stop. No second tool.
   Configuration changes occur only after an explicit dashboard confirmation.
 - **NFR4 Calm** — silent/neutral when normal; loud only on real events.
 - **NFR5 Cheap to run** — negligible CPU; tails by mtime + reparse.
+- **NFR6 Bounded disclosure** — current detail is limited to the caller's
+  matched runtime/project; historical results omit run and project identity;
+  MCP and skill names appear only for explicit capability review. No MCP result
+  may contain prompts, messages, reasoning text, tool arguments/results,
+  credentials, environment variables, config values, or local paths. Setup must
+  disclose that returned metrics enter the connected agent context and may be
+  processed by that client's model provider.
+- **NFR7 Read-only and on demand** — agent tools cannot mutate configuration,
+  stop a run, or change budgets, and they do not imply continuous monitoring.
 
 ---
 
@@ -555,10 +575,16 @@ estimation. A result can be oversized, repeated, and failed simultaneously;
 the headline `flagged_tokens` total includes that result once, while the reason
 counts remain separate.
 
-### 13.2 Global interface
+### 13.2 Global and Logs interfaces
 
-The Global page keeps its spend summary visible, then uses Logs-first subtabs
-for `Logs`, `Global insights`, and `Capability evidence`. The insight panel adds:
+The Global page keeps its spend summary visible and uses `Overview`,
+`Global insights`, and `Capability evidence` subtabs. The searchable and
+sortable log inventory lives in a dedicated top-level `Logs` route. Changes to
+any discovered log invalidate the cross-session snapshot and are published
+within two seconds, independently of which runtime owns the newest log. The
+SSE delivery coalesces a full per-client queue to the newest snapshot; queue
+pressure must not remove a still-connected browser subscriber. The insight
+panel adds:
 
 - Returned tokens, uniquely flagged tokens, oversized calls, errors, and exact
   repeats.
@@ -670,10 +696,11 @@ runtime and pack/server list in a separate confirmation dialog.
 
 ## 16. v8 — Global overview, Daily, and Learn (2026-07-01)
 
-Global opens on an overview instead of the log table. The landing view combines
+Global opens on an overview. The landing view combines
 total and current-day spend, log/execution/token volume, runtime and model mix,
 cross-log priorities, and direct access to the highest-cost logs. Logs, global
-insights, and capability evidence remain separate subtabs.
+insights, and capability evidence remain separate destinations; Logs is a
+top-level tab, while the other two remain Global subtabs.
 
 Daily uses per-day cost already attributed from trace usage records. For each
 recorded day it reports estimated spend, active logs, distinct projects,

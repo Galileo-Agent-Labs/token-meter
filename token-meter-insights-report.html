@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Token Meter — Personal Usage &amp; Efficiency Report</title>
+  <style>
+    :root {
+      --bg: #071015;
+      --panel: #0c1820;
+      --panel-2: #10212b;
+      --ink: #eef9fc;
+      --muted: #9bb2bc;
+      --faint: #6f8791;
+      --line: rgba(166, 219, 231, .16);
+      --cyan: #31c9ed;
+      --cyan-2: #80e6f7;
+      --green: #70d99a;
+      --amber: #ffbd66;
+      --red: #ff7b72;
+      --violet: #b59cff;
+      --shadow: 0 26px 70px rgba(0, 0, 0, .28);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 90% -10%, rgba(49, 201, 237, .14), transparent 34rem),
+        radial-gradient(circle at 0 28%, rgba(181, 156, 255, .08), transparent 30rem),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.58 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--cyan-2); }
+    button, .button { font: inherit; }
+    .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    .page { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 30px 0 68px; }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 800; }
+    .mark {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: grid; place-items: center;
+      background: linear-gradient(145deg, var(--cyan), #168daf);
+      color: #03232c; box-shadow: 0 8px 22px rgba(49, 201, 237, .22);
+      font-size: 13px; letter-spacing: -.04em;
+    }
+    .actions { display: flex; gap: 9px; align-items: center; }
+    .button {
+      border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px;
+      background: rgba(255, 255, 255, .035); color: var(--ink); text-decoration: none;
+      cursor: pointer; font-size: 12px; letter-spacing: 0; text-transform: none;
+    }
+    .button:hover { border-color: rgba(49, 201, 237, .5); background: rgba(49, 201, 237, .08); }
+
+    header { padding: 88px 0 42px; position: relative; }
+    .eyebrow { color: var(--cyan-2); font-weight: 800; letter-spacing: .13em; text-transform: uppercase; font-size: 12px; }
+    h1 { font-size: clamp(46px, 7vw, 80px); line-height: .98; letter-spacing: -.055em; margin: 17px 0 23px; max-width: 900px; }
+    .dek { font-size: clamp(17px, 2vw, 22px); color: #bdd0d8; max-width: 790px; margin: 0; }
+    .meta { margin-top: 26px; color: var(--faint); font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
+    .meta strong { color: var(--muted); }
+
+    .verdict {
+      margin: 20px 0 26px;
+      display: grid; grid-template-columns: 1.1fr repeat(3, 1fr); gap: 1px;
+      border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+      background: var(--line); box-shadow: var(--shadow);
+    }
+    .verdict > div { background: rgba(12, 24, 32, .96); padding: 24px; min-height: 146px; }
+    .verdict .lead { background: linear-gradient(145deg, rgba(255, 189, 102, .16), rgba(12, 24, 32, .96) 72%); }
+    .label { color: var(--faint); text-transform: uppercase; letter-spacing: .1em; font-size: 10px; font-weight: 800; }
+    .verdict .grade { font-size: 29px; line-height: 1.1; margin: 13px 0 8px; font-weight: 850; letter-spacing: -.03em; color: var(--amber); }
+    .verdict h3 { font-size: 16px; margin: 14px 0 7px; }
+    .verdict p { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.5; }
+
+    .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 10px 0 54px; }
+    .kpi { border: 1px solid var(--line); border-radius: 12px; padding: 17px 16px; background: rgba(255, 255, 255, .025); }
+    .kpi .value { font-size: 27px; line-height: 1; font-weight: 820; letter-spacing: -.045em; margin: 12px 0 8px; }
+    .kpi .note { color: var(--faint); font-size: 11px; line-height: 1.35; }
+    .kpi.warn .value { color: var(--amber); }
+    .kpi.bad .value { color: var(--red); }
+    .kpi.good .value { color: var(--green); }
+
+    section { margin-top: 66px; }
+    .section-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr); gap: 28px; align-items: end; margin-bottom: 20px; }
+    h2 { font-size: clamp(29px, 4vw, 43px); line-height: 1.08; letter-spacing: -.04em; margin: 7px 0 0; }
+    .section-head p { color: var(--muted); margin: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: 14px; background: rgba(12, 24, 32, .88); padding: 23px; box-shadow: 0 12px 35px rgba(0, 0, 0, .13); }
+    .card h3 { font-size: 17px; margin: 0 0 7px; }
+    .card p { color: var(--muted); margin: 0; }
+
+    .allocation { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 26px; align-items: center; }
+    .donut {
+      width: 186px; aspect-ratio: 1; border-radius: 50%;
+      display: grid; place-items: center;
+      background: conic-gradient(var(--cyan) 0 71.58%, var(--violet) 71.58% 100%);
+      position: relative; margin: auto;
+    }
+    .donut::after { content: ""; position: absolute; inset: 25px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); }
+    .donut span { position: relative; z-index: 1; text-align: center; font-size: 26px; font-weight: 850; line-height: 1; }
+    .donut small { display: block; color: var(--muted); font-size: 10px; font-weight: 650; margin-top: 7px; letter-spacing: .08em; text-transform: uppercase; }
+    .legend { display: grid; gap: 13px; }
+    .legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; }
+    .swatch { width: 9px; height: 9px; border-radius: 50%; }
+    .legend-row span:nth-child(2) { color: var(--muted); }
+    .legend-row strong { font-size: 13px; }
+
+    .bars { display: grid; gap: 14px; margin-top: 18px; }
+    .bar-row { display: grid; grid-template-columns: 145px minmax(0, 1fr) 80px; gap: 12px; align-items: center; font-size: 12px; }
+    .bar-row .name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track { height: 8px; border-radius: 8px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+    .fill { display: block; height: 100%; width: var(--w); background: linear-gradient(90deg, var(--cyan), var(--cyan-2)); border-radius: inherit; }
+    .bar-row:nth-child(2) .fill { background: linear-gradient(90deg, var(--violet), #d3c5ff); }
+    .bar-row:nth-child(n+3) .fill { background: linear-gradient(90deg, #647e88, #9bb2bc); }
+    .bar-row strong { text-align: right; }
+
+    .trend-card { padding: 25px 22px 19px; }
+    .trend-chart { height: 250px; display: grid; grid-template-columns: repeat(14, 1fr); gap: 8px; align-items: end; margin-top: 25px; border-bottom: 1px solid var(--line); }
+    .day { height: 100%; display: flex; flex-direction: column; justify-content: end; align-items: center; gap: 7px; min-width: 0; position: relative; }
+    .day .amount { color: var(--faint); font-size: 9px; writing-mode: vertical-rl; transform: rotate(180deg); max-height: 42px; }
+    .day .column { width: min(30px, 80%); height: max(3px, var(--h)); background: linear-gradient(180deg, var(--cyan-2), #167f9d); border-radius: 5px 5px 0 0; box-shadow: 0 0 18px rgba(49, 201, 237, .11); }
+    .day.anomaly .column { background: linear-gradient(180deg, var(--amber), #b86d2c); box-shadow: 0 0 20px rgba(255, 189, 102, .14); }
+    .day .date { color: var(--faint); font-size: 9px; white-space: nowrap; transform: rotate(-45deg); transform-origin: top center; height: 28px; }
+    .trend-note { margin-top: 30px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .tag { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; }
+    .tag.warn { color: var(--amber); border-color: rgba(255, 189, 102, .3); background: rgba(255, 189, 102, .07); }
+
+    .metric-stack { display: grid; gap: 1px; border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: var(--line); }
+    .metric-row { background: var(--panel); display: grid; grid-template-columns: 1fr auto; gap: 18px; padding: 16px 18px; align-items: center; }
+    .metric-row span { color: var(--muted); }
+    .metric-row strong { font-size: 17px; }
+    .progress { height: 8px; background: rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; margin-top: 8px; }
+    .progress > i { display: block; height: 100%; width: var(--w); background: var(--amber); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; text-align: left; padding: 0 10px 11px; border-bottom: 1px solid var(--line); }
+    td { padding: 14px 10px; border-bottom: 1px solid rgba(166, 219, 231, .1); vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    td:nth-child(n+2), th:nth-child(n+2) { text-align: right; }
+    .task { font-weight: 720; }
+    .task small { display: block; color: var(--faint); font-weight: 500; margin-top: 3px; }
+
+    .signal { border-left: 3px solid var(--cyan); }
+    .signal.good { border-left-color: var(--green); }
+    .signal.warn { border-left-color: var(--amber); }
+    .signal.bad { border-left-color: var(--red); }
+    .signal .signal-value { font-size: 31px; letter-spacing: -.04em; font-weight: 850; margin: 13px 0 7px; }
+    .signal .sub { color: var(--faint); font-size: 12px; }
+
+    .recommendations { counter-reset: action; display: grid; gap: 10px; }
+    .action-row { counter-increment: action; border: 1px solid var(--line); border-radius: 13px; background: rgba(12, 24, 32, .88); padding: 19px 20px; display: grid; grid-template-columns: 52px 1.15fr 1fr; gap: 18px; align-items: start; }
+    .action-row::before { content: "0" counter(action); color: var(--cyan-2); font: 800 14px/1 ui-monospace, monospace; padding-top: 5px; }
+    .action-row h3 { margin: 0 0 5px; font-size: 16px; }
+    .action-row p { margin: 0; color: var(--muted); font-size: 13px; }
+    .evidence { color: var(--faint); font-size: 12px; border-left: 1px solid var(--line); padding-left: 18px; }
+    .evidence strong { color: var(--ink); display: block; margin-bottom: 5px; }
+
+    .target-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+    .target { padding: 18px; border-radius: 12px; background: rgba(49, 201, 237, .045); border: 1px solid rgba(49, 201, 237, .18); }
+    .target strong { display: block; font-size: 24px; letter-spacing: -.04em; color: var(--cyan-2); margin: 9px 0 4px; }
+    .target span { color: var(--muted); font-size: 12px; }
+
+    .caveats { background: linear-gradient(145deg, rgba(181, 156, 255, .08), rgba(12, 24, 32, .9)); }
+    .caveats ul { margin: 13px 0 0; padding-left: 20px; color: var(--muted); }
+    .caveats li + li { margin-top: 8px; }
+    footer { border-top: 1px solid var(--line); margin-top: 68px; padding-top: 22px; color: var(--faint); font-size: 11px; display: flex; justify-content: space-between; gap: 18px; }
+
+    @media (max-width: 980px) {
+      .verdict { grid-template-columns: 1fr 1fr; }
+      .kpis { grid-template-columns: repeat(3, 1fr); }
+      .target-grid { grid-template-columns: repeat(2, 1fr); }
+      .action-row { grid-template-columns: 42px 1fr; }
+      .evidence { grid-column: 2; border-left: 0; border-top: 1px solid var(--line); padding: 12px 0 0; }
+    }
+    @media (max-width: 720px) {
+      .page { width: min(100% - 24px, 1180px); padding-top: 18px; }
+      .topline { align-items: flex-start; }
+      .actions button { display: none; }
+      header { padding-top: 58px; }
+      .verdict, .grid-2, .grid-3, .section-head { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .allocation { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 112px 1fr 65px; }
+      .trend-chart { gap: 3px; }
+      .day .amount { display: none; }
+      .day .date { font-size: 8px; }
+      .target-grid { grid-template-columns: 1fr 1fr; }
+      table { min-width: 650px; }
+      .table-wrap { overflow-x: auto; }
+      footer { display: block; }
+    }
+
+    @media print {
+      :root { --bg: #fff; --panel: #fff; --panel-2: #f5f8f9; --ink: #102128; --muted: #465c66; --faint: #687d85; --line: rgba(16, 33, 40, .18); }
+      body { background: #fff; font-size: 11px; }
+      .page { width: 100%; padding: 0 18px; }
+      .actions { display: none; }
+      header { padding: 36px 0 22px; }
+      h1 { font-size: 47px; }
+      section { margin-top: 38px; break-inside: avoid; }
+      .verdict > div, .card, .metric-row, .action-row { background: #fff; box-shadow: none; }
+      .donut::after { background: #fff; }
+      .card, .verdict, .action-row { break-inside: avoid; }
+      .kpis { margin-bottom: 28px; }
+      a { color: #146b80; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="topline">
+      <div class="brand"><span class="mark">TM</span> Token Meter</div>
+      <div class="actions">
+        <a class="button" href="http://127.0.0.1:8722" target="_blank" rel="noreferrer">Open live dashboard</a>
+        <button class="button" type="button" onclick="window.print()">Print / save PDF</button>
+      </div>
+    </div>
+
+    <header>
+      <div class="eyebrow">Personal usage &amp; efficiency report</div>
+      <h1>Your agent spend is concentrated—and tool output is the clearest optimization target.</h1>
+      <p class="dek">A local snapshot of Claude and Codex activity, translated into the few decisions most likely to reduce cost and context pressure without weakening important work.</p>
+      <div class="meta">
+        <span><strong>Captured</strong> 1 July 2026 · 14:54 IST</span>
+        <span><strong>Scope</strong> 60 discovered local logs</span>
+        <span><strong>Source</strong> Token Meter local state</span>
+      </div>
+    </header>
+
+    <div class="verdict" aria-label="Executive assessment">
+      <div class="lead">
+        <div class="label">Overall assessment</div>
+        <div class="grade">High optimization opportunity</div>
+        <p>The biggest gains are likely to come from reducing oversized tool results and reviewing a small number of expensive runs.</p>
+      </div>
+      <div>
+        <div class="label">Spend concentration</div>
+        <h3>Claude drives 71.6%</h3>
+        <p>Claude Opus alone accounts for 69.1% of all estimated historical spend.</p>
+      </div>
+      <div>
+        <div class="label">Tool-result quality</div>
+        <h3>31.0% flagged</h3>
+        <p>About 1.67M returned tokens matched an oversized, repeated, or error rule.</p>
+      </div>
+      <div>
+        <div class="label">Current-run signal</div>
+        <h3>Cache is working</h3>
+        <p>The sampled live run achieved 91% cache reads and an estimated $0.39 in savings.</p>
+      </div>
+    </div>
+
+    <div class="kpis" aria-label="Headline metrics">
+      <div class="kpi"><div class="label">Estimated spend</div><div class="value mono">$1,277.99</div><div class="note">API-equivalent historical total</div></div>
+      <div class="kpi warn"><div class="label">Spend today</div><div class="value mono">$86.29</div><div class="note">Partial day; not a closing total</div></div>
+      <div class="kpi"><div class="label">Tool results</div><div class="value mono">5.37M</div><div class="note">Trace-observed returned tokens</div></div>
+      <div class="kpi bad"><div class="label">Flagged results</div><div class="value mono">1.67M</div><div class="note">31.0% of measured volume</div></div>
+      <div class="kpi warn"><div class="label">Tool errors</div><div class="value mono">66</div><div class="note">Structured error signals</div></div>
+      <div class="kpi warn"><div class="label">Exact repeats</div><div class="value mono">42</div><div class="note">Same arguments within five minutes</div></div>
+    </div>
+
+    <section id="spend">
+      <div class="section-head">
+        <div><div class="label">01 · Spend footprint</div><h2>Most cost comes from one runtime and one model.</h2></div>
+        <p>This concentration is useful: optimization does not need to touch every workflow. Start with the high-cost Claude Opus runs and the few sessions responsible for each expensive day.</p>
+      </div>
+      <div class="grid-2">
+        <article class="card">
+          <h3>Spend by runtime</h3>
+          <div class="allocation">
+            <div class="donut"><span>71.6%<small>Claude share</small></span></div>
+            <div class="legend">
+              <div class="legend-row"><i class="swatch" style="background:var(--cyan)"></i><span>Claude · 23 session records</span><strong class="mono">$914.75</strong></div>
+              <div class="legend-row"><i class="swatch" style="background:var(--violet)"></i><span>Codex · 46 session records</span><strong class="mono">$363.24</strong></div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Model contribution</h3>
+          <p>Share of the $1,277.99 estimated total.</p>
+          <div class="bars">
+            <div class="bar-row"><span class="name">Claude Opus 4.8</span><span class="track"><i class="fill" style="--w:69.1%"></i></span><strong class="mono">$883.49</strong></div>
+            <div class="bar-row"><span class="name">GPT-5.6-sol</span><span class="track"><i class="fill" style="--w:17.4%"></i></span><strong class="mono">$222.68</strong></div>
+            <div class="bar-row"><span class="name">GPT-5.5</span><span class="track"><i class="fill" style="--w:11.0%"></i></span><strong class="mono">$140.56</strong></div>
+            <div class="bar-row"><span class="name">Claude Fable 5</span><span class="track"><i class="fill" style="--w:2.3%"></i></span><strong class="mono">$29.45</strong></div>
+            <div class="bar-row"><span class="name">Claude Sonnet 4.6</span><span class="track"><i class="fill" style="--w:.15%"></i></span><strong class="mono">$1.81</strong></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="trend">
+      <div class="section-head">
+        <div><div class="label">02 · Daily pattern</div><h2>Spend is bursty rather than steadily high.</h2></div>
+        <p>Three detected anomaly days—17 June, 19 June, and 30 June—contributed roughly 58% of total estimated spend. Investigating those days is higher leverage than optimizing low-cost sessions indiscriminately.</p>
+      </div>
+      <article class="card trend-card">
+        <div class="label">Recorded daily spend · 11 June–1 July</div>
+        <div class="trend-chart" role="img" aria-label="Daily spend chart. Highest day was 17 June at 362 dollars and 43 cents.">
+          <div class="day" title="11 Jun: $0.20"><span class="amount">$0.20</span><i class="column" style="--h:2%"></i><span class="date">11 Jun</span></div>
+          <div class="day" title="13 Jun: $37.65"><span class="amount">$37.65</span><i class="column" style="--h:10.4%"></i><span class="date">13 Jun</span></div>
+          <div class="day" title="15 Jun: $17.06"><span class="amount">$17.06</span><i class="column" style="--h:4.7%"></i><span class="date">15 Jun</span></div>
+          <div class="day anomaly" title="17 Jun: $362.43 · anomaly"><span class="amount">$362.43</span><i class="column" style="--h:100%"></i><span class="date">17 Jun</span></div>
+          <div class="day" title="18 Jun: $1.18"><span class="amount">$1.18</span><i class="column" style="--h:2%"></i><span class="date">18 Jun</span></div>
+          <div class="day anomaly" title="19 Jun: $180.69 · anomaly"><span class="amount">$180.69</span><i class="column" style="--h:49.9%"></i><span class="date">19 Jun</span></div>
+          <div class="day" title="22 Jun: $4.40"><span class="amount">$4.40</span><i class="column" style="--h:2%"></i><span class="date">22 Jun</span></div>
+          <div class="day" title="23 Jun: $15.06"><span class="amount">$15.06</span><i class="column" style="--h:4.2%"></i><span class="date">23 Jun</span></div>
+          <div class="day" title="24 Jun: $134.12"><span class="amount">$134.12</span><i class="column" style="--h:37%"></i><span class="date">24 Jun</span></div>
+          <div class="day" title="25 Jun: $30.57"><span class="amount">$30.57</span><i class="column" style="--h:8.4%"></i><span class="date">25 Jun</span></div>
+          <div class="day" title="26 Jun: $54.66"><span class="amount">$54.66</span><i class="column" style="--h:15.1%"></i><span class="date">26 Jun</span></div>
+          <div class="day" title="29 Jun: $126.44"><span class="amount">$126.44</span><i class="column" style="--h:34.9%"></i><span class="date">29 Jun</span></div>
+          <div class="day anomaly" title="30 Jun: $197.98 · anomaly"><span class="amount">$197.98</span><i class="column" style="--h:54.6%"></i><span class="date">30 Jun</span></div>
+          <div class="day" title="1 Jul: $86.29 · partial day"><span class="amount">$86.29</span><i class="column" style="--h:23.8%"></i><span class="date">1 Jul*</span></div>
+        </div>
+        <div class="trend-note"><span class="tag warn">Amber = detected anomaly</span><span class="tag">* 1 July is incomplete</span><span class="tag">Peak: $362.43 on 17 June</span></div>
+      </article>
+    </section>
+
+    <section id="today">
+      <div class="section-head">
+        <div><div class="label">03 · Today’s concentration</div><h2>Three sessions produced 79.1% of today’s spend.</h2></div>
+        <p>The day is still in progress, but the concentration is already decisive. Review the workflow shape of these sessions before changing general defaults.</p>
+      </div>
+      <article class="card table-wrap">
+        <table>
+          <thead><tr><th>Session</th><th>Runtime</th><th>Estimated cost</th><th>Share of day</th></tr></thead>
+          <tbody>
+            <tr><td class="task">Design MCP integration button<small>token-meter</small></td><td>Codex</td><td class="mono">$30.00</td><td class="mono">34.8%</td></tr>
+            <tr><td class="task">Add tool stats to overview<small>token-meter</small></td><td>Codex</td><td class="mono">$22.11</td><td class="mono">25.6%</td></tr>
+            <tr><td class="task">Fix disable-pack confirmation<small>token-meter</small></td><td>Codex</td><td class="mono">$16.15</td><td class="mono">18.7%</td></tr>
+            <tr><td class="task">Revise chapter 3 language<small>recursive-self-improvement / ebook</small></td><td>Codex</td><td class="mono">$5.82</td><td class="mono">6.7%</td></tr>
+            <tr><td class="task">Redesign Daily tab<small>token-meter</small></td><td>Codex</td><td class="mono">$5.60</td><td class="mono">6.5%</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="tools">
+      <div class="section-head">
+        <div><div class="label">04 · Tool-result efficiency</div><h2>Tool output is the clearest waste signal.</h2></div>
+        <p>The issue is not merely tool-call count. Large responses are being reintroduced into later context, while errors and exact repeats add avoidable recovery work.</p>
+      </div>
+      <div class="grid-3">
+        <article class="card signal bad"><div class="label">Historical flagged share</div><div class="signal-value mono">31.0%</div><p>1.67M of 5.37M returned tokens matched at least one rule.</p><div class="sub">Oversized, repeated, and error categories can overlap.</div></article>
+        <article class="card signal warn"><div class="label">Today’s flagged share</div><div class="signal-value mono">53.6%</div><p>671K of 1.25M tool-result tokens are flagged so far today.</p><div class="sub">This is materially worse than the historical baseline.</div></article>
+        <article class="card signal warn"><div class="label">Largest source</div><div class="signal-value mono">2.57M</div><p><span class="mono">exec</span> produced 47.8% of all trace-observed result tokens.</p><div class="sub">1,749 calls across 25 sessions.</div></article>
+      </div>
+      <div class="grid-2" style="margin-top:14px">
+        <article class="card">
+          <h3>Failure and repetition signals</h3>
+          <div class="metric-stack" style="margin-top:16px">
+            <div class="metric-row"><span>Oversized calls</span><strong class="mono">165</strong></div>
+            <div class="metric-row"><span>Structured tool errors</span><strong class="mono">66</strong></div>
+            <div class="metric-row"><span>Immediate exact repeats</span><strong class="mono">42</strong></div>
+            <div class="metric-row"><span>Error-result payload</span><strong class="mono">~7,850 tok</strong></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Unused eager schema signal</h3>
+          <p>Approximately 6,492 of 6,581 eager definition tokens were loaded in sessions that did not call those tools.</p>
+          <div class="progress" aria-label="99 percent unused eager schema"><i style="--w:98.6%"></i></div>
+          <p style="margin-top:14px"><strong style="color:var(--amber)">98.6% unused in measured catalogs.</strong> Move rarely used capabilities to deferred loading where the runtime supports it.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="current">
+      <div class="section-head">
+        <div><div class="label">05 · Current-run snapshot</div><h2>The sampled live run looks efficient.</h2></div>
+        <p>This is a point-in-time Claude Code run, not the historical average. It shows what healthy cache behavior looks like, while also illustrating the limits of incomplete context-window reporting.</p>
+      </div>
+      <div class="grid-3">
+        <article class="card signal good"><div class="label">Estimated cost</div><div class="signal-value mono">$0.12</div><p>Six recorded turns; largest execution was about $0.05.</p></article>
+        <article class="card signal good"><div class="label">Cache performance</div><div class="signal-value mono">91%</div><p>About 143K cache-read tokens and an estimated $0.39 saved.</p></article>
+        <article class="card signal"><div class="label">Reasoning mix</div><div class="signal-value mono">31%</div><p>Worth watching on longer runs, but not a warning at this level.</p></article>
+      </div>
+      <article class="card caveats" style="margin-top:14px">
+        <h3>Unavailable signal</h3>
+        <p>The run reported 27,802 latest input/context tokens, but no model context-window limit. Token Meter therefore cannot calculate a reliable context-pressure percentage for this snapshot.</p>
+      </article>
+    </section>
+
+    <section id="capabilities">
+      <div class="section-head">
+        <div><div class="label">06 · Capability review</div><h2>Eighteen optional groups deserve review—not automatic removal.</h2></div>
+        <p>No use was observed across the capability scan, but all 18 groups lack measured schema-overhead evidence. Treat this as a shortlist for manual review rather than a bulk-disable verdict.</p>
+      </div>
+      <div class="grid-2">
+        <article class="card">
+          <div class="metric-stack">
+            <div class="metric-row"><span>Optional groups enabled</span><strong class="mono">18</strong></div>
+            <div class="metric-row"><span>MCP servers</span><strong class="mono">1</strong></div>
+            <div class="metric-row"><span>Skill packs</span><strong class="mono">17</strong></div>
+            <div class="metric-row"><span>Sessions scanned</span><strong class="mono">69</strong></div>
+          </div>
+        </article>
+        <article class="card signal warn">
+          <h3>Decision rule</h3>
+          <p>Disable only a group you recognize as optional, have not used recently, and can safely restore. Lack of observed activation is useful evidence, but incomplete instrumentation can produce false “unused” signals.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="actions">
+      <div class="section-head">
+        <div><div class="label">07 · Recommended actions</div><h2>A focused two-week optimization plan.</h2></div>
+        <p>These actions follow the measured bottlenecks. They avoid broad model downgrades or indiscriminate tool removal.</p>
+      </div>
+      <div class="recommendations">
+        <article class="action-row"><div><h3>Put output bounds on shell and search commands</h3><p>Use narrower queries, file filters, result limits, and deliberate pagination. Summarize large outputs before the next model execution.</p></div><div class="evidence"><strong>Why first</strong><span class="mono">exec</span> generated 2.57M returned tokens—47.8% of all measured tool output.</div></article>
+        <article class="action-row"><div><h3>Review the 165 oversized calls</h3><p>Start with today’s three highest-cost sessions. Identify whether long build logs, broad searches, or repeated full-file reads caused the spikes.</p></div><div class="evidence"><strong>Why now</strong>Today’s flagged share is 53.6%, versus a 31.0% historical baseline.</div></article>
+        <article class="action-row"><div><h3>Eliminate repeat and failing calls</h3><p>Reuse recent results, correct authentication failures, and stop retry loops after the first repeated error pattern.</p></div><div class="evidence"><strong>Measured waste</strong>42 immediate repeats and 66 structured errors across scanned history.</div></article>
+        <article class="action-row"><div><h3>Audit high-cost model routing</h3><p>Review Claude Opus work by task type. Trial a lower-cost model only for bounded, reversible work and compare accepted outcomes—not token price alone.</p></div><div class="evidence"><strong>Concentration</strong>Claude Opus represents $883.49, or 69.1% of total estimated spend.</div></article>
+        <article class="action-row"><div><h3>Review optional capability groups individually</h3><p>Keep frequently needed packs, defer rarely used definitions, and disable only clearly obsolete groups after confirming reversibility.</p></div><div class="evidence"><strong>Caution</strong>18 review candidates are unmeasured for eager overhead; do not bulk disable from this evidence alone.</div></article>
+      </div>
+
+      <div class="target-grid" aria-label="Suggested next-period targets">
+        <div class="target"><div class="label">Flagged share</div><strong>&lt;20%</strong><span>from 31% historical</span></div>
+        <div class="target"><div class="label">Exact repeats</div><strong>Near zero</strong><span>in the next review window</span></div>
+        <div class="target"><div class="label">Tool errors</div><strong>Down 75%</strong><span>after auth and retry fixes</span></div>
+        <div class="target"><div class="label">Outcome check</div><strong>Weekly</strong><span>cost per accepted task</span></div>
+      </div>
+    </section>
+
+    <section id="method">
+      <article class="card caveats">
+        <div class="label">Method and limitations</div>
+        <h2 style="font-size:28px; margin-top:10px">Read the numbers as decision support, not billing truth.</h2>
+        <ul>
+          <li>Costs are API-equivalent estimates derived from configured public rates; subscriptions, discounts, and private pricing can differ.</li>
+          <li>1 July is a partial day. Comparing its $86.29 directly with completed days would be misleading.</li>
+          <li>Tool-result tokens are estimated from captured output size. Flagged categories can overlap.</li>
+          <li>“Unused” capabilities are review candidates, not proof that removal is safe.</li>
+          <li>Token Meter measures resource efficiency. It does not determine whether a task was correct or successful.</li>
+        </ul>
+      </article>
+    </section>
+
+    <footer>
+      <span>Generated locally from Token Meter · no external telemetry used</span>
+      <span class="mono">Snapshot: 2026-07-01 14:54 IST</span>
+    </footer>
+  </main>
+</body>
+</html>

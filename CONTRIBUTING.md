@@ -40,7 +40,7 @@ python3 meter.py
 ## Development Notes
 
 - Keep the server dependency-free. `meter.py` should continue to use the Python
-  standard library only.
+  standard library only. `token_meter_mcp.py` follows the same rule.
 - Keep the dashboard local-only. Do not add external telemetry, hosted assets,
   or network calls from `page.html`.
 - Avoid committing local session logs, generated logs, `.DS_Store`,
@@ -53,7 +53,9 @@ python3 meter.py
 Run the lightweight checks before opening a pull request:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py
+PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
+python3 -m unittest discover -s tests -v
+bash -n scripts/run-token-meter-mcp packaging/payload/bin/token-meter-mcp
 swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"

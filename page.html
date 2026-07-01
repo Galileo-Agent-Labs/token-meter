@@ -62,7 +62,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .section-h{display:flex;align-items:center;gap:10px;margin:24px 0 10px}
 .section-h h2{font-size:14px;margin:0;font-weight:780}
 .section-h .hint{font-size:12px;color:var(--faint)}
-.sessionhead{display:flex;align-items:center;gap:9px;margin-bottom:12px;min-width:0}
+.sessionhead{display:flex;align-items:center;gap:9px;margin-bottom:10px;min-width:0}
+.sessionStart{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:9px;align-items:baseline;margin-bottom:12px;padding:9px 11px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:rgba(0,188,235,.055);min-width:0}.sessionStart[hidden]{display:none}.sessionStart span{color:var(--faint);font-size:10.5px;font-weight:800;text-transform:uppercase;white-space:nowrap}.sessionStart strong{font-size:12.5px;font-weight:680;line-height:1.4;overflow-wrap:anywhere}
 .repo,.sessid{border:1px solid var(--line);background:rgba(17,24,32,.76);border-radius:8px;padding:6px 10px;font-size:12px;min-width:0;box-shadow:var(--inset)}
 .repo{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sessid{color:var(--dim);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -138,12 +139,14 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .globalOverviewGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.overviewKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.overviewKpis .pad{padding:14px}.overviewKpis .v{font-size:24px;font-weight:820;margin-top:4px}.overviewKpis .subline{font-size:11.5px;margin-top:3px}.overviewRows{display:grid;gap:7px;margin-top:12px}.overviewRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.overviewRow:first-child{border-top:0;padding-top:0}.overviewRow .name{font-weight:740;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overviewRow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.overviewRow .value{text-align:right;font-weight:800}.priorityRows{display:grid;gap:8px;margin-top:12px}.priorityRow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line)}.priorityRow:first-child{border-top:0;padding-top:0}.priorityRow i{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--accent)}.priorityRow.warn i{background:var(--warn)}.priorityRow.good i{background:var(--good)}.priorityRow b{display:block}.priorityRow span{display:block;color:var(--dim);font-size:12px;margin-top:2px}
 .dailyHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}.dailyHead h1,.learnHead h1{font-size:24px;line-height:1.2;margin:0}.dailyHead p,.learnHead p{color:var(--dim);margin:4px 0 0;font-size:13px}.dailyPicker{display:flex;align-items:center;gap:7px}.dailyPicker select{min-width:172px;border:1px solid var(--line2);background:var(--panel);color:var(--fg);border-radius:7px;padding:7px 9px;font:inherit;font-weight:700}.iconBtn{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;font:inherit;font-size:20px;line-height:1;cursor:pointer}.iconBtn:hover:not(:disabled){border-color:var(--accent);background:rgba(0,188,235,.09)}.iconBtn:disabled{opacity:.4;cursor:not-allowed}.dailyOverview{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(330px,.65fr);gap:12px}.dailySpendCard{padding:20px;overflow:hidden;background:linear-gradient(145deg,rgba(24,37,48,.98),rgba(12,17,23,.98))}.dailySpendCard:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 78%)}.dailySpendTop{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dailySpendValue{font-size:52px;font-weight:840;line-height:1;margin-top:8px;letter-spacing:-2px}.dailyDelta{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;padding:5px 9px;background:rgba(255,255,255,.04);color:var(--dim);font-size:11.5px;font-weight:760;white-space:nowrap}.dailyDelta:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}.dailyDelta.good{color:var(--good);border-color:rgba(102,217,144,.32);background:rgba(102,217,144,.07)}.dailyDelta.good:before{background:var(--good)}.dailyDelta.warn{color:var(--warn);border-color:rgba(255,180,87,.34);background:rgba(255,180,87,.07)}.dailyDelta.warn:before{background:var(--warn)}.dailyMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:22px;border-top:1px solid var(--line)}.dailyMetric{padding:13px 14px 0;border-left:1px solid var(--line);min-width:0}.dailyMetric:first-child{padding-left:0;border-left:0}.dailyMetric .v{font-size:21px;font-weight:820;margin-top:3px}.dailyMetric .subline{margin-top:2px;font-size:11px}.dailyReadout{padding:18px;display:flex;flex-direction:column;min-height:100%}.dailyStatusTitle{font-size:20px;line-height:1.2;font-weight:830;margin-top:7px}.dailySummaryLine{margin:7px 0 13px;color:var(--dim);font-size:12.5px;line-height:1.45}.dailySummaryLine b{color:var(--fg)}.dailySignalList{margin-top:auto;border-top:1px solid var(--line)}.dailySignal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);align-items:center}.dailySignal:last-child{border-bottom:0;padding-bottom:0}.dailySignal .name{font-size:12px;color:var(--dim)}.dailySignal .note{font-size:10.5px;color:var(--faint);margin-top:1px}.dailySignal .value{font-weight:820;text-align:right}.dailyTrendCard{margin-top:12px;padding:17px 18px 14px}.dailySectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.dailySectionHead h2{font-size:14px;margin:0}.dailySectionHead p{font-size:11.5px;color:var(--faint);margin:2px 0 0}.dailyTrend{height:150px;display:flex;align-items:stretch;gap:5px;margin-top:9px;overflow-x:auto;overflow-y:hidden;padding:0 1px;scrollbar-color:var(--line2) transparent}.dailyBar{appearance:none;border:0;background:transparent;color:var(--faint);font:inherit;flex:1 0 42px;min-width:42px;display:grid;grid-template-rows:18px 1fr 22px;gap:3px;padding:0 2px;cursor:pointer;border-radius:6px}.dailyBar:hover,.dailyBar:focus-visible{background:rgba(255,255,255,.035);outline:none}.dailyBarValue{font-size:9.5px;white-space:nowrap;opacity:0;text-align:center;color:var(--dim)}.dailyBar:hover .dailyBarValue,.dailyBar.selected .dailyBarValue{opacity:1}.dailyBarTrack{height:100%;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line2)}.dailyBarFill{display:block;width:min(26px,72%);min-height:3px;border-radius:4px 4px 1px 1px;background:linear-gradient(180deg,var(--accent),rgba(0,188,235,.34));box-shadow:0 -7px 16px rgba(0,188,235,.08);transition:height .24s ease,filter .16s}.dailyBar:hover .dailyBarFill{filter:brightness(1.18)}.dailyBar.selected .dailyBarFill{background:linear-gradient(180deg,#fff,var(--accent));box-shadow:0 -8px 18px rgba(0,188,235,.22)}.dailyBarLabel{font-size:9.5px;white-space:nowrap;text-align:center;padding-top:2px}.dailyBar.selected .dailyBarLabel{color:var(--fg);font-weight:780}.dailyGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:12px;margin-top:12px}.dailyPanel{padding:17px 18px}.dailyPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.dailyPanelHead h2{font-size:14px;margin:0}.dailyPanelHead span{font-size:11px;color:var(--faint)}.dailySessions{display:grid;margin-top:8px}.dailySession{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:11px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}.dailySession:first-child{border-top:0}.dailyRank{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--faint);font:700 10px/1 ui-monospace,"SF Mono",monospace}.dailySessionMain{min-width:0}.dailySessionName{font-weight:760;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dailySessionMeta{font-size:11px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dailySessionTrack{height:4px;border-radius:999px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:7px}.dailySessionTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--orange3))}.dailySessionValue{text-align:right;min-width:70px}.dailySessionValue strong{display:block;font-size:13px}.dailySessionValue span{display:block;font-size:10.5px;color:var(--faint);margin-top:1px}.dailyProviders{display:grid;margin-top:9px}.dailyProvider{padding:11px 0;border-top:1px solid var(--line)}.dailyProvider:first-child{border-top:0}.dailyProviderTop{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.dailyProviderName{display:flex;align-items:center;gap:8px;font-weight:760}.dailyProviderName i{width:8px;height:8px;border-radius:50%;background:var(--provider-color,var(--accent));box-shadow:0 0 10px color-mix(in srgb,var(--provider-color,var(--accent)) 35%,transparent)}.dailyProviderValue{text-align:right;font-weight:820}.dailyProviderValue span{color:var(--faint);font-size:10.5px;font-weight:600;margin-left:5px}.dailyProviderTrack{height:6px;background:rgba(255,255,255,.045);border-radius:999px;overflow:hidden;margin-top:7px}.dailyProviderTrack i{display:block;height:100%;border-radius:999px;background:var(--provider-color,var(--accent))}.dailyQuality{margin-top:12px;padding:17px 18px}.dailyQualityGrid{display:grid;grid-template-columns:minmax(180px,.55fr) minmax(280px,1.15fr) minmax(210px,.55fr);gap:24px;align-items:center;margin-top:12px}.dailyQualityVerdict{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;align-items:center}.dailyQualityScore{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(102,217,144,.38);background:radial-gradient(circle,rgba(102,217,144,.14),rgba(102,217,144,.025));color:var(--good);font-size:13px;font-weight:840}.dailyQualityScore.warn{border-color:rgba(255,180,87,.44);background:radial-gradient(circle,rgba(255,180,87,.15),rgba(255,180,87,.025));color:var(--warn)}.dailyQualityState{font-size:15px;font-weight:820}.dailyQuality .subline{font-size:11.5px;margin-top:3px}.dailyToolBar{height:10px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.04);overflow:hidden;display:flex;margin-top:9px}.dailyToolBar i{display:block;height:100%}.dailyToolBar .clean{background:linear-gradient(90deg,var(--good),var(--accent))}.dailyToolBar .flagged{background:var(--warn)}.dailyQualityLegend{display:flex;justify-content:space-between;gap:12px;margin-top:6px;color:var(--faint);font-size:10.5px}.dailyQualityNumbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dailyQualityNumber{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:rgba(255,255,255,.025)}.dailyQualityNumber .v{font-size:17px;font-weight:820;margin-top:2px}
 .learnHead{max-width:760px;margin-bottom:22px}.learnSection{padding:18px 0;border-top:1px solid var(--line2)}.learnSection h2{font-size:16px;margin:0}.learnSteps{margin-top:10px}.learnStep{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:14px;align-items:center;padding:15px 0;border-top:1px solid var(--line)}.learnStep:first-child{border-top:0}.learnStep .num{width:30px;height:30px;border:1px solid var(--line2);border-radius:50%;display:grid;place-items:center;color:var(--accent);font-weight:820}.learnStep h3{font-size:14px;margin:0}.learnStep p{font-size:12.5px;color:var(--dim);margin:3px 0 0;max-width:800px}.glossaryToolbar{display:grid;grid-template-columns:minmax(220px,420px) auto;gap:12px;align-items:center;margin-top:12px}.glossaryList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin-top:8px}.termRow{padding:13px 0;border-top:1px solid var(--line)}.termRow dt{font-weight:800}.termRow dd{margin:3px 0 0;color:var(--dim);font-size:12.5px}.bulkControls{max-height:220px;white-space:pre-wrap}
+.agentDiscovery{display:flex;align-items:center;gap:14px;margin-bottom:12px;padding:12px 14px;border:1px solid rgba(0,188,235,.32);border-left:3px solid var(--accent);border-radius:8px;background:linear-gradient(90deg,rgba(0,188,235,.11),rgba(17,24,32,.88) 58%,rgba(17,24,32,.94));box-shadow:var(--shadow-soft)}.agentDiscovery[hidden]{display:none}.agentDiscoveryMain{flex:1;min-width:0}.agentDiscoveryTitle{font-weight:810}.agentDiscoveryText{color:var(--dim);font-size:12.5px;margin-top:2px}.agentDiscoveryClose{border:0;background:transparent;color:var(--faint);font:700 18px/1 inherit;cursor:pointer;padding:6px}.agentDiscoveryClose:hover{color:var(--fg)}
+.agentAccess{margin-bottom:12px;overflow:hidden;border-color:rgba(0,188,235,.22)}.agentAccess:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 72%)}.agentAccessHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.agentAccessHead h1,.agentAccessHead h2{font-size:20px;line-height:1.2;margin:3px 0 0}.agentAccessHead p{color:var(--dim);font-size:12.5px;margin:5px 0 0;max-width:760px}.agentAccessBadge{border:1px solid var(--line2);border-radius:999px;padding:4px 9px;color:var(--dim);font-size:11px;white-space:nowrap}.agentClients{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}.agentClient{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.028);padding:11px 12px}.agentClientName{font-weight:800}.agentClientState{font-size:11.5px;color:var(--faint);margin-top:2px}.agentClientState.connected{color:var(--good)}.agentClientState.warn{color:var(--warn)}.agentDisclosure{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px;border-top:1px solid var(--line);margin-top:13px;padding-top:12px;color:var(--dim);font-size:11.5px}.agentDisclosure b{color:var(--fg)}.agentTools{margin-top:10px;color:var(--faint);font-size:11.5px}.agentTools code{color:var(--orange3)}.promptCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}.promptCard{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.028);padding:12px;color:var(--dim);font-size:12.5px}.promptCard code{display:block;color:var(--fg);font:inherit;font-weight:720;white-space:normal;margin-bottom:5px}.learnActions{margin-top:12px}.agentCommand{white-space:pre-wrap;overflow-wrap:anywhere}
 .slist{display:flex;flex-direction:column;gap:8px}.srow{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto auto;gap:12px;align-items:center;background:linear-gradient(180deg,rgba(20,28,37,.94),rgba(13,18,24,.94));border:1px solid var(--line);border-radius:8px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow-soft);transition:border-color .16s,background .16s,transform .16s;min-width:0}.srow:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(24,34,44,.96),rgba(14,20,27,.96));transform:translateY(-1px)}.srow.active{border-color:rgba(0,188,235,.62);box-shadow:0 0 0 1px rgba(0,188,235,.12),var(--shadow-soft)}.srow .t{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.srow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.srow .c{font-weight:820;font-size:15px;text-align:right}.sMain{min-width:0}.sbar{height:4px;border-radius:4px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:8px}.sbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--orange));border-radius:4px}.smetrics{text-align:right;min-width:88px}.smetrics .meta{font-size:11px}.badge{font-size:10.5px;color:var(--dim);background:rgba(255,255,255,.045);border:1px solid var(--line);padding:3px 7px;border-radius:6px;box-shadow:var(--inset)}.badge.codex{color:var(--orange3);border-color:rgba(0,188,235,.42);background:rgba(0,188,235,.12)}.badge.claude{color:#d4c0ff;border-color:rgba(183,140,255,.42);background:rgba(183,140,255,.12)}
 .dailyGrid{align-items:start}
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}}
-@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.overview,.overviewKpis{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}}
+@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.agentClients,.agentDisclosure,.promptCards{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}}
+@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}}
 </style></head><body>
 <div class=wrap>
  <div class=top>
@@ -151,9 +154,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	  <div class=tabs>
 	   <button class="tab on" id=tab-session>Current</button>
 	   <button class=tab id=tab-global>Global</button>
+	   <button class=tab id=tab-logs>Logs</button>
 	   <button class=tab id=tab-daily>Daily</button>
 	   <button class=tab id=tab-capabilities>Tools &amp; Skills</button>
 	   <button class=tab id=tab-learn>Learn</button>
+	   <button class=tab id=tab-settings>Settings</button>
 	  </div>
   <div class=spacer></div>
   <div class=live id=live><span class=pulse></span><span id=livetxt>connecting</span></div>
@@ -176,6 +181,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <span class=spacer></span>
    <button class=unpin id=unpin>Back to live</button>
   </div>
+  <div class=sessionStart id=session-start hidden><span>Session started with</span><strong id=session-start-text></strong></div>
 
   <div class="seg session-tabs" id=session-tabs>
    <button data-panel=summary>Summary</button>
@@ -186,6 +192,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   </div>
 
   <div class="session-panel on" id=panel-summary>
+  <div class=agentDiscovery id=agent-discovery hidden>
+   <div class=agentDiscoveryMain><div class=agentDiscoveryTitle>Ask about this run from Codex or Claude</div><div class=agentDiscoveryText>Get a read-only verdict on cost, context, tool output, and whether to continue&mdash;without sharing prompts or tool content.</div></div>
+   <button class=tbtn id=agent-discovery-open type=button>Connect agent</button>
+   <button class=agentDiscoveryClose id=agent-discovery-close type=button aria-label="Dismiss agent access suggestion">&times;</button>
+  </div>
   <div class=hero>
    <div class="card costcard" tabindex=0>
     <div>
@@ -330,7 +341,6 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	  </div>
 	  <div class="seg global-tabs" id=global-tabs>
 	   <button data-global-panel=overview>Overview</button>
-	   <button data-global-panel=logs>Logs</button>
 	   <button data-global-panel=insights>Global insights</button>
 	   <button data-global-panel=evidence>Capability evidence</button>
 	  </div>
@@ -351,21 +361,6 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	    <div class="card pad"><div class=label>Highest-cost logs</div><div class=overviewRows id=g-overview-sessions></div></div>
 	   </div>
 	  </div>
-
-	  <div class=global-panel id=global-panel-logs>
-  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
-  <div class=globalControls>
-   <input class=searchbox id=g-search type=search placeholder="Search title, project, model, provider">
-   <div class="seg sortseg" id=g-sort>
-    <button data-gsort=recent title="Newest activity first.">Recent</button>
-    <button data-gsort=cost title="Highest cost first.">Cost</button>
-    <button data-gsort=tokens title="Most tokens first.">Tokens</button>
-    <button data-gsort=executions title="Most executions first.">Execs</button>
-   </div>
-   <div class=globalMeta id=g-count></div>
-  </div>
-  <div class=slist id=slist></div>
-  </div>
 
   <div class=global-panel id=global-panel-insights>
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule." data-tip="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule.">Global tool waste</span></h2><span class=hint>trace-backed · categories can overlap</span></div>
@@ -388,6 +383,21 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <table class=tbl id=g-tool-table><thead><tr><th>Tool / MCP</th><th>Namespace</th><th class=num>Sessions</th><th class=num>Calls</th><th class=num>Returned</th><th class=num>Flagged</th><th class=num>Errors</th><th>Last used</th><th>Recommendation</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 	  </div>
+	 </div>
+
+	 <div class=view id=view-logs>
+  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
+  <div class=globalControls>
+   <input class=searchbox id=g-search type=search placeholder="Search title, project, model, provider">
+   <div class="seg sortseg" id=g-sort>
+    <button data-gsort=recent title="Newest activity first.">Recent</button>
+    <button data-gsort=cost title="Highest cost first.">Cost</button>
+    <button data-gsort=tokens title="Most tokens first.">Tokens</button>
+    <button data-gsort=executions title="Most executions first.">Execs</button>
+   </div>
+   <div class=globalMeta id=g-count></div>
+  </div>
+  <div class=slist id=slist></div>
 	 </div>
 
 	 <div class=view id=view-daily>
@@ -440,6 +450,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools &amp; Skills, review exact runtime-qualified controls, and disable only packs or MCP servers that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
 	   <div class=learnStep><div class=num>5</div><div><h3>Close with the daily summary</h3><p>Compare today with recent days, note the dominant runtime and highest-cost logs, and verify whether flagged tool results are trending down.</p></div><button class=tbtn data-learn-route=daily>Open Daily</button></div>
 	  </div></section>
+	  <section class=learnSection><h2>Ask from your agent</h2><div class=subline>After connecting Token Meter in Settings, ask naturally. The agent receives a bounded verdict and a link back to the evidence.</div><div class=promptCards>
+	   <div class=promptCard><code>Should I keep this run going?</code>Checks current cost, context pressure, tool-result volume, and the strongest action.</div>
+	   <div class=promptCard><code>Why was the last phase expensive?</code>Drills into a retained execution without returning prompts, arguments, or result content.</div>
+	   <div class=promptCard><code>What should I change before the next phase?</code>Combines current-run evidence with one practical recommendation.</div>
+	  </div><div class=learnActions><button class=tbtn data-learn-route=settings type=button>Open Settings</button></div></section>
 	  <section class=learnSection><h2>Glossary</h2><div class=glossaryToolbar><input class=searchbox id=learn-search type=search placeholder="Search terms"><span class=globalMeta id=learn-count></span></div><dl class=glossaryList id=learn-glossary></dl></section>
 	 </div>
 
@@ -463,6 +478,17 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class="card pad capTableWrap"><table class=tbl id=c-table><thead><tr><th class=sortable data-csort=name tabindex=0 aria-sort=none>Capability</th><th class=sortable data-csort=type tabindex=0 aria-sort=none>Type</th><th class=sortable data-csort=runtime tabindex=0 aria-sort=none>Runtime / source</th><th class=sortable data-csort=state tabindex=0 aria-sort=none>State</th><th class="num sortable" data-csort=use tabindex=0 aria-sort=none>Use</th><th class="num sortable" data-csort=returned tabindex=0 aria-sort=none>Returned</th><th class=sortable data-csort=last tabindex=0 aria-sort=none>Last used</th><th class=sortable data-csort=control tabindex=0 aria-sort=none>Control</th></tr></thead><tbody></tbody></table></div>
   <div class=foot>Eager = schema loaded up front · Deferred = schema loaded on demand · changes require restarting the IDE or agent</div>
  </div>
+
+	 <div class=view id=view-settings>
+	  <div class=learnHead><h1>Settings</h1><p>Manage machine-level Token Meter connections. Run evidence and capability optimization stay in Tools &amp; Skills.</p></div>
+  <section class="card pad agentAccess" id=agent-access>
+   <div class=agentAccessHead><div><div class=label>Agent connections</div><h2>Ask Token Meter from Codex or Claude</h2><p>Let your agent check this run&rsquo;s cost, context, tool usage, and efficiency when you ask. This is on-demand advice, not continuous monitoring.</p></div><span class=agentAccessBadge id=agent-access-badge>Checking clients</span></div>
+   <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status</div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
+   <div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named MCP servers and skill packs only when requested.</div><div><b>Never shared:</b> prompts, messages, reasoning, tool content, credentials, or config values.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div>
+   <div class=agentTools>Read-only tools: <code>mcp__tokenmeter__check</code> · <code>mcp__tokenmeter__usage</code> · <code>mcp__tokenmeter__capabilities</code></div>
+  </section>
+	  <div class=foot>Capability review and controls remain in Tools &amp; Skills · run-specific budgets and notifications remain in Current → Alerts</div>
+	 </div>
 </div>
 <dialog class=mcpDialog id=mcp-dialog>
  <div class=inner>
@@ -495,6 +521,17 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <code class=bulkControls id=bulk-dialog-controls></code>
   <div class=subline>Only current review candidates are accepted. Built-in and runtime packs are excluded. Successful changes require restarting the IDE or agent.</div>
   <div class=actions><button class=tbtn id=bulk-cancel>Cancel</button><button class="tbtn danger" id=bulk-confirm>Disable all unused</button></div>
+ </div>
+</dialog>
+<dialog class=mcpDialog id=agent-dialog>
+ <div class=inner>
+  <h3 id=agent-dialog-title>Connect agent?</h3>
+  <div class=subline id=agent-dialog-sub></div>
+  <div class=evidence id=agent-dialog-evidence></div>
+  <div class=label>Exact local command</div>
+  <code class=agentCommand id=agent-dialog-command></code>
+  <div class=subline>Only Token Meter&rsquo;s exact <code>tokenmeter</code> entry is managed. Start a new agent session after the change.</div>
+  <div class=actions><button class=tbtn id=agent-cancel>Cancel</button><button class=tbtn id=agent-confirm>Confirm</button></div>
  </div>
 </dialog>
 <div class=toastbox id=toastbox></div>
@@ -545,6 +582,7 @@ function costTipHtml(s,tok){
  return `<div class=h>Cost calculation</div>${rows}<div class=total><span>Total</span><span>${money(s.total_cost||0)}${s.cost_approx?' est':''}</span></div><div class=note>${s.cost_approx?'Estimated with public API rates. ':''}Cached input is priced separately from uncached input.</div>`;
 }
 let LATEST=null, CURRENT=null, pinned=null, sessionRequest=0;
+let AGENT_ACCESS=null, pendingAgentAccess=null, agentAccessLoading=false;
 
 function routedSessionId(){
  const match=(location.pathname||'').match(/^\/sessions\/([^/]+)\/?$/);
@@ -565,20 +603,28 @@ function setHashRoute(route,{replace=false,apply=true}={}){
 function showTab(t){
  $('tab-session').classList.toggle('on',t==='session');
  $('tab-global').classList.toggle('on',t==='global');
+ $('tab-logs').classList.toggle('on',t==='logs');
  $('tab-daily').classList.toggle('on',t==='daily');
  $('tab-capabilities').classList.toggle('on',t==='capabilities');
  $('tab-learn').classList.toggle('on',t==='learn');
+ $('tab-settings').classList.toggle('on',t==='settings');
  $('view-session').classList.toggle('on',t==='session');
  $('view-global').classList.toggle('on',t==='global');
+ $('view-logs').classList.toggle('on',t==='logs');
  $('view-daily').classList.toggle('on',t==='daily');
  $('view-capabilities').classList.toggle('on',t==='capabilities');
  $('view-learn').classList.toggle('on',t==='learn');
+ $('view-settings').classList.toggle('on',t==='settings');
+ const activeTop=$(`tab-${t}`);
+ if(activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'nearest'}));
 }
 $('tab-session').onclick=()=>goToLatestSession();
 $('tab-global').onclick=()=>setHashRoute('global-overview');
+$('tab-logs').onclick=()=>setHashRoute('logs');
 $('tab-daily').onclick=()=>setHashRoute('daily');
 $('tab-capabilities').onclick=()=>setHashRoute('capabilities');
 $('tab-learn').onclick=()=>setHashRoute('learn');
+$('tab-settings').onclick=()=>setHashRoute('settings');
 
 const PANEL_KEYS=['summary','activity','tools','insights','alerts'];
 const PANEL_ALIAS={overview:'summary',flow:'activity',efficiency:'summary',analysis:'summary',settings:'alerts'};
@@ -595,7 +641,7 @@ function showSessionPanel(p){
 $('session-tabs').onclick=e=>{ if(e.target.dataset.panel) setHashRoute(e.target.dataset.panel); };
 showSessionPanel(sessionPanel);
 
-const GLOBAL_PANEL_KEYS=['overview','logs','insights','evidence'];
+const GLOBAL_PANEL_KEYS=['overview','insights','evidence'];
 let globalPanel=localStorage.getItem('tm_global_panel')||'overview';
 function showGlobalPanel(p){
  if(!GLOBAL_PANEL_KEYS.includes(p))p='overview';
@@ -610,7 +656,13 @@ showGlobalPanel(globalPanel);
 function applyHashRoute(){
  const h=(location.hash||'').replace(/^#/,'');
  const panel=PANEL_ALIAS[h]||h;
- const globalMatch=h.match(/^global-(overview|logs|insights|evidence)$/);
+ if(h==='logs'||h==='global-logs'){
+  showTab('logs');
+  if(h==='global-logs')setHashRoute('logs',{replace:true,apply:false});
+  if(LATEST)renderGlobal(LATEST.xsession);
+  return;
+ }
+ const globalMatch=h.match(/^global-(overview|insights|evidence)$/);
  if(h==='global'||globalMatch){
   showTab('global');
   showGlobalPanel(globalMatch?globalMatch[1]:'overview');
@@ -630,6 +682,11 @@ function applyHashRoute(){
  }
  if(h==='learn'){
   showTab('learn');
+  return;
+ }
+ if(h==='settings'){
+  showTab('settings');
+  loadAgentAccess();
   return;
  }
  if(!h||h==='session'){
@@ -691,6 +748,75 @@ function showAppToast(entry){
  setTimeout(()=>toast.remove(),entry.sticky?9500:6500);
  while(box.children.length>4) box.firstElementChild.remove();
 }
+function agentActionToken(){return LATEST?.xsession?.capabilities?.actions?.token||LATEST?.xsession?.mcp_actions?.token||'';}
+function renderAgentAccess(status){
+ AGENT_ACCESS=status;
+ const clients=status?.clients||[];
+ const connected=clients.filter(row=>row.connected).length;
+ $('agent-access-badge').textContent=connected?`${connected} connected`:(status?.any_detected?'Ready to connect':'Clients not found');
+ $('agent-clients').innerHTML=clients.map(row=>{
+  const stateClass=row.connected?'connected':row.conflict?'warn':'';
+  const label=row.connected?'Disconnect':row.conflict?'Resolve manually':'Connect';
+  const disabled=(!row.connected&&!row.available)||row.conflict;
+  const detail=!row.detected?'CLI not found':!row.available?'Token Meter launcher unavailable':row.status;
+  return `<div class=agentClient><div><div class=agentClientName>${esc(row.label)}</div><div class="agentClientState ${stateClass}">${esc(detail)}${row.connected?' · available in new sessions':''}</div></div><button class="tbtn ${row.connected?'danger':''}" type=button data-agent-client="${esc(row.id)}" data-agent-enabled="${row.connected?'false':'true'}" ${disabled?'disabled':''}>${label}</button></div>`;
+ }).join('')||'<div class=agentClient><div><div class=agentClientName>Status unavailable</div><div class=agentClientState>Refresh Token Meter and try again.</div></div></div>';
+ const dismissed=localStorage.getItem('tm_agent_discovery_dismissed')==='1';
+ $('agent-discovery').hidden=!!(dismissed||!status?.any_detected||status?.any_connected);
+}
+async function loadAgentAccess(){
+ if(agentAccessLoading)return;
+ agentAccessLoading=true;
+ try{
+  const response=await fetch('/agent-access/status',{cache:'no-store'});
+  if(!response.ok)throw new Error(`Connection status failed (${response.status}).`);
+  renderAgentAccess(await response.json());
+ }catch(error){
+  $('agent-access-badge').textContent='Status unavailable';
+  $('agent-clients').innerHTML='<div class=agentClient><div><div class=agentClientName>Could not read connection status</div><div class=agentClientState>Token Meter will retry when you reopen this view.</div></div></div>';
+  $('agent-discovery').hidden=true;
+ }finally{agentAccessLoading=false;}
+}
+function openAgentAccessDialog(client,enabled){
+ const row=(AGENT_ACCESS?.clients||[]).find(item=>item.id===client);
+ if(!row)return;
+ pendingAgentAccess={client,enabled,row};
+ $('agent-dialog-title').textContent=`${enabled?'Connect':'Disconnect'} ${row.label}?`;
+ $('agent-dialog-sub').textContent=enabled?'Add Token Meter as a user-level, local stdio MCP server.':'Remove only Token Meter’s exact user-level MCP entry.';
+ $('agent-dialog-evidence').innerHTML=enabled
+  ? '<div>Read-only and on demand; no background agent monitoring.</div><div>Prompts, messages, reasoning, tool arguments, tool results, credentials, config values, and named history are excluded.</div><div>Returned metrics enter this agent’s context and may be processed by its model provider.</div>'
+  : '<div>Your Token Meter dashboard and local history stay unchanged.</div><div>Existing agent sessions keep their loaded tool list until restarted.</div>';
+ $('agent-dialog-command').textContent=enabled?row.connect_command:row.disconnect_command;
+ $('agent-confirm').textContent=enabled?'Connect':'Disconnect';
+ $('agent-confirm').classList.toggle('danger',!enabled);
+ $('agent-dialog').showModal();
+}
+$('agent-clients').onclick=e=>{
+ const button=e.target.closest('[data-agent-client]');
+ if(button&&!button.disabled)openAgentAccessDialog(button.dataset.agentClient,button.dataset.agentEnabled==='true');
+};
+$('agent-cancel').onclick=()=>{$('agent-dialog').close();pendingAgentAccess=null;};
+$('agent-dialog').addEventListener('cancel',()=>{pendingAgentAccess=null;});
+$('agent-confirm').onclick=async()=>{
+ if(!pendingAgentAccess)return;
+ const token=agentActionToken();
+ if(!token){showAppToast({title:'Connection not ready',body:'Wait for Token Meter’s live state, then try again.',kind:'warn'});return;}
+ const button=$('agent-confirm'), action=pendingAgentAccess;
+ button.disabled=true;button.textContent=action.enabled?'Connecting…':'Disconnecting…';
+ try{
+  const response=await fetch('/agent-access/toggle',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify({client:action.client,enabled:action.enabled})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Connection change failed.');
+  localStorage.setItem('tm_agent_discovery_dismissed','1');
+  $('agent-dialog').close();pendingAgentAccess=null;
+  await loadAgentAccess();
+  showAppToast({title:action.enabled?'Agent connected':'Agent disconnected',body:result.message||'Start a new agent session for the change to take effect.',kind:action.enabled?'good':'neutral',sticky:true});
+ }catch(error){
+  showAppToast({title:'Connection change failed',body:error.message||String(error),kind:'warn',sticky:true});
+ }finally{button.disabled=false;if(pendingAgentAccess)button.textContent=pendingAgentAccess.enabled?'Connect':'Disconnect';}
+};
+$('agent-discovery-open').onclick=()=>{setHashRoute('settings');setTimeout(()=>$('agent-access').scrollIntoView({behavior:'smooth',block:'start'}),30);};
+$('agent-discovery-close').onclick=()=>{localStorage.setItem('tm_agent_discovery_dismissed','1');$('agent-discovery').hidden=true;};
 function pushAppNotice(title,body,kind='neutral',opts={}){
  const entry={title,body:body||'',kind,time:notifyStamp(),sticky:!!opts.sticky};
  notifyLog.unshift(entry); notifyLog=notifyLog.slice(0,24); saveNotifyLog(); renderNotifyLog(); showAppToast(entry);
@@ -1357,6 +1483,15 @@ function renderAlertBanner(alert){
  }
 }
 
+function sessionStartMessage(s){
+ for(const row of (s?.series||[])){
+  const message=String(row?.user_message||row?.user_input||'').trim();
+  if(message)return message;
+ }
+ const event=(s?.trace||[]).find(row=>row?.kind==='user'||row?.label==='User message');
+ return String(event?.detail||'').trim();
+}
+
 function renderSession(s){
  CURRENT=s;
  loadBudgetForSession(s);
@@ -1366,6 +1501,9 @@ function renderSession(s){
  $('s-repo').textContent=s.project||source.project||'';
  $('s-id').textContent=s.session||source.id||'';
  $('s-pricing').textContent=source.pricing_note||'';
+ const startMessage=sessionStartMessage(s);
+ $('session-start').hidden=!startMessage;
+ $('session-start-text').textContent=startMessage;
  $('unpin').classList.toggle('on',!!pinned);
  $('frozen').classList.toggle('on',frozen);
  $('live').classList.toggle('dead',frozen);
@@ -1882,6 +2020,8 @@ renderGlossary();
 
 function renderGlobal(xs){
  if(!xs)return;
+ const generatedAt=Number(xs.generated_at||0);
+ $('g-hint').textContent=generatedAt?`live · updated ${new Date(generatedAt*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'recent activity';
  $('g-cost').textContent=money(xs.total_cost);
  const providerLine=(xs.providers||[]).slice(0,2).map(p=>`${esc(p.provider)} ${money(p.cost)}`).join(' · ');
  $('g-sub').innerHTML=`<b>${f(xs.total_sessions)}</b> logs`+(providerLine?` · ${providerLine}`:'');
@@ -1980,6 +2120,7 @@ function goToLatestSession(){
 $('unpin').onclick=goToLatestSession;
 
 const es=new EventSource('/events');
-es.onmessage=e=>{ LATEST=JSON.parse(e.data); $('live').classList.remove('dead'); if(!pinned&&$('view-session').classList.contains('on')) renderSession(LATEST); else if(!$('view-session').classList.contains('on')) $('livetxt').textContent='watching'; if($('view-global').classList.contains('on')) renderGlobal(LATEST.xsession); if($('view-daily').classList.contains('on')) renderDaily(LATEST.xsession); if($('view-capabilities').classList.contains('on')) renderCapabilities(LATEST.xsession?.capabilities); };
+es.onmessage=e=>{ LATEST=JSON.parse(e.data); $('live').classList.remove('dead'); if(!pinned&&$('view-session').classList.contains('on')) renderSession(LATEST); else if(!$('view-session').classList.contains('on')) $('livetxt').textContent='watching'; if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on')) renderGlobal(LATEST.xsession); if($('view-daily').classList.contains('on')) renderDaily(LATEST.xsession); if($('view-capabilities').classList.contains('on')) renderCapabilities(LATEST.xsession?.capabilities); };
 es.onerror=()=>{$('livetxt').textContent='reconnecting';};
+loadAgentAccess();
 </script></body></html>

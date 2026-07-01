@@ -30,7 +30,8 @@ Expected:
 Compile the Python server:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py
+PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
+python3 -m unittest discover -s tests -v
 ```
 
 Parse the dashboard JavaScript:
@@ -49,6 +50,17 @@ Run the non-GUI menu bar smoke test:
 
 ```bash
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
+```
+
+Validate both MCP launchers and a protocol transcript:
+
+```bash
+bash -n scripts/run-token-meter-mcp packaging/payload/bin/token-meter-mcp
+./scripts/run-token-meter-mcp <<'EOF'
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+EOF
 ```
 
 Check for whitespace errors:
@@ -113,10 +125,12 @@ Expected payload:
 ./Library/Application Support/Token Meter/VERSION
 ./Library/Application Support/Token Meter/bin
 ./Library/Application Support/Token Meter/bin/start-token-meter
+./Library/Application Support/Token Meter/bin/token-meter-mcp
 ./Library/Application Support/Token Meter/bin/token-meter-menubar
 ./Library/Application Support/Token Meter/bin/uninstall-token-meter
 ./Library/Application Support/Token Meter/meter.py
 ./Library/Application Support/Token Meter/page.html
+./Library/Application Support/Token Meter/token_meter_mcp.py
 ```
 
 Check that no AppleDouble metadata files are in the payload:

@@ -43,10 +43,15 @@ machine.
 - **Global view**: summarizes local spend across logs, model mix, provider mix,
   trend, anomalies, review priorities, expensive logs, and trace-backed tool
   waste across sessions.
+- **Logs view**: provides a dedicated searchable and sortable list of every
+  discovered Claude and Codex log, with durable links to frozen run views.
 - **Daily summary**: attributes spend to recorded local days, with active logs,
   projects, runtime mix, highest-cost logs, and tool-result quality.
 - **Learn view**: provides a practical Token Meter review workflow with direct
   links to each view and a searchable glossary of dashboard terms.
+- **Ask from Codex or Claude**: connects a local, read-only MCP server so an
+  agent can answer whether to continue, explain aggregate usage change, or
+  review optional capabilities with bounded evidence and a dashboard link.
 - **Global tool-waste evidence**: ranks tools and MCP namespaces by returned
   tokens, flags oversized results, exact immediate repeats, and structured
   errors, and shows a 14-day result-token trend.
@@ -178,6 +183,55 @@ Stop the foreground server with `Ctrl-C` in the terminal that started it.
 
 For source installs that should start automatically, see [Launch At Login](#launch-at-login).
 
+## Ask From Codex Or Claude
+
+Open **Settings** and use the **Agent connections** panel to connect Codex,
+Claude Code, or both. Token Meter shows the exact local command before it
+changes configuration and manages only the user-level MCP entry named
+`tokenmeter`. Start a new agent session after connecting.
+
+The three client-visible tools are deliberately compact for crowded MCP lists:
+
+- `mcp__tokenmeter__check` answers questions about the matched current run,
+  including “Should I keep this run going?” and an optional execution drill-down.
+- `mcp__tokenmeter__usage` reviews aggregate spend, models, tools, or change for
+  today, 7 days, or 14 days.
+- `mcp__tokenmeter__capabilities` reviews named optional MCP servers and skill
+  packs without changing them.
+
+The integration is read-only and on demand. Current-run detail is limited to
+the caller's matched runtime and project. History is aggregate-only and omits
+run titles, project names, session IDs, and paths. Prompts, messages, reasoning,
+tool arguments, tool results, credentials, environment variables, and config
+values are never returned.
+
+Implicit current-run checks use the runtime's trace-recorded working directory
+and refuse stale matches older than six hours. Older logs remain available only
+through an explicit log selection or session link, so an abandoned run is not
+described as the caller's latest execution.
+
+When a tool is called, its derived result enters the connected agent's context
+and may be processed by that client's model provider under the client's own
+terms. Token Meter itself makes no outbound network request.
+
+For source installs, the equivalent manual commands are:
+
+```bash
+codex mcp add --env TOKEN_METER_CALLER=codex tokenmeter -- "$PWD/scripts/run-token-meter-mcp"
+claude mcp add --transport stdio --scope user tokenmeter --env TOKEN_METER_CALLER=claude -- "$PWD/scripts/run-token-meter-mcp"
+```
+
+Remove the connections with:
+
+```bash
+codex mcp remove tokenmeter
+claude mcp remove tokenmeter --scope user
+```
+
+Connecting does not create background monitoring or interruptions. The tools
+run only when the user or agent calls them; Token Meter's browser and menu-bar
+alerts remain the proactive channels.
+
 ## Build The macOS Installer Package
 
 Maintainers can build a local installer package:
@@ -259,18 +313,19 @@ Meter discovers both through `~/.codex/sessions`.
 It picks the newest source by modification time and recomputes state whenever
 that source changes.
 
-The Global tab keeps spend/model/trend cards visible, then uses three subtabs:
-`Logs` first, `Global insights`, and `Capability evidence`. Clicking a log opens
-it as a frozen view at `/sessions/<session-id>#summary`, so refreshing or
-sharing that local URL restores the same log. Clicking the top-level `Current`
-tab or `Back to live` always removes the session path and returns to the active
-newest log.
+The Global tab keeps spend/model/trend cards visible and uses `Overview`,
+`Global insights`, and `Capability evidence` subtabs. Logs have a dedicated
+top-level tab. Clicking a log opens it as a frozen view at
+`/sessions/<session-id>#summary`, so refreshing or sharing that local URL
+restores the same log. Clicking the top-level `Current` tab or `Back to live`
+always removes the session path and returns to the active newest log.
 
 Dashboard tabs are addressable routes. The menu bar opens `#summary` for Open
 Dashboard, `#daily` for Open Daily Brief, `#activity` for Open Trace, and
-`#capabilities` for Tools & Skills.
-Current-session panels keep their panel name in the hash, while Global subtabs
-use `#global-logs`, `#global-insights`, and `#global-evidence`.
+`#capabilities` for Tools & Skills, and `#settings` for machine-level settings.
+Current-session panels keep their panel name in the hash. Logs use `#logs`,
+while Global subtabs use `#global-overview`, `#global-insights`, and
+`#global-evidence`; the old `#global-logs` route redirects to `#logs`.
 
 ## What The Dashboard Shows
 
@@ -293,13 +348,20 @@ The Global tab includes:
 - Provider and model mix.
 - 14-day spend trend with anomaly markers.
 - An Overview-first subtab with today, runtime/model mix, review priorities, and
-  the highest-cost logs, followed by a searchable Logs subtab.
+  the highest-cost logs.
 - A Global insights subtab with trace-observed tool-result totals and tokens
   flagged by oversized, exact-repeat, or structured-error rules, ranked
   payloads, and a 14-day result-token trend.
 - A Capability evidence subtab with project concentration, last use, failures,
   recommendations, and server-level MCP evidence.
 - MCP state changes live in the Tools & Skills tab.
+
+The Logs tab includes the searchable log inventory with Recent, Cost, Tokens,
+and Executions sorting. Its live snapshot watches every discovered log, so a
+background Claude update appears without waiting for a newer Codex session (or
+vice versa). If a browser tab falls behind during a burst, Token Meter drops
+queued stale snapshots and keeps the newest one instead of silently detaching
+the live stream.
 
 The Tools & Skills tab includes:
 

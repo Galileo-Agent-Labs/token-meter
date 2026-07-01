@@ -22,13 +22,14 @@ import os
 import queue
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import time
 import threading
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
 CLAUDE_DESKTOP_DATA_ROOTS = [
@@ -47,6 +48,8 @@ PORT = 8722
 CLAUDE_PRICE = {
     "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
     "claude-fable-5": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
+    # Introductory pricing through 2026-08-31; standard pricing is $3/$15 afterward.
+    "claude-sonnet-5": {"input": 2.0, "output": 10.0, "cache_write": 2.50, "cache_read": 0.20},
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30},
     "claude-haiku-4-5": {"input": 1.0, "output": 5.0, "cache_write": 1.25, "cache_read": 0.10},
 }
@@ -54,6 +57,8 @@ CLAUDE_PRICE = {
 # Public OpenAI API pricing, per 1M tokens. Codex subscription accounting can
 # differ by plan, so the UI labels OpenAI/Codex costs as API-rate estimates.
 OPENAI_PRICE = {
+    # GPT-5.6 Sol / flagship pricing. Terra and Luna use lower rates.
+    "gpt-5.6": {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.50},
     "gpt-5.5": {"input": 5.0, "output": 30.0, "cache_write": 0.0, "cache_read": 0.50},
     "gpt-5.4": {"input": 2.50, "output": 15.0, "cache_write": 0.0, "cache_read": 0.25},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "cache_write": 0.0, "cache_read": 0.075},
@@ -83,10 +88,13 @@ subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
 _xsess = {"data": None, "at": 0.0}
 _XSESS_TTL = 15.0
+_XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
 _ACTION_TOKEN = secrets.token_urlsafe(24)
 _mcp_action_log = []
 _ghost_catalog_cache = {"rows": {}, "at": 0.0}
+AGENT_ACCESS_SERVER = "tokenmeter"
+AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
 
 
 def parse_iso(ts):
@@ -334,6 +342,27 @@ def decode_claude_project(name):
     return name.strip("-").replace("-", "/").replace("~/", "~/")
 
 
+def claude_trace_cwd(path, max_lines=120):
+    """Prefer Claude's recorded cwd over its lossy hyphen-encoded folder name."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for index, line in enumerate(fh):
+                if index >= max_lines:
+                    break
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                cwd = row.get("cwd") if isinstance(row, dict) else None
+                if isinstance(cwd, str) and cwd.strip():
+                    return cwd.strip()
+    except OSError:
+        pass
+    return ""
+
+
 def codex_id_from_path(path, meta=None):
     if meta and meta.get("session_id"):
         return meta["session_id"]
@@ -524,7 +553,8 @@ def all_session_sources():
         sid = os.path.basename(path).rsplit(".", 1)[0]
         project_raw = os.path.basename(os.path.dirname(path))
         desktop = desktop_idx.get(sid) or {}
-        project = desktop.get("project") or decode_claude_project(project_raw)
+        trace_cwd = claude_trace_cwd(path)
+        project = desktop.get("project") or home_shorten(trace_cwd) or decode_claude_project(project_raw)
         source = {
             "provider": "claude",
             "client": desktop.get("client") or "claude_code",
@@ -590,10 +620,12 @@ def source_from_path(path):
             "tool_namespaces": meta.get("tool_namespaces") or [],
         }
     sid = os.path.basename(path).rsplit(".", 1)[0]
+    trace_cwd = claude_trace_cwd(path)
     return {
         "provider": "claude", "client": "claude_code", "label": "Claude Code", "id": sid,
         "session": os.path.basename(path),
-        "path": path, "project": decode_claude_project(os.path.basename(os.path.dirname(path))),
+        "path": path,
+        "project": home_shorten(trace_cwd) or decode_claude_project(os.path.basename(os.path.dirname(path))),
         "mtime": safe_mtime(path), "title": None,
     }
 
@@ -2396,9 +2428,14 @@ def global_tool_waste(session_rows):
         top_project = max(project_calls, key=project_calls.get) if project_calls else ""
         top_project_calls = project_calls.get(top_project, 0)
         project_share = top_project_calls / row["calls"] if row["calls"] else 0.0
+        diagnostic = bool(row["kind"] == "mcp" and (
+            row["namespace"] == "tokenmeter" or str(row["name"]).startswith("mcp__tokenmeter__")
+        ))
         recommendation = "keep"
         reason = "Observed usage does not cross a trace-waste threshold."
-        if row["kind"] == "mcp" and advertised_sessions >= 5 and sessions_used == 0:
+        if diagnostic:
+            reason = "Token Meter diagnostic overhead is retained for accounting but excluded from cleanup advice."
+        elif row["kind"] == "mcp" and advertised_sessions >= 5 and sessions_used == 0:
             recommendation = "disable"
             reason = f"Reported in {advertised_sessions} sessions and never called."
         elif row["errors"] >= 3 and row["errors"] / max(1, row["calls"]) >= 0.5:
@@ -2435,6 +2472,7 @@ def global_tool_waste(session_rows):
             "last_used": time.strftime("%Y-%m-%d", time.localtime(row["last_ts"])) if row["last_ts"] else "Never",
             "recommendation": recommendation, "reason": reason,
             "mcp_server": row["namespace"] if row["kind"] == "mcp" else "",
+            "diagnostic": diagnostic,
         })
 
     tool_rows.sort(key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))
@@ -2454,8 +2492,13 @@ def global_tool_waste(session_rows):
     ][-14:]
 
     insights = []
-    if tool_rows and tool_rows[0]["output_tokens"]:
-        top = tool_rows[0]
+    actionable_rows = [row for row in tool_rows if not row.get("diagnostic")]
+    actionable_flagged = sum(int(row.get("flagged_tokens") or 0) for row in actionable_rows)
+    actionable_output = sum(int(row.get("output_tokens") or 0) for row in actionable_rows)
+    actionable_repeats = sum(int(row.get("repeat_calls") or 0) for row in actionable_rows)
+    actionable_errors = sum(int(row.get("errors") or 0) for row in actionable_rows)
+    if actionable_rows and actionable_rows[0]["output_tokens"]:
+        top = actionable_rows[0]
         insights.append(insight(
             f"global-tool:{top['name']}", "warn" if top["output_tokens"] >= 25000 else "neutral",
             "Tools", "Largest tool payload",
@@ -2464,31 +2507,31 @@ def global_tool_waste(session_rows):
             action="Narrow the command or query output." if top["output_tokens"] >= 25000 else "",
             priority=12,
         ))
-    if totals["flagged_tokens"]:
-        share = totals["flagged_tokens"] / max(1, totals["total_output_tokens"])
+    if actionable_flagged:
+        share = actionable_flagged / max(1, actionable_output)
         insights.append(insight(
             "global-flagged", "warn" if share >= 0.25 else "neutral", "Tools", "Flagged result volume",
-            f"~{totals['flagged_tokens']:,} returned tokens matched an oversized, repeat, or error signal.",
-            detail=f"That is {share * 100:.0f}% of {totals['total_output_tokens']:,} trace-observed tool-result tokens; categories can overlap.",
+            f"~{actionable_flagged:,} returned tokens matched an oversized, repeat, or error signal.",
+            detail=f"That is {share * 100:.0f}% of {actionable_output:,} non-diagnostic tool-result tokens; categories can overlap.",
             action="Inspect the ranked tools and repeated calls first." if share >= 0.25 else "",
             priority=14,
         ))
-    if totals["repeat_calls"]:
+    if actionable_repeats:
         insights.append(insight(
-            "global-repeats", "warn" if totals["repeat_calls"] >= 5 else "neutral", "Flow", "Repeated calls",
-            f"{totals['repeat_calls']} calls immediately repeated the same tool arguments.",
+            "global-repeats", "warn" if actionable_repeats >= 5 else "neutral", "Flow", "Repeated calls",
+            f"{actionable_repeats} calls immediately repeated the same tool arguments.",
             detail=f"The exact consecutive repeats occurred within five minutes and returned ~{totals['repeat_tokens']:,} tokens.",
-            action="Reuse earlier results or make the next query narrower." if totals["repeat_calls"] >= 5 else "",
+            action="Reuse earlier results or make the next query narrower." if actionable_repeats >= 5 else "",
             priority=20,
         ))
-    if totals["errors"]:
+    if actionable_errors:
         insights.append(insight(
             "global-errors", "warn", "Tools", "Tool errors",
-            f"{totals['errors']} tool calls ended with a structured error signal.",
+            f"{actionable_errors} tool calls ended with a structured error signal.",
             detail=f"Failed calls returned ~{totals['error_tokens']:,} tokens before recovery or retry.",
             action="Fix authentication or disable persistently failing MCPs.", priority=10,
         ))
-    disable_candidates = [row for row in tool_rows if row["recommendation"] == "disable"]
+    disable_candidates = [row for row in actionable_rows if row["recommendation"] == "disable"]
     if disable_candidates:
         candidate = disable_candidates[0]
         insights.append(insight(
@@ -2845,7 +2888,7 @@ def capability_inventory(waste=None):
             "id": f"mcp:{name}", "type": "mcp", "name": name, "runtime": "Codex + Claude",
             "source": (mcp_catalog.get(name) or {}).get("transport") or "trace/config",
             "state": "Enabled" if enabled else "Disabled", "enabled": enabled,
-            "mutable": bool(ghost_executable() and name in mcp_catalog),
+            "mutable": bool(name != "tokenmeter" and ghost_executable() and name in mcp_catalog),
             "codex_enabled": codex_on, "claude_enabled": claude_on, "used": usage_row["used"],
             "calls": usage_row["calls"], "returned_tokens": usage_row["tokens"], "last_used": usage_row["last_used"],
             "definition_tokens": usage_row["definition_tokens"],
@@ -2995,6 +3038,222 @@ def mcp_action_capability():
         "scope": "Codex and Claude",
         "command_template": "ghost mcp all remove <server>",
         "enable_command_template": "ghost mcp all add <server>",
+    }
+
+
+def agent_access_launcher():
+    root = os.path.dirname(os.path.realpath(__file__))
+    candidates = [
+        os.path.join(root, "scripts", "run-token-meter-mcp"),
+        os.path.join(root, "bin", "token-meter-mcp"),
+        "/Library/Application Support/Token Meter/bin/token-meter-mcp",
+    ]
+    return next((path for path in candidates if os.path.isfile(path) and os.access(path, os.X_OK)), candidates[0])
+
+
+def agent_client_executable(client, which=None):
+    which = which or shutil.which
+    direct = which(client)
+    if direct:
+        return direct
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".local", "bin", client),
+        os.path.join(home, ".volta", "bin", client),
+        os.path.join(home, ".asdf", "shims", client),
+        os.path.join(home, ".npm-global", "bin", client),
+        os.path.join(home, "bin", client),
+        os.path.join("/opt/homebrew/bin", client),
+        os.path.join("/usr/local/bin", client),
+    ]
+    nvm = glob.glob(os.path.join(home, ".nvm", "versions", "node", "*", "bin", client))
+    candidates.extend(sorted(nvm, key=safe_mtime, reverse=True))
+    return next((path for path in candidates if os.path.isfile(path) and os.access(path, os.X_OK)), None)
+
+
+def agent_client_environment(cli_path):
+    """Give env-based Node wrappers their sibling runtime under a LaunchAgent."""
+    env = os.environ.copy()
+    current = [value for value in str(env.get("PATH") or "").split(os.pathsep) if value]
+    # Keep the wrapper's directory, not the resolved script target. NVM's
+    # `codex` is a symlink whose sibling `node` binary is required by env(1).
+    preferred = [os.path.dirname(os.path.abspath(cli_path))] if cli_path else []
+    for value in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"):
+        if value not in preferred:
+            preferred.append(value)
+    env["PATH"] = os.pathsep.join(dict.fromkeys(preferred + current))
+    env.setdefault("HOME", os.path.expanduser("~"))
+    return env
+
+
+def agent_access_command(client, enabled, launcher=None, cli_path=None):
+    launcher = launcher or agent_access_launcher()
+    client = str(client or "").strip().lower()
+    if client == "codex":
+        cli_path = cli_path or agent_client_executable("codex") or "codex"
+        if enabled:
+            return [cli_path, "mcp", "add", "--env", "TOKEN_METER_CALLER=codex",
+                    AGENT_ACCESS_SERVER, "--", launcher]
+        return [cli_path, "mcp", "remove", AGENT_ACCESS_SERVER]
+    if client == "claude":
+        cli_path = cli_path or agent_client_executable("claude") or "claude"
+        if enabled:
+            return [cli_path, "mcp", "add", "--transport", "stdio", "--scope", "user",
+                    AGENT_ACCESS_SERVER, "--env", "TOKEN_METER_CALLER=claude", "--", launcher]
+        return [cli_path, "mcp", "remove", AGENT_ACCESS_SERVER, "--scope", "user"]
+    raise ValueError("Unsupported agent client.")
+
+
+def agent_access_command_display(command):
+    command = list(command or [])
+    if command:
+        command[0] = os.path.basename(command[0])
+    return shlex.join(command)
+
+
+def agent_cli_error_detail(completed):
+    raw = str(getattr(completed, "stderr", "") or getattr(completed, "stdout", "") or "")
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    return compact_text(lines[-1].replace(os.path.expanduser("~"), "~"), 220)
+
+
+def _agent_access_matches(command, args, env, launcher, runtime):
+    try:
+        command_match = os.path.realpath(os.path.expanduser(str(command or ""))) == os.path.realpath(launcher)
+    except OSError:
+        command_match = False
+    return bool(command_match and list(args or []) == [] and str((env or {}).get("TOKEN_METER_CALLER") or "") == runtime)
+
+
+def agent_access_client_status(client, launcher=None, runner=None, which=None, claude_config_path=None):
+    client = str(client or "").strip().lower()
+    if client not in ("codex", "claude"):
+        raise ValueError("Unsupported agent client.")
+    launcher = launcher or agent_access_launcher()
+    runner = runner or subprocess.run
+    which = which or shutil.which
+    cli_path = agent_client_executable(client, which=which)
+    configured = False
+    connected = False
+    conflict = False
+    actual_enabled = True
+    command, args, env = "", [], {}
+    if cli_path and client == "codex":
+        try:
+            completed = runner([cli_path, "mcp", "get", AGENT_ACCESS_SERVER, "--json"],
+                               capture_output=True, text=True, timeout=15, check=False,
+                               env=agent_client_environment(cli_path))
+        except (OSError, subprocess.TimeoutExpired):
+            completed = None
+        if completed and completed.returncode == 0:
+            try:
+                row = json.loads(completed.stdout or "{}")
+            except json.JSONDecodeError:
+                row = {}
+            transport = row.get("transport") if isinstance(row, dict) else {}
+            if isinstance(transport, dict) and transport.get("type") == "stdio":
+                configured = True
+                command = transport.get("command") or ""
+                args = transport.get("args") or []
+                env = transport.get("env") or {}
+                actual_enabled = row.get("enabled") is not False
+    elif cli_path:
+        config = load_json(claude_config_path or CLAUDE_ROOT_CONFIG, {})
+        servers = config.get("mcpServers") if isinstance(config, dict) else {}
+        row = (servers or {}).get(AGENT_ACCESS_SERVER) if isinstance(servers, dict) else None
+        if isinstance(row, dict):
+            configured = True
+            command = row.get("command") or ""
+            args = row.get("args") or []
+            env = row.get("env") or {}
+
+    exact = configured and _agent_access_matches(command, args, env, launcher,
+                                                  "codex" if client == "codex" else "claude")
+    connected = bool(exact and actual_enabled)
+    conflict = bool(configured and not connected)
+    add_command = agent_access_command(client, True, launcher=launcher, cli_path=cli_path or client)
+    remove_command = agent_access_command(client, False, launcher=launcher, cli_path=cli_path or client)
+    return {
+        "id": client,
+        "label": "Codex" if client == "codex" else "Claude Code",
+        "detected": bool(cli_path),
+        "available": bool(cli_path and os.path.isfile(launcher) and os.access(launcher, os.X_OK)),
+        "configured": configured,
+        "connected": connected,
+        "conflict": conflict,
+        "status": "Connected" if connected else ("Needs attention" if conflict else
+                  ("Ready to connect" if cli_path else "Client not found")),
+        "connect_command": agent_access_command_display(add_command),
+        "disconnect_command": agent_access_command_display(remove_command),
+        "restart_note": "Start a new agent session after changing this connection.",
+    }
+
+
+def agent_access_status(**kwargs):
+    launcher = kwargs.pop("launcher", None) or agent_access_launcher()
+    clients = [agent_access_client_status(client, launcher=launcher, **kwargs)
+               for client in ("codex", "claude")]
+    return {
+        "ok": True,
+        "server": AGENT_ACCESS_SERVER,
+        "launcher_ready": bool(os.path.isfile(launcher) and os.access(launcher, os.X_OK)),
+        "clients": clients,
+        "any_detected": any(row["detected"] for row in clients),
+        "any_connected": any(row["connected"] for row in clients),
+        "access": {
+            "current_run": "Detailed cost, context, execution, and safe tool labels for the matched run.",
+            "history": "Aggregate spend, model, runtime, and tool categories without run or project names.",
+            "capabilities": "Named MCP servers and skill packs only when capability review is requested.",
+            "never": "Prompts, messages, reasoning, tool arguments or results, paths, credentials, and config values.",
+            "processing": "Returned metrics enter the connected agent context and may be processed by its model provider.",
+            "mutation": False,
+        },
+    }
+
+
+def set_agent_access(client, enabled, runner=None, status_getter=None):
+    client = str(client or "").strip().lower()
+    if client not in ("codex", "claude") or enabled not in (True, False):
+        return {"ok": False, "error": "A supported client and explicit connection state are required."}
+    runner = runner or subprocess.run
+    status_getter = status_getter or agent_access_client_status
+    before = status_getter(client)
+    if not before.get("detected"):
+        return {"ok": False, "error": f"{before.get('label') or client} CLI was not found."}
+    if not before.get("available"):
+        return {"ok": False, "error": "The Token Meter MCP launcher is not executable. Reinstall Token Meter."}
+    if enabled and before.get("connected"):
+        return {"ok": True, "changed": False, "client": before, "restart_required": False}
+    if before.get("conflict"):
+        return {"ok": False, "conflict": True,
+                "error": "A different tokenmeter MCP entry already exists. Remove or rename it before connecting Token Meter."}
+    if not enabled and not before.get("configured"):
+        return {"ok": True, "changed": False, "client": before, "restart_required": False}
+    cli_path = agent_client_executable(client)
+    command = agent_access_command(client, enabled, cli_path=cli_path)
+    try:
+        completed = runner(command, capture_output=True, text=True, timeout=45, check=False,
+                           env=agent_client_environment(cli_path))
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "The agent client timed out while changing the connection."}
+    except OSError:
+        return {"ok": False, "error": "The agent client could not change the connection."}
+    if completed.returncode != 0:
+        label = before.get("label") or client
+        detail = agent_cli_error_detail(completed)
+        message = f"{label} rejected the connection change."
+        if detail:
+            message = f"{message} {detail}"
+        return {"ok": False, "error": message}
+    after = status_getter(client)
+    verified = bool(after.get("connected")) if enabled else not bool(after.get("configured"))
+    if not verified:
+        return {"ok": False, "error": "The connection command completed, but the saved configuration could not be verified."}
+    return {
+        "ok": True, "changed": True, "client": after, "restart_required": True,
+        "message": f"{after.get('label') or client} {'connected' if enabled else 'disconnected'}. Start a new agent session.",
     }
 
 
@@ -3270,6 +3529,7 @@ def cross_session():
     tool_waste = global_tool_waste(internal_rows)
     daily = daily_summaries(internal_rows, tool_waste)
     data = {
+        "generated_at": int(now),
         "sessions": sessions[:60],
         "model_mix": mm,
         "trend": trend,
@@ -3292,6 +3552,26 @@ def cross_session():
     return data
 
 
+def enqueue_latest(q_, data):
+    """Keep a slow SSE client subscribed by replacing queued stale snapshots."""
+    try:
+        q_.put_nowait(data)
+        return True
+    except queue.Full:
+        try:
+            while True:
+                q_.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            q_.put_nowait(data)
+        except queue.Full:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def publish(state):
     global STATE
     STATE = state
@@ -3299,12 +3579,31 @@ def publish(state):
     with subscribers_lock:
         dead = []
         for q_ in subscribers:
-            try:
-                q_.put_nowait(data)
-            except Exception:
+            if not enqueue_latest(q_, data):
                 dead.append(q_)
         for d in dead:
             subscribers.remove(d)
+
+
+def source_mtime_signature(sources):
+    """Track additions, removals, and updates across every discovered log."""
+    return tuple(sorted(
+        (str(source.get("path") or ""), float(source.get("mtime") or 0))
+        for source in (sources or [])
+        if source.get("path")
+    ))
+
+
+def refresh_cross_session_state(state=None, builder=None, publisher=None):
+    """Force a fresh cross-log snapshot and publish it with the live state."""
+    builder = builder or cross_session
+    publisher = publisher or publish
+    _xsess["data"], _xsess["at"] = None, 0.0
+    cross = builder()
+    base = dict(state or STATE or {})
+    if base:
+        publisher(attach_cross_session(base, cross))
+    return cross
 
 
 def current_state():
@@ -3324,6 +3623,434 @@ def current_state():
         "context": {},
         "insights": [],
     }
+
+
+AGENT_RESULT_MAX_CHARS = 8000
+AGENT_CHECK_FOCUS = {"continue", "cost", "context", "tools", "next_phase"}
+AGENT_USAGE_WINDOWS = {"today": 1, "7d": 7, "14d": 14}
+AGENT_USAGE_FOCUS = {"spend", "models", "tools", "changes"}
+
+
+def agent_as_of():
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime())
+
+
+def agent_project_key(value):
+    value = str(value or "").strip()
+    if not value or value == "No project":
+        return ""
+    return os.path.normcase(os.path.realpath(os.path.expanduser(value)))
+
+
+def agent_project_name(value):
+    value = str(value or "").strip().rstrip("/\\")
+    if not value or value == "No project":
+        return "No project"
+    return compact_text(value.replace("\\", "/").rsplit("/", 1)[-1], 52)
+
+
+def agent_provider(value):
+    value = str(value or "").strip().lower()
+    if value.startswith("claude"):
+        return "claude"
+    if value.startswith("codex"):
+        return "codex"
+    return ""
+
+
+def resolve_agent_source(session_id=None, caller=None, sources=None):
+    """Resolve a safe current-run target without crossing a caller's runtime/project."""
+    sources = list(sources if sources is not None else all_session_sources())
+    requested = str(session_id or "").strip()
+    if requested:
+        source = find_session(requested, sources=sources)
+        if not source:
+            return None, "The requested Token Meter session was not found."
+        return source, "explicit"
+
+    caller = caller or {}
+    provider = agent_provider(caller.get("runtime") or caller.get("provider"))
+    project = agent_project_key(caller.get("project") or caller.get("cwd"))
+    candidates = [row for row in sources if not provider or row.get("provider") == provider]
+    if project:
+        exact_matches = []
+        ancestor_matches = []
+        for row in candidates:
+            candidate = agent_project_key(row.get("project"))
+            if not candidate:
+                continue
+            if candidate == project:
+                exact_matches.append(row)
+            elif project.startswith(candidate + os.sep):
+                ancestor_matches.append((candidate, row))
+        matches = exact_matches
+        if not matches and ancestor_matches:
+            nearest_length = max(len(candidate) for candidate, _ in ancestor_matches)
+            matches = [row for candidate, row in ancestor_matches if len(candidate) == nearest_length]
+        if not matches:
+            runtime = "Codex" if provider == "codex" else "Claude" if provider == "claude" else "agent"
+            return None, f"No {runtime} run matched the caller's current project."
+        candidates = matches
+    if not candidates:
+        return None, "No matching Codex or Claude run was found."
+    selected = max(candidates, key=lambda row: float(row.get("mtime") or 0))
+    mtime = float(selected.get("mtime") or 0)
+    if not mtime or time.time() - mtime > AGENT_CURRENT_MAX_AGE_S:
+        runtime = "Codex" if provider == "codex" else "Claude" if provider == "claude" else "agent"
+        return None, f"No recent {runtime} run matched the caller's current project."
+    return selected, "matched"
+
+
+def agent_session_summary(source):
+    return {
+        "id": source.get("id"),
+        "provider": source.get("provider"),
+        "client": source.get("client") or source.get("provider"),
+        "project": agent_project_name(source.get("project")),
+    }
+
+
+def agent_dashboard_url(session_id=None, panel="summary"):
+    base = f"http://127.0.0.1:{PORT}"
+    if session_id:
+        return f"{base}/sessions/{quote(str(session_id), safe='')}#{panel}"
+    return f"{base}/#{panel}"
+
+
+def compact_agent_value(value, depth=0):
+    if depth > 5:
+        return None
+    if isinstance(value, str):
+        return compact_text(value, 500)
+    if isinstance(value, list):
+        return [compact_agent_value(item, depth + 1) for item in value[:10]]
+    if isinstance(value, dict):
+        return {str(key): compact_agent_value(item, depth + 1)
+                for key, item in list(value.items())[:50]}
+    return value
+
+
+def bounded_agent_result(result):
+    """Keep a model-facing result useful even if an upstream label grows unexpectedly."""
+    result = dict(result or {})
+    result["evidence"] = list(result.get("evidence") or [])[:3]
+    if isinstance(result.get("candidates"), list):
+        result["candidates"] = result["candidates"][:5]
+    result.setdefault("truncated", False)
+    encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) <= AGENT_RESULT_MAX_CHARS:
+        return result
+    result = compact_agent_value(result)
+    result["truncated"] = True
+    result["evidence"] = list(result.get("evidence") or [])[:2]
+    if isinstance(result.get("candidates"), list):
+        result["candidates"] = result["candidates"][:3]
+    if isinstance(result.get("categories"), list):
+        result["categories"] = result["categories"][:3]
+    for key in ("answer", "caveat", "recommended_action"):
+        if isinstance(result.get(key), str):
+            result[key] = compact_text(result[key], 240)
+    encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > AGENT_RESULT_MAX_CHARS:
+        result.pop("categories", None)
+        result.pop("candidates", None)
+        result.pop("execution", None)
+    encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > AGENT_RESULT_MAX_CHARS:
+        result["evidence"] = []
+    return result
+
+
+def agent_no_session(message, panel="summary"):
+    return bounded_agent_result({
+        "ok": False,
+        "answer": message,
+        "verdict": {"key": "unavailable", "label": "Run not matched", "severity": "idle"},
+        "evidence": [],
+        "recommended_action": "Open Token Meter and choose the intended run, then ask again with its session id.",
+        "caveat": "Token Meter did not fall back to another project because that could expose the wrong run.",
+        "dashboard_url": agent_dashboard_url(panel=panel),
+        "as_of": agent_as_of(),
+        "data_scope": "matched_current_run",
+        "approximate_fields": [],
+    })
+
+
+def safe_execution_trace(state, execution_idx, limit=5):
+    allowed = {"tool_call", "tool_result", "usage", "complete", "context", "reasoning", "coordination", "start"}
+    out = []
+    for event in state.get("trace") or []:
+        if event.get("execution") != execution_idx or event.get("kind") not in allowed:
+            continue
+        item = {"kind": event.get("kind"), "label": compact_text(event.get("label") or "Activity", 64)}
+        if event.get("kind") == "tool_result" and event.get("tokens") is not None:
+            item["returned_tokens"] = int(event.get("tokens") or 0)
+        if event.get("cost"):
+            item["cost"] = round(float(event.get("cost") or 0), 4)
+        out.append(item)
+    return out[:limit]
+
+
+def agent_check(focus="continue", execution=None, session_id=None, caller=None):
+    focus = str(focus or "continue").strip().lower()
+    if focus not in AGENT_CHECK_FOCUS:
+        raise ValueError(f"focus must be one of: {', '.join(sorted(AGENT_CHECK_FOCUS))}")
+    if execution is not None:
+        try:
+            execution = int(execution)
+        except (TypeError, ValueError):
+            raise ValueError("execution must be a positive integer")
+        if execution < 1:
+            raise ValueError("execution must be a positive integer")
+
+    source, resolution = resolve_agent_source(session_id=session_id, caller=caller)
+    if not source:
+        return agent_no_session(resolution)
+    state = recompute(source)
+    if not state:
+        return agent_no_session("Token Meter found the run but could not read its metrics.")
+
+    recommendation = menubar_recommendation(state)
+    verdict = menubar_verdict(state, recommendation)
+    context = state.get("context") or {}
+    tools = state.get("tools") or {}
+    executions = state.get("executions") or []
+    last_execution = executions[-1] if executions else {}
+    requested_execution = None
+    if execution is not None:
+        requested_execution = next((row for row in executions if int(row.get("idx") or 0) == execution), None)
+        if requested_execution is None:
+            raise ValueError(f"execution {execution} is not available in the retained run history")
+        last_execution = requested_execution
+
+    total_cost = round(float(state.get("total_cost") or 0), 4)
+    context_pct = context.get("latest_pct")
+    context_text = f"{context_pct * 100:.0f}%" if context_pct is not None else "not reported"
+    tool_tokens = int(tools.get("total_output_tokens") or 0)
+    flagged_tokens = int(tools.get("flagged_tokens") or 0)
+    selected_tool_tokens = int((last_execution.get("tokens") or {}).get("retrieval") or 0)
+    selected_execution_label = "Selected execution" if requested_execution is not None else "Latest execution"
+    evidence_pool = {
+        "cost": {"label": "Estimated run cost", "value": total_cost, "unit": "USD"},
+        "last_cost": {"label": f"{selected_execution_label} cost", "value": round(float(last_execution.get("cost") or 0), 4), "unit": "USD"},
+        "context": {"label": "Current context use", "value": context_text},
+        "latest_tools": {"label": f"{selected_execution_label} tool results", "value": selected_tool_tokens, "unit": "tokens"},
+        "run_tools": {"label": "Run-wide trace-observed tool results", "value": tool_tokens, "unit": "tokens", "flagged_tokens": flagged_tokens},
+        "turns": {"label": "Executions", "value": int(state.get("turns") or len(executions))},
+    }
+    order = {
+        "continue": ("context", "last_cost", "latest_tools"),
+        "cost": ("cost", "last_cost", "turns"),
+        "context": ("context", "turns", "cost"),
+        "tools": ("run_tools", "latest_tools", "context"),
+        "next_phase": ("context", "cost", "run_tools"),
+    }[focus]
+    evidence = [evidence_pool[key] for key in order]
+    action = recommendation.get("label") or "Review the selected run"
+    if recommendation.get("detail"):
+        action = f"{action}: {recommendation['detail']}"
+    selected = agent_session_summary(source)
+    answer = verdict.get("detail") or recommendation.get("detail") or "Token Meter found no immediate intervention signal."
+    result = {
+        "ok": True,
+        "answer": answer,
+        "verdict": {key: verdict.get(key) for key in ("key", "label", "severity", "detail")},
+        "evidence": evidence,
+        "recommended_action": compact_text(action, 220),
+        "caveat": "Costs are estimates based on public API rates." if state.get("cost_approx") else "Tool-result volume is trace-observed and may not include content the client did not log.",
+        "dashboard_url": agent_dashboard_url(source.get("id"), recommendation.get("target") or "summary"),
+        "as_of": agent_as_of(),
+        "data_scope": "matched_current_run",
+        "approximate_fields": ["cost"] if state.get("cost_approx") else [],
+        "selected_session": selected,
+        "selection": resolution,
+    }
+    if requested_execution is not None:
+        result["execution"] = {
+            "index": execution,
+            "cost": round(float(requested_execution.get("cost") or 0), 4),
+            "tokens": {
+                "input": int((requested_execution.get("tokens") or {}).get("input") or 0),
+                "output": int((requested_execution.get("tokens") or {}).get("output") or 0),
+                "retrieval": int((requested_execution.get("tokens") or {}).get("retrieval") or 0),
+            },
+            "context_pct": requested_execution.get("context_pct"),
+            "activity": safe_execution_trace(state, execution),
+        }
+    return bounded_agent_result(result)
+
+
+def agent_usage(window="7d", focus="changes"):
+    window = str(window or "7d").strip().lower()
+    focus = str(focus or "changes").strip().lower()
+    if window not in AGENT_USAGE_WINDOWS:
+        raise ValueError("window must be one of: today, 7d, 14d")
+    if focus not in AGENT_USAGE_FOCUS:
+        raise ValueError(f"focus must be one of: {', '.join(sorted(AGENT_USAGE_FOCUS))}")
+    cross = cross_session()
+    days = sorted(cross.get("daily") or [], key=lambda row: row.get("day") or "", reverse=True)
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    if window == "today":
+        selected = [row for row in days if row.get("day") == today]
+    else:
+        selected = days[:AGENT_USAGE_WINDOWS[window]]
+    total_cost = sum(float(row.get("cost") or 0) for row in selected)
+    sessions = sum(int(row.get("sessions") or 0) for row in selected)
+    tool_tokens = sum(int(row.get("tool_tokens") or 0) for row in selected)
+    flagged_tokens = sum(int(row.get("flagged_tokens") or 0) for row in selected)
+    providers = defaultdict(float)
+    for row in selected:
+        for provider in row.get("providers") or []:
+            providers[provider.get("provider") or "unknown"] += float(provider.get("cost") or 0)
+    provider_rank = sorted(providers.items(), key=lambda item: (-item[1], item[0]))[:5]
+    model_rank = [
+        {"model": row.get("model"), "cost": round(float(row.get("cost") or 0), 4), "tokens": int(row.get("tokens") or 0)}
+        for row in (cross.get("model_mix") or [])[:5]
+    ]
+    tool_rank = [
+        {"name": row.get("display") or row.get("name"), "namespace": row.get("namespace"),
+         "returned_tokens": int(row.get("output_tokens") or 0), "calls": int(row.get("calls") or 0)}
+        for row in ((cross.get("tool_waste") or {}).get("by_name") or [])
+        if not row.get("diagnostic")
+    ][:5]
+
+    newest = selected[0] if selected else {}
+    previous = selected[1] if len(selected) > 1 else {}
+    newest_cost = float(newest.get("cost") or 0)
+    previous_cost = float(previous.get("cost") or 0)
+    delta = ((newest_cost - previous_cost) / previous_cost) if previous_cost else None
+    evidence_pool = {
+        "spend": {"label": f"Estimated spend ({window})", "value": round(total_cost, 4), "unit": "USD"},
+        "sessions": {"label": "Daily run count summed", "value": sessions},
+        "tools": {"label": "Trace-observed tool results", "value": tool_tokens, "unit": "tokens", "flagged_tokens": flagged_tokens},
+        "change": {"label": "Latest day vs prior day", "value": f"{delta * 100:+.0f}%" if delta is not None else "No prior-day baseline"},
+        "provider": {"label": "Largest runtime by spend", "value": provider_rank[0][0] if provider_rank else "No data",
+                     "cost": round(provider_rank[0][1], 4) if provider_rank else 0},
+    }
+    order = {
+        "spend": ("spend", "change", "provider"),
+        "models": ("spend", "provider", "change"),
+        "tools": ("tools", "spend", "change"),
+        "changes": ("change", "spend", "tools"),
+    }[focus]
+    if not selected:
+        answer = f"Token Meter has no aggregate usage for {window}."
+        action = "Run Codex or Claude, then ask again after Token Meter observes token usage."
+        assessment = "No data"
+    elif delta is not None and delta >= 0.25:
+        answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
+        action = "Review the Daily view and the largest model or tool category before the next phase."
+        assessment = "Spend increased"
+    elif flagged_tokens and flagged_tokens / max(1, tool_tokens) >= 0.25:
+        answer = "Tool-result volume is the clearest efficiency signal in this window."
+        action = "Review the largest returned-token category and narrow repeated or oversized results."
+        assessment = "Tool output needs review"
+    else:
+        answer = f"Estimated spend is ${total_cost:.2f} across the selected {window} window, with no strong change signal."
+        action = "Keep the current approach and compare again after another recorded day."
+        assessment = "Stable"
+    approximate = any(bool(row.get("cost_approx")) for row in (cross.get("sessions") or []))
+    result = {
+        "ok": bool(selected),
+        "answer": answer,
+        "assessment": assessment,
+        "evidence": [evidence_pool[key] for key in order],
+        "recommended_action": action,
+        "caveat": "History is aggregate-only; run titles, project names, session ids, and paths are omitted.",
+        "dashboard_url": agent_dashboard_url(panel="daily"),
+        "as_of": agent_as_of(),
+        "data_scope": "anonymous_aggregate_history",
+        "approximate_fields": ["cost"] if approximate else [],
+        "window": window,
+        "days_observed": len(selected),
+    }
+    if focus == "models":
+        result["categories"] = model_rank
+    elif focus == "tools":
+        result["categories"] = tool_rank
+    else:
+        result["categories"] = [{"provider": name, "cost": round(value, 4)} for name, value in provider_rank]
+    return bounded_agent_result(result)
+
+
+def agent_capabilities(scope="current", limit=5, caller=None):
+    scope = str(scope or "current").strip().lower()
+    if scope not in ("current", "all"):
+        raise ValueError("scope must be one of: current, all")
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        raise ValueError("limit must be an integer from 1 to 5")
+    if limit < 1 or limit > 5:
+        raise ValueError("limit must be an integer from 1 to 5")
+    cross = cross_session()
+    capabilities = cross.get("capabilities") or {}
+    selected = None
+    if scope == "current":
+        source, resolution = resolve_agent_source(caller=caller)
+        if not source:
+            return agent_no_session(resolution, panel="capabilities")
+        state = recompute(source)
+        if not state:
+            return agent_no_session("Token Meter found the run but could not read its capability evidence.", panel="capabilities")
+        summary = session_optional_capabilities(state, capabilities)
+        groups = summary.get("groups") or []
+        selected = agent_session_summary(source)
+    else:
+        summary = ((capabilities.get("summary") or {}).get("optional") or {})
+        groups = capabilities.get("control_groups") or []
+    groups = [row for row in groups if row.get("name") != "tokenmeter" and row.get("namespace") != "tokenmeter"]
+    groups.sort(key=lambda row: (
+        bool(row.get("current_used") if scope == "current" else row.get("used")),
+        -int(row.get("current_unused_eager_definition_tokens") or row.get("unused_eager_definition_tokens") or 0),
+        str(row.get("name") or ""),
+    ))
+    candidates = []
+    for row in groups[:limit]:
+        used = bool(row.get("current_used") if scope == "current" else row.get("used"))
+        candidate = {
+            "name": compact_text(row.get("name") or "Unknown", 80),
+            "type": row.get("control_type") or "capability",
+            "runtime": row.get("runtime") or "",
+            "used": used,
+            "observed_uses": int(row.get("current_activations") or row.get("activations") or row.get("calls") or 0),
+        }
+        overhead = int(row.get("current_unused_eager_definition_tokens") or row.get("unused_eager_definition_tokens") or 0)
+        if overhead:
+            candidate["avoidable_eager_tokens"] = overhead
+        candidates.append(candidate)
+    enabled = int(summary.get("enabled") or 0)
+    unused = int(summary.get("unused") or 0)
+    avoidable = int(summary.get("avoidable_eager_definition_tokens") or 0)
+    if unused:
+        answer = f"{unused} of {enabled} removable capability groups have no observed use in this scope."
+        action = "Review the named candidates in Tools & Skills; only disable a group after confirming you do not need it."
+        assessment = "Review available"
+    else:
+        answer = "No unused removable capability group was found in this scope."
+        action = "Keep the current setup and review again after more representative work."
+        assessment = "No cleanup needed"
+    result = {
+        "ok": True,
+        "answer": answer,
+        "assessment": assessment,
+        "evidence": [
+            {"label": "Enabled removable groups", "value": enabled},
+            {"label": "Groups without observed use", "value": unused},
+            {"label": "Measured avoidable eager context", "value": avoidable, "unit": "tokens"},
+        ],
+        "candidates": candidates,
+        "recommended_action": action,
+        "caveat": "Capability evidence names MCP servers or skill packs but never returns configuration values, environment variables, credentials, tool arguments, or tool results.",
+        "dashboard_url": agent_dashboard_url(panel="capabilities"),
+        "as_of": agent_as_of(),
+        "data_scope": "named_capability_evidence",
+        "approximate_fields": [],
+        "scope": scope,
+    }
+    if selected:
+        result["selected_session"] = selected
+    return bounded_agent_result(result)
 
 
 def compact_duration_ms(ms):
@@ -3496,7 +4223,8 @@ def menubar_recommendation(st):
 
 def menubar_verdict(st, recommendation):
     context = st.get("context") or {}
-    pct = context.get("latest_pct") or 0
+    reported_pct = context.get("latest_pct")
+    pct = reported_pct or 0
     last_cost = st.get("last_turn_cost") or 0
     insights = st.get("insights") or []
     operational_warn = next((i for i in insights if i.get("kind") == "warn" and is_operational_warning(i)), None)
@@ -3532,10 +4260,10 @@ def menubar_verdict(st, recommendation):
         detail = operational_warn.get("text") or recommendation.get("detail") or "An operational warning is active."
         return payload("watch", detail)
 
-    return payload(
-        "healthy",
-        f"Context is {pct * 100:.0f}% and no operational warning needs intervention.",
-    )
+    detail = (f"Context is {pct * 100:.0f}% and no operational warning needs intervention."
+              if reported_pct is not None else
+              "Context percentage is not reported; no operational warning needs intervention.")
+    return payload("healthy", detail)
 
 
 def menubar_session_name(source):
@@ -3645,10 +4373,19 @@ def menubar_state(session_id=None):
 
 def watcher():
     cur, last_sig = None, None
+    last_sources_sig = None
+    cross_dirty = False
+    last_cross_refresh = 0.0
     while True:
-        nf = newest_source()
+        sources = all_session_sources()
+        nf = max(sources, key=lambda source: source["mtime"]) if sources else None
+        sources_sig = source_mtime_signature(sources)
+        if sources_sig != last_sources_sig:
+            cross_dirty = True
+            last_sources_sig = sources_sig
         if nf and (not cur or nf["path"] != cur["path"]):
             cur, last_sig = nf, None
+        updated_state = None
         if cur:
             sig = safe_mtime(cur["path"])
             if not sig:
@@ -3657,9 +4394,18 @@ def watcher():
                 continue
             if sig != last_sig:
                 last_sig = sig
-                st = recompute(cur)
-                if st:
-                    publish(attach_cross_session(st))
+                updated_state = recompute(cur)
+                if updated_state:
+                    cache_at = _xsess.get("at") or 0.0
+                    publish(attach_cross_session(updated_state))
+                    if (_xsess.get("at") or 0.0) > cache_at:
+                        cross_dirty = False
+                        last_cross_refresh = time.monotonic()
+        now = time.monotonic()
+        if cross_dirty and now - last_cross_refresh >= _XSESS_LIVE_REFRESH_S:
+            refresh_cross_session_state(updated_state or STATE)
+            cross_dirty = False
+            last_cross_refresh = now
         time.sleep(0.5)
 
 
@@ -3753,7 +4499,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         req_path = urlparse(self.path).path
-        if req_path not in ("/mcp/disable", "/capability/toggle", "/capability/disable-unused"):
+        if req_path not in ("/mcp/disable", "/capability/toggle", "/capability/disable-unused",
+                            "/agent-access/toggle"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -3784,6 +4531,11 @@ class H(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._send(json.dumps({"ok": False, "error": "Invalid JSON."}),
                        "application/json", status=400)
+            return
+        if req_path == "/agent-access/toggle":
+            result = set_agent_access(payload.get("client"), payload.get("enabled"))
+            status = 200 if result.get("ok") else (409 if result.get("conflict") else 400)
+            self._send(json.dumps(result), "application/json", status=status)
             return
         if req_path == "/mcp/disable":
             result = disable_mcp_server(payload.get("server"))
@@ -3833,6 +4585,8 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(st or {}), "application/json")
         elif req_path == "/state":
             self._send(json.dumps(current_state()), "application/json")
+        elif req_path == "/agent-access/status":
+            self._send(json.dumps(agent_access_status()), "application/json")
         elif req_path == "/menubar":
             sid = (parse_qs(parsed.query).get("session") or [""])[0][:240]
             self._send(json.dumps(menubar_state(sid)), "application/json")

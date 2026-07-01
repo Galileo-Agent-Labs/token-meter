@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/Library/Application Support/Token Meter"
+
+python_is_usable() {
+  "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1
+}
+
+find_python() {
+  local candidate path
+  for candidate in "${TOKEN_METER_PYTHON:-}" /usr/bin/python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+    [[ -n "$candidate" ]] || continue
+    if [[ "$candidate" == */* ]]; then
+      path="$candidate"
+      [[ -x "$path" ]] || continue
+    else
+      path="$(command -v "$candidate" 2>/dev/null || true)"
+      [[ -n "$path" ]] || continue
+    fi
+    if python_is_usable "$path"; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  return 1
+}
+
+PYTHON="$(find_python || true)"
+if [[ -z "$PYTHON" ]]; then
+  printf '%s\n' "Token Meter requires Python 3.8 or newer." >&2
+  exit 1
+fi
+if [[ ! -f "$ROOT/token_meter_mcp.py" || ! -f "$ROOT/meter.py" ]]; then
+  printf '%s\n' "Token Meter MCP runtime files are missing. Reinstall Token Meter." >&2
+  exit 1
+fi
+
+exec "$PYTHON" "$ROOT/token_meter_mcp.py"

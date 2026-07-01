@@ -86,6 +86,7 @@ build_menubar() {
 mkdir -p "$WORK/root/$INSTALL_REL/bin" "$WORK/scripts" "$DIST"
 
 copy_payload_file 0644 "$ROOT/meter.py" "$WORK/root/$INSTALL_REL/meter.py"
+copy_payload_file 0644 "$ROOT/token_meter_mcp.py" "$WORK/root/$INSTALL_REL/token_meter_mcp.py"
 copy_payload_file 0644 "$ROOT/page.html" "$WORK/root/$INSTALL_REL/page.html"
 copy_payload_file 0644 "$ROOT/README.md" "$WORK/root/$INSTALL_REL/README.md"
 copy_payload_file 0644 "$ROOT/LICENSE" "$WORK/root/$INSTALL_REL/LICENSE"
@@ -93,6 +94,7 @@ printf '%s\n' "$VERSION" > "$WORK/root/$INSTALL_REL/VERSION"
 chmod 644 "$WORK/root/$INSTALL_REL/VERSION"
 
 copy_payload_file 0755 "$ROOT/packaging/payload/bin/start-token-meter" "$WORK/root/$INSTALL_REL/bin/start-token-meter"
+copy_payload_file 0755 "$ROOT/packaging/payload/bin/token-meter-mcp" "$WORK/root/$INSTALL_REL/bin/token-meter-mcp"
 copy_payload_file 0755 "$ROOT/packaging/payload/bin/uninstall-token-meter" "$WORK/root/$INSTALL_REL/bin/uninstall-token-meter"
 copy_payload_file 0755 "$ROOT/packaging/scripts/postinstall" "$WORK/scripts/postinstall"
 

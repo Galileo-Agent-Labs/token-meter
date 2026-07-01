@@ -62,6 +62,72 @@ class SessionRouteTests(unittest.TestCase):
         self.assertFalse(meter.is_dashboard_page_path("/sessions/one/two"))
 
 
+class DashboardLayoutTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.page = Path(meter.__file__).with_name("page.html").read_text()
+
+    def test_current_tabs_exclude_efficiency_panel(self):
+        self.assertNotIn("data-panel=efficiency", self.page)
+        self.assertNotIn("id=panel-efficiency", self.page)
+        self.assertIn("const PANEL_KEYS=['summary','activity','tools','insights','alerts'];", self.page)
+        self.assertIn("efficiency:'summary'", self.page)
+
+    def test_execution_overview_separates_activity_from_removable_optimization(self):
+        for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-avoidable-tokens"):
+            self.assertIn(marker, self.page)
+        self.assertIn("renderCurrentOptimization(s)", self.page)
+        self.assertNotIn("renderCapabilityUsage('ov-cap'", self.page)
+        self.assertIn("Default tools are excluded", self.page)
+
+    def test_tools_and_skills_uses_removable_groups_and_review_filter(self):
+        for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-opt-eager"):
+            self.assertIn(marker, self.page)
+        self.assertIn("data-cstate=review", self.page)
+        self.assertIn("Default/read-only tools are excluded", self.page)
+
+    def test_capability_card_tooltips_are_not_clipped(self):
+        self.assertIn(".capHero .pad{padding:13px 15px;overflow:visible}", self.page)
+        self.assertIn(".capHero .card:hover,.capHero .card:focus-within{z-index:50}", self.page)
+        self.assertIn(".capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}", self.page)
+
+    def test_skill_pack_changes_confirm_exact_control_and_use_verified_state(self):
+        self.assertIn("id=cap-dialog", self.page)
+        self.assertIn("control_id:controlId", self.page)
+        self.assertIn("result.capabilities||cap", self.page)
+        self.assertIn("Setting verified.", self.page)
+        self.assertIn("row.reviewable!==false", self.page)
+        self.assertNotIn("...group,id:group.item_id", self.page)
+
+    def test_global_daily_and_learn_views_are_first_class_routes(self):
+        for marker in ("id=tab-daily", "id=view-daily", "id=tab-learn", "id=view-learn"):
+            self.assertIn(marker, self.page)
+        self.assertIn("data-global-panel=overview", self.page)
+        self.assertIn("id=global-panel-overview", self.page)
+        self.assertIn("id=d-day-select", self.page)
+        self.assertIn("id=learn-glossary", self.page)
+        self.assertIn("if(h==='daily')", self.page)
+        self.assertIn("if(h==='learn')", self.page)
+
+    def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
+        self.assertIn("id=c-disable-unused", self.page)
+        self.assertIn("id=bulk-dialog", self.page)
+        self.assertIn("/capability/disable-unused", self.page)
+        self.assertIn("control_ids:groups.map(row=>row.id)", self.page)
+        self.assertIn("Runtime packs, built-ins, standalone skills, and used groups are excluded.", self.page)
+
+
+class MenubarSourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = Path(meter.__file__).with_name("menubar").joinpath("TokenMeterMenuBar.swift").read_text()
+
+    def test_daily_brief_action_opens_cross_session_daily_route(self):
+        self.assertIn('addAction("Open Daily Brief", #selector(openDailyBrief))', self.source)
+        self.assertIn('@objc private func openDailyBrief()', self.source)
+        self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
+
+
 class MenubarSessionTests(unittest.TestCase):
     def test_recent_sessions_are_limited_and_keep_an_older_pin_visible(self):
         sources = [{
@@ -165,6 +231,31 @@ class ClaudeDesktopDiscoveryTests(unittest.TestCase):
 
 
 class ToolEvidenceTests(unittest.TestCase):
+    def test_tool_summary_reconciles_types_calls_and_per_execution_peak(self):
+        executions = [
+            {"idx": 1, "tools": [{"name": "exec", "namespace": "exec"}]},
+            {"idx": 2, "tools": [
+                {"name": "exec", "namespace": "exec"},
+                {"name": "wait", "namespace": "wait", "skills": ["browser"]},
+            ]},
+        ]
+        summary = meter.tool_summary(executions)
+        self.assertEqual(summary["activity"]["observed_unique"], 2)
+        self.assertEqual(summary["activity"]["total_calls"], 3)
+        self.assertEqual(summary["activity"]["peak_calls_per_execution"], 2)
+        self.assertEqual(summary["skills"], [{"name": "browser", "activations": 1}])
+        self.assertFalse(summary["execution_rows_truncated"])
+
+    def test_tool_summary_discloses_latest_execution_window(self):
+        executions = [{"idx": idx, "tools": [{"name": "exec", "namespace": "exec"}]}
+                      for idx in range(1, 82)]
+        summary = meter.tool_summary(executions)
+        self.assertEqual(summary["total_calls"], 81)
+        self.assertEqual(summary["execution_rows_total"], 81)
+        self.assertEqual(summary["execution_rows_shown"], 80)
+        self.assertEqual(summary["execution_calls_shown"], 80)
+        self.assertTrue(summary["execution_rows_truncated"])
+
     def test_flags_tokens_once_across_oversize_repeat_and_error_rules(self):
         calls = [
             {**meter.tool_identity("exec_command"), "output_tokens": 9000, "ts": 100,
@@ -266,6 +357,99 @@ class McpActionTests(unittest.TestCase):
 
 
 class CapabilityConfigTests(unittest.TestCase):
+    def test_skill_identity_separates_runtime_origin_and_plugin(self):
+        identities = {
+            meter.skill_identity("Codex", "browser", "codex:built-in"),
+            meter.skill_identity("Codex", "browser", "codex:user"),
+            meter.skill_identity("Codex", "browser", "codex:plugin:openai-bundled", "browser@openai-bundled"),
+            meter.skill_identity("Claude", "browser", "claude:plugin:skills-marketplace", "browser@skills-marketplace"),
+        }
+        self.assertEqual(len(identities), 4)
+
+    def test_optional_summary_counts_only_mutable_control_groups(self):
+        mcp_items = [
+            {"name": "context7", "mutable": True, "enabled": True, "used": False,
+             "codex_enabled": True, "claude_enabled": False},
+            {"name": "core", "mutable": False, "enabled": True, "used": False},
+        ]
+        skill_items = [
+            {"name": "browser", "runtime": "Codex", "plugin_id": "browser@bundled",
+             "mutable": True, "enabled": True, "used": True, "activations": 2},
+            {"name": "local", "runtime": "Codex", "plugin_id": "",
+             "mutable": False, "enabled": True, "used": False},
+        ]
+        groups = meter.capability_control_groups(mcp_items, skill_items)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(summary["enabled"], 2)
+        self.assertEqual(summary["used"], 1)
+        self.assertEqual(summary["unused"], 1)
+        self.assertEqual(summary["mcp_enabled"], 1)
+        self.assertEqual(summary["skill_packs_enabled"], 1)
+
+    def test_runtime_skill_packs_are_not_review_candidates(self):
+        skill_items = [
+            {"id": "runtime-skill", "name": "browser", "runtime": "Codex",
+             "plugin_id": "browser@openai-bundled", "mutable": True, "enabled": True,
+             "used": False, "reviewable": False, "origin": "runtime_pack"},
+            {"id": "user-skill", "name": "custom", "runtime": "Codex",
+             "plugin_id": "custom@personal", "mutable": True, "enabled": True,
+             "used": False, "reviewable": True, "origin": "user_plugin"},
+        ]
+        groups = meter.capability_control_groups([], skill_items)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(summary["enabled"], 1)
+        self.assertEqual(summary["review_candidates"], ["skill_pack:Codex:custom@personal"])
+
+    def test_bulk_disable_accepts_only_exact_review_candidates(self):
+        capabilities = {
+            "summary": {"optional": {"review_candidates": ["skill_pack:Claude:custom@personal"]}},
+            "control_groups": [
+                {"id": "skill_pack:Claude:custom@personal", "name": "custom@personal",
+                 "control_type": "skill_pack", "enabled": True, "used": False,
+                 "mutable": True, "reviewable": True},
+                {"id": "skill_pack:Codex:browser@openai-bundled", "name": "browser@openai-bundled",
+                 "control_type": "skill_pack", "enabled": True, "used": False,
+                 "mutable": True, "reviewable": False},
+            ],
+        }
+        changed = []
+
+        def fake_setter(control, enabled):
+            changed.append((control["id"], enabled))
+            return {"ok": True, "verified": True}
+
+        result = meter.disable_capability_controls(
+            ["skill_pack:Claude:custom@personal"], capabilities, fake_setter)
+        rejected = meter.disable_capability_controls(
+            ["skill_pack:Codex:browser@openai-bundled"], capabilities, fake_setter)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["changed"], 1)
+        self.assertEqual(changed, [("skill_pack:Claude:custom@personal", False)])
+        self.assertFalse(rejected["ok"])
+        self.assertEqual(rejected["invalid_control_ids"], ["skill_pack:Codex:browser@openai-bundled"])
+
+    def test_session_optional_summary_excludes_default_activity_and_measures_eager_mcp(self):
+        capabilities = {"control_groups": [
+            {"id": "mcp:context7", "control_type": "mcp", "name": "context7",
+             "runtime": "Codex + Claude", "enabled": True, "mutable": True,
+             "codex_enabled": True, "claude_enabled": False},
+            {"id": "skill_pack:Codex:browser@bundled", "control_type": "skill_pack",
+             "name": "browser@bundled", "runtime": "Codex", "enabled": True,
+             "mutable": True, "members": ["browser"]},
+        ], "summary": {"optional": {"review_candidate_names": ["context7"]}}}
+        state = {"provider": "codex", "tools": {
+            "by_name": [{"name": "exec", "namespace": "exec", "kind": "tool", "calls": 3}],
+            "skills": [{"name": "browser", "activations": 1}],
+            "catalog": [{"name": "mcp__context7__query", "namespace": "context7", "kind": "mcp",
+                         "defer_loading": False, "definition_tokens": 120}],
+        }}
+        summary = meter.session_optional_capabilities(state, capabilities)
+        self.assertEqual(summary["enabled"], 2)
+        self.assertEqual(summary["used"], 1)
+        self.assertEqual(summary["avoidable_eager_definition_tokens"], 120)
+        self.assertEqual(summary["eager_unused_groups"], 1)
+        self.assertNotIn("exec", [row["name"] for row in summary["groups"]])
+
     def test_mcp_parser_ignores_nested_env_section(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"
@@ -281,8 +465,44 @@ class CapabilityConfigTests(unittest.TestCase):
                 result = meter.set_codex_plugin_enabled("docs@runtime", False)
             text = path.read_text()
         self.assertTrue(result["ok"])
+        self.assertTrue(result["verified"])
         self.assertIn("enabled = false", text)
         self.assertIn('source = "keep"', text)
+
+    def test_claude_plugin_toggle_verifies_written_setting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"enabledPlugins": {"docs@personal": True}}))
+            with (mock.patch.object(meter, "CLAUDE_SETTINGS", str(path)),
+                  mock.patch.object(meter, "claude_plugin_installations",
+                                    return_value={"docs@personal": {"installPath": tmp}})):
+                result = meter.set_claude_plugin_enabled("docs@personal", False)
+            written = json.loads(path.read_text())
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["verified"])
+        self.assertFalse(written["enabledPlugins"]["docs@personal"])
+
+
+class DailySummaryTests(unittest.TestCase):
+    def test_aggregates_daily_spend_providers_logs_and_tool_results(self):
+        sessions = [
+            {"id": "one", "title": "One", "project": "/repo/a", "provider": "codex",
+             "label": "Codex", "_day_cost": {"2026-07-01": 1.25}},
+            {"id": "two", "title": "Two", "project": "/repo/b", "provider": "claude",
+             "label": "Claude Code", "_day_cost": {"2026-07-01": 0.75, "2026-06-30": 0.5}},
+        ]
+        waste = {"trend": [
+            {"day": "2026-07-01", "tokens": 1000, "flagged_tokens": 250},
+            {"day": "2026-06-30", "tokens": 400, "flagged_tokens": 0},
+        ]}
+        days = meter.daily_summaries(sessions, waste)
+        self.assertEqual(days[0]["day"], "2026-07-01")
+        self.assertEqual(days[0]["cost"], 2.0)
+        self.assertEqual(days[0]["sessions"], 2)
+        self.assertEqual(days[0]["projects"], 2)
+        self.assertEqual(days[0]["tool_tokens"], 1000)
+        self.assertEqual(days[0]["flagged_share"], 0.25)
+        self.assertEqual(days[0]["providers"][0], {"provider": "codex", "cost": 1.25})
 
 
 if __name__ == "__main__":

@@ -857,6 +857,7 @@ def claude_user_events(objs):
 def tool_summary(executions):
     by_name = {}
     by_namespace = {}
+    by_skill = defaultdict(int)
     by_execution = []
 
     for ex in executions:
@@ -868,6 +869,9 @@ def tool_summary(executions):
             tokens = int(tool.get("output_tokens") or 0)
             output_chars = int(tool.get("output_chars") or 0)
             args_chars = int(tool.get("args_chars") or 0)
+            for skill_name in tool.get("skills") or []:
+                if skill_name:
+                    by_skill[str(skill_name)] += 1
 
             n = by_name.setdefault(name, {
                 "name": name,
@@ -946,15 +950,34 @@ def tool_summary(executions):
         row["execution_count"] = len(row["executions"])
         by_namespace_rows.append(row)
 
+    total_calls = sum(r["calls"] for r in by_name_rows)
+    peak_calls = max((row["tool_calls"] for row in by_execution), default=0)
+    peak_unique = max((row["unique_tools"] for row in by_execution), default=0)
+    shown_execution_rows = by_execution[-80:]
     return {
-        "total_calls": sum(r["calls"] for r in by_name_rows),
+        "total_calls": total_calls,
         "total_output_tokens": sum(r["output_tokens"] for r in by_name_rows),
         "total_errors": sum(r["errors"] for r in by_name_rows),
         "unique_used": len(by_name_rows),
         "namespaces_used": len(by_namespace_rows),
+        "peak_calls_per_execution": peak_calls,
+        "peak_tools_per_execution": peak_unique,
+        "execution_rows_total": len(by_execution),
+        "execution_rows_shown": len(shown_execution_rows),
+        "execution_rows_truncated": len(shown_execution_rows) < len(by_execution),
+        "execution_calls_shown": sum(row["tool_calls"] for row in shown_execution_rows),
+        "skills": [{"name": name, "activations": activations}
+                   for name, activations in sorted(by_skill.items(), key=lambda item: (-item[1], item[0]))],
+        "activity": {
+            "scope": "session",
+            "observed_unique": len(by_name_rows),
+            "total_calls": total_calls,
+            "peak_calls_per_execution": peak_calls,
+            "namespaces_used": len(by_namespace_rows),
+        },
         "by_name": sorted(by_name_rows, key=lambda r: (-r["output_tokens"], -r["calls"], r["name"]))[:16],
         "by_namespace": sorted(by_namespace_rows, key=lambda r: (-r["output_tokens"], -r["calls"], r["namespace"]))[:12],
-        "by_execution": by_execution[-80:],
+        "by_execution": shown_execution_rows,
     }
 
 
@@ -1148,6 +1171,7 @@ def recompute_claude(source):
                 "output_chars": out_chars,
                 "output_tokens": out_chars // CHARS_PER_TOKEN,
                 "error": bool(result_errors.get(tid)),
+                "skills": skill_names_from_value(block.get("input")),
             }
             tools.append(tool)
 
@@ -1425,14 +1449,16 @@ def recompute_codex(source):
             name = payload.get("name") or ("web.search" if ptype == "web_search_call" else ptype.replace("_call", ""))
             call_id = payload.get("call_id") or payload.get("id") or f"call-{len(call_map) + 1}"
             ident = tool_identity(name)
+            arguments = payload.get("arguments") or payload.get("input")
             tool = {
                 **ident,
                 "id": payload.get("id"),
                 "call_id": call_id,
-                "args_chars": len(str(payload.get("arguments") or payload.get("input") or "")),
+                "args_chars": len(str(arguments or "")),
                 "output_chars": 0,
                 "output_tokens": 0,
                 "error": False,
+                "skills": skill_names_from_value(arguments),
             }
             pending["calls"][call_id] = tool
             call_map[call_id] = tool
@@ -1447,7 +1473,8 @@ def recompute_codex(source):
             if tool is None:
                 ident = tool_identity(payload.get("name") or ptype)
                 tool = {**ident, "id": payload.get("id"), "call_id": call_id,
-                        "args_chars": 0, "output_chars": 0, "output_tokens": 0, "error": False}
+                        "args_chars": 0, "output_chars": 0, "output_tokens": 0, "error": False,
+                        "skills": []}
                 pending["calls"][call_id] = tool
                 call_map[call_id] = tool
             output = payload.get("output") if "output" in payload else payload
@@ -2294,6 +2321,8 @@ def global_tool_waste(session_rows):
                 "last_ts": 0, "sessions": set(), "projects": set(),
                 "project_calls": defaultdict(int), "providers": set(),
                 "advertised_sessions": set(), "eager_sessions": set(), "deferred_sessions": set(),
+                "definition_tokens": 0, "eager_definition_tokens": 0,
+                "deferred_definition_tokens": 0, "unused_eager_definition_tokens": 0,
             })
             for key in ("calls", "output_tokens", "flagged_tokens", "errors", "oversized_calls", "repeat_calls"):
                 row[key] += int(item.get(key) or 0)
@@ -2343,12 +2372,20 @@ def global_tool_waste(session_rows):
                 "last_ts": 0, "sessions": set(), "projects": set(),
                 "project_calls": defaultdict(int), "providers": set(),
                 "advertised_sessions": set(), "eager_sessions": set(), "deferred_sessions": set(),
+                "definition_tokens": 0, "eager_definition_tokens": 0,
+                "deferred_definition_tokens": 0, "unused_eager_definition_tokens": 0,
             })
             row["advertised_sessions"].add(session_id)
+            definition_tokens = int(item.get("definition_tokens") or 0)
+            row["definition_tokens"] += definition_tokens
             if item.get("defer_loading"):
                 row["deferred_sessions"].add(session_id)
+                row["deferred_definition_tokens"] += definition_tokens
             else:
                 row["eager_sessions"].add(session_id)
+                row["eager_definition_tokens"] += definition_tokens
+                if name not in session_used:
+                    row["unused_eager_definition_tokens"] += definition_tokens
 
     total_sessions = len(session_rows)
     tool_rows = []
@@ -2388,6 +2425,10 @@ def global_tool_waste(session_rows):
             "oversized_calls": row["oversized_calls"], "repeat_calls": row["repeat_calls"],
             "sessions_used": sessions_used, "advertised_sessions": advertised_sessions,
             "eager_sessions": len(row["eager_sessions"]), "deferred_sessions": len(row["deferred_sessions"]),
+            "definition_tokens": row["definition_tokens"],
+            "eager_definition_tokens": row["eager_definition_tokens"],
+            "deferred_definition_tokens": row["deferred_definition_tokens"],
+            "unused_eager_definition_tokens": row["unused_eager_definition_tokens"],
             "projects": sorted(row["projects"]), "top_project": top_project,
             "project_share": project_share, "providers": sorted(row["providers"]),
             "last_ts": row["last_ts"],
@@ -2480,6 +2521,7 @@ def global_tool_waste(session_rows):
 
     return {
         **dict(totals),
+        "total_sessions": total_sessions,
         "sessions_with_tools": sum(1 for row in session_rows if (row.get("_tool_evidence") or {}).get("total_calls")),
         "by_name": (tool_rows[:20] + [
             row for row in tool_rows[20:] if row["recommendation"] in ("disable", "fix_or_disable")
@@ -2556,8 +2598,7 @@ def refresh_ghost_mcp_catalog(runner=None):
         _xsess["data"], _xsess["at"] = None, 0.0
         if STATE:
             updated = dict(STATE)
-            updated["xsession"] = cross_session()
-            publish(updated)
+            publish(attach_cross_session(updated))
     return rows
 
 
@@ -2578,25 +2619,43 @@ def claude_plugin_installations():
     return result
 
 
+def skill_identity(runtime, name, origin_id, plugin_id=""):
+    """Return a stable identity that cannot collide across runtimes or origins."""
+    runtime_key = re.sub(r"[^a-z0-9]+", "-", str(runtime or "unknown").lower()).strip("-") or "unknown"
+    owner = str(plugin_id or origin_id or "unknown").strip()
+    return f"skill:{runtime_key}:{owner}:{name}"
+
+
 def discovered_skills(skill_usage=None):
     usage = {str(row.get("name") or "").lower(): row for row in (skill_usage or [])}
     rows = []
 
-    def add(path, runtime, source, enabled=True, plugin_id="", mutable=False, control_scope=""):
+    def add(path, runtime, source, origin_id, origin="user", enabled=True, plugin_id="",
+            mutable=False, control_scope="", reviewable=False, setting_path=""):
         name = os.path.basename(os.path.dirname(path))
         used = usage.get(name.lower()) or {}
+        providers = {str(provider).lower() for provider in used.get("providers") or []}
+        expected_provider = "codex" if runtime == "Codex" else "claude"
+        if providers and expected_provider not in providers:
+            used = {}
         rows.append({
-            "id": f"{runtime}:{plugin_id or source}:{name}",
+            "id": skill_identity(runtime, name, origin_id, plugin_id),
             "type": "skill", "name": name, "runtime": runtime, "source": source,
             "path": home_shorten(path), "enabled": bool(enabled), "plugin_id": plugin_id,
             "mutable": bool(mutable), "control_scope": control_scope,
+            "origin": origin, "origin_id": origin_id, "reviewable": bool(reviewable),
+            "setting_path": home_shorten(setting_path) if setting_path else "",
             "used": bool(used), "activations": int(used.get("activations") or 0),
             "sessions_used": int(used.get("sessions_used") or 0), "last_used": used.get("last_used") or "Never",
         })
 
-    for path in glob.glob(os.path.expanduser("~/.codex/skills/**/SKILL.md"), recursive=True):
-        if "/plugins/" not in path:
-            add(path, "Codex", "local skill", True)
+    codex_skills_root = os.path.expanduser("~/.codex/skills")
+    codex_system_root = os.path.join(codex_skills_root, ".system") + os.sep
+    for path in glob.glob(os.path.join(codex_system_root, "**", "SKILL.md"), recursive=True):
+        add(path, "Codex", "Codex built-in", "codex:built-in", "built_in", True)
+    for path in glob.glob(os.path.join(codex_skills_root, "**", "SKILL.md"), recursive=True):
+        if "/plugins/" not in path and not path.startswith(codex_system_root):
+            add(path, "Codex", "User installed", "codex:user", "user", True)
 
     codex_plugins = codex_plugin_states()
     codex_cache = os.path.expanduser("~/.codex/plugins/cache")
@@ -2607,24 +2666,129 @@ def discovered_skills(skill_usage=None):
         market, plugin = rel[0], rel[1]
         plugin_id = f"{plugin}@{market}"
         configured = plugin_id in codex_plugins
-        add(path, "Codex", plugin_id, codex_plugins.get(plugin_id, True), plugin_id, configured, "plugin pack" if configured else "")
+        bundled = market in ("openai-bundled", "openai-primary-runtime", "openai-curated-remote")
+        add(path, "Codex", "Codex runtime pack" if bundled else "User-installed plugin",
+            f"codex:plugin:{market}", "runtime_pack" if bundled else "user_plugin",
+            codex_plugins.get(plugin_id, True), plugin_id, configured,
+            "plugin pack" if configured else "", configured and not bundled, CODEX_CONFIG)
 
     claude_settings = load_json(CLAUDE_SETTINGS, {})
     claude_enabled = claude_settings.get("enabledPlugins") if isinstance(claude_settings, dict) else {}
     for plugin_id, install in claude_plugin_installations().items():
         root = install.get("installPath") or ""
+        marketplace = plugin_id.rsplit("@", 1)[-1] if "@" in plugin_id else "unknown"
+        runtime_pack = marketplace in ("claude-plugins-official", "openai-codex")
         for path in glob.glob(os.path.join(root, "skills", "*", "SKILL.md")):
-            add(path, "Claude", plugin_id, bool((claude_enabled or {}).get(plugin_id)), plugin_id, True, "plugin pack")
+            add(path, "Claude", "Claude runtime pack" if runtime_pack else "User-installed plugin",
+                f"claude:plugin:{marketplace}", "runtime_pack" if runtime_pack else "user_plugin",
+                bool((claude_enabled or {}).get(plugin_id)), plugin_id, True, "plugin pack",
+                not runtime_pack, CLAUDE_SETTINGS)
 
     for data_root in CLAUDE_DESKTOP_DATA_ROOTS:
         desktop_root = os.path.join(data_root, "local-agent-mode-sessions", "skills-plugin")
         for path in glob.glob(os.path.join(desktop_root, "**", "skills", "*", "SKILL.md"), recursive=True):
-            add(path, "Claude Desktop", "Cowork built-in", True)
+            add(path, "Claude Desktop", "Cowork built-in", "claude-desktop:built-in", "built_in", True)
 
     deduped = {}
     for row in rows:
         deduped[row["id"]] = row
     return sorted(deduped.values(), key=lambda row: (row["runtime"], row["name"], row["source"]))
+
+
+def capability_control_groups(mcp_items, skill_items):
+    """Return only capability groups that the dashboard can actually disable."""
+    groups = []
+    for row in mcp_items or []:
+        if not row.get("mutable"):
+            continue
+        groups.append({
+            "id": f"mcp:{row.get('name')}", "item_id": row.get("id"),
+            "type": "mcp", "control_type": "mcp", "name": row.get("name"),
+            "runtime": "Codex + Claude", "enabled": bool(row.get("enabled")),
+            "used": bool(row.get("used")), "mutable": True,
+            "codex_enabled": bool(row.get("codex_enabled")),
+            "claude_enabled": bool(row.get("claude_enabled")),
+            "calls": int(row.get("calls") or 0), "activations": 0,
+            "returned_tokens": int(row.get("returned_tokens") or 0), "plugin_id": "",
+            "members": [], "member_count": 0, "used_members": 0,
+            "last_used": row.get("last_used") or "Never",
+            "definition_tokens": int(row.get("definition_tokens") or 0),
+            "eager_definition_tokens": int(row.get("eager_definition_tokens") or 0),
+            "deferred_definition_tokens": int(row.get("deferred_definition_tokens") or 0),
+            "unused_eager_definition_tokens": int(row.get("unused_eager_definition_tokens") or 0),
+            "reviewable": True, "origin": "configured", "origin_id": f"mcp:{row.get('name')}",
+        })
+
+    packs = {}
+    for row in skill_items or []:
+        if not row.get("mutable") or not row.get("plugin_id"):
+            continue
+        key = (row.get("runtime") or "unknown", row.get("plugin_id"))
+        pack = packs.setdefault(key, {
+            "id": f"skill_pack:{key[0]}:{key[1]}", "control_type": "skill_pack",
+            "item_id": row.get("id"), "type": "skill", "name": key[1], "runtime": key[0],
+            "plugin_id": key[1], "enabled": False, "used": False,
+            "mutable": True, "calls": 0, "activations": 0, "members": set(),
+            "returned_tokens": 0,
+            "used_member_names": set(), "last_used": "Never",
+            "definition_tokens": 0, "eager_definition_tokens": 0,
+            "deferred_definition_tokens": 0, "unused_eager_definition_tokens": 0,
+            "origin": row.get("origin") or "user_plugin",
+            "origin_id": row.get("origin_id") or key[1],
+            "source": row.get("source") or key[1],
+            "reviewable": bool(row.get("reviewable", True)),
+            "setting_path": row.get("setting_path") or "",
+            "member_ids": set(),
+        })
+        name = row.get("name") or "?"
+        pack["members"].add(name)
+        pack["member_ids"].add(row.get("id"))
+        pack["enabled"] = pack["enabled"] or bool(row.get("enabled"))
+        pack["used"] = pack["used"] or bool(row.get("used"))
+        if row.get("used"):
+            pack["used_member_names"].add(name)
+        pack["activations"] += int(row.get("activations") or 0)
+        last_used = row.get("last_used") or "Never"
+        if last_used != "Never" and (pack["last_used"] == "Never" or last_used > pack["last_used"]):
+            pack["last_used"] = last_used
+    for pack in packs.values():
+        members = sorted(pack.pop("members"))
+        used_members = pack.pop("used_member_names")
+        pack["members"] = members
+        pack["member_ids"] = sorted(value for value in pack["member_ids"] if value)
+        pack["member_count"] = len(members)
+        pack["used_members"] = len(used_members)
+        groups.append(pack)
+    return sorted(groups, key=lambda row: (row["control_type"], row["runtime"], row["name"]))
+
+
+def optional_capability_summary(control_groups):
+    enabled = [row for row in (control_groups or [])
+               if row.get("enabled") and row.get("mutable") and row.get("reviewable", True)]
+    used = [row for row in enabled if row.get("used")]
+    unused = [row for row in enabled if not row.get("used")]
+    mcp_enabled = [row for row in enabled if row.get("control_type") == "mcp"]
+    skill_enabled = [row for row in enabled if row.get("control_type") == "skill_pack"]
+    avoidable_tokens = sum(int(row.get("unused_eager_definition_tokens") or 0) for row in unused)
+    eager_unused = [row for row in unused if int(row.get("unused_eager_definition_tokens") or 0) > 0]
+    deferred_unused = [row for row in unused if int(row.get("deferred_definition_tokens") or 0) > 0
+                       and int(row.get("unused_eager_definition_tokens") or 0) == 0]
+    return {
+        "scope": "all_sessions", "enabled": len(enabled), "used": len(used), "unused": len(unused),
+        "utilization": len(used) / len(enabled) if enabled else 0.0,
+        "mcp_enabled": len(mcp_enabled),
+        "mcp_used": sum(1 for row in mcp_enabled if row.get("used")),
+        "skill_packs_enabled": len(skill_enabled),
+        "skill_packs_used": sum(1 for row in skill_enabled if row.get("used")),
+        "review_candidates": [row["id"] for row in unused],
+        "review_candidate_names": [row["name"] for row in unused],
+        "avoidable_eager_definition_tokens": avoidable_tokens,
+        "overhead_measured_groups": sum(1 for row in enabled if int(row.get("definition_tokens") or 0) > 0),
+        "eager_unused_groups": len(eager_unused),
+        "deferred_unused_groups": len(deferred_unused),
+        "unmeasured_unused_groups": sum(1 for row in unused
+                                         if not row.get("definition_tokens")),
+    }
 
 
 def capability_inventory(waste=None):
@@ -2652,7 +2816,11 @@ def capability_inventory(waste=None):
 
     mcp_catalog = ghost_mcp_catalog()
     codex_states, claude_states = codex_mcp_states(), claude_mcp_states()
-    mcp_usage = defaultdict(lambda: {"calls": 0, "tokens": 0, "last_used": "Never", "used": False})
+    mcp_usage = defaultdict(lambda: {
+        "calls": 0, "tokens": 0, "last_used": "Never", "used": False,
+        "definition_tokens": 0, "eager_definition_tokens": 0,
+        "deferred_definition_tokens": 0, "unused_eager_definition_tokens": 0,
+    })
     for row in tool_evidence:
         if row.get("kind") != "mcp":
             continue
@@ -2661,6 +2829,9 @@ def capability_inventory(waste=None):
         u["calls"] += int(row.get("calls") or 0)
         u["tokens"] += int(row.get("output_tokens") or 0)
         u["used"] = u["used"] or bool(row.get("calls"))
+        for key in ("definition_tokens", "eager_definition_tokens", "deferred_definition_tokens",
+                    "unused_eager_definition_tokens"):
+            u[key] += int(row.get(key) or 0)
         if row.get("last_ts") and row.get("last_used"):
             u["last_used"] = row["last_used"]
     all_mcp_names = set(mcp_catalog) | set(codex_states) | set(claude_states) | set(mcp_usage)
@@ -2677,9 +2848,23 @@ def capability_inventory(waste=None):
             "mutable": bool(ghost_executable() and name in mcp_catalog),
             "codex_enabled": codex_on, "claude_enabled": claude_on, "used": usage_row["used"],
             "calls": usage_row["calls"], "returned_tokens": usage_row["tokens"], "last_used": usage_row["last_used"],
+            "definition_tokens": usage_row["definition_tokens"],
+            "eager_definition_tokens": usage_row["eager_definition_tokens"],
+            "deferred_definition_tokens": usage_row["deferred_definition_tokens"],
+            "unused_eager_definition_tokens": usage_row["unused_eager_definition_tokens"],
         })
 
     skill_items = discovered_skills(waste.get("skills") or [])
+    control_groups = capability_control_groups(mcp_items, skill_items)
+    optional_summary = optional_capability_summary(control_groups)
+    optional_summary["scanned_sessions"] = int(waste.get("total_sessions") or 0)
+    review_ids = set(optional_summary["review_candidates"])
+    for row in mcp_items:
+        row["control_id"] = row["id"]
+        row["review_candidate"] = row["control_id"] in review_ids
+    for row in skill_items:
+        row["control_id"] = f"skill_pack:{row.get('runtime')}:{row.get('plugin_id')}" if row.get("plugin_id") else ""
+        row["review_candidate"] = bool(row["control_id"] and row["control_id"] in review_ids)
     tool_reported = sum(1 for row in tool_items if row["advertised_sessions"])
     tool_reported_used = sum(1 for row in tool_items if row["advertised_sessions"] and row["used"])
     mcp_enabled = sum(1 for row in mcp_items if row["enabled"])
@@ -2699,12 +2884,14 @@ def capability_inventory(waste=None):
                  "utilization": mcp_enabled_used / mcp_enabled if mcp_enabled else 0.0},
         "skills": {"available": len(skill_items), "enabled": skills_enabled, "used": skills_used,
                    "utilization": skills_used / skills_enabled if skills_enabled else 0.0},
+        "optional": optional_summary,
         "definitions": {key: int(waste.get(key) or 0) for key in (
             "definition_tokens", "eager_definition_tokens", "deferred_definition_tokens", "unused_eager_definition_tokens"
         )},
     }
     return {
         "summary": summary, "items": tool_items + mcp_items + skill_items,
+        "control_groups": control_groups,
         "actions": {**mcp_action_capability(), "skill_pack_toggle": True},
         "claude_desktop": {
             "local_agent_sessions": len(local_agents),
@@ -2716,6 +2903,88 @@ def capability_inventory(waste=None):
         },
         "generated_at": int(time.time()),
     }
+
+
+def session_optional_capabilities(state, capabilities):
+    """Summarize enabled removable groups for one selected session."""
+    state = state or {}
+    tools = state.get("tools") or {}
+    provider = state.get("provider") or (state.get("source") or {}).get("provider") or ""
+    observed_names = {row.get("name") for row in tools.get("by_name") or [] if row.get("name")}
+    observed_mcp = {
+        row.get("namespace") for row in tools.get("by_name") or []
+        if row.get("kind") == "mcp" and row.get("namespace")
+    }
+    skill_activations = {row.get("name"): int(row.get("activations") or 0)
+                         for row in tools.get("skills") or [] if row.get("name")}
+    catalog = tools.get("catalog") or []
+    groups = []
+    for source_group in (capabilities or {}).get("control_groups") or []:
+        group = dict(source_group)
+        if (not group.get("enabled") or not group.get("mutable") or
+                not group.get("reviewable", True)):
+            continue
+        if group.get("control_type") == "mcp":
+            attached = bool(group.get("codex_enabled")) if provider == "codex" else bool(group.get("claude_enabled"))
+            current_used = group.get("name") in observed_mcp
+            relevant_catalog = [row for row in catalog if row.get("kind") == "mcp"
+                                and row.get("namespace") == group.get("name")]
+            activations = sum(int(row.get("calls") or 0) for row in tools.get("by_name") or []
+                              if row.get("kind") == "mcp" and row.get("namespace") == group.get("name"))
+        else:
+            attached = ((provider == "codex" and group.get("runtime") == "Codex") or
+                        (provider == "claude" and group.get("runtime") == "Claude"))
+            active_members = set(group.get("members") or []) & set(skill_activations)
+            current_used = bool(active_members)
+            relevant_catalog = []
+            activations = sum(skill_activations[name] for name in active_members)
+        if not attached:
+            continue
+        eager_tokens = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
+                           if not row.get("defer_loading"))
+        deferred_tokens = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
+                              if row.get("defer_loading"))
+        unused_eager = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
+                           if not row.get("defer_loading") and row.get("name") not in observed_names)
+        group.update({
+            "current_used": current_used, "current_activations": activations,
+            "current_eager_definition_tokens": eager_tokens,
+            "current_deferred_definition_tokens": deferred_tokens,
+            "current_unused_eager_definition_tokens": unused_eager,
+            "overhead_measured": bool(relevant_catalog),
+        })
+        groups.append(group)
+
+    used = [row for row in groups if row.get("current_used")]
+    unused = [row for row in groups if not row.get("current_used")]
+    avoidable_tokens = sum(int(row.get("current_unused_eager_definition_tokens") or 0) for row in unused)
+    return {
+        "scope": "session", "enabled": len(groups), "used": len(used), "unused": len(unused),
+        "utilization": len(used) / len(groups) if groups else 0.0,
+        "mcp_enabled": sum(1 for row in groups if row.get("control_type") == "mcp"),
+        "mcp_used": sum(1 for row in used if row.get("control_type") == "mcp"),
+        "skill_packs_enabled": sum(1 for row in groups if row.get("control_type") == "skill_pack"),
+        "skill_packs_used": sum(1 for row in used if row.get("control_type") == "skill_pack"),
+        "avoidable_eager_definition_tokens": avoidable_tokens,
+        "overhead_measured_groups": sum(1 for row in groups if row.get("overhead_measured")),
+        "eager_unused_groups": sum(1 for row in unused
+                                    if int(row.get("current_unused_eager_definition_tokens") or 0) > 0),
+        "deferred_unused_groups": sum(1 for row in unused
+                                       if int(row.get("current_deferred_definition_tokens") or 0) > 0
+                                       and int(row.get("current_unused_eager_definition_tokens") or 0) == 0),
+        "unmeasured_unused_groups": sum(1 for row in unused if not row.get("overhead_measured")),
+        "global_review_candidates": list((((capabilities or {}).get("summary") or {}).get("optional") or {}).get("review_candidate_names") or []),
+        "groups": groups,
+    }
+
+
+def attach_cross_session(state, cross=None):
+    if not state:
+        return state
+    cross = cross or cross_session()
+    state["xsession"] = cross
+    state["optional_capabilities"] = session_optional_capabilities(state, cross.get("capabilities") or {})
+    return state
 
 
 def mcp_action_capability():
@@ -2800,8 +3069,14 @@ def set_codex_plugin_enabled(plugin_id, enabled):
         atomic_write_text(CODEX_CONFIG, text[:header.end()] + body + text[end:])
     except OSError as exc:
         return {"ok": False, "error": compact_text(str(exc), 240)}
+    verified_state = codex_plugin_states().get(plugin_id)
+    if verified_state is not bool(enabled):
+        return {"ok": False, "error": "Codex setting was written but could not be verified."}
     _xsess["data"], _xsess["at"] = None, 0.0
-    return {"ok": True, "plugin_id": plugin_id, "runtime": "Codex", "enabled": bool(enabled), "restart_required": True}
+    return {
+        "ok": True, "plugin_id": plugin_id, "runtime": "Codex", "enabled": bool(enabled),
+        "verified": True, "setting_path": home_shorten(CODEX_CONFIG), "restart_required": True,
+    }
 
 
 def set_claude_plugin_enabled(plugin_id, enabled):
@@ -2818,8 +3093,16 @@ def set_claude_plugin_enabled(plugin_id, enabled):
         atomic_write_text(CLAUDE_SETTINGS, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     except OSError as exc:
         return {"ok": False, "error": compact_text(str(exc), 240)}
+    verified = load_json(CLAUDE_SETTINGS, {})
+    verified_state = ((verified.get("enabledPlugins") or {}).get(plugin_id)
+                      if isinstance(verified, dict) else None)
+    if verified_state is not bool(enabled):
+        return {"ok": False, "error": "Claude setting was written but could not be verified."}
     _xsess["data"], _xsess["at"] = None, 0.0
-    return {"ok": True, "plugin_id": plugin_id, "runtime": "Claude", "enabled": bool(enabled), "restart_required": True}
+    return {
+        "ok": True, "plugin_id": plugin_id, "runtime": "Claude", "enabled": bool(enabled),
+        "verified": True, "setting_path": home_shorten(CLAUDE_SETTINGS), "restart_required": True,
+    }
 
 
 def set_skill_pack_enabled(runtime, plugin_id, enabled):
@@ -2830,6 +3113,118 @@ def set_skill_pack_enabled(runtime, plugin_id, enabled):
         result = set_claude_plugin_enabled(plugin_id, enabled)
     else:
         return {"ok": False, "error": "Only Codex and Claude plugin packs can be changed."}
+    return result
+
+
+def set_capability_control_enabled(control, enabled):
+    if (control or {}).get("control_type") == "mcp":
+        return set_mcp_server_enabled(control.get("name"), enabled)
+    if (control or {}).get("control_type") == "skill_pack":
+        return set_skill_pack_enabled(control.get("runtime"), control.get("plugin_id"), enabled)
+    return {"ok": False, "error": "Unsupported capability control."}
+
+
+def disable_capability_controls(control_ids, capabilities=None, setter=None):
+    """Disable an exact set of current review candidates with partial-failure reporting."""
+    if not isinstance(control_ids, list) or not control_ids or len(control_ids) > 100:
+        return {"ok": False, "error": "Select between 1 and 100 unused capability groups."}
+    requested = list(dict.fromkeys(str(value or "").strip() for value in control_ids))
+    if any(not value for value in requested):
+        return {"ok": False, "error": "Capability control ids must be non-empty strings."}
+    capabilities = capabilities or (cross_session().get("capabilities") or {})
+    candidate_ids = set((((capabilities.get("summary") or {}).get("optional") or {}).get("review_candidates") or []))
+    groups = {row.get("id"): row for row in capabilities.get("control_groups") or []}
+    invalid = [control_id for control_id in requested if (
+        control_id not in candidate_ids or control_id not in groups or
+        not groups[control_id].get("enabled") or groups[control_id].get("used") or
+        not groups[control_id].get("mutable") or not groups[control_id].get("reviewable", True)
+    )]
+    if invalid:
+        return {
+            "ok": False, "error": "One or more controls are no longer unused review candidates.",
+            "invalid_control_ids": invalid,
+        }
+
+    setter = setter or set_capability_control_enabled
+    changed, failures, results = [], [], []
+    for control_id in requested:
+        control = groups[control_id]
+        item = setter(control, False)
+        result = {
+            "control_id": control_id, "name": control.get("name"),
+            "control_type": control.get("control_type"), "ok": bool(item.get("ok")),
+        }
+        if item.get("ok"):
+            changed.append(control_id)
+            result["verified"] = bool(item.get("verified", control.get("control_type") == "mcp"))
+        else:
+            result["error"] = item.get("error") or "Capability change failed."
+            failures.append(result)
+        results.append(result)
+    return {
+        "ok": not failures, "partial": bool(changed and failures),
+        "requested": len(requested), "changed": len(changed),
+        "changed_control_ids": changed, "failures": failures, "results": results,
+        "restart_required": bool(changed),
+    }
+
+
+def refresh_capability_state():
+    """Rebuild and publish capabilities after a verified configuration change."""
+    cross = cross_session()
+    if STATE:
+        publish(attach_cross_session(dict(STATE), cross))
+    return cross.get("capabilities") or {}
+
+
+def daily_summaries(session_rows, tool_waste=None, limit=30):
+    """Aggregate exact per-day spend plus daily log/provider and tool-result evidence."""
+    days = {}
+
+    def day_row(day):
+        return days.setdefault(day, {
+            "day": day, "cost": 0.0, "providers": defaultdict(float),
+            "sessions": {}, "projects": set(), "tool_tokens": 0,
+            "flagged_tokens": 0,
+        })
+
+    for session in session_rows or []:
+        for day, value in (session.get("_day_cost") or {}).items():
+            cost = float(value or 0)
+            row = day_row(day)
+            row["cost"] += cost
+            provider = session.get("provider") or "unknown"
+            row["providers"][provider] += cost
+            project = session.get("project") or "local"
+            row["projects"].add(project)
+            session_id = session.get("id") or session.get("path") or "unknown"
+            daily_session = row["sessions"].setdefault(session_id, {
+                "id": session_id, "title": session.get("title") or session_id,
+                "project": project, "provider": provider,
+                "label": session.get("label") or provider, "cost": 0.0,
+            })
+            daily_session["cost"] += cost
+
+    for item in (tool_waste or {}).get("trend") or []:
+        row = day_row(item.get("day") or "")
+        row["tool_tokens"] += int(item.get("tokens") or 0)
+        row["flagged_tokens"] += int(item.get("flagged_tokens") or 0)
+
+    result = []
+    for day in sorted((value for value in days if value), reverse=True)[:limit]:
+        row = days[day]
+        sessions = sorted(row["sessions"].values(), key=lambda value: (-value["cost"], value["title"]))
+        providers = sorted([
+            {"provider": provider, "cost": cost}
+            for provider, cost in row["providers"].items()
+        ], key=lambda value: (-value["cost"], value["provider"]))
+        result.append({
+            "day": day, "cost": row["cost"], "sessions": len(sessions),
+            "projects": len(row["projects"]), "providers": providers,
+            "top_sessions": sessions[:8], "tool_tokens": row["tool_tokens"],
+            "flagged_tokens": row["flagged_tokens"],
+            "flagged_share": row["flagged_tokens"] / row["tool_tokens"] if row["tool_tokens"] else 0.0,
+        })
     return result
 
 
@@ -2873,12 +3268,15 @@ def cross_session():
     premium = (model_cost.get("claude-opus-4-8", 0) + model_cost.get("claude-fable-5", 0)
                + model_cost.get("gpt-5.5", 0))
     tool_waste = global_tool_waste(internal_rows)
+    daily = daily_summaries(internal_rows, tool_waste)
     data = {
         "sessions": sessions[:60],
         "model_mix": mm,
         "trend": trend,
         "total_cost": total,
         "total_sessions": len(sessions),
+        "total_executions": sum(int(row.get("turns") or 0) for row in internal_rows),
+        "total_tokens": sum(int(row.get("tokens") or 0) for row in internal_rows),
         "opus_share": (premium / total) if total else 0.0,
         "premium_share": (premium / total) if total else 0.0,
         "providers": sorted([
@@ -2886,6 +3284,7 @@ def cross_session():
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
         "tool_waste": tool_waste,
+        "daily": daily,
         "capabilities": capability_inventory(tool_waste),
         "mcp_actions": mcp_action_capability(),
     }
@@ -2914,8 +3313,7 @@ def current_state():
     source = newest_source()
     st = recompute(source) if source else None
     if st:
-        st["xsession"] = cross_session()
-        return st
+        return attach_cross_session(st)
     return {
         "ok": False,
         "message": "No Claude Code or Codex logs found yet.",
@@ -3261,8 +3659,7 @@ def watcher():
                 last_sig = sig
                 st = recompute(cur)
                 if st:
-                    st["xsession"] = cross_session()
-                    publish(st)
+                    publish(attach_cross_session(st))
         time.sleep(0.5)
 
 
@@ -3356,7 +3753,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         req_path = urlparse(self.path).path
-        if req_path not in ("/mcp/disable", "/capability/toggle"):
+        if req_path not in ("/mcp/disable", "/capability/toggle", "/capability/disable-unused"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -3390,24 +3787,29 @@ class H(BaseHTTPRequestHandler):
             return
         if req_path == "/mcp/disable":
             result = disable_mcp_server(payload.get("server"))
+        elif req_path == "/capability/disable-unused":
+            capabilities = cross_session().get("capabilities") or {}
+            result = disable_capability_controls(payload.get("control_ids"), capabilities)
         else:
             capability_type = str(payload.get("type") or "").strip().lower()
+            control_id = str(payload.get("control_id") or "").strip()
             enabled = payload.get("enabled") is True
-            if capability_type == "mcp":
-                known = {
-                    row["name"] for row in capability_inventory().get("items") or []
-                    if row.get("type") == "mcp" and row.get("mutable")
-                }
-                server = str(payload.get("name") or "").strip()
-                if server not in known:
-                    result = {"ok": False, "error": "MCP server is not in the discovered inventory."}
-                else:
-                    result = set_mcp_server_enabled(server, enabled)
+            expected_control = "mcp" if capability_type == "mcp" else "skill_pack"
+            control = next((row for row in capability_inventory().get("control_groups") or []
+                            if row.get("id") == control_id and row.get("control_type") == expected_control
+                            and row.get("mutable")), None)
+            if not control:
+                result = {"ok": False, "error": "Capability control is not in the discovered inventory."}
+            elif capability_type == "mcp":
+                result = set_mcp_server_enabled(control.get("name"), enabled)
             elif capability_type == "skill":
-                result = set_skill_pack_enabled(payload.get("runtime"), payload.get("plugin_id"), enabled)
+                result = set_skill_pack_enabled(control.get("runtime"), control.get("plugin_id"), enabled)
             else:
                 result = {"ok": False, "error": "Unsupported capability type."}
-        status = 200 if result.get("ok") else (503 if "not available" in result.get("error", "") else 400)
+        if result.get("ok") or result.get("changed"):
+            result["capabilities"] = refresh_capability_state()
+        status = 200 if result.get("ok") else (409 if result.get("partial") else
+                 (503 if "not available" in result.get("error", "") else 400))
         self._send(json.dumps(result), "application/json", status=status)
 
     def do_GET(self):
@@ -3424,7 +3826,7 @@ class H(BaseHTTPRequestHandler):
             source = find_session(sid)
             st = recompute(source) if source else None
             if st:
-                st["xsession"] = cross_session()
+                attach_cross_session(st)
                 st["ended"] = True
                 if st.get("timing"):
                     st["timing"]["end_label"] = "Last activity"

@@ -196,12 +196,22 @@ moment is already on screen the instant you stop. No second tool.
   the underlying session.
 - **FR15 Capability inventory** — keep a searchable Tools, MCPs, and Skills view
   with runtime, source, state, observed use, returned tokens, and last use.
-- **FR16 Capability utilization** — show trace-backed use percentages for
-  runtime-reported tools, enabled MCP servers, and enabled installed skills,
-  with partial-catalog and inferred-skill labels.
+- **FR16 Actionable capability utilization** — calculate optimization only over
+  enabled removable control groups: MCP servers and user-installed configured
+  skill packs. Keep built-in/runtime packs out of review candidates. Aggregate
+  child functions/skills under their real disable control, exclude default and
+  read-only tools, assign runtime-and-origin-qualified identifiers, and keep
+  session activity separate from cross-session optimization evidence.
 - **FR17 Capability controls** — enable or disable MCP servers through Ghost and
   configured skill packs through their native Codex/Claude enabled state;
-  runtime-owned tools and standalone skills remain read-only.
+  runtime-owned tools and standalone skills remain read-only. Confirm pack
+  changes and read the persisted setting back before reporting success.
+- **FR18 Bulk unused disable** — confirm and disable an exact set of current
+  unused review-candidate controls, reject stale, used, built-in, and runtime
+  pack identifiers before mutation, and report partial failures explicitly.
+- **FR19 Global guidance views** — open Global on an operational overview, add a
+  date-selectable Daily summary from trace-backed day attribution, and provide a
+  Learn view with a practical workflow and searchable glossary.
 
 ## 5. Non-functional requirements
 
@@ -403,11 +413,14 @@ The visual design was rebuilt around a dark-only operational palette, tighter
 cards, and denser dashboard surfaces. The Session view now includes:
 
 - Execution overview cards.
+- Cross-session tool, MCP, and skill utilization cards in Current Summary,
+  rendered from the same capability summary as Tools & Skills.
 - A trace timeline that grows as SSE state changes.
 - An adjustable input/output chart with Linear, Sqrt, and Log Y-scale modes.
 - Tools and MCP usage by namespace and by execution.
-- Existing semantic split, efficiency analyses, insights, alerts, and
-  post-mortem pinning.
+- Existing semantic split, insights, alerts, and post-mortem pinning. The
+  standalone Efficiency panel was retired; its normalized analysis data remains
+  available to headline metrics and insight generation.
 
 The chart defaults to linear scale because that is the normal interpretation of
 the Y axis. Sqrt and log remain available when very large input values compress
@@ -458,11 +471,12 @@ It shows provider/project, live or idle state, current activity from the latest
 trace event, recommended action, cost, compact token count, context pressure, a
 small context bar, last execution cost, a verdict (`Healthy`, `Watch closely`,
 `Intervene now`, `Idle`, or `Server offline`), the top signal, and actions to
-open the dashboard, open the current trace, open Tools & Skills, or quit the
-companion. These navigation actions stay together at the top of the menu.
-Their URLs are deterministic: Open Dashboard targets `#summary`, Open Trace
-targets `#activity`, and Tools & Skills targets `#capabilities`. Dashboard tab
-changes preserve the selected panel in the URL for direct links and reloads.
+open the dashboard, open the daily brief, open the current trace, open Tools &
+Skills, or quit the companion. These navigation actions stay together at the
+top of the menu. Their URLs are deterministic: Open Dashboard targets
+`#summary`, Open Daily Brief targets `#daily`, Open Trace targets `#activity`,
+and Tools & Skills targets `#capabilities`. Dashboard tab changes preserve the
+selected panel in the URL for direct links and reloads.
 The dropdown also lists up to five recently active sessions with a Claude or
 Codex icon, provider label, and title/project identifier. Selecting a row pins
 the native companion to that session across polls and restarts; `Follow Latest`
@@ -610,10 +624,21 @@ It intentionally keeps three evidence levels separate:
   caches. Activation is inferred only when a tool-call argument references a
   concrete `SKILL.md` path, so the UI labels skill utilization as inferred.
 
-Tool use percentage is the number of unique runtime-reported non-MCP tools
-called at least once divided by unique runtime-reported non-MCP tools. MCP and
-skill percentages use enabled capabilities as the denominator. Counts are
-global across discovered local sessions.
+Current Summary and Tools & Skills answer different questions. Current Summary
+reports activity for the selected log: observed tool types, total calls, and the
+maximum calls in one execution. Those counts may include default tools and
+result-only instrumentation because they explain what happened. They are never
+used as a removal denominator.
+
+Tools & Skills reports optimization at the removable control-group level. One
+MCP server is one group regardless of how many functions it exposes; one
+configured user plugin pack is one group regardless of how many skills it
+contains. Any child call or inferred skill activation marks its group used.
+Default tools, standalone skills, Cowork built-ins, Codex/Claude runtime packs,
+and other read-only entries remain in the inventory but cannot become review
+candidates. Every skill is identified by runtime, origin or plugin pack, and
+skill name so same-named built-in and user-installed skills cannot collide.
+Unused deferred definitions are not treated as initial-context waste.
 
 Runtime catalogs expose descriptions and input schemas. Token Meter estimates
 their definition size with four characters per token, then aggregates total,
@@ -621,10 +646,43 @@ eager, deferred, and unused-eager definition tokens. An eager definition is
 unused for a session when that runtime advertised it without deferred loading
 and the trace never called the same tool name. These are prompt-overhead
 estimates repeated across sessions, not provider billing-token claims.
+Only eager definition tokens attributable to an unused removable group appear
+as avoidable context. When the runtime does not report that attribution, the UI
+shows a dash and says the overhead is not measured instead of claiming zero.
 
 `POST /capability/toggle` requires the same local-origin action token as the
 existing MCP review action. MCP changes call `ghost mcp all add/remove` with a
 fixed argument vector. Skill actions update the containing configured plugin
 pack because neither runtime exposes a safe universal per-skill switch.
 Standalone skills, Cowork built-ins, unmanaged plugin caches, and native tools
-are displayed as read-only. All successful changes require a runtime restart.
+are displayed as read-only. The server validates the exact discovered control
+identifier, reads the persisted enabled value back, and only then reports
+success with a refreshed capability snapshot. All successful changes require a
+runtime restart.
+
+`POST /capability/disable-unused` accepts only the exact control identifiers in
+the current optional-capability review set. The server validates the full list
+before changing any setting, applies accepted controls sequentially, refreshes
+capability state once, and reports any partial failure. The dashboard shows the
+runtime and pack/server list in a separate confirmation dialog.
+
+---
+
+## 16. v8 — Global overview, Daily, and Learn (2026-07-01)
+
+Global opens on an overview instead of the log table. The landing view combines
+total and current-day spend, log/execution/token volume, runtime and model mix,
+cross-log priorities, and direct access to the highest-cost logs. Logs, global
+insights, and capability evidence remain separate subtabs.
+
+Daily uses per-day cost already attributed from trace usage records. For each
+recorded day it reports estimated spend, active logs, distinct projects,
+provider cost, highest-cost logs for that day, and tool-result/flagged-token
+totals. It does not invent daily token or execution counts when traces do not
+provide reliable attribution.
+
+Learn is a static, local guide to the operating workflow: inspect Current,
+locate spikes in Activity, confirm repeated patterns in Global and Daily, review
+runtime-qualified capability controls, and close with a daily comparison. Its
+glossary defines the cost, token, cache, context, timing, tool, and capability
+terms used by the dashboard.

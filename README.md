@@ -41,20 +41,28 @@ machine.
 - **Efficiency signals**: highlights reasoning share, tool/retrieval bloat,
   coordination tax, cost per task, context pressure, and spend anomalies.
 - **Global view**: summarizes local spend across logs, model mix, provider mix,
-  trend, anomalies, newest logs, and trace-backed tool waste across sessions.
+  trend, anomalies, review priorities, expensive logs, and trace-backed tool
+  waste across sessions.
+- **Daily summary**: attributes spend to recorded local days, with active logs,
+  projects, runtime mix, highest-cost logs, and tool-result quality.
+- **Learn view**: provides a practical Token Meter review workflow with direct
+  links to each view and a searchable glossary of dashboard terms.
 - **Global tool-waste evidence**: ranks tools and MCP namespaces by returned
   tokens, flags oversized results, exact immediate repeats, and structured
   errors, and shows a 14-day result-token trend.
 - **Tools & Skills view**: inventories trace-observed tools, discovered MCP
   servers, and installed Codex/Claude skills with runtime, source, state, use,
   returned tokens, and last-use evidence.
-- **Utilization and definition tax**: charts the share of runtime-reported tools,
-  enabled MCPs, and enabled skills actually used, plus eager tool-definition
-  tokens loaded in sessions that never called the corresponding tool.
+- **Actionable capability optimization**: measures only removable MCP servers
+  and configured skill packs, groups child functions/skills under their real
+  disable control, and excludes default or read-only tools from utilization and
+  removal recommendations.
 - **Capability controls**: when Ghost CLI is available, MCP servers can be
   enabled or disabled for Codex and Claude. Plugin-managed skill rows can enable
   or disable their containing skill pack; runtime-owned tools remain read-only.
-  Changes apply to future sessions after the IDE or agent restarts.
+  A confirmed bulk action can disable the exact current unused review candidates
+  while rejecting built-in, runtime, used, or stale controls. Changes apply to
+  future sessions after the IDE or agent restarts.
 - **Alerts and notifications**: can notify on budget crossings, execution cost
   spikes, and notable log insights.
 - **macOS menu bar companion**: shows a compact live status item backed by the
@@ -259,7 +267,8 @@ tab or `Back to live` always removes the session path and returns to the active
 newest log.
 
 Dashboard tabs are addressable routes. The menu bar opens `#summary` for Open
-Dashboard, `#activity` for Open Trace, and `#capabilities` for Tools & Skills.
+Dashboard, `#daily` for Open Daily Brief, `#activity` for Open Trace, and
+`#capabilities` for Tools & Skills.
 Current-session panels keep their panel name in the hash, while Global subtabs
 use `#global-logs`, `#global-insights`, and `#global-evidence`.
 
@@ -268,13 +277,12 @@ use `#global-logs`, `#global-insights`, and `#global-evidence`.
 The Current tab includes:
 
 - Summary: live cost, tokens, active execution duration, burn rate per active
-  minute, cache behavior, context pressure, and per-execution input/output
-  trajectory. Idle gaps are excluded from duration and burn rate.
+  minute, cache behavior, context pressure, per-execution input/output
+  trajectory, session tool activity, optional capability use, and measured
+  avoidable eager context. Idle gaps are excluded from duration and burn rate.
 - Activity: normalized event trace for messages, reasoning, tool calls, tool
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.
-- Efficiency: reasoning share, model mix, tool/retrieval bloat, coordination
-  tax, cost per task, and spend anomaly signals.
 - Insights: plain-language log signals.
 - Alerts: a per-session budget that starts at $10 for every new session, plus
   execution-spike events.
@@ -284,8 +292,8 @@ The Global tab includes:
 - Total spend across supported local Claude and Codex logs.
 - Provider and model mix.
 - 14-day spend trend with anomaly markers.
-- A Logs-first subtab with the newest-first log list, provider, project, models,
-  tokens, and cost.
+- An Overview-first subtab with today, runtime/model mix, review priorities, and
+  the highest-cost logs, followed by a searchable Logs subtab.
 - A Global insights subtab with trace-observed tool-result totals and tokens
   flagged by oversized, exact-repeat, or structured-error rules, ranked
   payloads, and a 14-day result-token trend.
@@ -295,29 +303,37 @@ The Global tab includes:
 
 The Tools & Skills tab includes:
 
-- Prominent use percentages and in-card progress bars for runtime-reported
-  tools, enabled MCP servers, enabled installed skills, and unused eager schema
-  share.
+- Prominent counts for enabled removable groups, groups used across scanned
+  logs, review candidates, and measured avoidable eager context. Default tools,
+  standalone skills, and built-in/runtime skill packs are excluded.
+- An optimization insight that explains the removable MCP servers and skill
+  packs needing review and can filter the inventory to those candidates.
 - A tool-definition chart separating useful eager, unused eager, and deferred
   schema tokens across session catalogs.
 - Searchable Tools, MCPs, and Skills inventory with sortable runtime, source,
   state, observed calls/activations, returned tokens, last use, and control
-  columns.
+  columns. Skill identifiers include runtime and origin or plugin pack so
+  same-named built-in and user-installed skills remain distinct.
 - MCP enable/disable actions through fixed `ghost mcp all add/remove` argument
   vectors and skill-pack enable/disable actions for configured Codex and Claude
-  plugins. Individual runtime-owned tools and standalone skills are read-only.
+  plugins. **Disable all unused** confirms and submits only the exact current
+  review-candidate IDs. Individual runtime-owned tools and standalone skills are
+  read-only.
 
 To use it, open **Tools & Skills** in the dashboard or choose **Open Tools &
-Skills** from the macOS menu bar companion. Start with the utilization cards to
-spot enabled capabilities that are rarely used and eager tool definitions that
-consume context. Then search or filter the inventory by Tools, MCPs, Skills,
-Enabled, or Unused. The `Use`, `Returned`, and `Last used` columns provide the
-trace evidence for deciding what to keep, defer, or disable.
+Skills** from the macOS menu bar companion. Start with the optimization insight
+to review enabled removable groups with no observed use. Then search or filter
+the inventory by Tools, MCPs, Skills, Enabled, Unused, or Review candidates.
+The `Use`, `Returned`, and `Last used` columns provide the trace evidence for
+deciding what to keep or disable. Deferred and default/read-only tools remain
+visible as evidence but are not labeled removable waste.
 
-Rows with an available control can be enabled or disabled directly. MCP
-controls require Ghost CLI on `PATH`; restart Codex, Claude, or the relevant
-IDE after a change so it applies to new sessions. A `read-only` row is observed
-by Token Meter but cannot be changed from the dashboard.
+Rows with an available control can be enabled or disabled after confirmation.
+Pack changes name the exact runtime control and affected skills, then read the
+persisted Codex or Claude enabled value back before reporting success. MCP
+controls require Ghost CLI on `PATH`; restart Codex, Claude, or the relevant IDE
+after a change so it applies to new sessions. A `read-only` row is observed by
+Token Meter but cannot be changed from the dashboard.
 
 Token Meter does not claim that every flagged token was billed waste. Returned
 tokens are estimated from trace-visible text, embedded image/base64 bytes are
@@ -348,9 +364,10 @@ that information.
 The Tools & Skills table can invoke `ghost mcp all add/remove <server>` after an
 in-dashboard action. The server name is validated and passed as a fixed
 subprocess argument; Token Meter does not run arbitrary dashboard-provided shell
-text. Plugin-pack actions update only the relevant enabled state in the local
-Codex or Claude configuration. Restart Codex, Claude, or the IDE after a
-successful capability change.
+text. Plugin-pack actions validate the exact discovered runtime control, update
+only its enabled state in the local Codex or Claude configuration, and verify
+the persisted value before refreshing the table. Restart Codex, Claude, or the
+IDE after a successful capability change.
 
 ## Troubleshooting
 

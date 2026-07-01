@@ -435,6 +435,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         addAction("Open Dashboard", #selector(openDashboard))
+        addAction("Open Daily Brief", #selector(openDailyBrief))
         addAction("Open Trace", #selector(openTrace), enabled: snapshot.connected)
         addAction("Open Tools & Skills", #selector(openToolsAndSkills))
         menu.addItem(.separator())
@@ -663,6 +664,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openDashboard() {
         openDashboardPanel("summary")
+    }
+
+    @objc private func openDailyBrief() {
+        openDashboardPanel("daily", includePinnedSession: false)
     }
 
     @objc private func openTrace() {

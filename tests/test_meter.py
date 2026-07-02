@@ -62,6 +62,47 @@ class PricingTests(unittest.TestCase):
         self.assertFalse(approximate)
 
 
+class SessionSummaryStatsTests(unittest.TestCase):
+    def source(self, provider, model=None):
+        return {
+            "id": "session", "path": "/tmp/session.jsonl", "provider": provider,
+            "client": provider, "label": provider.title(), "project": "/repo",
+            "mtime": 1, "title": "Summary stats", "model": model,
+        }
+
+    def test_claude_summary_exposes_input_output_and_model_stats(self):
+        objs = [{
+            "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+            "message": {
+                "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
+                "usage": {"input_tokens": 100, "cache_creation_input_tokens": 20,
+                          "cache_read_input_tokens": 30, "output_tokens": 10},
+            },
+        }]
+        row = meter.claude_summary(self.source("claude"), objs)
+        self.assertEqual(row["input_tokens"], 150)
+        self.assertEqual(row["output_tokens"], 10)
+        self.assertEqual(row["model_stats"][0]["model"], "claude-sonnet-4-6")
+        self.assertEqual(row["model_stats"][0]["executions"], 1)
+
+    def test_codex_summary_exposes_input_output_and_model_stats(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-02T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-02T00:00:01.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "cached_input_tokens": 40,
+                    "output_tokens": 20, "total_tokens": 120,
+                }},
+            }},
+        ]
+        row = meter.codex_summary(self.source("codex", "gpt-5.6"), objs)
+        self.assertEqual(row["input_tokens"], 100)
+        self.assertEqual(row["output_tokens"], 20)
+        self.assertEqual(row["model_stats"][0]["model"], "gpt-5.6")
+        self.assertEqual(row["model_stats"][0]["tokens"], 120)
+
+
 class SessionRouteTests(unittest.TestCase):
     def test_dashboard_accepts_root_and_unique_session_paths(self):
         self.assertTrue(meter.is_dashboard_page_path("/"))
@@ -72,6 +113,47 @@ class SessionRouteTests(unittest.TestCase):
         self.assertFalse(meter.is_dashboard_page_path("/session"))
         self.assertFalse(meter.is_dashboard_page_path("/sessions/"))
         self.assertFalse(meter.is_dashboard_page_path("/sessions/one/two"))
+
+
+class SessionDeleteTests(unittest.TestCase):
+    def test_moves_only_exact_discovered_jsonl_to_trash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "logs"
+            trash_dir = Path(tmp) / "Trash"
+            source_dir.mkdir()
+            path = source_dir / "session-one.jsonl"
+            path.write_text('{"type":"test"}\n')
+            source = {
+                "id": "session-one", "session": path.name, "path": str(path),
+                "provider": "codex", "project": "/repo", "title": "One", "mtime": 1,
+            }
+            result = meter.trash_session_log("session-one", sources=[source], trash_dir=str(trash_dir))
+            trashed = trash_dir / result["trash_name"]
+            self.assertTrue(result["ok"])
+            self.assertFalse(path.exists())
+            self.assertTrue(trashed.exists())
+            self.assertEqual(trashed.read_text(), '{"type":"test"}\n')
+            self.assertNotIn(str(path), json.dumps(result))
+
+    def test_rejects_alias_and_unknown_session_ids(self):
+        source = {
+            "id": "canonical", "session": "alias.jsonl", "path": "/tmp/alias.jsonl",
+            "provider": "codex", "project": "/repo", "mtime": 1,
+        }
+        self.assertEqual(meter.trash_session_log("alias.jsonl", sources=[source])["error_code"], "not_found")
+        self.assertEqual(meter.trash_session_log("missing", sources=[source])["error_code"], "not_found")
+
+    def test_publish_after_delete_selects_newest_remaining_session(self):
+        sources = [{"id": "older", "path": "/tmp/older.jsonl", "mtime": 1},
+                   {"id": "newer", "path": "/tmp/newer.jsonl", "mtime": 2}]
+        published = []
+        with mock.patch.object(meter, "all_session_sources", return_value=sources), \
+                mock.patch.object(meter, "cross_session", return_value={"sessions": []}), \
+                mock.patch.object(meter, "recompute", return_value={"source": {"id": "newer"}}), \
+                mock.patch.object(meter, "publish", side_effect=published.append):
+            selected = meter.publish_after_session_delete()
+        self.assertEqual(selected, "newer")
+        self.assertEqual(published[0]["source"]["id"], "newer")
 
 
 class LiveCrossSessionRefreshTests(unittest.TestCase):
@@ -121,6 +203,12 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=panel-efficiency", self.page)
         self.assertIn("const PANEL_KEYS=['summary','activity','tools','insights','alerts'];", self.page)
         self.assertIn("efficiency:'summary'", self.page)
+
+    def test_dashboard_uses_inline_token_meter_favicon(self):
+        self.assertIn('rel=icon type="image/svg+xml"', self.page)
+        self.assertIn("data:image/svg+xml", self.page)
+        self.assertIn("stop-color='%2300bceb'", self.page)
+        self.assertIn('name=theme-color content="#07090c"', self.page)
 
     def test_current_header_keeps_session_start_message_visible(self):
         self.assertIn("id=session-start", self.page)
@@ -174,6 +262,30 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("if(h==='learn')", self.page)
         self.assertIn("if(h==='settings')", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
+
+    def test_logs_support_project_and_time_range_filters(self):
+        for marker in ("id=g-project", "id=g-time", "Projects filter", "Time range filter",
+                       "id=g-clear", "id=lf-cost", "id=lf-input", "id=lf-output", "id=lf-models"):
+            self.assertIn(marker, self.page)
+        for value in ("value=24h", "value=7d", "value=30d", "value=90d"):
+            self.assertIn(value, self.page)
+        self.assertIn("globalProject&&(s.project||'No project')!==globalProject", self.page)
+        self.assertIn("Date.now()/1000-rangeSeconds", self.page)
+        self.assertIn("tm_global_project", self.page)
+        self.assertIn("tm_global_time", self.page)
+        self.assertIn("renderLogStats(sessions)", self.page)
+        self.assertIn("session.model_stats", self.page)
+        self.assertIn("globalSearch='';globalProject='';globalTime='all'", self.page)
+        self.assertIn("['tm_global_search','tm_global_project','tm_global_time']", self.page)
+
+    def test_session_delete_actions_require_confirmation_and_use_trash_endpoint(self):
+        for marker in ("id=session-delete", "data-delete-session", "id=session-delete-dialog",
+                       "id=session-delete-confirm", "Move to Trash", "/session/delete"):
+            self.assertIn(marker, self.page)
+        self.assertIn("openSessionDeleteDialog", self.page)
+        self.assertIn("event.stopPropagation()", self.page)
+        self.assertIn("X-Token-Meter-Action", self.page)
+        self.assertIn("Provider metadata and configuration are not changed", self.page)
 
     def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
         self.assertIn("id=c-disable-unused", self.page)

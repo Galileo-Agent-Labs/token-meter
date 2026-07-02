@@ -44,7 +44,10 @@ machine.
   trend, anomalies, review priorities, expensive logs, and trace-backed tool
   waste across sessions.
 - **Logs view**: provides a dedicated searchable and sortable list of every
-  discovered Claude and Codex log, with durable links to frozen run views.
+  discovered Claude and Codex log, with Projects folder and time-range filters
+  plus filter-responsive cost, input/output, execution, and model statistics
+  and durable links to frozen run views. Confirmed session deletion moves only
+  the underlying JSONL log to macOS Trash.
 - **Daily summary**: attributes spend to recorded local days, with active logs,
   projects, runtime mix, highest-cost logs, and tool-result quality.
 - **Learn view**: provides a practical Token Meter review workflow with direct
@@ -342,6 +345,9 @@ The Current tab includes:
 - Alerts: a per-session budget that starts at $10 for every new session, plus
   execution-spike events.
 
+The Current header also offers Delete session. It uses the same confirmation
+as Logs and warns when the selected session appears to still be live.
+
 The Global tab includes:
 
 - Total spend across supported local Claude and Codex logs.
@@ -356,12 +362,21 @@ The Global tab includes:
   recommendations, and server-level MCP evidence.
 - MCP state changes live in the Tools & Skills tab.
 
-The Logs tab includes the searchable log inventory with Recent, Cost, Tokens,
-and Executions sorting. Its live snapshot watches every discovered log, so a
-background Claude update appears without waiting for a newer Codex session (or
-vice versa). If a browser tab falls behind during a burst, Token Meter drops
-queued stale snapshots and keeps the newest one instead of silently detaching
-the live stream.
+The Logs tab includes the searchable log inventory with an exact Projects
+folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
+Recent, Cost, Tokens, and Executions sorting. Filters persist in the browser.
+Clear filters resets search, Projects, and time range without changing the
+selected sort order.
+The summary above the matching logs recalculates filtered cost, total input
+(fresh plus cached), output tokens, executions, and per-model cost and token
+mix whenever any filter changes.
+Each row has a Delete action. Deletion requires an explicit confirmation and
+moves the exact discovered JSONL file to macOS Trash so it remains recoverable.
+Provider metadata, project files, and configuration are not changed.
+Its live snapshot watches every discovered log, so a background Claude update
+appears without waiting for a newer Codex session (or vice versa). If a browser
+tab falls behind during a burst, Token Meter drops queued stale snapshots and
+keeps the newest one instead of silently detaching the live stream.
 
 The Tools & Skills tab includes:
 

@@ -644,6 +644,51 @@ def find_session(sid, sources=None):
     return None
 
 
+def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
+    """Move one exact, currently discovered session log to Trash."""
+    session_id = str(session_id or "").strip()
+    if not session_id or len(session_id) > 240:
+        return {"ok": False, "error": "A valid session ID is required.", "error_code": "invalid_id"}
+    source_pool = list(sources) if sources is not None else all_session_sources()
+    source = find_session(session_id, sources=source_pool)
+    if not source or str(source.get("id") or "") != session_id:
+        return {"ok": False, "error": "Session is not in the discovered log inventory.",
+                "error_code": "not_found"}
+    path = str(source.get("path") or "")
+    if not path.endswith(".jsonl") or not os.path.isfile(path):
+        return {"ok": False, "error": "The discovered session log is not available.",
+                "error_code": "not_found"}
+
+    trash_dir = os.path.expanduser(trash_dir or "~/.Trash")
+    mover = mover or shutil.move
+    try:
+        os.makedirs(trash_dir, exist_ok=True)
+        base = f"Token Meter - {os.path.basename(path)}"
+        stem, ext = os.path.splitext(base)
+        destination = os.path.join(trash_dir, base)
+        suffix = 2
+        while os.path.exists(destination):
+            destination = os.path.join(trash_dir, f"{stem} {suffix}{ext}")
+            suffix += 1
+        mover(path, destination)
+    except OSError:
+        return {"ok": False, "error": "Token Meter could not move the session log to Trash.",
+                "error_code": "trash_failed"}
+
+    _summary_cache.pop(path, None)
+    _xsess["data"], _xsess["at"] = None, 0.0
+    return {
+        "ok": True,
+        "changed": True,
+        "session_id": session_id,
+        "title": source.get("title") or "(untitled log)",
+        "project": source.get("project") or "",
+        "provider": source.get("provider") or "",
+        "trash_name": os.path.basename(destination),
+        "message": "Session log moved to Trash.",
+    }
+
+
 def price_for(model, provider="claude"):
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
     table = OPENAI_PRICE if provider == "codex" else CLAUDE_PRICE
@@ -670,6 +715,30 @@ def cost_of(u, model, provider="claude"):
 def usage_tokens(u):
     return (u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
             + u.get("cache_read_input_tokens", 0) + u.get("output_tokens", 0))
+
+
+def usage_io_tokens(u):
+    """Return total trace-reported input, including cache, and output."""
+    return (
+        int(u.get("input_tokens", 0) or 0)
+        + int(u.get("cache_creation_input_tokens", 0) or 0)
+        + int(u.get("cache_read_input_tokens", 0) or 0),
+        int(u.get("output_tokens", 0) or 0),
+    )
+
+
+def add_model_summary(stats, model, usage, cost):
+    input_tokens, output_tokens = usage_io_tokens(usage)
+    row = stats.setdefault(model or "unknown", {
+        "cost": 0.0, "tokens": 0, "input_tokens": 0,
+        "output_tokens": 0, "executions": 0,
+    })
+    row["cost"] += float(cost or 0)
+    row["tokens"] += input_tokens + output_tokens
+    row["input_tokens"] += input_tokens
+    row["output_tokens"] += output_tokens
+    row["executions"] += 1
+    return input_tokens, output_tokens
 
 
 def codex_usage(raw):
@@ -2178,6 +2247,8 @@ def claude_summary(source, objs):
     first_ts = last_ts = None
     models = set()
     model_cost, model_tok = defaultdict(float), defaultdict(int)
+    model_stats = {}
+    input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = False
     for rec in msgs:
@@ -2193,6 +2264,9 @@ def claude_summary(source, objs):
         models.add(rec["model"].replace("claude-", ""))
         model_cost[rec["model"]] += c
         model_tok[rec["model"]] += toks
+        input_count, output_count = add_model_summary(model_stats, rec["model"], usage, c)
+        input_tokens += input_count
+        output_tokens += output_count
         if rec["ts"]:
             first_ts = rec["ts"] if first_ts is None else min(first_ts, rec["ts"])
             last_ts = rec["ts"] if last_ts is None else max(last_ts, rec["ts"])
@@ -2210,7 +2284,7 @@ def claude_summary(source, objs):
                     break
 
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                      execution_timing("claude", objs))
+                      execution_timing("claude", objs), input_tokens, output_tokens, model_stats)
     row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
     return row
 
@@ -2223,6 +2297,8 @@ def codex_summary(source, objs):
     first_ts = last_ts = None
     models = set()
     model_cost, model_tok = defaultdict(float), defaultdict(int)
+    model_stats = {}
+    input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = True
 
@@ -2244,6 +2320,9 @@ def codex_summary(source, objs):
         models.add(model)
         model_cost[model] += c
         model_tok[model] += toks
+        input_count, output_count = add_model_summary(model_stats, model, usage, c)
+        input_tokens += input_count
+        output_tokens += output_count
         ts = parse_iso(obj.get("timestamp", ""))
         if ts:
             first_ts = ts if first_ts is None else min(first_ts, ts)
@@ -2259,14 +2338,15 @@ def codex_summary(source, objs):
                 title = compact_text(payload.get("message") or "", 60)
                 break
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                      execution_timing("codex", objs))
+                      execution_timing("codex", objs), input_tokens, output_tokens, model_stats)
     row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
     return row
 
 
 def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                active_timing=None):
+                active_timing=None, input_tokens=0, output_tokens=0, model_stats=None):
     active_timing = active_timing or {}
+    model_stats = model_stats or {}
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     return {
         "id": source["id"],
@@ -2280,8 +2360,21 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "cost": cost,
         "cost_approx": bool(approx),
         "tokens": tokens,
+        "input_tokens": int(input_tokens or 0),
+        "output_tokens": int(output_tokens or 0),
         "turns": turns,
         "models": sorted(models),
+        "model_stats": sorted([
+            {
+                "model": model,
+                "cost": float(values.get("cost") or 0),
+                "tokens": int(values.get("tokens") or 0),
+                "input_tokens": int(values.get("input_tokens") or 0),
+                "output_tokens": int(values.get("output_tokens") or 0),
+                "executions": int(values.get("executions") or 0),
+            }
+            for model, values in model_stats.items()
+        ], key=lambda row: (-row["cost"], -row["tokens"], row["model"])),
         "mtime": source["mtime"],
         "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(first_ts)) if first_ts else "",
         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(last_ts)) if last_ts else "",
@@ -3041,6 +3134,15 @@ def mcp_action_capability():
     }
 
 
+def session_action_capability():
+    return {
+        "available": True,
+        "token": _ACTION_TOKEN,
+        "recoverable": True,
+        "destination": "macOS Trash",
+    }
+
+
 def agent_access_launcher():
     root = os.path.dirname(os.path.realpath(__file__))
     candidates = [
@@ -3547,6 +3649,7 @@ def cross_session():
         "daily": daily,
         "capabilities": capability_inventory(tool_waste),
         "mcp_actions": mcp_action_capability(),
+        "session_actions": session_action_capability(),
     }
     _xsess["data"], _xsess["at"] = data, now
     return data
@@ -3604,6 +3707,28 @@ def refresh_cross_session_state(state=None, builder=None, publisher=None):
     if base:
         publisher(attach_cross_session(base, cross))
     return cross
+
+
+def publish_after_session_delete():
+    """Publish a fresh remaining-session state immediately after deletion."""
+    sources = all_session_sources()
+    next_source = max(sources, key=lambda row: row.get("mtime") or 0) if sources else None
+    cross = cross_session()
+    if next_source:
+        state = recompute(next_source)
+        if state:
+            publish(attach_cross_session(state, cross))
+            return next_source.get("id")
+    publish({
+        "ok": False,
+        "message": "No Claude Code or Codex logs found yet.",
+        "source": {},
+        "total_cost": 0,
+        "total_tokens": 0,
+        "turns": 0,
+        "xsession": cross,
+    })
+    return None
 
 
 def current_state():
@@ -4500,7 +4625,7 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         req_path = urlparse(self.path).path
         if req_path not in ("/mcp/disable", "/capability/toggle", "/capability/disable-unused",
-                            "/agent-access/toggle"):
+                            "/agent-access/toggle", "/session/delete"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -4535,6 +4660,14 @@ class H(BaseHTTPRequestHandler):
         if req_path == "/agent-access/toggle":
             result = set_agent_access(payload.get("client"), payload.get("enabled"))
             status = 200 if result.get("ok") else (409 if result.get("conflict") else 400)
+            self._send(json.dumps(result), "application/json", status=status)
+            return
+        if req_path == "/session/delete":
+            result = trash_session_log(payload.get("session_id"))
+            if result.get("ok"):
+                result["next_session_id"] = publish_after_session_delete()
+            status = 200 if result.get("ok") else (404 if result.get("error_code") == "not_found" else
+                     (500 if result.get("error_code") == "trash_failed" else 400))
             self._send(json.dumps(result), "application/json", status=status)
             return
         if req_path == "/mcp/disable":

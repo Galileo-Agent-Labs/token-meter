@@ -1,6 +1,8 @@
 <!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Token Meter</title>
+<link rel=icon type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%2300bceb'/%3E%3Cstop offset='.55' stop-color='%231ba0e1'/%3E%3Cstop offset='1' stop-color='%237fdbf2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23062430' stroke-width='4.2' stroke-linecap='round'%3E%3Cpath d='M14 36v-6M20 36V22M26 36v-8M32 36V16M38 36v-8M44 36V22M50 36v-6M13 45h38'/%3E%3C/g%3E%3C/svg%3E">
+<meta name=theme-color content="#07090c">
 <style>
 :root{
  color-scheme:dark;
@@ -69,6 +71,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .sessid{color:var(--dim);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .unpin{display:none;border:1px solid var(--line2);background:rgba(17,24,32,.9);border-radius:8px;color:var(--dim);font:inherit;font-size:12px;padding:6px 11px;cursor:pointer;box-shadow:var(--inset)}
 .unpin.on{display:inline-block}.unpin:hover{color:var(--fg);border-color:var(--accent)}
+.sessionDelete{border:1px solid rgba(255,111,111,.36);background:rgba(255,111,111,.07);border-radius:8px;color:#ffaaaa;font:inherit;font-size:12px;font-weight:720;padding:6px 10px;cursor:pointer;box-shadow:var(--inset);white-space:nowrap}.sessionDelete:hover:not(:disabled){border-color:rgba(255,111,111,.68);background:rgba(255,111,111,.13);color:#ffd0d0}.sessionDelete:disabled{opacity:.42;cursor:not-allowed}.sessionDelete[hidden]{display:none}.smetrics .sessionDelete{font-size:10.5px;padding:4px 7px;margin-top:5px}
 .hero{display:grid;grid-template-columns:minmax(410px,.86fr) minmax(620px,1.14fr);gap:12px;align-items:start}
 .costcard{overflow:hidden;align-self:start;min-height:238px;padding:16px;display:flex;flex-direction:column;justify-content:flex-start;background:
  linear-gradient(180deg,rgba(27,38,48,.98),rgba(13,18,24,.98)),
@@ -133,7 +136,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
 .glob-hero{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.spark{display:flex;align-items:flex-end;gap:5px;height:84px;margin-top:8px;padding:0 2px}.spark .b{flex:1;background:linear-gradient(180deg,var(--orange),rgba(0,188,235,.55));border-radius:3px 3px 0 0;min-height:3px;position:relative;box-shadow:0 -8px 18px rgba(0,188,235,.08)}.spark .b.anom{background:linear-gradient(180deg,var(--bad),rgba(255,111,111,.58))}.spark .b:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5;box-shadow:var(--shadow-soft)}
 .wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDisable{border:1px solid rgba(255,180,87,.4);background:rgba(255,180,87,.08);color:var(--warn);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.mcpDisable:hover{background:rgba(255,180,87,.15)}.mcpDisable:disabled{opacity:.45;cursor:not-allowed}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
-.globalControls{display:grid;grid-template-columns:minmax(240px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}.searchbox{width:100%;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.searchbox:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
+.globalControls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(190px,.78fr) minmax(150px,.52fr) auto auto;gap:10px;align-items:end;margin:12px 0}.filterControl{display:grid;gap:5px;min-width:0}.filterControl>span{font-size:10px;line-height:1;text-transform:uppercase;color:var(--faint);font-weight:780}.searchbox,.filterSelect{width:100%;min-width:0;height:38px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.filterSelect{appearance:auto;padding-right:28px}.searchbox:focus,.filterSelect:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.filterSort .seg{min-height:38px;align-items:center}.filterClear{display:grid;gap:5px;justify-items:stretch;min-width:148px}.clearFilters{height:38px;background:rgba(255,255,255,.045);color:var(--dim)}.clearFilters:hover:not(:disabled){color:var(--fg)}.clearFilters:disabled{opacity:.42;cursor:not-allowed}.filterCount{text-align:right}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
+.logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
 .capHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.currentCapHero{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}.capHero .pad{padding:13px 15px;overflow:visible}.capHero .card:hover,.capHero .card:focus-within{z-index:50}.capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}.capHero .card:last-child .fieldtip:after{left:auto;right:0}.capHero .meter{font-size:28px;margin-top:4px}.capHero .subline{font-size:12px;margin-top:5px}.capStatBar{height:8px;margin-top:9px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.42)}.capStatBar i{display:block;width:0;height:100%;border-radius:999px;transition:width .35s ease;background:linear-gradient(90deg,var(--good),var(--accent));box-shadow:0 0 14px rgba(102,217,144,.3)}.capStatBar.mcp i{background:linear-gradient(90deg,#9d72f1,#c2a5ff);box-shadow:0 0 14px rgba(183,140,255,.3)}.capStatBar.skill i{background:linear-gradient(90deg,var(--accent),var(--orange3));box-shadow:0 0 14px rgba(0,188,235,.3)}.capStatBar.warn i{background:linear-gradient(90deg,var(--warn),var(--orange));box-shadow:0 0 14px rgba(255,180,87,.3)}.capReview{margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border-left:3px solid var(--warn)}.capReview.good{border-left-color:var(--good)}.capReviewTitle{font-size:15px;font-weight:800;margin-top:4px}.capReviewDetail{font-size:12px;color:var(--dim);margin-top:3px;max-width:880px}.capCharts{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}.capCharts .pad{padding:13px 17px}.defBar{height:12px;margin-top:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:flex}.defBar i{display:block;height:100%}.defBar .used{background:var(--good)}.defBar .unused{background:var(--warn)}.defBar .deferred{background:rgba(127,219,242,.42)}.capSource{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:rgba(255,255,255,.03);white-space:nowrap}.capFilters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:10px 0}.capTableWrap{overflow:auto;max-height:620px}.capTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.capTableWrap .tbl th.sortable{cursor:pointer;user-select:none;white-space:nowrap}.capTableWrap .tbl th.sortable:after{content:"\2195";display:inline-block;margin-left:6px;color:var(--faint);font-size:10px}.capTableWrap .tbl th.sortable.sort-asc:after{content:"\2191";color:var(--accent)}.capTableWrap .tbl th.sortable.sort-desc:after{content:"\2193";color:var(--accent)}.capTableWrap .tbl th.sortable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}.stateDot{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.stateDot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}.stateDot.on:before{background:var(--good)}.stateDot.off:before{background:var(--bad)}.stateDot.lazy:before{background:var(--orange3)}.capAction{border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.capAction:hover{border-color:var(--accent)}.capAction.disable{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}.capAction:disabled{opacity:.45;cursor:not-allowed}.capPath{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
 .capReviewActions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.tbtn.danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}.tbtn.danger:hover{background:rgba(255,180,87,.19)}
 .globalOverviewGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.overviewKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.overviewKpis .pad{padding:14px}.overviewKpis .v{font-size:24px;font-weight:820;margin-top:4px}.overviewKpis .subline{font-size:11.5px;margin-top:3px}.overviewRows{display:grid;gap:7px;margin-top:12px}.overviewRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.overviewRow:first-child{border-top:0;padding-top:0}.overviewRow .name{font-weight:740;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overviewRow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.overviewRow .value{text-align:right;font-weight:800}.priorityRows{display:grid;gap:8px;margin-top:12px}.priorityRow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line)}.priorityRow:first-child{border-top:0;padding-top:0}.priorityRow i{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--accent)}.priorityRow.warn i{background:var(--warn)}.priorityRow.good i{background:var(--good)}.priorityRow b{display:block}.priorityRow span{display:block;color:var(--dim);font-size:12px;margin-top:2px}
@@ -145,6 +149,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .dailyGrid{align-items:start}
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
+@media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.agentClients,.agentDisclosure,.promptCards{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}}
 @media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}}
 </style></head><body>
@@ -180,6 +186,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <span class=pill id=s-pricing></span>
    <span class=spacer></span>
    <button class=unpin id=unpin>Back to live</button>
+   <button class=sessionDelete id=session-delete type=button hidden>Delete session</button>
   </div>
   <div class=sessionStart id=session-start hidden><span>Session started with</span><strong id=session-start-text></strong></div>
 
@@ -388,14 +395,28 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 <div class=view id=view-logs>
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
   <div class=globalControls>
-   <input class=searchbox id=g-search type=search placeholder="Search title, project, model, provider">
-   <div class="seg sortseg" id=g-sort>
-    <button data-gsort=recent title="Newest activity first.">Recent</button>
-    <button data-gsort=cost title="Highest cost first.">Cost</button>
-    <button data-gsort=tokens title="Most tokens first.">Tokens</button>
-    <button data-gsort=executions title="Most executions first.">Execs</button>
+   <label class=filterControl><span>Search</span><input class=searchbox id=g-search type=search placeholder="Title, project, model, provider"></label>
+   <label class=filterControl><span>Projects</span><select class=filterSelect id=g-project aria-label="Projects filter"><option value="">All projects</option></select></label>
+   <label class=filterControl><span>Time range</span><select class=filterSelect id=g-time aria-label="Time range filter"><option value=all>Any time</option><option value=24h>Last 24 hours</option><option value=7d>Last 7 days</option><option value=30d>Last 30 days</option><option value=90d>Last 90 days</option></select></label>
+   <div class="filterControl filterSort"><span>Sort</span><div class="seg sortseg" id=g-sort>
+     <button data-gsort=recent title="Newest activity first.">Recent</button>
+     <button data-gsort=cost title="Highest cost first.">Cost</button>
+     <button data-gsort=tokens title="Most tokens first.">Tokens</button>
+     <button data-gsort=executions title="Most executions first.">Execs</button>
+    </div></div>
+   <div class=filterClear><button class="tbtn clearFilters" id=g-clear type=button title="Clear search, project, and time filters.">Clear filters</button><div class="globalMeta filterCount" id=g-count></div></div>
+  </div>
+  <div class=logsSummary id=logs-summary>
+   <div class=logKpis>
+    <div class="card logStat"><div class=label>Filtered cost</div><div class="v mono" id=lf-cost>$0</div><div class=subline id=lf-cost-note></div></div>
+    <div class="card logStat"><div class=label>Input tokens</div><div class="v mono" id=lf-input>0</div><div class=subline>fresh + cached input</div></div>
+    <div class="card logStat"><div class=label>Output tokens</div><div class="v mono" id=lf-output>0</div><div class=subline>trace-reported output</div></div>
+    <div class="card logStat"><div class=label>Executions</div><div class="v mono" id=lf-executions>0</div><div class=subline id=lf-executions-note></div></div>
    </div>
-   <div class=globalMeta id=g-count></div>
+   <div class="card logModels">
+    <div class=logModelsHead><div><div class=label>Model stats</div><div class=subline>filtered logs · ranked by cost</div></div><span class=logModelCount id=lf-model-count></span></div>
+    <div class=logModelList id=lf-models></div>
+   </div>
   </div>
   <div class=slist id=slist></div>
 	 </div>
@@ -534,11 +555,23 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=actions><button class=tbtn id=agent-cancel>Cancel</button><button class=tbtn id=agent-confirm>Confirm</button></div>
  </div>
 </dialog>
+<dialog class=mcpDialog id=session-delete-dialog>
+ <div class=inner>
+  <h3>Delete session?</h3>
+  <div class=subline id=session-delete-sub></div>
+  <div class=evidence id=session-delete-evidence></div>
+  <div class=label>Session</div>
+  <code id=session-delete-id></code>
+  <div class=subline id=session-delete-note></div>
+  <div class=actions><button class=tbtn id=session-delete-cancel>Cancel</button><button class="tbtn danger" id=session-delete-confirm>Move to Trash</button></div>
+ </div>
+</dialog>
 <div class=toastbox id=toastbox></div>
 
 <script>
 const $=id=>document.getElementById(id);
 const f=n=>Math.round(n||0).toLocaleString();
+const compactNumber=n=>{n=Number(n)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a>=1e10?0:1).replace(/\.0$/,'')+'B';if(a>=1e6)return (n/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'M';if(a>=1e3)return (n/1e3).toFixed(a>=1e4?0:1).replace(/\.0$/,'')+'K';return f(n);};
 const money=n=>'$'+(Math.abs(n||0)>=1?(n||0).toFixed(2):(n||0).toFixed(3));
 const pct=n=>Math.round((n||0)*100)+'%';
 const countWord=(n,one,many=one+'s')=>Number(n)===1?one:many;
@@ -1011,16 +1044,33 @@ paintExecSort();
 
 let globalSearch=localStorage.getItem('tm_global_search')||'';
 let globalSort=localStorage.getItem('tm_global_sort')||'recent';
+let globalProject=localStorage.getItem('tm_global_project')||'';
+let globalTime=localStorage.getItem('tm_global_time')||'all';
 if(!['recent','cost','tokens','executions'].includes(globalSort)) globalSort='recent';
+if(!['all','24h','7d','30d','90d'].includes(globalTime)) globalTime='all';
 function paintGlobalSort(){
  [...$('g-sort').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.gsort===globalSort));
  const label={recent:'recent activity',cost:'highest cost',tokens:'most tokens',executions:'most executions'}[globalSort]||'recent activity';
  $('g-hint').textContent=label;
 }
 $('g-search').value=globalSearch;
-$('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-time').value=globalTime;
+function paintGlobalFilters(){
+ $('g-clear').disabled=!(globalSearch.trim()||globalProject||globalTime!=='all');
+}
+$('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-project').addEventListener('change',e=>{ globalProject=e.target.value; localStorage.setItem('tm_global_project',globalProject); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-time').addEventListener('change',e=>{ globalTime=e.target.value; localStorage.setItem('tm_global_time',globalTime); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-clear').onclick=()=>{
+ globalSearch='';globalProject='';globalTime='all';
+ $('g-search').value='';$('g-project').value='';$('g-time').value='all';
+ ['tm_global_search','tm_global_project','tm_global_time'].forEach(key=>localStorage.removeItem(key));
+ paintGlobalFilters();
+ if(LATEST)renderGlobal(LATEST.xsession);
+};
 $('g-sort').onclick=e=>{ if(e.target.dataset.gsort){ globalSort=e.target.dataset.gsort; localStorage.setItem('tm_global_sort',globalSort); paintGlobalSort(); if(LATEST) renderGlobal(LATEST.xsession); } };
 paintGlobalSort();
+paintGlobalFilters();
 
 const cssVar=name=>getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const CHART={
@@ -1505,6 +1555,10 @@ function renderSession(s){
  $('session-start').hidden=!startMessage;
  $('session-start-text').textContent=startMessage;
  $('unpin').classList.toggle('on',!!pinned);
+ const sessionActions=s.xsession?.session_actions||{}, deleteButton=$('session-delete');
+ deleteButton.hidden=!source.id;
+ deleteButton.disabled=!sessionActions.available;
+ deleteButton.title=sessionActions.available?'Move this session log to macOS Trash.':'Session deletion is unavailable.';
  $('frozen').classList.toggle('on',frozen);
  $('live').classList.toggle('dead',frozen);
  $('livetxt').textContent=frozen?(pinned?'pinned log':'frozen log'):('watching · '+idleLabel(s.idle_s));
@@ -1549,6 +1603,55 @@ function renderSession(s){
  renderAlertBanner(alert);
  if(alert.msg&&liveView) notifyAlertForSession(s);
 }
+
+let pendingSessionDelete=null;
+function sessionDeleteTargetFromState(state){
+ const id=stateSessionId(state),source=state?.source||{};
+ if(!id)return null;
+ const row=(state?.xsession?.sessions||[]).find(item=>String(item.id)===String(id));
+ return row||{id,title:sessionStartMessage(state)||id,project:state?.project||source.project||'',label:source.label||state?.provider||'session'};
+}
+function openSessionDeleteDialog(target,actions,returnToLogs=false,isLive=false){
+ if(!target?.id||!actions?.available)return;
+ pendingSessionDelete={target,actions,returnToLogs,isLive};
+ $('session-delete-sub').textContent=`${target.label||target.provider||'Session'} · ${target.project||'No project'}`;
+ $('session-delete-evidence').innerHTML=`<div><b>${esc(target.title||'(untitled log)')}</b></div><div>This removes the underlying local JSONL log from Token Meter.</div>`;
+ $('session-delete-id').textContent=target.id;
+ $('session-delete-note').textContent=isLive?'This appears to be the live session. Stop its agent first to prevent further writes. The log will be moved to macOS Trash; provider metadata and configuration are not changed.':'The log will be moved to macOS Trash and can be recovered there. Provider metadata and configuration are not changed.';
+ $('session-delete-confirm').disabled=false;
+ $('session-delete-confirm').textContent='Move to Trash';
+ $('session-delete-dialog').showModal();
+}
+$('session-delete').onclick=()=>{
+ const target=sessionDeleteTargetFromState(CURRENT),actions=CURRENT?.xsession?.session_actions||{};
+ if(target)openSessionDeleteDialog(target,actions,false,Boolean(!pinned&&LATEST&&target.id===stateSessionId(LATEST)));
+};
+$('session-delete-cancel').onclick=()=>{$('session-delete-dialog').close();pendingSessionDelete=null;};
+$('session-delete-dialog').addEventListener('cancel',()=>{pendingSessionDelete=null;});
+$('session-delete-confirm').onclick=async()=>{
+ if(!pendingSessionDelete)return;
+ const {target,actions,returnToLogs}=pendingSessionDelete,button=$('session-delete-confirm');
+ button.disabled=true;button.textContent='Moving…';
+ try{
+  const response=await fetch('/session/delete',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':actions.token},body:JSON.stringify({session_id:target.id})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Could not delete session.');
+  $('session-delete-dialog').close();pendingSessionDelete=null;sessionRequest++;pinned=null;
+  const stateResponse=await fetch('/state',{cache:'no-store'}),state=await stateResponse.json();
+  LATEST=state;CURRENT=state;
+  if(returnToLogs||!stateSessionId(state)){
+   setHashRoute('logs',{replace:true,apply:false});showTab('logs');
+   if(state.xsession)renderGlobal(state.xsession);
+  }else{
+   if(history.replaceState)history.replaceState(null,'','/#summary');
+   applyHashRoute();renderSession(state);
+  }
+  showAppToast({title:'Session moved to Trash',body:`${target.title||target.id} was removed from Token Meter.`,kind:'warn',sticky:true});
+ }catch(error){
+  button.disabled=false;button.textContent='Move to Trash';
+  showAppToast({title:'Session deletion failed',body:error.message||String(error),kind:'warn',sticky:true});
+ }
+};
 
 let pendingMcpAction=null;
 function recommendationLabel(value){
@@ -2053,12 +2156,24 @@ function renderGlobal(xs){
  const costly=(xs.sessions||[]).slice().sort((a,b)=>(b.cost||0)-(a.cost||0)).slice(0,5);
  $('g-overview-sessions').innerHTML=costly.length?costly.map(row=>`<div class=overviewRow><div><div class=name>${esc(row.title)}</div><div class=meta>${esc(row.project)} · ${esc(row.label||row.provider)}</div></div><div class=value><div class=mono>${money(row.cost)}</div><button class=tbtn data-global-session="${esc(row.id)}" type=button>Open</button></div></div>`).join(''):'<div class=subline>no logs yet</div>';
  [...$('g-overview-sessions').querySelectorAll('[data-global-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.globalSession));
- const q=globalSearch.trim().toLowerCase();
  const all=xs.sessions||[];
+ const projects=[...new Set(all.map(s=>s.project||'No project'))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+ if(globalProject&&!projects.includes(globalProject)){
+  globalProject='';
+  localStorage.removeItem('tm_global_project');
+ }
+ $('g-project').innerHTML='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
+ $('g-project').value=globalProject;
+ paintGlobalFilters();
+ const q=globalSearch.trim().toLowerCase();
+ const rangeSeconds={all:0,'24h':86400,'7d':604800,'30d':2592000,'90d':7776000}[globalTime]||0;
+ const rangeStart=rangeSeconds?Date.now()/1000-rangeSeconds:0;
  let sessions=all.filter(s=>{
-  if(!q) return true;
-  return [s.title,s.project,s.provider,s.label,(s.models||[]).join(' ')].join(' ').toLowerCase().includes(q);
+  if(globalProject&&(s.project||'No project')!==globalProject)return false;
+  if(rangeStart&&(s.mtime||0)<rangeStart)return false;
+  return !q||[s.title,s.project,s.provider,s.label,(s.models||[]).join(' ')].join(' ').toLowerCase().includes(q);
  });
+ renderLogStats(sessions);
  const sorters={
   recent:(a,b)=>(b.mtime||0)-(a.mtime||0),
   cost:(a,b)=>(b.cost||0)-(a.cost||0)||(b.mtime||0)-(a.mtime||0),
@@ -2067,7 +2182,7 @@ function renderGlobal(xs){
  };
  sessions=sessions.slice().sort(sorters[globalSort]||sorters.recent);
  const shownCost=sessions.reduce((a,b)=>a+(b.cost||0),0);
- $('g-count').textContent=`${f(sessions.length)} shown · ${money(shownCost)}`;
+ $('g-count').textContent=`${f(sessions.length)} of ${f(all.length)} logs · ${money(shownCost)}`;
  const maxCost=Math.max(.001,...sessions.map(s=>s.cost||0));
  $('slist').innerHTML=sessions.length?sessions.map(s=>{
   const active=pinned?s.id===pinned:(LATEST&&s.id===stateSessionId(LATEST));
@@ -2079,9 +2194,38 @@ function renderGlobal(xs){
    <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${dur} · ${f(s.turns)} execs · ${avg}/exec</div><div class=sbar><i style="width:${Math.max(2,100*(s.cost||0)/maxCost)}%"></i></div></div>
    <div class="badge models">${esc(modelText)}</div>
    <div class="badge tok">${f(s.tokens)} tok</div>
-   <div class=smetrics><div class="c mono">${money(s.cost)}${s.cost_approx?' est':''}</div><div class=meta>${f(s.turns)} execs</div></div></div>`;
- }).join(''):'<div class="ins empty">No logs match the current search</div>';
+   <div class=smetrics><div class="c mono">${money(s.cost)}${s.cost_approx?' est':''}</div><div class=meta>${f(s.turns)} execs</div><button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button></div></div>`;
+ }).join(''):'<div class="ins empty">No logs match the selected filters</div>';
  [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onclick=()=>selectSession(el.dataset.id));
+ [...$('slist').querySelectorAll('[data-delete-session]')].forEach(button=>button.onclick=event=>{
+  event.stopPropagation();
+  const row=all.find(item=>String(item.id)===button.dataset.deleteSession);
+  if(row)openSessionDeleteDialog(row,xs.session_actions||{},true,Boolean(LATEST&&row.id===stateSessionId(LATEST)));
+ });
+}
+function renderLogStats(sessions){
+ const totals=sessions.reduce((sum,row)=>{
+  sum.cost+=Number(row.cost||0);sum.input+=Number(row.input_tokens||0);sum.output+=Number(row.output_tokens||0);sum.executions+=Number(row.turns||0);
+  return sum;
+ },{cost:0,input:0,output:0,executions:0});
+ $('lf-cost').textContent=money(totals.cost);
+ $('lf-cost-note').textContent=sessions.length?`${f(sessions.length)} ${countWord(sessions.length,'log')} · ${money(totals.cost/sessions.length)}/log`:'no matching logs';
+ $('lf-input').textContent=compactNumber(totals.input);$('lf-input').title=f(totals.input)+' input tokens';
+ $('lf-output').textContent=compactNumber(totals.output);$('lf-output').title=f(totals.output)+' output tokens';
+ $('lf-executions').textContent=f(totals.executions);
+ $('lf-executions-note').textContent=sessions.length?`${(totals.executions/sessions.length).toFixed(1)} average / log`:'no matching executions';
+ const models=new Map();
+ sessions.forEach(session=>{
+  let rows=session.model_stats||[];
+  if(!rows.length&&(session.models||[]).length===1)rows=[{model:session.models[0],cost:session.cost,tokens:session.tokens,input_tokens:session.input_tokens,output_tokens:session.output_tokens,executions:session.turns}];
+  rows.forEach(item=>{
+   const key=item.model||'unknown',row=models.get(key)||{model:key,cost:0,tokens:0,input:0,output:0,executions:0,logs:0};
+   row.cost+=Number(item.cost||0);row.tokens+=Number(item.tokens||0);row.input+=Number(item.input_tokens||0);row.output+=Number(item.output_tokens||0);row.executions+=Number(item.executions||0);row.logs+=1;models.set(key,row);
+  });
+ });
+ const ranked=[...models.values()].sort((a,b)=>b.cost-a.cost||b.tokens-a.tokens||a.model.localeCompare(b.model));
+ $('lf-model-count').textContent=`${f(ranked.length)} ${countWord(ranked.length,'model')}`;
+ $('lf-models').innerHTML=ranked.length?ranked.slice(0,4).map(row=>`<div class=logModelRow><div><div class=logModelName title="${esc(row.model)}">${esc(row.model)}</div><div class=logModelMeta>${f(row.logs)} ${countWord(row.logs,'log')} · ${f(row.executions)} execs · ${compactNumber(row.input)} in · ${compactNumber(row.output)} out</div></div><div class=logModelValue><b class=mono>${money(row.cost)}</b><span>${pct(totals.cost?row.cost/totals.cost:0)} of cost</span></div></div>`).join('')+(ranked.length>4?`<div class=logModelEmpty>+${f(ranked.length-4)} more ${countWord(ranked.length-4,'model')}</div>`:''):'<div class=logModelEmpty>No model data for these filters</div>';
 }
 function selectSession(id,{updateUrl=true,replace=false,show=true}={}){
  id=String(id||'').trim();

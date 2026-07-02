@@ -47,3 +47,10 @@ token and fixed subprocess argument vectors. They may add or remove only the
 exact user-level MCP entry named `tokenmeter`, must refuse a conflicting entry,
 and must verify the persisted state before reporting success. The MCP tools
 themselves cannot change configuration, budgets, sessions, or Token Meter state.
+
+Dashboard session deletion uses the same local-origin action token and accepts
+only a canonical ID from the currently discovered session inventory. It moves
+the exact discovered `.jsonl` file to macOS Trash with collision-safe naming;
+it does not delete provider metadata, project files, or configuration. The UI
+requires an explicit confirmation and warns when the target appears to be the
+live session.

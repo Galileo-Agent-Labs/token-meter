@@ -5,6 +5,7 @@ LABEL="com.token-meter.menubar"
 INSTALL_DIR="/Library/Application Support/Token Meter"
 START="$INSTALL_DIR/bin/start-token-meter"
 ROOT_URL="http://127.0.0.1:8722/"
+HEALTH_URL="http://127.0.0.1:8722/health"
 
 xml_escape() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g'
@@ -31,6 +32,18 @@ stop_token_meter_listener() {
     kill "$pid" 2>/dev/null || true
   done <<< "$pids"
   sleep 0.5
+}
+
+wait_for_dashboard() {
+  local body
+  for _ in $(seq 1 240); do
+    body="$(curl -fsS --max-time 1 "$HEALTH_URL" 2>/dev/null || true)"
+    if [[ "$body" == *'"ok": true'* && "$body" == *'"state_ready": true'* ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
 }
 
 chmod 755 "$INSTALL_DIR/bin/start-token-meter" "$INSTALL_DIR/bin/token-meter-mcp" "$INSTALL_DIR/bin/uninstall-token-meter" "$INSTALL_DIR/bin/token-meter-menubar"
@@ -95,5 +108,12 @@ launchctl bootout "gui/$USER_UID" "$PLIST" >/dev/null 2>&1 || true
 stop_token_meter_listener
 launchctl bootstrap "gui/$USER_UID" "$PLIST"
 launchctl kickstart -k "gui/$USER_UID/$LABEL" >/dev/null 2>&1 || true
+
+# Do not let Installer report success while the browser can still receive
+# ERR_CONNECTION_REFUSED or an uninitialized dashboard.
+if ! wait_for_dashboard; then
+  echo "Token Meter did not become ready at $HEALTH_URL" >&2
+  exit 1
+fi
 
 exit 0

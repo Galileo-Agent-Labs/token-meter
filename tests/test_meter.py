@@ -218,17 +218,17 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=session-start"), self.page.index("id=session-tabs"))
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
-        for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-avoidable-tokens"):
+        for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
             self.assertIn(marker, self.page)
         self.assertIn("renderCurrentOptimization(s)", self.page)
         self.assertNotIn("renderCapabilityUsage('ov-cap'", self.page)
-        self.assertIn("Default tools are excluded", self.page)
+        self.assertIn("Default tools and MCP servers are read-only evidence", self.page)
 
     def test_tools_and_skills_uses_removable_groups_and_review_filter(self):
-        for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-opt-eager"):
+        for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-mcp-observed"):
             self.assertIn(marker, self.page)
         self.assertIn("data-cstate=review", self.page)
-        self.assertIn("Default/read-only tools are excluded", self.page)
+        self.assertIn("MCP servers remain read-only evidence", self.page)
 
     def test_capability_card_tooltips_are_not_clipped(self):
         self.assertIn(".capHero .pad{padding:13px 15px;overflow:visible}", self.page)
@@ -292,7 +292,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("id=bulk-dialog", self.page)
         self.assertIn("/capability/disable-unused", self.page)
         self.assertIn("control_ids:groups.map(row=>row.id)", self.page)
-        self.assertIn("Runtime packs, built-ins, standalone skills, and used groups are excluded.", self.page)
+        self.assertIn("MCP servers, runtime packs, built-ins, standalone skills, and used groups are excluded.", self.page)
 
     def test_agent_access_has_a_dedicated_settings_tab(self):
         for marker in ("id=agent-discovery", "id=agent-access", "id=agent-clients",
@@ -311,6 +311,29 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("Should I keep this run going?", self.page)
         self.assertIn("Why was the last phase expensive?", self.page)
         self.assertIn("What should I change before the next phase?", self.page)
+
+    def test_daily_omits_tool_result_health_and_uses_the_logs_open_path(self):
+        self.assertNotIn("Tool-result health", self.page)
+        self.assertNotIn("Tool results need attention", self.page)
+        self.assertNotIn("function openDailySession", self.page)
+        self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
+        self.assertIn("el.onclick=()=>selectSession(el.dataset.id)", self.page)
+
+    def test_handler_swallows_browser_disconnects(self):
+        source = Path(meter.__file__).read_text()
+        self.assertIn("except (BrokenPipeError, ConnectionResetError):", source)
+
+    def test_dashboard_live_updates_do_not_hold_event_stream_connections(self):
+        self.assertNotIn("new EventSource('/events')", self.page)
+        self.assertIn("setInterval(refreshLiveState,2000)", self.page)
+        self.assertIn("if(statePollBusy)return", self.page)
+        source = Path(meter.__file__).read_text()
+        events = source.index('elif req_path == "/events":')
+        self.assertIn("self.send_response(204)", source[events:events + 700])
+
+    def test_http_server_tolerates_browser_connection_bursts(self):
+        self.assertTrue(meter.TokenMeterHTTPServer.daemon_threads)
+        self.assertGreaterEqual(meter.TokenMeterHTTPServer.request_queue_size, 32)
 
 
 class MenubarSourceTests(unittest.TestCase):
@@ -403,7 +426,7 @@ class ClaudeDesktopDiscoveryTests(unittest.TestCase):
         self.assertEqual(idx["cli-session-id"]["cwd"], "/tmp/project")
         self.assertEqual(idx["cli-session-id"]["title"], "Desktop project task")
 
-    def test_discovers_enterprise_no_project_agent_trace(self):
+    def test_discovers_no_project_agent_trace(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "local-agent-mode-sessions" / "account" / "org"
             metadata = root / "local_agent-session.json"
@@ -643,20 +666,19 @@ class AgentDataContractTests(unittest.TestCase):
 
     def test_capability_result_names_only_requested_evidence(self):
         cross = {"capabilities": {
-            "summary": {"optional": {"enabled": 2, "unused": 1,
-                "avoidable_eager_definition_tokens": 120}},
+            "summary": {"optional": {"enabled": 2, "unused": 1}},
             "control_groups": [
-                {"name": "context7", "control_type": "mcp", "runtime": "Codex + Claude",
-                 "used": False, "enabled": True, "calls": 0, "unused_eager_definition_tokens": 120,
+                {"name": "docs@personal", "control_type": "skill_pack", "runtime": "Codex",
+                 "used": False, "enabled": True, "activations": 0,
                  "environment": {"TOKEN": "secret"}},
-                {"name": "tokenmeter", "control_type": "mcp", "runtime": "Codex",
+                {"name": "tokenmeter", "control_type": "skill_pack", "runtime": "Codex",
                  "used": False, "enabled": True},
             ],
         }}
         with mock.patch.object(meter, "cross_session", return_value=cross):
             result = meter.agent_capabilities(scope="all", limit=5)
         encoded = json.dumps(result)
-        self.assertEqual([row["name"] for row in result["candidates"]], ["context7"])
+        self.assertEqual([row["name"] for row in result["candidates"]], ["docs@personal"])
         self.assertNotIn("TOKEN", encoded)
         self.assertNotIn("secret", encoded)
 
@@ -669,46 +691,14 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertLessEqual(len(result["evidence"]), 2)
 
 
-class McpActionTests(unittest.TestCase):
-    def test_disable_uses_fixed_argument_vector_without_shell(self):
-        observed = {}
-
-        class Completed:
-            returncode = 0
-            stdout = "removed"
-            stderr = ""
-
-        def fake_runner(argv, **kwargs):
-            observed["argv"] = argv
-            observed["kwargs"] = kwargs
-            return Completed()
-
-        result = meter.disable_mcp_server("jira", ghost_path="/usr/local/bin/ghost", runner=fake_runner)
-        self.assertTrue(result["ok"])
-        self.assertEqual(observed["argv"], ["/usr/local/bin/ghost", "mcp", "all", "remove", "jira"])
-        self.assertNotIn("shell", observed["kwargs"])
-        self.assertTrue(result["restart_required"])
-
-    def test_disable_rejects_untrusted_server_name(self):
-        result = meter.disable_mcp_server("jira; rm -rf /", ghost_path="ghost", runner=lambda *a, **k: None)
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"], "Invalid MCP server name.")
-
-    def test_enable_uses_fixed_add_argument_vector(self):
-        observed = {}
-
-        class Completed:
-            returncode = 0
-            stdout = "added"
-            stderr = ""
-
-        def fake_runner(argv, **kwargs):
-            observed["argv"] = argv
-            return Completed()
-
-        result = meter.set_mcp_server_enabled("context7", True, ghost_path="/usr/local/bin/ghost", runner=fake_runner)
-        self.assertTrue(result["ok"])
-        self.assertEqual(observed["argv"], ["/usr/local/bin/ghost", "mcp", "all", "add", "context7"])
+class PackagingTests(unittest.TestCase):
+    def test_postinstall_waits_for_initialized_dashboard_after_launch(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "packaging" / "scripts" / "postinstall").read_text()
+        kickstart = script.rindex('launchctl kickstart -k "gui/$USER_UID/$LABEL"')
+        readiness_check = script.rindex("if ! wait_for_dashboard; then")
+        self.assertLess(kickstart, readiness_check)
+        self.assertIn("state_ready", script)
 
 
 class AgentAccessTests(unittest.TestCase):
@@ -855,7 +845,7 @@ class CapabilityConfigTests(unittest.TestCase):
         }
         self.assertEqual(len(identities), 4)
 
-    def test_optional_summary_counts_only_mutable_control_groups(self):
+    def test_optional_summary_counts_only_mutable_skill_packs(self):
         mcp_items = [
             {"name": "context7", "mutable": True, "enabled": True, "used": False,
              "codex_enabled": True, "claude_enabled": False},
@@ -869,10 +859,10 @@ class CapabilityConfigTests(unittest.TestCase):
         ]
         groups = meter.capability_control_groups(mcp_items, skill_items)
         summary = meter.optional_capability_summary(groups)
-        self.assertEqual(summary["enabled"], 2)
+        self.assertEqual(summary["enabled"], 1)
         self.assertEqual(summary["used"], 1)
-        self.assertEqual(summary["unused"], 1)
-        self.assertEqual(summary["mcp_enabled"], 1)
+        self.assertEqual(summary["unused"], 0)
+        self.assertEqual(summary["mcp_enabled"], 0)
         self.assertEqual(summary["skill_packs_enabled"], 1)
 
     def test_runtime_skill_packs_are_not_review_candidates(self):
@@ -917,27 +907,25 @@ class CapabilityConfigTests(unittest.TestCase):
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["invalid_control_ids"], ["skill_pack:Codex:browser@openai-bundled"])
 
-    def test_session_optional_summary_excludes_default_activity_and_measures_eager_mcp(self):
+    def test_session_optional_summary_excludes_mcp_and_default_activity(self):
         capabilities = {"control_groups": [
-            {"id": "mcp:context7", "control_type": "mcp", "name": "context7",
-             "runtime": "Codex + Claude", "enabled": True, "mutable": True,
-             "codex_enabled": True, "claude_enabled": False},
             {"id": "skill_pack:Codex:browser@bundled", "control_type": "skill_pack",
              "name": "browser@bundled", "runtime": "Codex", "enabled": True,
              "mutable": True, "members": ["browser"]},
-        ], "summary": {"optional": {"review_candidate_names": ["context7"]}}}
+        ], "summary": {"optional": {"review_candidate_names": []}}}
         state = {"provider": "codex", "tools": {
-            "by_name": [{"name": "exec", "namespace": "exec", "kind": "tool", "calls": 3}],
+            "by_name": [
+                {"name": "exec", "namespace": "exec", "kind": "tool", "calls": 3},
+                {"name": "mcp__context7__query", "namespace": "context7", "kind": "mcp", "calls": 1},
+            ],
             "skills": [{"name": "browser", "activations": 1}],
-            "catalog": [{"name": "mcp__context7__query", "namespace": "context7", "kind": "mcp",
-                         "defer_loading": False, "definition_tokens": 120}],
         }}
         summary = meter.session_optional_capabilities(state, capabilities)
-        self.assertEqual(summary["enabled"], 2)
+        self.assertEqual(summary["enabled"], 1)
         self.assertEqual(summary["used"], 1)
-        self.assertEqual(summary["avoidable_eager_definition_tokens"], 120)
-        self.assertEqual(summary["eager_unused_groups"], 1)
-        self.assertNotIn("exec", [row["name"] for row in summary["groups"]])
+        self.assertEqual(summary["mcp_enabled"], 0)
+        self.assertEqual(summary["avoidable_eager_definition_tokens"], 0)
+        self.assertNotIn("context7", [row["name"] for row in summary["groups"]])
 
     def test_mcp_parser_ignores_nested_env_section(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -973,24 +961,20 @@ class CapabilityConfigTests(unittest.TestCase):
 
 
 class DailySummaryTests(unittest.TestCase):
-    def test_aggregates_daily_spend_providers_logs_and_tool_results(self):
+    def test_aggregates_daily_spend_providers_and_logs(self):
         sessions = [
             {"id": "one", "title": "One", "project": "/repo/a", "provider": "codex",
              "label": "Codex", "_day_cost": {"2026-07-01": 1.25}},
             {"id": "two", "title": "Two", "project": "/repo/b", "provider": "claude",
              "label": "Claude Code", "_day_cost": {"2026-07-01": 0.75, "2026-06-30": 0.5}},
         ]
-        waste = {"trend": [
-            {"day": "2026-07-01", "tokens": 1000, "flagged_tokens": 250},
-            {"day": "2026-06-30", "tokens": 400, "flagged_tokens": 0},
-        ]}
-        days = meter.daily_summaries(sessions, waste)
+        days = meter.daily_summaries(sessions)
         self.assertEqual(days[0]["day"], "2026-07-01")
         self.assertEqual(days[0]["cost"], 2.0)
         self.assertEqual(days[0]["sessions"], 2)
         self.assertEqual(days[0]["projects"], 2)
-        self.assertEqual(days[0]["tool_tokens"], 1000)
-        self.assertEqual(days[0]["flagged_share"], 0.25)
+        self.assertNotIn("tool_tokens", days[0])
+        self.assertNotIn("flagged_tokens", days[0])
         self.assertEqual(days[0]["providers"][0], {"provider": "codex", "cost": 1.25})
 
 

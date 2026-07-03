@@ -187,9 +187,9 @@ moment is already on screen the instant you stop. No second tool.
 - **FR12 Global trace-waste evidence** — aggregate tool calls, returned text
   tokens, oversized results, exact immediate repeats, structured errors,
   project concentration, and last use across local sessions.
-- **FR13 MCP disable review** — for traced MCP servers, show a confirmed
-  server-level disable action that invokes Ghost with a fixed argument vector
-  and tells the user to restart Codex, Claude, or the IDE.
+- **FR13 MCP review** — show traced MCP server usage, returned-token volume,
+  failures, and last use as read-only evidence without assuming a universal
+  configuration mechanism.
 - **FR14 Claude Desktop attribution** — join Claude Desktop `local_*.json`
   metadata to the authoritative Claude project trace through `cliSessionId`,
   then show Desktop title, project, model, and source label without duplicating
@@ -197,15 +197,15 @@ moment is already on screen the instant you stop. No second tool.
 - **FR15 Capability inventory** — keep a searchable Tools, MCPs, and Skills view
   with runtime, source, state, observed use, returned tokens, and last use.
 - **FR16 Actionable capability utilization** — calculate optimization only over
-  enabled removable control groups: MCP servers and user-installed configured
-  skill packs. Keep built-in/runtime packs out of review candidates. Aggregate
-  child functions/skills under their real disable control, exclude default and
-  read-only tools, assign runtime-and-origin-qualified identifiers, and keep
-  session activity separate from cross-session optimization evidence.
-- **FR17 Capability controls** — enable or disable MCP servers through Ghost and
-  configured skill packs through their native Codex/Claude enabled state;
-  runtime-owned tools and standalone skills remain read-only. Confirm pack
-  changes and read the persisted setting back before reporting success.
+  enabled user-installed configured skill packs. Keep MCP servers and
+  built-in/runtime packs out of review candidates. Aggregate child skills under
+  their real disable control, exclude default and read-only tools, assign
+  runtime-and-origin-qualified identifiers, and keep session activity separate
+  from cross-session optimization evidence.
+- **FR17 Capability controls** — enable or disable configured skill packs
+  through their native Codex/Claude enabled state; MCP servers, runtime-owned
+  tools, and standalone skills remain read-only. Confirm pack changes and read
+  the persisted setting back before reporting success.
 - **FR18 Bulk unused disable** — confirm and disable an exact set of current
   unused review-candidate controls, reject stale, used, built-in, and runtime
   pack identifiers before mutation, and report partial failures explicitly.
@@ -599,15 +599,13 @@ reduce exact repeats, fix repeated failures, scope project-concentrated tools,
 or review an MCP function that a runtime catalog reported across at least five
 sessions without any observed call.
 
-### 13.3 MCP configuration action
+### 13.3 MCP configuration boundary
 
-For `mcp__server__tool` evidence, Token Meter can present `Disable MCP`. The
-review dialog shows the evidence and exact `ghost mcp all remove <server>`
-command. `POST /mcp/disable` accepts JSON from the localhost dashboard, validates
-the server name, requires the same-origin action token, and calls Ghost through
-`subprocess.run()` without a shell. It does not disable built-in tools,
-individual functions within a server, or skills. Successful configuration
-changes affect future sessions and require an IDE or agent restart.
+For `mcp__server__tool` evidence, Token Meter reports usage, result volume,
+failures, and last use. MCP configuration remains read-only because Codex,
+Claude, desktop clients, plugins, and managed installations do not share one
+safe configuration mechanism. Token Meter does not present a mutation action or
+write MCP server configuration.
 
 ---
 
@@ -616,11 +614,11 @@ changes affect future sessions and require an IDE or agent restart.
 Claude Desktop project sessions have two local records. Standard project usage
 and tool traces remain normal Claude JSONL under `~/.claude/projects` with
 metadata beneath `~/Library/Application Support/Claude/claude-code-sessions`.
-Agent/Cowork sessions can instead live beneath either the standard `Claude`
-data root or the enterprise `Claude-3p` root. Their metadata is stored under
-`local-agent-mode-sessions`, and the authoritative JSONL is nested inside that
-session's `.claude/projects` directory. Metadata holds the Desktop session id,
-title, cwd, model, timestamps, and a `cliSessionId` which identifies the JSONL.
+Agent/Cowork session metadata is stored beneath the standard Claude data root
+under `local-agent-mode-sessions`, and the authoritative JSONL is nested inside
+that session's `.claude/projects` directory. Metadata holds the Desktop session
+id, title, cwd, model, timestamps, and a `cliSessionId` which identifies the
+JSONL.
 
 Token Meter indexes the targeted metadata locations, joins by `cliSessionId`,
 and parses only the authoritative JSONL. This keeps one logical session and one
@@ -644,8 +642,8 @@ It intentionally keeps three evidence levels separate:
 
 - Tools are runtime-reported when present in Codex `dynamic_tools`; built-in
   tools absent from that partial catalog can still be listed as observed-only.
-- MCP server availability comes from the local Ghost server installation and
-  Codex/Claude configuration; historical use comes from traced MCP calls.
+- MCP server availability comes from Codex/Claude configuration and traced MCP
+  calls; historical use comes from traced MCP calls.
 - Skills come from installed Codex skill descriptors and Codex/Claude plugin
   caches. Activation is inferred only when a tool-call argument references a
   concrete `SKILL.md` path, so the UI labels skill utilization as inferred.
@@ -656,11 +654,10 @@ maximum calls in one execution. Those counts may include default tools and
 result-only instrumentation because they explain what happened. They are never
 used as a removal denominator.
 
-Tools & Skills reports optimization at the removable control-group level. One
-MCP server is one group regardless of how many functions it exposes; one
+Tools & Skills reports optimization at the removable skill-pack level. One
 configured user plugin pack is one group regardless of how many skills it
-contains. Any child call or inferred skill activation marks its group used.
-Default tools, standalone skills, Cowork built-ins, Codex/Claude runtime packs,
+contains. Any inferred skill activation marks its group used. MCP servers,
+default tools, standalone skills, Cowork built-ins, Codex/Claude runtime packs,
 and other read-only entries remain in the inventory but cannot become review
 candidates. Every skill is identified by runtime, origin or plugin pack, and
 skill name so same-named built-in and user-installed skills cannot collide.
@@ -672,14 +669,13 @@ eager, deferred, and unused-eager definition tokens. An eager definition is
 unused for a session when that runtime advertised it without deferred loading
 and the trace never called the same tool name. These are prompt-overhead
 estimates repeated across sessions, not provider billing-token claims.
-Only eager definition tokens attributable to an unused removable group appear
-as avoidable context. When the runtime does not report that attribution, the UI
-shows a dash and says the overhead is not measured instead of claiming zero.
+Definition-token totals remain evidence about prompt composition; they do not
+enter the removable skill-pack review calculation because traces do not provide
+a reliable mapping from tool schemas to installed skill packs.
 
-`POST /capability/toggle` requires the same local-origin action token as the
-existing MCP review action. MCP changes call `ghost mcp all add/remove` with a
-fixed argument vector. Skill actions update the containing configured plugin
-pack because neither runtime exposes a safe universal per-skill switch.
+`POST /capability/toggle` requires a local-origin action token. Skill actions
+update the containing configured plugin pack because neither runtime exposes a
+safe universal per-skill switch.
 Standalone skills, Cowork built-ins, unmanaged plugin caches, and native tools
 are displayed as read-only. The server validates the exact discovered control
 identifier, reads the persisted enabled value back, and only then reports
@@ -704,9 +700,8 @@ top-level tab, while the other two remain Global subtabs.
 
 Daily uses per-day cost already attributed from trace usage records. For each
 recorded day it reports estimated spend, active logs, distinct projects,
-provider cost, highest-cost logs for that day, and tool-result/flagged-token
-totals. It does not invent daily token or execution counts when traces do not
-provide reliable attribution.
+provider cost, and highest-cost logs for that day. It does not invent daily
+token or execution counts when traces do not provide reliable attribution.
 
 Learn is a static, local guide to the operating workflow: inspect Current,
 locate spikes in Activity, confirm repeated patterns in Global and Daily, review

@@ -32,17 +32,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
-CLAUDE_DESKTOP_DATA_ROOTS = [
-    os.path.expanduser("~/Library/Application Support/Claude"),
-    os.path.expanduser("~/Library/Application Support/Claude-3p"),
-]
+CLAUDE_DESKTOP_DATA_ROOTS = [os.path.expanduser("~/Library/Application Support/Claude")]
 CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
-GHOST_MCP_ROOT = os.path.expanduser("~/.config/ghost/mcp-servers")
 PORT = 8722
 
 CLAUDE_PRICE = {
@@ -78,7 +74,6 @@ LOW_YIELD_COST = 0.05
 LOW_YIELD_CONTEXT_PCT = 0.25
 LOW_YIELD_INPUT_TOKENS = 60000
 TOOL_OVERSIZED_TOKENS = 8000
-MCP_SERVER_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,180}$")
 SKILL_PATH_RE = re.compile(r"(?:^|[/\\])([^/\\\s'\"]+)[/\\]SKILL\.md(?:\b|$)", re.IGNORECASE)
 DATA_URL_RE = re.compile(r"data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+")
@@ -91,8 +86,6 @@ _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
 _ACTION_TOKEN = secrets.token_urlsafe(24)
-_mcp_action_log = []
-_ghost_catalog_cache = {"rows": {}, "at": 0.0}
 AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
 
@@ -320,20 +313,6 @@ def home_shorten(path):
     return path.replace(home, "~", 1) if path and path.startswith(home) else path
 
 
-def ghost_executable():
-    found = shutil.which("ghost")
-    if found:
-        return found
-    for path in (
-        os.path.expanduser("~/.local/bin/ghost"),
-        "/opt/homebrew/bin/ghost",
-        "/usr/local/bin/ghost",
-    ):
-        if os.path.isfile(path) and os.access(path, os.X_OK):
-            return path
-    return None
-
-
 def decode_claude_project(name):
     user = os.environ.get("USER", "")
     prefix = "-Users-" + user
@@ -478,7 +457,7 @@ def claude_desktop_metadata_paths(root=None):
 
 
 def claude_desktop_index(root=None):
-    """Map standard and enterprise Claude Desktop metadata onto CLI trace ids."""
+    """Map Claude Desktop metadata onto CLI trace ids."""
     idx = {}
     for path in claude_desktop_metadata_paths(root):
         try:
@@ -888,8 +867,6 @@ def is_operational_warning(insight):
     return (
         key == "context-high"
         or key == "low-yield-latest" and insight.get("kind") == "warn"
-        or key.startswith("tool-bloat:")
-        or key.startswith("namespace-bloat:")
     )
 
 
@@ -1909,16 +1886,6 @@ def enrich_insights(insights, executions, tool_data, context_window, context_lat
             action="Review rarely used tools or keep them deferred." if kind == "warn" else "",
             priority=34 if kind == "warn" else 68,
         ))
-    if tool_data.get("by_namespace"):
-        top_ns = tool_data["by_namespace"][0]
-        if top_ns.get("output_tokens", 0) > 25000:
-            out.append(insight(
-                f"namespace-bloat:{top_ns['namespace']}", "warn", "Tools", "Namespace payload",
-                f"{top_ns['namespace']} tools returned ~{top_ns['output_tokens']:,} tokens.",
-                detail="Tool result text is reintroduced into context and can dominate later turns.",
-                action="Open the Tools tab and narrow high-volume calls.",
-                priority=18,
-            ))
     if executions:
         latest = executions[-1]
         if low_yield_should_warn(executions, latest_pct if context_window else 0):
@@ -2049,24 +2016,6 @@ def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, pro
             f"Coordination used {co['share'] * 100:.0f}% of spend.",
             detail=f"{co['turns']} coordination executions were detected.",
             priority=74,
-        ))
-
-    if an["tool_bloat"] and an["tool_bloat"][0]["tokens"] > 8000:
-        b = an["tool_bloat"][0]
-        out.append(insight(
-            f"tool-bloat:{b['name']}", "warn", "Tools", "Tool payload",
-            f"{b['name']} returned ~{b['tokens']:,} tokens.",
-            detail=f"{b['calls']} calls from the {b['namespace']} namespace produced the largest tool payload.",
-            action="Open Tools and inspect whether that output can be narrowed.",
-            priority=16,
-        ))
-    elif an["tool_bloat"] and an["tool_bloat"][0]["tokens"] > 2500:
-        b = an["tool_bloat"][0]
-        out.append(insight(
-            f"tool-heavy:{b['name']}", "neutral", "Tools", "Tool payload",
-            f"{b['name']} returned ~{b['tokens']:,} tokens.",
-            detail="This is the largest tool result stream in the log.",
-            priority=64,
         ))
 
     if cost_approx:
@@ -2586,44 +2535,6 @@ def global_tool_waste(session_rows):
 
     insights = []
     actionable_rows = [row for row in tool_rows if not row.get("diagnostic")]
-    actionable_flagged = sum(int(row.get("flagged_tokens") or 0) for row in actionable_rows)
-    actionable_output = sum(int(row.get("output_tokens") or 0) for row in actionable_rows)
-    actionable_repeats = sum(int(row.get("repeat_calls") or 0) for row in actionable_rows)
-    actionable_errors = sum(int(row.get("errors") or 0) for row in actionable_rows)
-    if actionable_rows and actionable_rows[0]["output_tokens"]:
-        top = actionable_rows[0]
-        insights.append(insight(
-            f"global-tool:{top['name']}", "warn" if top["output_tokens"] >= 25000 else "neutral",
-            "Tools", "Largest tool payload",
-            f"{top['display']} returned ~{top['output_tokens']:,} tokens across {top['sessions_used']} sessions.",
-            detail=f"{top['calls']} calls from {top['namespace']} produced the largest trace-observed payload.",
-            action="Narrow the command or query output." if top["output_tokens"] >= 25000 else "",
-            priority=12,
-        ))
-    if actionable_flagged:
-        share = actionable_flagged / max(1, actionable_output)
-        insights.append(insight(
-            "global-flagged", "warn" if share >= 0.25 else "neutral", "Tools", "Flagged result volume",
-            f"~{actionable_flagged:,} returned tokens matched an oversized, repeat, or error signal.",
-            detail=f"That is {share * 100:.0f}% of {actionable_output:,} non-diagnostic tool-result tokens; categories can overlap.",
-            action="Inspect the ranked tools and repeated calls first." if share >= 0.25 else "",
-            priority=14,
-        ))
-    if actionable_repeats:
-        insights.append(insight(
-            "global-repeats", "warn" if actionable_repeats >= 5 else "neutral", "Flow", "Repeated calls",
-            f"{actionable_repeats} calls immediately repeated the same tool arguments.",
-            detail=f"The exact consecutive repeats occurred within five minutes and returned ~{totals['repeat_tokens']:,} tokens.",
-            action="Reuse earlier results or make the next query narrower." if actionable_repeats >= 5 else "",
-            priority=20,
-        ))
-    if actionable_errors:
-        insights.append(insight(
-            "global-errors", "warn", "Tools", "Tool errors",
-            f"{actionable_errors} tool calls ended with a structured error signal.",
-            detail=f"Failed calls returned ~{totals['error_tokens']:,} tokens before recovery or retry.",
-            action="Fix authentication or disable persistently failing MCPs.", priority=10,
-        ))
     disable_candidates = [row for row in actionable_rows if row["recommendation"] == "disable"]
     if disable_candidates:
         candidate = disable_candidates[0]
@@ -2685,57 +2596,6 @@ def claude_mcp_states():
         for name in (data.get("mcpServers") or {}) if isinstance(data, dict) else {}:
             states[name] = True
     return states
-
-
-def ghost_mcp_catalog():
-    rows = {}
-    remote_root = os.path.join(GHOST_MCP_ROOT, "remote")
-    for path in glob.glob(os.path.join(remote_root, "*.yaml")):
-        name = os.path.basename(path).rsplit(".", 1)[0]
-        try:
-            with open(path, encoding="utf-8") as fh:
-                content = fh.read()
-            match = re.search(r'^name:\s*([A-Za-z0-9_.:-]+)\s*$', content, re.MULTILINE)
-            name = match.group(1) if match else name
-        except OSError:
-            pass
-        rows[name] = {"name": name, "transport": "remote"}
-    local_root = os.path.join(GHOST_MCP_ROOT, "dist", "servers")
-    aliases = {"cisco-directory": "cisco_directory", "splunk-docs": "splunk_docs"}
-    for path in glob.glob(os.path.join(local_root, "*")):
-        if not os.path.isdir(path):
-            continue
-        raw = os.path.basename(path)
-        name = aliases.get(raw, raw)
-        rows[name] = {"name": name, "transport": "local"}
-    rows.update(_ghost_catalog_cache.get("rows") or {})
-    return rows
-
-
-def refresh_ghost_mcp_catalog(runner=None):
-    ghost_path = ghost_executable()
-    if not ghost_path:
-        return {}
-    runner = runner or subprocess.run
-    try:
-        completed = runner([ghost_path, "mcp", "codex", "list"], capture_output=True,
-                           text=True, timeout=30, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return {}
-    if completed.returncode != 0:
-        return {}
-    rows = {}
-    for line in (completed.stdout or "").splitlines():
-        match = re.match(r'^\s{2}([A-Za-z0-9_.:-]+)\s+(remote|local)\s+', line)
-        if match:
-            rows[match.group(1)] = {"name": match.group(1), "transport": match.group(2)}
-    if rows:
-        _ghost_catalog_cache["rows"], _ghost_catalog_cache["at"] = rows, time.time()
-        _xsess["data"], _xsess["at"] = None, 0.0
-        if STATE:
-            updated = dict(STATE)
-            publish(attach_cross_session(updated))
-    return rows
 
 
 def codex_plugin_states():
@@ -2831,30 +2691,13 @@ def discovered_skills(skill_usage=None):
     return sorted(deduped.values(), key=lambda row: (row["runtime"], row["name"], row["source"]))
 
 
-def capability_control_groups(mcp_items, skill_items):
-    """Return only capability groups that the dashboard can actually disable."""
-    groups = []
-    for row in mcp_items or []:
-        if not row.get("mutable"):
-            continue
-        groups.append({
-            "id": f"mcp:{row.get('name')}", "item_id": row.get("id"),
-            "type": "mcp", "control_type": "mcp", "name": row.get("name"),
-            "runtime": "Codex + Claude", "enabled": bool(row.get("enabled")),
-            "used": bool(row.get("used")), "mutable": True,
-            "codex_enabled": bool(row.get("codex_enabled")),
-            "claude_enabled": bool(row.get("claude_enabled")),
-            "calls": int(row.get("calls") or 0), "activations": 0,
-            "returned_tokens": int(row.get("returned_tokens") or 0), "plugin_id": "",
-            "members": [], "member_count": 0, "used_members": 0,
-            "last_used": row.get("last_used") or "Never",
-            "definition_tokens": int(row.get("definition_tokens") or 0),
-            "eager_definition_tokens": int(row.get("eager_definition_tokens") or 0),
-            "deferred_definition_tokens": int(row.get("deferred_definition_tokens") or 0),
-            "unused_eager_definition_tokens": int(row.get("unused_eager_definition_tokens") or 0),
-            "reviewable": True, "origin": "configured", "origin_id": f"mcp:{row.get('name')}",
-        })
+def capability_control_groups(_mcp_items, skill_items):
+    """Return user-installed skill packs that the dashboard can disable.
 
+    MCP servers remain visible as read-only evidence because their configuration
+    mechanisms differ across clients and installations.
+    """
+    groups = []
     packs = {}
     for row in skill_items or []:
         if not row.get("mutable") or not row.get("plugin_id"):
@@ -2950,7 +2793,6 @@ def capability_inventory(waste=None):
             "last_used": row.get("last_used") or "Never", "recommendation": row.get("recommendation") or "keep",
         })
 
-    mcp_catalog = ghost_mcp_catalog()
     codex_states, claude_states = codex_mcp_states(), claude_mcp_states()
     mcp_usage = defaultdict(lambda: {
         "calls": 0, "tokens": 0, "last_used": "Never", "used": False,
@@ -2970,7 +2812,7 @@ def capability_inventory(waste=None):
             u[key] += int(row.get(key) or 0)
         if row.get("last_ts") and row.get("last_used"):
             u["last_used"] = row["last_used"]
-    all_mcp_names = set(mcp_catalog) | set(codex_states) | set(claude_states) | set(mcp_usage)
+    all_mcp_names = set(codex_states) | set(claude_states) | set(mcp_usage)
     mcp_items = []
     for name in sorted(all_mcp_names):
         codex_on = bool(codex_states.get(name))
@@ -2979,9 +2821,9 @@ def capability_inventory(waste=None):
         enabled = codex_on or claude_on
         mcp_items.append({
             "id": f"mcp:{name}", "type": "mcp", "name": name, "runtime": "Codex + Claude",
-            "source": (mcp_catalog.get(name) or {}).get("transport") or "trace/config",
+            "source": "trace/config",
             "state": "Enabled" if enabled else "Disabled", "enabled": enabled,
-            "mutable": bool(name != "tokenmeter" and ghost_executable() and name in mcp_catalog),
+            "mutable": False,
             "codex_enabled": codex_on, "claude_enabled": claude_on, "used": usage_row["used"],
             "calls": usage_row["calls"], "returned_tokens": usage_row["tokens"], "last_used": usage_row["last_used"],
             "definition_tokens": usage_row["definition_tokens"],
@@ -3028,14 +2870,14 @@ def capability_inventory(waste=None):
     return {
         "summary": summary, "items": tool_items + mcp_items + skill_items,
         "control_groups": control_groups,
-        "actions": {**mcp_action_capability(), "skill_pack_toggle": True},
+        "actions": capability_action_capability(),
         "claude_desktop": {
             "local_agent_sessions": len(local_agents),
             "traceable_agent_sessions": len(traceable_agents),
             "latest_local_agent": local_dt(latest_desktop) if latest_desktop else "Never",
             "cloud_trace_available": False,
             "roots": [home_shorten(root) for root in CLAUDE_DESKTOP_DATA_ROOTS if os.path.isdir(root)],
-            "note": "Scanning standard and enterprise Claude Desktop Agent/Cowork traces.",
+            "note": "Scanning local Claude Desktop Agent/Cowork traces.",
         },
         "generated_at": int(time.time()),
     }
@@ -3046,48 +2888,27 @@ def session_optional_capabilities(state, capabilities):
     state = state or {}
     tools = state.get("tools") or {}
     provider = state.get("provider") or (state.get("source") or {}).get("provider") or ""
-    observed_names = {row.get("name") for row in tools.get("by_name") or [] if row.get("name")}
-    observed_mcp = {
-        row.get("namespace") for row in tools.get("by_name") or []
-        if row.get("kind") == "mcp" and row.get("namespace")
-    }
     skill_activations = {row.get("name"): int(row.get("activations") or 0)
                          for row in tools.get("skills") or [] if row.get("name")}
-    catalog = tools.get("catalog") or []
     groups = []
     for source_group in (capabilities or {}).get("control_groups") or []:
         group = dict(source_group)
         if (not group.get("enabled") or not group.get("mutable") or
                 not group.get("reviewable", True)):
             continue
-        if group.get("control_type") == "mcp":
-            attached = bool(group.get("codex_enabled")) if provider == "codex" else bool(group.get("claude_enabled"))
-            current_used = group.get("name") in observed_mcp
-            relevant_catalog = [row for row in catalog if row.get("kind") == "mcp"
-                                and row.get("namespace") == group.get("name")]
-            activations = sum(int(row.get("calls") or 0) for row in tools.get("by_name") or []
-                              if row.get("kind") == "mcp" and row.get("namespace") == group.get("name"))
-        else:
-            attached = ((provider == "codex" and group.get("runtime") == "Codex") or
-                        (provider == "claude" and group.get("runtime") == "Claude"))
-            active_members = set(group.get("members") or []) & set(skill_activations)
-            current_used = bool(active_members)
-            relevant_catalog = []
-            activations = sum(skill_activations[name] for name in active_members)
+        attached = ((provider == "codex" and group.get("runtime") == "Codex") or
+                    (provider == "claude" and group.get("runtime") == "Claude"))
+        active_members = set(group.get("members") or []) & set(skill_activations)
+        current_used = bool(active_members)
+        activations = sum(skill_activations[name] for name in active_members)
         if not attached:
             continue
-        eager_tokens = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
-                           if not row.get("defer_loading"))
-        deferred_tokens = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
-                              if row.get("defer_loading"))
-        unused_eager = sum(int(row.get("definition_tokens") or 0) for row in relevant_catalog
-                           if not row.get("defer_loading") and row.get("name") not in observed_names)
         group.update({
             "current_used": current_used, "current_activations": activations,
-            "current_eager_definition_tokens": eager_tokens,
-            "current_deferred_definition_tokens": deferred_tokens,
-            "current_unused_eager_definition_tokens": unused_eager,
-            "overhead_measured": bool(relevant_catalog),
+            "current_eager_definition_tokens": 0,
+            "current_deferred_definition_tokens": 0,
+            "current_unused_eager_definition_tokens": 0,
+            "overhead_measured": False,
         })
         groups.append(group)
 
@@ -3123,14 +2944,10 @@ def attach_cross_session(state, cross=None):
     return state
 
 
-def mcp_action_capability():
-    ghost_path = ghost_executable()
+def capability_action_capability():
     return {
-        "available": bool(ghost_path),
         "token": _ACTION_TOKEN,
-        "scope": "Codex and Claude",
-        "command_template": "ghost mcp all remove <server>",
-        "enable_command_template": "ghost mcp all add <server>",
+        "skill_pack_toggle": True,
     }
 
 
@@ -3307,7 +3124,7 @@ def agent_access_status(**kwargs):
         "access": {
             "current_run": "Detailed cost, context, execution, and safe tool labels for the matched run.",
             "history": "Aggregate spend, model, runtime, and tool categories without run or project names.",
-            "capabilities": "Named MCP servers and skill packs only when capability review is requested.",
+            "capabilities": "Named user-installed skill packs only when capability review is requested.",
             "never": "Prompts, messages, reasoning, tool arguments or results, paths, credentials, and config values.",
             "processing": "Returned metrics enter the connected agent context and may be processed by its model provider.",
             "mutation": False,
@@ -3357,47 +3174,6 @@ def set_agent_access(client, enabled, runner=None, status_getter=None):
         "ok": True, "changed": True, "client": after, "restart_required": True,
         "message": f"{after.get('label') or client} {'connected' if enabled else 'disconnected'}. Start a new agent session.",
     }
-
-
-def set_mcp_server_enabled(server, enabled, ghost_path=None, runner=None):
-    server = str(server or "").strip()
-    if not MCP_SERVER_RE.fullmatch(server):
-        return {"ok": False, "error": "Invalid MCP server name."}
-    ghost_path = ghost_path or ghost_executable()
-    if not ghost_path:
-        return {"ok": False, "error": "Ghost CLI is not available on PATH."}
-    runner = runner or subprocess.run
-    operation = "add" if enabled else "remove"
-    command = [ghost_path, "mcp", "all", operation, server]
-    try:
-        completed = runner(command, capture_output=True, text=True, timeout=60, check=False)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"Ghost timed out while trying to {operation} the MCP server.", "command": command[1:]}
-    except OSError as exc:
-        return {"ok": False, "error": compact_text(str(exc), 240), "command": command[1:]}
-
-    output = compact_text((completed.stdout or completed.stderr or "").strip(), 600)
-    result = {
-        "ok": completed.returncode == 0,
-        "server": server,
-        "enabled": bool(enabled),
-        "command": ["ghost", "mcp", "all", operation, server],
-        "message": output or (f"MCP server {'enabled' if enabled else 'disabled'}." if completed.returncode == 0 else f"Ghost could not {operation} the MCP server."),
-        "restart_required": completed.returncode == 0,
-    }
-    if completed.returncode != 0:
-        result["error"] = result["message"]
-    _mcp_action_log.insert(0, {
-        "ts": int(time.time()), "server": server, "ok": result["ok"], "message": result["message"],
-    })
-    del _mcp_action_log[20:]
-    if result["ok"]:
-        _xsess["data"], _xsess["at"] = None, 0.0
-    return result
-
-
-def disable_mcp_server(server, ghost_path=None, runner=None):
-    return set_mcp_server_enabled(server, False, ghost_path=ghost_path, runner=runner)
 
 
 def set_codex_plugin_enabled(plugin_id, enabled):
@@ -3478,8 +3254,6 @@ def set_skill_pack_enabled(runtime, plugin_id, enabled):
 
 
 def set_capability_control_enabled(control, enabled):
-    if (control or {}).get("control_type") == "mcp":
-        return set_mcp_server_enabled(control.get("name"), enabled)
     if (control or {}).get("control_type") == "skill_pack":
         return set_skill_pack_enabled(control.get("runtime"), control.get("plugin_id"), enabled)
     return {"ok": False, "error": "Unsupported capability control."}
@@ -3538,15 +3312,14 @@ def refresh_capability_state():
     return cross.get("capabilities") or {}
 
 
-def daily_summaries(session_rows, tool_waste=None, limit=30):
-    """Aggregate exact per-day spend plus daily log/provider and tool-result evidence."""
+def daily_summaries(session_rows, limit=30):
+    """Aggregate exact per-day spend plus daily log and provider evidence."""
     days = {}
 
     def day_row(day):
         return days.setdefault(day, {
             "day": day, "cost": 0.0, "providers": defaultdict(float),
-            "sessions": {}, "projects": set(), "tool_tokens": 0,
-            "flagged_tokens": 0,
+            "sessions": {}, "projects": set(),
         })
 
     for session in session_rows or []:
@@ -3566,11 +3339,6 @@ def daily_summaries(session_rows, tool_waste=None, limit=30):
             })
             daily_session["cost"] += cost
 
-    for item in (tool_waste or {}).get("trend") or []:
-        row = day_row(item.get("day") or "")
-        row["tool_tokens"] += int(item.get("tokens") or 0)
-        row["flagged_tokens"] += int(item.get("flagged_tokens") or 0)
-
     result = []
     for day in sorted((value for value in days if value), reverse=True)[:limit]:
         row = days[day]
@@ -3582,9 +3350,7 @@ def daily_summaries(session_rows, tool_waste=None, limit=30):
         result.append({
             "day": day, "cost": row["cost"], "sessions": len(sessions),
             "projects": len(row["projects"]), "providers": providers,
-            "top_sessions": sessions[:8], "tool_tokens": row["tool_tokens"],
-            "flagged_tokens": row["flagged_tokens"],
-            "flagged_share": row["flagged_tokens"] / row["tool_tokens"] if row["tool_tokens"] else 0.0,
+            "top_sessions": sessions[:8],
         })
     return result
 
@@ -3629,7 +3395,7 @@ def cross_session():
     premium = (model_cost.get("claude-opus-4-8", 0) + model_cost.get("claude-fable-5", 0)
                + model_cost.get("gpt-5.5", 0))
     tool_waste = global_tool_waste(internal_rows)
-    daily = daily_summaries(internal_rows, tool_waste)
+    daily = daily_summaries(internal_rows)
     data = {
         "generated_at": int(now),
         "sessions": sessions[:60],
@@ -3648,7 +3414,6 @@ def cross_session():
         "tool_waste": tool_waste,
         "daily": daily,
         "capabilities": capability_inventory(tool_waste),
-        "mcp_actions": mcp_action_capability(),
         "session_actions": session_action_capability(),
     }
     _xsess["data"], _xsess["at"] = data, now
@@ -4146,7 +3911,6 @@ def agent_capabilities(scope="current", limit=5, caller=None):
         candidates.append(candidate)
     enabled = int(summary.get("enabled") or 0)
     unused = int(summary.get("unused") or 0)
-    avoidable = int(summary.get("avoidable_eager_definition_tokens") or 0)
     if unused:
         answer = f"{unused} of {enabled} removable capability groups have no observed use in this scope."
         action = "Review the named candidates in Tools & Skills; only disable a group after confirming you do not need it."
@@ -4162,11 +3926,10 @@ def agent_capabilities(scope="current", limit=5, caller=None):
         "evidence": [
             {"label": "Enabled removable groups", "value": enabled},
             {"label": "Groups without observed use", "value": unused},
-            {"label": "Measured avoidable eager context", "value": avoidable, "unit": "tokens"},
         ],
         "candidates": candidates,
         "recommended_action": action,
-        "caveat": "Capability evidence names MCP servers or skill packs but never returns configuration values, environment variables, credentials, tool arguments, or tool results.",
+        "caveat": "Capability evidence names user-installed skill packs but never returns configuration values, environment variables, credentials, tool arguments, or tool results.",
         "dashboard_url": agent_dashboard_url(panel="capabilities"),
         "as_of": agent_as_of(),
         "data_scope": "named_capability_evidence",
@@ -4275,7 +4038,6 @@ def menubar_recommendation(st):
     pct = context.get("latest_pct") or 0
     insights = st.get("insights") or []
     warn = next((i for i in insights if i.get("kind") == "warn"), None)
-    operational_warn = next((i for i in insights if i.get("kind") == "warn" and is_operational_warning(i)), None)
     last_cost = st.get("last_turn_cost") or 0
     low_yield_actionable = low_yield_should_warn(st.get("executions") or [], pct)
 
@@ -4306,16 +4068,6 @@ def menubar_recommendation(st):
             "detail": "Latest execution replayed large context for low output.",
             "severity": "warn",
             "target": "activity",
-        }
-    if operational_warn and (
-        "tool-bloat" in (operational_warn.get("key") or "")
-        or "namespace-bloat" in (operational_warn.get("key") or "")
-    ):
-        return {
-            "label": "Inspect tool output",
-            "detail": operational_warn.get("text") or "Tool output is dominating the log.",
-            "severity": "warn",
-            "target": "tools",
         }
     if pct >= MENUBAR_CONTEXT_WATCH_PCT:
         return {
@@ -4595,7 +4347,7 @@ class H(BaseHTTPRequestHandler):
     def handle(self):
         try:
             super().handle()
-        except ConnectionResetError:
+        except (BrokenPipeError, ConnectionResetError):
             pass
 
     def log_message(self, *args):
@@ -4624,7 +4376,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         req_path = urlparse(self.path).path
-        if req_path not in ("/mcp/disable", "/capability/toggle", "/capability/disable-unused",
+        if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete"):
             self.send_error(404)
             return
@@ -4670,23 +4422,18 @@ class H(BaseHTTPRequestHandler):
                      (500 if result.get("error_code") == "trash_failed" else 400))
             self._send(json.dumps(result), "application/json", status=status)
             return
-        if req_path == "/mcp/disable":
-            result = disable_mcp_server(payload.get("server"))
-        elif req_path == "/capability/disable-unused":
+        if req_path == "/capability/disable-unused":
             capabilities = cross_session().get("capabilities") or {}
             result = disable_capability_controls(payload.get("control_ids"), capabilities)
         else:
             capability_type = str(payload.get("type") or "").strip().lower()
             control_id = str(payload.get("control_id") or "").strip()
             enabled = payload.get("enabled") is True
-            expected_control = "mcp" if capability_type == "mcp" else "skill_pack"
             control = next((row for row in capability_inventory().get("control_groups") or []
-                            if row.get("id") == control_id and row.get("control_type") == expected_control
+                            if row.get("id") == control_id and row.get("control_type") == "skill_pack"
                             and row.get("mutable")), None)
             if not control:
                 result = {"ok": False, "error": "Capability control is not in the discovered inventory."}
-            elif capability_type == "mcp":
-                result = set_mcp_server_enabled(control.get("name"), enabled)
             elif capability_type == "skill":
                 result = set_skill_pack_enabled(control.get("runtime"), control.get("plugin_id"), enabled)
             else:
@@ -4740,39 +4487,28 @@ class H(BaseHTTPRequestHandler):
                 "page_candidates": PAGE_CANDIDATES,
             }), "application/json", status=200 if path else 503)
         elif req_path == "/events":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("Connection", "keep-alive")
+            # Older dashboard builds used EventSource and can keep reconnecting
+            # even after Chromium replaces the visible tab with an error page.
+            # A 204 response explicitly tells EventSource clients to stop.
+            self.send_response(204)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.send_header("Connection", "close")
             self.end_headers()
-            q_ = queue.Queue(maxsize=8)
-            with subscribers_lock:
-                subscribers.append(q_)
-            if STATE:
-                q_.put_nowait("data: " + json.dumps(STATE) + "\n\n")
-            try:
-                while True:
-                    try:
-                        chunk = q_.get(timeout=15)
-                    except queue.Empty:
-                        chunk = ": ping\n\n"
-                    self.wfile.write(chunk.encode())
-                    self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
-                pass
-            finally:
-                with subscribers_lock:
-                    if q_ in subscribers:
-                        subscribers.remove(q_)
+            self.close_connection = True
         else:
             self.send_error(404)
 
 
+class TokenMeterHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    request_queue_size = 64
+
+
 if __name__ == "__main__":
     threading.Thread(target=watcher, daemon=True).start()
-    threading.Thread(target=refresh_ghost_mcp_catalog, daemon=True).start()
-    ThreadingHTTPServer.allow_reuse_address = True
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    srv = TokenMeterHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
     print("Auto-following newest ~/.claude and ~/.codex log. Ctrl-C to stop.")
     try:

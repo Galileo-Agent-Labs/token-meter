@@ -21,7 +21,7 @@ SUPPORTED_PROTOCOL_VERSIONS = {
 SERVER_INSTRUCTIONS = (
     "Token Meter is a local, read-only source of cost and efficiency evidence for Codex and Claude. "
     "Use check for a decision about the caller's current run, usage for aggregate historical change, "
-    "and capabilities for optional MCP or skill-pack hygiene. Prefer calling check at meaningful phase "
+    "and capabilities for optional skill-pack hygiene. Prefer calling check at meaningful phase "
     "boundaries or when the user asks about cost, context, tool output, or whether to continue. Never imply "
     "continuous monitoring: tools run only when called. Results omit prompts, messages, reasoning text, tool "
     "arguments, tool results, credentials, config values, and named historical runs. The server cannot mutate "
@@ -97,7 +97,7 @@ TOOLS = [
         "name": "capabilities",
         "title": "Review optional capabilities",
         "description": (
-            "Review named MCP servers or skill packs with bounded usage and schema-overhead evidence. "
+            "Review named user-installed skill packs with bounded usage evidence. "
             "Never returns environment variables, credentials, config values, tool arguments, or tool results, "
             "and cannot change configuration."
         ),

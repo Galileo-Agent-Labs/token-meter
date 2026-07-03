@@ -135,7 +135,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .toastbox{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:9px;width:min(360px,calc(100vw - 28px));pointer-events:none}.toast{pointer-events:auto;border:1px solid rgba(0,188,235,.38);border-left:4px solid var(--orange);border-radius:8px;background:linear-gradient(180deg,rgba(24,34,44,.98),rgba(13,18,24,.98));box-shadow:0 16px 42px rgba(0,0,0,.42);padding:10px 12px;animation:enter .18s ease}.toast.warn{border-left-color:var(--warn);border-color:rgba(255,180,87,.42)}.toast.bad{border-left-color:var(--bad);border-color:rgba(255,111,111,.42)}.toast .th{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;font-size:13px;font-weight:780}.toast .tb{font-size:12px;color:var(--dim);margin-top:2px}.toast button{border:0;background:transparent;color:var(--faint);font:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0}.toast button:hover{color:var(--fg)}
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
 .glob-hero{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.spark{display:flex;align-items:flex-end;gap:5px;height:84px;margin-top:8px;padding:0 2px}.spark .b{flex:1;background:linear-gradient(180deg,var(--orange),rgba(0,188,235,.55));border-radius:3px 3px 0 0;min-height:3px;position:relative;box-shadow:0 -8px 18px rgba(0,188,235,.08)}.spark .b.anom{background:linear-gradient(180deg,var(--bad),rgba(255,111,111,.58))}.spark .b:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5;box-shadow:var(--shadow-soft)}
-.wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDisable{border:1px solid rgba(255,180,87,.4);background:rgba(255,180,87,.08);color:var(--warn);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.mcpDisable:hover{background:rgba(255,180,87,.15)}.mcpDisable:disabled{opacity:.45;cursor:not-allowed}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
+.wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
 .globalControls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(190px,.78fr) minmax(150px,.52fr) auto auto;gap:10px;align-items:end;margin:12px 0}.filterControl{display:grid;gap:5px;min-width:0}.filterControl>span{font-size:10px;line-height:1;text-transform:uppercase;color:var(--faint);font-weight:780}.searchbox,.filterSelect{width:100%;min-width:0;height:38px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.filterSelect{appearance:auto;padding-right:28px}.searchbox:focus,.filterSelect:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.filterSort .seg{min-height:38px;align-items:center}.filterClear{display:grid;gap:5px;justify-items:stretch;min-width:148px}.clearFilters{height:38px;background:rgba(255,255,255,.045);color:var(--dim)}.clearFilters:hover:not(:disabled){color:var(--fg)}.clearFilters:disabled{opacity:.42;cursor:not-allowed}.filterCount{text-align:right}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
 .logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
 .capHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.currentCapHero{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}.capHero .pad{padding:13px 15px;overflow:visible}.capHero .card:hover,.capHero .card:focus-within{z-index:50}.capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}.capHero .card:last-child .fieldtip:after{left:auto;right:0}.capHero .meter{font-size:28px;margin-top:4px}.capHero .subline{font-size:12px;margin-top:5px}.capStatBar{height:8px;margin-top:9px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.42)}.capStatBar i{display:block;width:0;height:100%;border-radius:999px;transition:width .35s ease;background:linear-gradient(90deg,var(--good),var(--accent));box-shadow:0 0 14px rgba(102,217,144,.3)}.capStatBar.mcp i{background:linear-gradient(90deg,#9d72f1,#c2a5ff);box-shadow:0 0 14px rgba(183,140,255,.3)}.capStatBar.skill i{background:linear-gradient(90deg,var(--accent),var(--orange3));box-shadow:0 0 14px rgba(0,188,235,.3)}.capStatBar.warn i{background:linear-gradient(90deg,var(--warn),var(--orange));box-shadow:0 0 14px rgba(255,180,87,.3)}.capReview{margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border-left:3px solid var(--warn)}.capReview.good{border-left-color:var(--good)}.capReviewTitle{font-size:15px;font-weight:800;margin-top:4px}.capReviewDetail{font-size:12px;color:var(--dim);margin-top:3px;max-width:880px}.capCharts{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}.capCharts .pad{padding:13px 17px}.defBar{height:12px;margin-top:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:flex}.defBar i{display:block;height:100%}.defBar .used{background:var(--good)}.defBar .unused{background:var(--warn)}.defBar .deferred{background:rgba(127,219,242,.42)}.capSource{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:rgba(255,255,255,.03);white-space:nowrap}.capFilters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:10px 0}.capTableWrap{overflow:auto;max-height:620px}.capTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.capTableWrap .tbl th.sortable{cursor:pointer;user-select:none;white-space:nowrap}.capTableWrap .tbl th.sortable:after{content:"\2195";display:inline-block;margin-left:6px;color:var(--faint);font-size:10px}.capTableWrap .tbl th.sortable.sort-asc:after{content:"\2191";color:var(--accent)}.capTableWrap .tbl th.sortable.sort-desc:after{content:"\2193";color:var(--accent)}.capTableWrap .tbl th.sortable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}.stateDot{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.stateDot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}.stateDot.on:before{background:var(--good)}.stateDot.off:before{background:var(--bad)}.stateDot.lazy:before{background:var(--orange3)}.capAction{border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.capAction:hover{border-color:var(--accent)}.capAction.disable{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}.capAction:disabled{opacity:.45;cursor:not-allowed}.capPath{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
@@ -254,8 +254,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   </div>
   <div class="capHero currentCapHero" aria-label="Current tool activity and removable capability optimization">
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Unique tool identities observed in this selected log. Default tools and result-only instrumentation are included here as activity, not as removal candidates." data-tip="Unique tool identities observed in this selected log. Default tools and result-only instrumentation are included here as activity, not as removal candidates.">Tool activity</div><div class="meter mono" id=ov-activity-tools>0</div><div class=subline id=ov-activity-note></div></div>
-   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled capability groups this runtime can actually disable, such as MCP servers and configured skill packs. Any child call or skill activation marks its whole group used. Default tools are excluded." data-tip="Enabled capability groups this runtime can actually disable, such as MCP servers and configured skill packs. Any child call or skill activation marks its whole group used. Default tools are excluded.">Optional capability use</div><div class="meter mono" id=ov-optional-use>0/0</div><div class=capStatBar id=ov-optional-bar role=progressbar aria-label="Optional capability use in this session" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=ov-optional-note></div></div>
-   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Estimated eager schema tokens from unused removable capability groups in this session. Default/read-only tools are excluded; deferred capabilities are not treated as initial-context waste." data-tip="Estimated eager schema tokens from unused removable capability groups in this session. Default/read-only tools are excluded; deferred capabilities are not treated as initial-context waste.">Avoidable context</div><div class="meter mono" id=ov-avoidable-tokens>--</div><div class=subline id=ov-avoidable-note></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled user-installed skill packs this runtime can disable. Any skill activation marks its whole pack used. Default tools and MCP servers are read-only evidence." data-tip="Enabled user-installed skill packs this runtime can disable. Any skill activation marks its whole pack used. Default tools and MCP servers are read-only evidence.">Optional capability use</div><div class="meter mono" id=ov-optional-use>0/0</div><div class=capStatBar id=ov-optional-bar role=progressbar aria-label="Optional capability use in this session" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=ov-optional-note></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled user-installed skill packs with no observed activation in this session. MCP servers and read-only capabilities are excluded." data-tip="Enabled user-installed skill packs with no observed activation in this session. MCP servers and read-only capabilities are excluded.">Unused skill packs</div><div class="meter mono" id=ov-unused-packs>0</div><div class=subline id=ov-unused-packs-note></div></div>
   </div>
 
   <div class=section-h><h2>Execution Profile</h2><span class=hint id=exec-profile-hint>per execution or request</span></div>
@@ -387,7 +387,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=global-panel id=global-panel-evidence>
   <div class=section-h><h2>Capability evidence</h2><span class=hint>usage, payloads, failures, and recommendations</span></div>
   <div class="card pad wasteTableWrap">
-   <table class=tbl id=g-tool-table><thead><tr><th>Tool / MCP</th><th>Namespace</th><th class=num>Sessions</th><th class=num>Calls</th><th class=num>Returned</th><th class=num>Flagged</th><th class=num>Errors</th><th>Last used</th><th>Recommendation</th><th></th></tr></thead><tbody></tbody></table>
+   <table class=tbl id=g-tool-table><thead><tr><th>Tool / MCP</th><th>Namespace</th><th class=num>Sessions</th><th class=num>Calls</th><th class=num>Returned</th><th class=num>Flagged</th><th class=num>Errors</th><th>Last used</th><th>Recommendation</th></tr></thead><tbody></tbody></table>
   </div>
 	  </div>
 	 </div>
@@ -452,14 +452,6 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2>Highest-cost logs</h2><span>Where the day&rsquo;s spend came from</span></div><span id=d-session-count></span></div><div class=dailySessions id=d-sessions></div></div>
 	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2>Runtime split</h2><span>Share of daily spend</span></div></div><div class=dailyProviders id=d-providers></div></div>
 	  </div>
-	  <div class="card dailyQuality">
-	   <div class=dailyPanelHead><div><h2>Tool-result health</h2><span>Oversized, repeated, or error results can inflate context</span></div><span>trace-observed</span></div>
-	   <div class=dailyQualityGrid>
-	    <div class=dailyQualityVerdict><div class=dailyQualityScore id=d-quality-share>--</div><div><div class=dailyQualityState id=d-quality-state>No tool traffic</div><div class=subline id=d-quality-note>No returned tool or MCP tokens.</div></div></div>
-	    <div><div class=label>Returned-token mix</div><div class=dailyToolBar id=d-quality-bar><i class=clean></i><i class=flagged></i></div><div class=dailyQualityLegend><span id=d-clean-legend>0 unflagged</span><span id=d-flagged-legend>0 flagged</span></div></div>
-	    <div class=dailyQualityNumbers><div class=dailyQualityNumber><div class=label>Returned</div><div class="v mono" id=d-tool-tokens>0</div></div><div class=dailyQualityNumber><div class=label>Flagged</div><div class="v mono" id=d-flagged-tokens>0</div></div></div>
-	   </div>
-	  </div>
 	 </div>
 
 	 <div class=view id=view-learn>
@@ -468,8 +460,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <div class=learnStep><div class=num>1</div><div><h3>Start with the current summary</h3><p>Check estimated spend, context use, cache behavior, and the latest execution before deciding whether the session needs intervention.</p></div><button class=tbtn data-learn-route=summary>Open Current</button></div>
 	   <div class=learnStep><div class=num>2</div><div><h3>Inspect execution spikes</h3><p>Use Activity to find the execution where tokens, cost, context, or tool calls changed sharply, then inspect the prompt and result around that point.</p></div><button class=tbtn data-learn-route=activity>Open Activity</button></div>
 	   <div class=learnStep><div class=num>3</div><div><h3>Act on evidence, not one-off noise</h3><p>Use Insights for immediate issues, then Global and Daily to confirm whether the pattern repeats across logs or days.</p></div><button class=tbtn data-learn-route=global-overview>Open Global</button></div>
-	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools &amp; Skills, review exact runtime-qualified controls, and disable only packs or MCP servers that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
-	   <div class=learnStep><div class=num>5</div><div><h3>Close with the daily summary</h3><p>Compare today with recent days, note the dominant runtime and highest-cost logs, and verify whether flagged tool results are trending down.</p></div><button class=tbtn data-learn-route=daily>Open Daily</button></div>
+	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools &amp; Skills, review MCP usage as read-only evidence, and disable only user-installed skill packs that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
+	   <div class=learnStep><div class=num>5</div><div><h3>Close with the daily summary</h3><p>Compare today with recent days, note the dominant runtime and highest-cost logs, and capture any follow-up for the next run.</p></div><button class=tbtn data-learn-route=daily>Open Daily</button></div>
 	  </div></section>
 	  <section class=learnSection><h2>Ask from your agent</h2><div class=subline>After connecting Token Meter in Settings, ask naturally. The agent receives a bounded verdict and a link back to the evidence.</div><div class=promptCards>
 	   <div class=promptCard><code>Should I keep this run going?</code>Checks current cost, context pressure, tool-result volume, and the strongest action.</div>
@@ -481,12 +473,12 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
 	 <div class=view id=view-capabilities>
   <div class=capHero>
-   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled MCP servers and user-installed skill packs eligible for review. Default tools, standalone skills, and runtime packs are excluded." data-tip="Enabled MCP servers and user-installed skill packs eligible for review. Default tools, standalone skills, and runtime packs are excluded.">Optional groups enabled</div><div class="meter mono" id=c-opt-enabled>0</div><div class=subline id=c-opt-enabled-note></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled user-installed skill packs eligible for review. MCP servers, default tools, standalone skills, and runtime packs are read-only or excluded." data-tip="Enabled user-installed skill packs eligible for review. MCP servers, default tools, standalone skills, and runtime packs are read-only or excluded.">Optional groups enabled</div><div class="meter mono" id=c-opt-enabled>0</div><div class=subline id=c-opt-enabled-note></div></div>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Removable capability groups used at least once across the scanned local logs. Any child tool or skill activation marks the whole group used." data-tip="Removable capability groups used at least once across the scanned local logs. Any child tool or skill activation marks the whole group used.">Used across scanned logs</div><div class="meter mono" id=c-opt-used>0/0</div><div class=capStatBar id=c-opt-used-bar role=progressbar aria-label="Optional groups used across scanned logs" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-opt-used-note></div></div>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled removable groups with no observed child calls or skill activations in the scanned logs. These are review candidates, not automatic disable recommendations." data-tip="Enabled removable groups with no observed child calls or skill activations in the scanned logs. These are review candidates, not automatic disable recommendations.">Review candidates</div><div class="meter mono" id=c-opt-review>0</div><div class="capStatBar warn" id=c-opt-review-bar role=progressbar aria-label="Unused removable groups" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-opt-review-note></div></div>
-   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Measured eager schema tokens belonging only to unused removable groups. Default/read-only and deferred capabilities are excluded. A dash means the runtime did not report removable-group schema loading." data-tip="Measured eager schema tokens belonging only to unused removable groups. Default/read-only and deferred capabilities are excluded. A dash means the runtime did not report removable-group schema loading.">Avoidable eager context</div><div class="meter mono" id=c-opt-eager>--</div><div class=subline id=c-opt-eager-note></div></div>
+   <div class="card pad"><div class="label fieldtip" tabindex=0 title="MCP servers discovered from Codex or Claude configuration and trace evidence. They remain read-only in Token Meter." data-tip="MCP servers discovered from Codex or Claude configuration and trace evidence. They remain read-only in Token Meter.">MCP servers observed</div><div class="meter mono" id=c-mcp-observed>0</div><div class=subline id=c-mcp-observed-note></div></div>
   </div>
-	  <div class="card pad capReview" id=c-review-panel><div><div class="label fieldtip" tabindex=0 title="This insight only considers MCP servers and user-installed packs with a working disable control. Built-in and runtime-managed skills remain visible below but cannot become candidates." data-tip="This insight only considers MCP servers and user-installed packs with a working disable control. Built-in and runtime-managed skills remain visible below but cannot become candidates.">Optimization insight</div><div class=capReviewTitle id=c-review-title></div><div class=capReviewDetail id=c-review-detail></div></div><div class=capReviewActions><button class=tbtn id=c-review-filter type=button>Review candidates</button><button class="tbtn danger" id=c-disable-unused type=button>Disable all unused</button></div></div>
+	  <div class="card pad capReview" id=c-review-panel><div><div class="label fieldtip" tabindex=0 title="This insight only considers user-installed skill packs with a working native control. MCP servers, built-ins, and runtime-managed skills remain visible below but cannot become candidates." data-tip="This insight only considers user-installed skill packs with a working native control. MCP servers, built-ins, and runtime-managed skills remain visible below but cannot become candidates.">Optimization insight</div><div class=capReviewTitle id=c-review-title></div><div class=capReviewDetail id=c-review-detail></div></div><div class=capReviewActions><button class=tbtn id=c-review-filter type=button>Review candidates</button><button class="tbtn danger" id=c-disable-unused type=button>Disable all unused</button></div></div>
   <div class=capCharts>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Evidence for every runtime-reported definition, including default and read-only tools. This chart explains prompt composition but is not itself a removal recommendation." data-tip="Evidence for every runtime-reported definition, including default and read-only tools. This chart explains prompt composition but is not itself a removal recommendation.">All catalog definition evidence</div><div class=subline><span class=fieldtip tabindex=0 title="Useful eager: schema loaded up front and called. Unused eager: schema loaded up front but not called. Deferred: schema kept out of the initial prompt. Default/read-only entries remain included here for evidence." data-tip="Useful eager: schema loaded up front and called. Unused eager: schema loaded up front but not called. Deferred: schema kept out of the initial prompt. Default/read-only entries remain included here for evidence.">useful eager · unused eager · deferred schemas</span></div><div class=defBar id=c-def-chart></div><div class=legend id=c-def-legend></div><div class=subline id=c-def-note></div></div>
   </div>
@@ -505,23 +497,12 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <section class="card pad agentAccess" id=agent-access>
    <div class=agentAccessHead><div><div class=label>Agent connections</div><h2>Ask Token Meter from Codex or Claude</h2><p>Let your agent check this run&rsquo;s cost, context, tool usage, and efficiency when you ask. This is on-demand advice, not continuous monitoring.</p></div><span class=agentAccessBadge id=agent-access-badge>Checking clients</span></div>
    <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status</div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
-   <div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named MCP servers and skill packs only when requested.</div><div><b>Never shared:</b> prompts, messages, reasoning, tool content, credentials, or config values.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div>
+   <div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named user-installed skill packs only when requested.</div><div><b>Never shared:</b> prompts, messages, reasoning, tool content, credentials, or config values.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div>
    <div class=agentTools>Read-only tools: <code>mcp__tokenmeter__check</code> · <code>mcp__tokenmeter__usage</code> · <code>mcp__tokenmeter__capabilities</code></div>
   </section>
 	  <div class=foot>Capability review and controls remain in Tools &amp; Skills · run-specific budgets and notifications remain in Current → Alerts</div>
 	 </div>
 </div>
-<dialog class=mcpDialog id=mcp-dialog>
- <div class=inner>
-  <h3>Disable MCP server?</h3>
-  <div class=subline id=mcp-dialog-sub></div>
-  <div class=evidence id=mcp-dialog-evidence></div>
-  <div class=label>Command</div>
-  <code id=mcp-dialog-command></code>
-  <div class=subline>This changes Codex and Claude configuration for future sessions. Restart the IDE or agent after it succeeds.</div>
-  <div class=actions><button class=tbtn id=mcp-cancel>Cancel</button><button class="tbtn danger" id=mcp-confirm>Disable MCP</button></div>
- </div>
-</dialog>
 <dialog class=mcpDialog id=cap-dialog>
  <div class=inner>
   <h3 id=cap-dialog-title>Change skill pack?</h3>
@@ -624,7 +605,6 @@ function routedSessionId(){
 }
 function sessionRoute(id){return `/sessions/${encodeURIComponent(id)}#summary`;}
 function stateSessionId(state){return state?.source?.id||String(state?.session||'').split('.')[0]||null;}
-
 function setHashRoute(route,{replace=false,apply=true}={}){
  const url=`${location.pathname}${location.search||''}#${route}`;
  if(history.pushState){
@@ -781,7 +761,7 @@ function showAppToast(entry){
  setTimeout(()=>toast.remove(),entry.sticky?9500:6500);
  while(box.children.length>4) box.firstElementChild.remove();
 }
-function agentActionToken(){return LATEST?.xsession?.capabilities?.actions?.token||LATEST?.xsession?.mcp_actions?.token||'';}
+function agentActionToken(){return LATEST?.xsession?.capabilities?.actions?.token||'';}
 function renderAgentAccess(status){
  AGENT_ACCESS=status;
  const clients=status?.clients||[];
@@ -1402,13 +1382,12 @@ function renderCurrentOptimization(s){
  $('ov-optional-use').textContent=`${f(used)}/${f(enabled)}`;
  setCapabilityStatBar('ov-optional-bar',enabled?used/enabled:0);
  $('ov-optional-note').textContent=enabled
-  ? `MCP ${f(optional.mcp_used)}/${f(optional.mcp_enabled)} · skill packs ${f(optional.skill_packs_used)}/${f(optional.skill_packs_enabled)} · defaults excluded`
+  ? `skill packs ${f(optional.skill_packs_used)}/${f(optional.skill_packs_enabled)} · MCPs are read-only`
   : 'no removable groups enabled for this runtime';
- const measured=optional.overhead_measured_groups||0, avoidable=optional.avoidable_eager_definition_tokens||0;
- $('ov-avoidable-tokens').textContent=measured?f(avoidable):'--';
- $('ov-avoidable-note').textContent=measured
-  ? `${f(optional.eager_unused_groups)} unused eager groups · deferred excluded`
-  : `${f(optional.unused)} unused removable groups · schema loading not reported`;
+ $('ov-unused-packs').textContent=f(optional.unused||0);
+ $('ov-unused-packs-note').textContent=optional.unused
+  ? 'enabled packs with no activation in this run'
+  : 'no unused user-installed packs in this run';
 }
 function renderTrace(trace){
  const rows=(trace||[]).slice(-72);
@@ -1653,22 +1632,11 @@ $('session-delete-confirm').onclick=async()=>{
  }
 };
 
-let pendingMcpAction=null;
 function recommendationLabel(value){
  return ({disable:'disable candidate',fix_or_disable:'fix or disable',narrow_results:'narrow results',reduce_repeats:'reduce repeats',scope:'scope to project',keep:'keep'})[value]||String(value||'review').replaceAll('_',' ');
 }
-function openMcpDialog(row,actions){
- if(!row?.mcp_server||!actions?.available) return;
- pendingMcpAction={row,actions};
- $('mcp-dialog-sub').textContent=`${row.mcp_server} · ${row.sessions_used||0} sessions used · ${f(row.calls||0)} calls`;
- $('mcp-dialog-evidence').innerHTML=`<div>${esc(row.reason||'Review the trace evidence before disabling.')}</div><div>${f(row.output_tokens||0)} returned tokens · ${f(row.errors||0)} errors · last used ${esc(row.last_used||'Never')}</div>`;
- $('mcp-dialog-command').textContent=`ghost mcp all remove ${row.mcp_server}`;
- $('mcp-confirm').disabled=false;
- $('mcp-confirm').textContent='Disable MCP';
- $('mcp-dialog').showModal();
-}
-function renderGlobalWaste(waste,actions){
- waste=waste||{}; actions=actions||{};
+function renderGlobalWaste(waste){
+ waste=waste||{};
  const total=waste.total_output_tokens||0, flagged=waste.flagged_tokens||0;
  $('g-tool-tokens').textContent=f(total);
  $('g-tool-token-note').textContent=`${f(waste.total_calls||0)} calls · ${f(waste.sessions_with_tools||0)} sessions`;
@@ -1688,30 +1656,11 @@ function renderGlobalWaste(waste,actions){
  $('g-waste-insights').innerHTML=(waste.insights||[]).length?(waste.insights||[]).map(i=>`<div class="ins ${esc(i.kind||'neutral')}"><div class=glyph>${icon[i.kind]||'›'}</div><div class=copy><div class=title>${esc(i.title||'Signal')}</div><div class=text>${esc(i.text||'')}</div>${i.detail?`<div class=detail>${esc(i.detail)}</div>`:''}${i.action?`<div class=action>${esc(i.action)}</div>`:''}</div><div class=meta>${i.action?'action':'signal'}</div></div>`).join(''):'<div class="ins empty">No global tool-waste signals yet</div>';
 
  const rows=waste.by_name||[];
- $('g-tool-table').querySelector('tbody').innerHTML=rows.length?rows.map((r,idx)=>{
+ $('g-tool-table').querySelector('tbody').innerHTML=rows.length?rows.map(r=>{
   const used=r.advertised_sessions?`${f(r.sessions_used)}/${f(r.advertised_sessions)} reported`:f(r.sessions_used);
-  const disable=r.kind==='mcp'&&r.mcp_server?`<button class=mcpDisable data-mcp-row="${idx}" ${actions.available?'':`disabled title="Ghost CLI is not available"`}>Disable MCP</button>`:'';
-  return `<tr><td class=nm>${esc(r.display||r.name)}<div class=subline>${esc(r.reason||'')}</div></td><td><span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></td><td class="num mono">${used}</td><td class="num mono">${f(r.calls)}</td><td class="num mono">${f(r.output_tokens)}</td><td class="num mono">${f(r.flagged_tokens)}</td><td class="num mono">${f(r.errors)}</td><td>${esc(r.last_used||'Never')}</td><td><span class="reco ${esc(r.recommendation)}">${esc(recommendationLabel(r.recommendation))}</span></td><td>${disable}</td></tr>`;
- }).join(''):'<tr><td colspan=10 style=color:var(--faint)>no tool evidence yet</td></tr>';
- [...$('g-tool-table').querySelectorAll('[data-mcp-row]')].forEach(btn=>btn.onclick=()=>openMcpDialog(rows[Number(btn.dataset.mcpRow)],actions));
+  return `<tr><td class=nm>${esc(r.display||r.name)}<div class=subline>${esc(r.reason||'')}</div></td><td><span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></td><td class="num mono">${used}</td><td class="num mono">${f(r.calls)}</td><td class="num mono">${f(r.output_tokens)}</td><td class="num mono">${f(r.flagged_tokens)}</td><td class="num mono">${f(r.errors)}</td><td>${esc(r.last_used||'Never')}</td><td><span class="reco ${esc(r.recommendation)}">${esc(recommendationLabel(r.recommendation))}</span></td></tr>`;
+ }).join(''):'<tr><td colspan=9 style=color:var(--faint)>no tool evidence yet</td></tr>';
 }
-$('mcp-cancel').onclick=()=>{$('mcp-dialog').close(); pendingMcpAction=null;};
-$('mcp-dialog').addEventListener('cancel',()=>{pendingMcpAction=null;});
-$('mcp-confirm').onclick=async()=>{
- if(!pendingMcpAction)return;
- const {row,actions}=pendingMcpAction, button=$('mcp-confirm');
- button.disabled=true; button.textContent='Disabling…';
- try{
-  const response=await fetch('/mcp/disable',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':actions.token},body:JSON.stringify({server:row.mcp_server})});
-  const result=await response.json();
-  if(!response.ok||!result.ok) throw new Error(result.error||'Could not disable MCP server.');
-  $('mcp-dialog').close(); pendingMcpAction=null;
-  showAppToast({title:'MCP disabled',body:`${row.mcp_server} was removed from Codex and Claude. Restart the IDE or agent to load the change.`,kind:'warn',sticky:true});
- }catch(error){
-  button.disabled=false; button.textContent='Disable MCP';
-  showAppToast({title:'MCP change failed',body:error.message||String(error),kind:'warn',sticky:true});
- }
-};
 
 const CAPABILITY_SORT_KEYS=new Set(['name','type','runtime','state','use','returned','last','control']);
 let capabilityType='all', capabilityState='all', capabilitySearch='';
@@ -1782,7 +1731,7 @@ function capabilityAction(row){
 function renderCapabilityTable(cap){
  const inventory=cap?.items||[], reviewing=capabilityState==='review';
  const all=reviewing?(cap?.control_groups||[]).filter(row=>row.reviewable!==false&&row.enabled&&!row.used).map(group=>({
-  ...group,source:group.control_type==='skill_pack'?group.source:'removable server',
+  ...group,source:group.source,
   state:'Enabled',review_candidate:true
  })):inventory;
  const q=capabilitySearch.trim().toLowerCase();
@@ -1821,7 +1770,6 @@ function setCapabilityStatBar(id,value){
 let pendingCapabilityAction=null;
 function requestCapabilityToggle(row,cap){
  if(!row||!row.mutable)return;
- if(row.type!=='skill'){toggleCapability(row,cap);return;}
  const enabled=!row.enabled, members=row.members||[row.name], shown=members.slice(0,8);
  pendingCapabilityAction={row,cap};
  $('cap-dialog-title').textContent=`${enabled?'Enable':'Disable'} skill pack?`;
@@ -1862,7 +1810,6 @@ async function toggleCapability(row,cap,confirmButton=null){
   (cap.items||[]).forEach(item=>{
    if(item.id===row.id||item.control_id===controlId){
     item.enabled=enabled; item.state=enabled?'Enabled':'Disabled';
-    if(item.type==='mcp'){item.codex_enabled=enabled;item.claude_enabled=enabled;}
    }
   });
   (cap.control_groups||[]).forEach(group=>{if(group.id===controlId)group.enabled=enabled;});
@@ -1875,7 +1822,7 @@ async function toggleCapability(row,cap,confirmButton=null){
   if(confirmButton){$('cap-dialog').close();pendingCapabilityAction=null;}
   if(!result.capabilities)renderCapabilities(freshCap);
   const verified=result.verified?' Setting verified.':'';
-  showAppToast({title:`${row.type==='mcp'?'MCP':'Skill pack'} ${enabled?'enabled':'disabled'}`,body:`${row.type==='skill'?row.plugin_id:row.name} changed for future sessions.${verified} Restart the IDE or agent to load the change.`,kind:enabled?'neutral':'warn',sticky:true});
+  showAppToast({title:`Skill pack ${enabled?'enabled':'disabled'}`,body:`${row.plugin_id} changed for future sessions.${verified} Restart the IDE or agent to load the change.`,kind:enabled?'neutral':'warn',sticky:true});
  }catch(error){
   buttons.forEach(button=>{button.disabled=false;});
   if(confirmButton){confirmButton.disabled=false;confirmButton.textContent=`${enabled?'Enable':'Disable'} pack`;}
@@ -1892,9 +1839,8 @@ function openBulkDisableDialog(cap){
  const groups=unusedReviewGroups(cap);
  if(!groups.length)return;
  pendingBulkDisable={cap,groups};
- const mcps=groups.filter(row=>row.control_type==='mcp').length, packs=groups.length-mcps;
  $('bulk-dialog-sub').textContent=`${f(groups.length)} current review candidates will be disabled`;
- $('bulk-dialog-evidence').innerHTML=`<div>${f(mcps)} MCP ${countWord(mcps,'server')} · ${f(packs)} user-installed skill ${countWord(packs,'pack')}</div><div>Runtime packs, built-ins, standalone skills, and used groups are excluded.</div>`;
+ $('bulk-dialog-evidence').innerHTML=`<div>${f(groups.length)} user-installed skill ${countWord(groups.length,'pack')}</div><div>MCP servers, runtime packs, built-ins, standalone skills, and used groups are excluded.</div>`;
  $('bulk-dialog-controls').textContent=groups.map(row=>row.id).join('\n');
  $('bulk-confirm').disabled=false;
  $('bulk-confirm').textContent='Disable all unused';
@@ -1931,26 +1877,24 @@ function renderCapabilities(cap){
  const sum=cap.summary||{}, defs=sum.definitions||{}, optional=sum.optional||{};
  const enabled=optional.enabled||0, usedGroups=optional.used||0, unusedGroups=optional.unused||0;
  $('c-opt-enabled').textContent=f(enabled);
- $('c-opt-enabled-note').textContent=`${f(optional.mcp_enabled)} MCP ${countWord(optional.mcp_enabled,'server')} · ${f(optional.skill_packs_enabled)} skill ${countWord(optional.skill_packs_enabled,'pack')} · defaults excluded`;
+ $('c-opt-enabled-note').textContent=`${f(optional.skill_packs_enabled)} user-installed skill ${countWord(optional.skill_packs_enabled,'pack')} · MCPs are read-only`;
  $('c-opt-used').textContent=`${f(usedGroups)}/${f(enabled)}`;
  $('c-opt-used-note').textContent=`across ${f(optional.scanned_sessions)} scanned logs · skill activation inferred`;
  setCapabilityStatBar('c-opt-used-bar',enabled?usedGroups/enabled:0);
  $('c-opt-review').textContent=f(unusedGroups);
  $('c-opt-review-note').textContent='enabled removable groups with no observed use';
  setCapabilityStatBar('c-opt-review-bar',enabled?unusedGroups/enabled:0);
- const measured=optional.overhead_measured_groups||0, avoidable=optional.avoidable_eager_definition_tokens||0;
- $('c-opt-eager').textContent=measured?f(avoidable):'--';
- $('c-opt-eager-note').textContent=measured
-  ? `${f(optional.eager_unused_groups)} unused eager groups · deferred excluded`
-  : 'removable-group schema loading not reported';
+ const mcps=sum.mcps||{};
+ $('c-mcp-observed').textContent=f(mcps.available||0);
+ $('c-mcp-observed-note').textContent=`${f(mcps.enabled||0)} configured enabled · read-only`;
  const reviewPanel=$('c-review-panel');
  reviewPanel.classList.toggle('good',unusedGroups===0);
  $('c-review-title').textContent=unusedGroups
   ? `${f(unusedGroups)} removable groups are enabled but unused across the scanned logs.`
   : 'No unused removable capability groups detected.';
  $('c-review-detail').textContent=unusedGroups
-  ? `${f(optional.mcp_enabled-optional.mcp_used)} MCP ${countWord(optional.mcp_enabled-optional.mcp_used,'server')} and ${f(optional.skill_packs_enabled-optional.skill_packs_used)} skill ${countWord(optional.skill_packs_enabled-optional.skill_packs_used,'pack')} need review. Default/read-only tools and runtime packs are excluded; ${f(optional.unmeasured_unused_groups)} candidates have no measured schema overhead.`
-  : 'Default and read-only tools plus runtime packs remain visible as evidence, but never enter this optimization result.';
+  ? `${f(optional.skill_packs_enabled-optional.skill_packs_used)} user-installed skill ${countWord(optional.skill_packs_enabled-optional.skill_packs_used,'pack')} need review. MCP servers, default/read-only tools, and runtime packs are excluded; ${f(optional.unmeasured_unused_groups)} candidates have no measured schema overhead.`
+  : 'MCP servers, default and read-only tools, plus runtime packs remain visible as evidence, but never enter this optimization result.';
  $('c-review-filter').style.display=unusedGroups?'inline-block':'none';
  $('c-disable-unused').style.display=unusedGroups?'inline-block':'none';
  const eager=defs.eager_definition_tokens||0, unused=defs.unused_eager_definition_tokens||0, deferred=defs.deferred_definition_tokens||0, total=defs.definition_tokens||0, useful=Math.max(0,eager-unused);
@@ -2003,7 +1947,7 @@ function renderDaily(xs){
  if(!days.length){
   $('d-day-select').innerHTML='<option>No daily data</option>';
   $('d-cost').textContent='$0';
-  ['d-logs','d-projects','d-tool-tokens','d-flagged-tokens'].forEach(id=>$(id).textContent='0');
+  ['d-logs','d-projects'].forEach(id=>$(id).textContent='0');
   $('d-avg-log').textContent='$0';
   $('d-spend-delta').textContent='Building baseline';$('d-spend-delta').className='dailyDelta';
   $('d-status-title').textContent='No daily data yet';
@@ -2015,12 +1959,6 @@ function renderDaily(xs){
   $('d-providers').innerHTML='<div class=subline>no runtime spend</div>';
   $('d-sessions').innerHTML='<div class=subline>no logs for this day</div>';
   $('d-session-count').textContent='';
-  $('d-quality-share').textContent='--';$('d-quality-share').className='dailyQualityScore';
-  $('d-quality-state').textContent='No tool traffic';
-  $('d-quality-note').textContent='No returned tool or MCP tokens were observed.';
-  $('d-clean-legend').textContent='0 unflagged';$('d-flagged-legend').textContent='0 flagged';
-  $('d-quality-bar').querySelector('.clean').style.width='0%';
-  $('d-quality-bar').querySelector('.flagged').style.width='0%';
   $('d-older').disabled=true;$('d-newer').disabled=true;
   return;
  }
@@ -2040,11 +1978,10 @@ function renderDaily(xs){
  $('d-avg-log').textContent=money(day.sessions?cost/day.sessions:0);
  $('d-spend-delta').textContent=previous?`${previousDelta} vs previous`:'First recorded day';
  $('d-spend-delta').className=`dailyDelta${previous&&cost>Number(previous.cost||0)*1.25?' warn':previous&&cost<Number(previous.cost||0)*.9?' good':''}`;
- const ratio=recentAvg?cost/recentAvg:0,flaggedShare=Number(day.flagged_share||0);
+ const ratio=recentAvg?cost/recentAvg:0;
  let status='Building a baseline';
  if(priorDays.length){
-  if(day.tool_tokens&&flaggedShare>=.25)status='Tool results need attention';
-  else if(ratio>=1.5)status='Spend was unusually high';
+  if(ratio>=1.5)status='Spend was unusually high';
   else if(ratio>=1.15)status='Above the recent pace';
   else if(ratio<=.75)status='A lighter day';
   else status='Within the recent range';
@@ -2069,22 +2006,6 @@ function renderDaily(xs){
  $('d-session-count').textContent=(day.top_sessions||[]).length?`${f((day.top_sessions||[]).length)} shown`:'';
  $('d-sessions').innerHTML=(day.top_sessions||[]).length?(day.top_sessions||[]).map((row,i)=>`<div class=dailySession><div class=dailyRank>${i+1}</div><div class=dailySessionMain><div class=dailySessionName title="${esc(row.title)}">${esc(row.title)}</div><div class=dailySessionMeta>${esc(row.project)} · ${esc(row.label)}</div><div class=dailySessionTrack><i style="width:${100*row.cost/sessionMax}%"></i></div></div><div class=dailySessionValue><strong class=mono>${money(row.cost)}</strong><span>${pct(cost?row.cost/cost:0)} of day</span></div><button class=tbtn data-daily-session="${esc(row.id)}" type=button>Open</button></div>`).join(''):'<div class=subline>no logs for this day</div>';
  [...$('d-sessions').querySelectorAll('[data-daily-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.dailySession));
- const clean=Math.max(0,(day.tool_tokens||0)-(day.flagged_tokens||0));
- $('d-tool-tokens').textContent=f(day.tool_tokens);$('d-flagged-tokens').textContent=f(day.flagged_tokens);
- $('d-clean-legend').textContent=`${f(clean)} unflagged`;$('d-flagged-legend').textContent=`${f(day.flagged_tokens)} flagged`;
- let qualityState='No tool traffic',qualityNote='No tool or MCP result tokens were observed for this day.',qualityWarn=false;
- if(day.tool_tokens){
-  if(!day.flagged_tokens){qualityState='Clean results';qualityNote='No returned tokens matched the oversized, repeat, or error rules.';}
-  else if(flaggedShare<.1){qualityState='Mostly clean';qualityNote=`${pct(flaggedShare)} of returned tokens matched at least one quality rule.`;}
-  else if(flaggedShare<.25){qualityState='Worth reviewing';qualityNote=`${pct(flaggedShare)} of returned tokens matched at least one quality rule.`;qualityWarn=true;}
-  else{qualityState='Needs attention';qualityNote=`${pct(flaggedShare)} of returned tokens matched at least one quality rule.`;qualityWarn=true;}
- }
- $('d-quality-share').textContent=day.tool_tokens?pct(flaggedShare):'--';
- $('d-quality-share').className=`dailyQualityScore${qualityWarn?' warn':''}`;
- $('d-quality-state').textContent=qualityState;$('d-quality-note').textContent=qualityNote;
- const cleanWidth=day.tool_tokens?100*Math.min(1,clean/day.tool_tokens):0,flaggedWidth=day.tool_tokens?100*Math.min(1,day.flagged_tokens/day.tool_tokens):0;
- $('d-quality-bar').querySelector('.clean').style.width=`${cleanWidth}%`;
- $('d-quality-bar').querySelector('.flagged').style.width=`${flaggedWidth}%`;
 }
 $('d-day-select').onchange=e=>{dailySelected=e.target.value;if(LATEST)renderDaily(LATEST.xsession);};
 $('d-older').onclick=()=>{const days=LATEST?.xsession?.daily||[],i=days.findIndex(row=>row.day===dailySelected);if(i>=0&&i<days.length-1){dailySelected=days[i+1].day;renderDaily(LATEST.xsession);}};
@@ -2104,7 +2025,7 @@ const LEARN_TERMS=[
  ['Flagged tokens','Returned tool-result tokens matching at least one oversized, exact-repeat, or structured-error rule.'],
  ['Fresh input','Input tokens processed normally rather than read from prompt cache.'],
  ['Input tokens','Instructions, conversation, tool definitions, and other context sent to the model.'],
- ['Optional group','A removable MCP server or user-installed skill pack represented by one real runtime control.'],
+ ['Optional group','A user-installed skill pack represented by one native runtime control. MCP servers remain read-only evidence.'],
  ['Output tokens','Tokens generated by the model, including visible output and any trace-reported reasoning tokens.'],
  ['Returned tokens','Estimated tokens in tool and MCP results visible in local traces.'],
  ['Review candidate','An enabled removable group with no observed use across the scanned logs. It is a prompt for review, not an automatic verdict.'],
@@ -2145,11 +2066,9 @@ function renderGlobal(xs){
  $('g-spark').innerHTML=tr.map(t=>`<div class="b${t.anomaly?' anom':''}" style="height:${100*t.cost/tmax}%" data-l="${esc(t.day.slice(5))}: ${money(t.cost)}"></div>`).join('');
  const an=tr.filter(t=>t.anomaly).length;
  $('g-trend').textContent=tr.length?`${money(tr.reduce((a,b)=>a+b.cost,0))} over ${tr.length} days`+(an?` · ${an} spike(s)`:''):'no history';
- renderGlobalWaste(xs.tool_waste||{},xs.mcp_actions||{});
- const waste=xs.tool_waste||{},flaggedShare=waste.total_output_tokens?waste.flagged_tokens/waste.total_output_tokens:0;
+ renderGlobalWaste(xs.tool_waste||{});
  const priorities=[];
- if(optional.unused)priorities.push(['warn',`${f(optional.unused)} capability ${countWord(optional.unused,'group')} need review`,'Only removable MCP servers and user-installed packs are included.']);
- if(waste.flagged_tokens)priorities.push([flaggedShare>=.25?'warn':'neutral',`${f(waste.flagged_tokens)} returned tokens matched a rule`,`${pct(flaggedShare)} of trace-observed tool results were oversized, repeated, or errors.`]);
+ if(optional.unused)priorities.push(['warn',`${f(optional.unused)} capability ${countWord(optional.unused,'group')} need review`,'Only user-installed skill packs with native controls are included.']);
  if(an)priorities.push(['warn',`${f(an)} daily spend ${countWord(an,'spike')} detected`,'Open Daily to compare the affected dates and their highest-cost logs.']);
  if(!priorities.length)priorities.push(['good','No immediate cross-log issue detected','Review Daily periodically and act only when a signal repeats.']);
  $('g-global-priorities').innerHTML=priorities.map(([kind,title,detail])=>`<div class="priorityRow ${kind}"><i></i><div><b>${esc(title)}</b><span>${esc(detail)}</span></div></div>`).join('');
@@ -2263,8 +2182,27 @@ function goToLatestSession(){
 }
 $('unpin').onclick=goToLatestSession;
 
-const es=new EventSource('/events');
-es.onmessage=e=>{ LATEST=JSON.parse(e.data); $('live').classList.remove('dead'); if(!pinned&&$('view-session').classList.contains('on')) renderSession(LATEST); else if(!$('view-session').classList.contains('on')) $('livetxt').textContent='watching'; if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on')) renderGlobal(LATEST.xsession); if($('view-daily').classList.contains('on')) renderDaily(LATEST.xsession); if($('view-capabilities').classList.contains('on')) renderCapabilities(LATEST.xsession?.capabilities); };
-es.onerror=()=>{$('livetxt').textContent='reconnecting';};
+let statePollBusy=false;
+function applyLiveState(state){
+ LATEST=state;$('live').classList.remove('dead');
+ if(!pinned&&$('view-session').classList.contains('on'))renderSession(LATEST);
+ else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='watching';
+ if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+ if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
+ if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
+}
+async function refreshLiveState(){
+ if(statePollBusy)return;
+ statePollBusy=true;
+ try{
+  const response=await fetch('/state',{cache:'no-store'});
+  if(!response.ok)throw new Error(`State request failed (${response.status}).`);
+  applyLiveState(await response.json());
+ }catch(error){$('live').classList.add('dead');$('livetxt').textContent='reconnecting';}
+ finally{statePollBusy=false;}
+}
+setInterval(refreshLiveState,2000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiveState();});
+refreshLiveState();
 loadAgentAccess();
 </script></body></html>

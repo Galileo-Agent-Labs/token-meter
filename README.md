@@ -1,30 +1,116 @@
 # Token Meter
 
-A local, live cost and activity dashboard for Claude and Codex, across their
-CLI and desktop agent apps.
+A local, unified view of token consumption across Claude and Codex apps.
 
-Token Meter follows the newest local agent log on your machine, parses
-usage as it lands, and streams updates to a localhost dashboard. It is meant for
-the moment when a long agent run is still active and you need to know whether it
-is productive, expensive, stuck, or filling context.
+Token Meter brings Claude Code, Claude Desktop Agent/Cowork, Codex CLI, and the
+Codex desktop app into one dashboard. It follows the newest local agent log,
+parses usage as it lands, and combines live runs with cross-app history so you
+can compare tokens, estimated spend, models, context pressure, and tool-result
+volume without hopping between apps.
 
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
 
-<p align="center">
-  <img src="images/dashboard.png" alt="Token Meter dashboard" width="900">
-</p>
+## Visual Tour
+
+### 1. Follow The Current Run
+
+Start on **Current** while an agent is working. The top cards show estimated
+cost, input/output/thinking tokens, tool-result volume, and cache behavior. Use
+**Execution Overview** and the chart below it to spot context growth, expensive
+executions, or unusually large tool results before deciding whether to continue.
 
 <p align="center">
-  <img src="images/tool-analytics.png" alt="Token Meter tool, MCP, and skill analytics" width="900">
+  <img src="images/dashboard.png" alt="Token Meter Current view with live cost, token, context, and execution metrics" width="900">
 </p>
 
+### 2. See All Apps In One View
+
+Open **Global** to combine local Claude and Codex history in one place. Compare
+token consumption and estimated spend by runtime and model, see the 14-day
+trend, and jump directly to the highest-cost logs or review candidates. This is
+the cross-app view for answering what you used, where you used it, and what
+deserves attention next.
+
 <p align="center">
-  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar widget" width="420">
+  <img src="images/global.png" alt="Token Meter Global view combining Claude and Codex token consumption, spend, model mix, and review priorities" width="900">
 </p>
+
+### 3. Find Expensive Or Noisy Logs
+
+Open **Logs** to search by title, project, model, or provider. Project and time
+filters recalculate the cost, token, execution, and model summaries above the
+list. Sort by cost or tokens to find the runs worth reviewing first; opening a
+row preserves that run as a frozen view, while Delete moves only its JSONL log
+to macOS Trash after confirmation.
+
+<p align="center">
+  <img src="images/logs-filtering.png" alt="Token Meter Logs view with project and time filters, model statistics, and cost-ranked runs" width="900">
+</p>
+
+### 4. Explain A Day's Spend
+
+Open **Daily** to inspect a recorded local day. The brief compares spend with
+the previous day and recent pace, identifies the largest cost driver, and breaks
+the day down by project, runtime, and highest-cost logs. Select any day in the
+trend to see what changed.
+
+<p align="center">
+  <img src="images/daily.png" alt="Token Meter Daily brief with spend trend, day-over-day comparison, highest-cost logs, and Claude versus Codex runtime split" width="900">
+</p>
+
+### 5. Inspect Tools, MCPs, And Skills
+
+Open **Tools & Skills** to see the capabilities found across scanned Claude and
+Codex logs. Compare observed use, returned tokens, last-use evidence, and eager
+versus deferred catalog definitions. The view keeps MCP servers read-only and
+limits review and disable actions to eligible user-installed skill packs.
+
+<p align="center">
+  <img src="images/tool-analytics.png" alt="Token Meter Tools and Skills view with observed capability use, catalog definition tokens, review candidates, and skill-pack controls" width="900">
+</p>
+
+### 6. Ask Token Meter From Codex Or Claude
+
+Open **Settings** to connect the local, read-only `tokenmeter` MCP server to
+Codex, Claude Code, or both. Token Meter previews the exact command and manages
+only its own user-level entry. Connected agents can check the current run,
+review aggregate usage, or inspect user-installed skill-pack hygiene; prompts,
+reasoning, tool contents, credentials, and configuration values are never
+returned. Start a new agent session after connecting.
+
+<p align="center">
+  <img src="images/mcp.png" alt="Token Meter Settings view for connecting read-only access from Codex and Claude Code" width="900">
+</p>
+
+### 7. Keep The Live Signal In The Menu Bar
+
+The macOS companion shows the current run, latest completion, recommended
+action, estimated cost, token and execution count, cache reuse, context
+pressure, last-execution cost, and overall status. Its shortcuts open the
+Dashboard, Daily Brief, Trace, or Tools & Skills directly. When several Claude
+or Codex runs are active, select a recent session to pin it or choose **Follow
+Latest** to resume automatic switching.
+
+<p align="center">
+  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude and Codex sessions, current action, cost, tokens, cache reuse, context pressure, and status" width="420">
+</p>
+
+### A Good First Five Minutes
+
+1. Install or start Token Meter, then begin a Claude or Codex task.
+2. Confirm **Current** follows the run and check cost plus context pressure.
+3. Set a session budget or enable notifications under **Current → Alerts**.
+4. Connect Codex or Claude Code from **Settings** if you want on-demand answers
+   inside the agent.
+5. After a few runs, use **Global** and **Daily** to compare apps and explain
+   spend, then open **Logs** or **Tools & Skills** for the underlying evidence.
 
 ## Features
 
+- **Unified cross-app view**: combines supported Claude and Codex CLI and
+  desktop-agent logs into one local view of tokens, estimated spend, models,
+  runtimes, projects, and trends.
 - **Live log cost**: shows the running log/thread cost as entries are written,
   with a hover breakdown for uncached input, cached input, cache writes, and
   output tokens.
@@ -49,7 +135,7 @@ machine.
   and durable links to frozen run views. Confirmed session deletion moves only
   the underlying JSONL log to macOS Trash.
 - **Daily summary**: attributes spend to recorded local days, with active logs,
-  projects, runtime mix, highest-cost logs, and tool-result quality.
+  projects, runtime mix, and highest-cost logs.
 - **Learn view**: provides a practical Token Meter review workflow with direct
   links to each view and a searchable glossary of dashboard terms.
 - **Ask from Codex or Claude**: connects a local, read-only MCP server so an
@@ -61,16 +147,16 @@ machine.
 - **Tools & Skills view**: inventories trace-observed tools, discovered MCP
   servers, and installed Codex/Claude skills with runtime, source, state, use,
   returned tokens, and last-use evidence.
-- **Actionable capability optimization**: measures only removable MCP servers
-  and configured skill packs, groups child functions/skills under their real
-  disable control, and excludes default or read-only tools from utilization and
-  removal recommendations.
-- **Capability controls**: when Ghost CLI is available, MCP servers can be
-  enabled or disabled for Codex and Claude. Plugin-managed skill rows can enable
-  or disable their containing skill pack; runtime-owned tools remain read-only.
-  A confirmed bulk action can disable the exact current unused review candidates
-  while rejecting built-in, runtime, used, or stale controls. Changes apply to
-  future sessions after the IDE or agent restarts.
+- **Actionable capability optimization**: measures configured user-installed
+  skill packs, groups child skills under their real native control, and excludes
+  MCP servers, default tools, and other read-only capabilities from removal
+  recommendations.
+- **Capability controls**: plugin-managed skill rows can enable or disable their
+  containing skill pack through native Codex or Claude settings. A confirmed
+  bulk action can disable the exact current unused review candidates while
+  rejecting built-in, runtime, used, or stale controls. MCP servers remain
+  read-only evidence. Changes apply to future sessions after the IDE or agent
+  restarts.
 - **Alerts and notifications**: can notify on budget crossings, execution cost
   spikes, and notable log insights.
 - **macOS menu bar companion**: shows a compact live status item backed by the
@@ -87,8 +173,6 @@ machine.
   Homebrew and user `python3` installs.
 - Claude Code CLI, Codex CLI, Claude Desktop Agent/Cowork, and/or the Codex
   desktop app if you want live log data.
-- Ghost CLI on `PATH` only if you want to enable or disable MCP servers from the
-  Tools & Skills dashboard. Analytics and recommendations work without it.
 - macOS with the Swift toolchain, usually from Xcode Command Line Tools, when
   running from source. The macOS package includes a prebuilt menu bar binary.
 - `curl`, used by the helper scripts.
@@ -116,6 +200,10 @@ repository root:
 ```bash
 open dist/TokenMeter-0.1.0.pkg
 ```
+
+The checked-in package is currently unsigned, so macOS may show a Gatekeeper
+warning. A public release should use a Developer ID-signed and notarized
+installer; building from source remains available in the meantime.
 
 The installer:
 
@@ -199,8 +287,8 @@ The three client-visible tools are deliberately compact for crowded MCP lists:
   including “Should I keep this run going?” and an optional execution drill-down.
 - `mcp__tokenmeter__usage` reviews aggregate spend, models, tools, or change for
   today, 7 days, or 14 days.
-- `mcp__tokenmeter__capabilities` reviews named optional MCP servers and skill
-  packs without changing them.
+- `mcp__tokenmeter__capabilities` reviews named user-installed skill packs
+  without changing them.
 
 The integration is read-only and on demand. Current-run detail is limited to
 the caller's matched runtime and project. History is aggregate-only and omits
@@ -293,8 +381,8 @@ Token Meter reads local log stores:
 
 ```text
 Claude Code CLI:          ~/.claude/projects/*/*.jsonl
-Claude Desktop metadata:  ~/Library/Application Support/{Claude,Claude-3p}/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
-Claude Desktop Agent:     ~/Library/Application Support/{Claude,Claude-3p}/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
+Claude Desktop metadata:  ~/Library/Application Support/Claude/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
+Claude Desktop Agent:     ~/Library/Application Support/Claude/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
 Codex CLI + desktop app:   ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 ```
 
@@ -304,9 +392,8 @@ trace under `~/.claude/projects`, so Desktop sessions use the same validated
 cost, token, tool, and execution parser without appearing twice. They are
 labeled `Claude Desktop` in Current and Global views.
 
-Token Meter scans both the standard `Claude` data root and the enterprise
-`Claude-3p` root. Agent/Cowork sessions without a workspace are joined to their
-nested JSONL and labeled `No project`. A regular Claude Desktop cloud
+Agent/Cowork sessions without a workspace are joined to their nested JSONL and
+labeled `No project`. A regular Claude Desktop cloud
 conversation still is not written to the local agent JSONL store, so its tokens
 and tool calls cannot be attributed reliably.
 
@@ -336,8 +423,8 @@ The Current tab includes:
 
 - Summary: live cost, tokens, active execution duration, burn rate per active
   minute, cache behavior, context pressure, per-execution input/output
-  trajectory, session tool activity, optional capability use, and measured
-  avoidable eager context. Idle gaps are excluded from duration and burn rate.
+  trajectory, session tool activity, optional skill-pack use, and unused
+  user-installed packs. Idle gaps are excluded from duration and burn rate.
 - Activity: normalized event trace for messages, reasoning, tool calls, tool
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.
@@ -360,7 +447,8 @@ The Global tab includes:
   payloads, and a 14-day result-token trend.
 - A Capability evidence subtab with project concentration, last use, failures,
   recommendations, and server-level MCP evidence.
-- MCP state changes live in the Tools & Skills tab.
+- MCP rows remain read-only; supported user-installed skill-pack changes live
+  in the Tools & Skills tab.
 
 The Logs tab includes the searchable log inventory with an exact Projects
 folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
@@ -381,21 +469,21 @@ keeps the newest one instead of silently detaching the live stream.
 The Tools & Skills tab includes:
 
 - Prominent counts for enabled removable groups, groups used across scanned
-  logs, review candidates, and measured avoidable eager context. Default tools,
-  standalone skills, and built-in/runtime skill packs are excluded.
-- An optimization insight that explains the removable MCP servers and skill
-  packs needing review and can filter the inventory to those candidates.
+  logs, review candidates, and observed MCP servers. MCP servers remain
+  read-only; default tools, standalone skills, and built-in/runtime skill packs
+  are excluded from removal candidates.
+- An optimization insight that explains the user-installed skill packs needing
+  review and can filter the inventory to those candidates.
 - A tool-definition chart separating useful eager, unused eager, and deferred
   schema tokens across session catalogs.
 - Searchable Tools, MCPs, and Skills inventory with sortable runtime, source,
   state, observed calls/activations, returned tokens, last use, and control
   columns. Skill identifiers include runtime and origin or plugin pack so
   same-named built-in and user-installed skills remain distinct.
-- MCP enable/disable actions through fixed `ghost mcp all add/remove` argument
-  vectors and skill-pack enable/disable actions for configured Codex and Claude
-  plugins. **Disable all unused** confirms and submits only the exact current
-  review-candidate IDs. Individual runtime-owned tools and standalone skills are
-  read-only.
+- Skill-pack enable/disable actions for configured Codex and Claude plugins.
+  **Disable all unused** confirms and submits only the exact current
+  review-candidate IDs. MCP servers, runtime-owned tools, and standalone skills
+  are read-only.
 
 To use it, open **Tools & Skills** in the dashboard or choose **Open Tools &
 Skills** from the macOS menu bar companion. Start with the optimization insight
@@ -405,11 +493,11 @@ The `Use`, `Returned`, and `Last used` columns provide the trace evidence for
 deciding what to keep or disable. Deferred and default/read-only tools remain
 visible as evidence but are not labeled removable waste.
 
-Rows with an available control can be enabled or disabled after confirmation.
-Pack changes name the exact runtime control and affected skills, then read the
-persisted Codex or Claude enabled value back before reporting success. MCP
-controls require Ghost CLI on `PATH`; restart Codex, Claude, or the relevant IDE
-after a change so it applies to new sessions. A `read-only` row is observed by
+Rows with an available skill-pack control can be enabled or disabled after
+confirmation. Pack changes name the exact runtime control and affected skills,
+then read the persisted Codex or Claude enabled value back before reporting
+success. Restart Codex, Claude, or the relevant IDE after a change so it applies
+to new sessions. A `read-only` row, including every MCP server, is observed by
 Token Meter but cannot be changed from the dashboard.
 
 Token Meter does not claim that every flagged token was billed waste. Returned
@@ -438,13 +526,11 @@ The dashboard can display local project paths, tool names, and trace metadata.
 Do not expose the localhost page publicly unless you are comfortable sharing
 that information.
 
-The Tools & Skills table can invoke `ghost mcp all add/remove <server>` after an
-in-dashboard action. The server name is validated and passed as a fixed
-subprocess argument; Token Meter does not run arbitrary dashboard-provided shell
-text. Plugin-pack actions validate the exact discovered runtime control, update
-only its enabled state in the local Codex or Claude configuration, and verify
-the persisted value before refreshing the table. Restart Codex, Claude, or the
-IDE after a successful capability change.
+Plugin-pack actions validate the exact discovered runtime control, update only
+its enabled state in the local Codex or Claude configuration, and verify the
+persisted value before refreshing the table. Token Meter does not mutate MCP
+server configuration. Restart Codex, Claude, or the IDE after a successful
+skill-pack change.
 
 ## Troubleshooting
 
@@ -555,6 +641,11 @@ The final command requires at least one supported local Claude or Codex log.
 |-- page.html                        # single-file dashboard UI
 |-- images/
 |   |-- dashboard.png                # README dashboard screenshot
+|   |-- daily.png                    # README daily spend screenshot
+|   |-- global.png                   # README cross-app overview screenshot
+|   |-- logs-filtering.png           # README log review screenshot
+|   |-- mcp.png                      # README agent connection screenshot
+|   |-- tool-analytics.png           # README tools and skills screenshot
 |   `-- menu-bar-widget.png          # README menu bar screenshot
 |-- menubar/
 |   `-- TokenMeterMenuBar.swift      # native macOS menu bar companion
@@ -585,6 +676,11 @@ LICENSE
 meter.py
 page.html
 images/dashboard.png
+images/daily.png
+images/global.png
+images/logs-filtering.png
+images/mcp.png
+images/tool-analytics.png
 images/menu-bar-widget.png
 menubar/TokenMeterMenuBar.swift
 packaging/

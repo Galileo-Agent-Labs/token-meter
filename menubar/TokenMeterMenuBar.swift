@@ -6,9 +6,9 @@ private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#summary
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
 private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
 
-// Cisco brand accent — Cisco Blue (#00BCEB)
+// Token Meter accent blue (#00BCEB)
 extension NSColor {
-    static let ciscoBlue = NSColor(srgbRed: 0.0, green: 0.737, blue: 0.922, alpha: 1.0)
+    static let tokenMeterBlue = NSColor(srgbRed: 0.0, green: 0.737, blue: 0.922, alpha: 1.0)
 }
 
 enum Verdict {
@@ -40,10 +40,10 @@ enum Verdict {
 
     var color: NSColor {
         switch self {
-        case .healthy: return .ciscoBlue
-        case .watch: return .ciscoBlue
-        case .intervene: return .ciscoBlue
-        case .idle: return .ciscoBlue
+        case .healthy: return .tokenMeterBlue
+        case .watch: return .tokenMeterBlue
+        case .intervene: return .tokenMeterBlue
+        case .idle: return .tokenMeterBlue
         case .disconnected: return .secondaryLabelColor
         }
     }
@@ -454,7 +454,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addContextBar()
             addMetricRow("Last execution", formatMoney(snapshot.lastTurnCost))
         } else {
-            addSignalRow("Connection", snapshot.error, color: .ciscoBlue)
+            addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
         }
 
         menu.addItem(.separator())
@@ -771,30 +771,30 @@ private func compactScaled(_ value: Double, suffix: String) -> String {
 
 private func activityColor(_ kind: String) -> NSColor {
     switch kind {
-    case "tool_call": return .ciscoBlue
+    case "tool_call": return .tokenMeterBlue
     case "tool_result": return .systemTeal
     case "reasoning": return .systemPurple
     case "complete": return .systemGreen
     case "message": return .labelColor
     case "offline": return .secondaryLabelColor
-    default: return .ciscoBlue
+    default: return .tokenMeterBlue
     }
 }
 
 private func recommendationColor(_ severity: String) -> NSColor {
     switch severity {
-    case "bad": return .ciscoBlue
-    case "warn": return .ciscoBlue
+    case "bad": return .tokenMeterBlue
+    case "warn": return .tokenMeterBlue
     case "good": return .systemGreen
-    case "idle": return .ciscoBlue
+    case "idle": return .tokenMeterBlue
     default: return .labelColor
     }
 }
 
 private func contextColor(_ pct: Double) -> NSColor {
-    if pct >= 0.85 { return .ciscoBlue }
-    if pct >= 0.70 { return .ciscoBlue }
-    return .ciscoBlue
+    if pct >= 0.85 { return .tokenMeterBlue }
+    if pct >= 0.70 { return .tokenMeterBlue }
+    return .tokenMeterBlue
 }
 
 if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {

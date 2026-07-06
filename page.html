@@ -138,6 +138,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
 .globalControls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(190px,.78fr) minmax(150px,.52fr) auto auto;gap:10px;align-items:end;margin:12px 0}.filterControl{display:grid;gap:5px;min-width:0}.filterControl>span{font-size:10px;line-height:1;text-transform:uppercase;color:var(--faint);font-weight:780}.searchbox,.filterSelect{width:100%;min-width:0;height:38px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.filterSelect{appearance:auto;padding-right:28px}.searchbox:focus,.filterSelect:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.filterSort .seg{min-height:38px;align-items:center}.filterClear{display:grid;gap:5px;justify-items:stretch;min-width:148px}.clearFilters{height:38px;background:rgba(255,255,255,.045);color:var(--dim)}.clearFilters:hover:not(:disabled){color:var(--fg)}.clearFilters:disabled{opacity:.42;cursor:not-allowed}.filterCount{text-align:right}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
 .logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
+.outputPair{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;min-width:0}.outputPair .v{min-width:0}.outputRate{display:grid;justify-items:end;line-height:1;padding-bottom:2px;white-space:nowrap}.outputRate strong{font-size:16px;color:var(--orange3);font-weight:840}.outputRate span{font-size:9.5px;color:var(--faint);font-weight:760;text-transform:uppercase;margin-top:3px}.modelHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}.modelHead h1{font-size:24px;line-height:1.2;margin:0}.modelHead p{color:var(--dim);margin:4px 0 0;font-size:13px;max-width:760px}.modelControls{display:grid;grid-template-columns:minmax(180px,260px) minmax(150px,190px);gap:9px;align-items:end}.modelHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.modelKpi{padding:15px;min-height:110px;overflow:visible}.modelKpi .v{font-size:28px;font-weight:840;line-height:1.08;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.modelKpi .subline{font-size:11.5px;margin-top:5px}.modelDelta{display:inline-flex;align-items:center;gap:6px;color:var(--dim)}.modelDelta:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}.modelDelta.up{color:var(--good)}.modelDelta.up:before{background:var(--good)}.modelDelta.down{color:var(--warn)}.modelDelta.down:before{background:var(--warn)}.modelCoverage{height:7px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:9px}.modelCoverage i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--orange3));border-radius:999px}.modelTrendCard{margin-top:12px;padding:16px 17px}.modelTrendHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.modelTrendHead h2{font-size:14px;margin:0}.modelTrendHead p{font-size:11.5px;color:var(--faint);margin:2px 0 0}.modelLegend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:var(--dim);font-size:11px}.modelLegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}.modelChartWrap{position:relative;margin-top:10px}.modelChart{display:block;width:100%;height:270px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.022)}.modelChartTip{position:absolute;z-index:5;display:none;min-width:210px;pointer-events:none;border:1px solid rgba(0,188,235,.5);background:linear-gradient(180deg,rgba(5,7,10,.98),rgba(13,18,24,.98));border-radius:8px;box-shadow:0 16px 34px rgba(0,0,0,.52);overflow:hidden;font:11.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;color:var(--dim)}.modelChartTip .h{padding:7px 10px;background:rgba(0,188,235,.14);font-weight:820;color:var(--fg)}.modelChartTip .r{display:flex;justify-content:space-between;gap:18px;padding:3px 10px}.modelChartTip .r b{color:var(--fg)}.modelTableWrap{margin-top:12px;overflow:auto;max-height:620px}.modelTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820;white-space:nowrap}.modelTableWrap .tbl th .fieldtip:after{bottom:auto;top:calc(100% + 7px);left:auto;right:0;z-index:4}.modelTableWrap .tbl td{vertical-align:middle}.modelName{font-weight:790;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelRuntime{font-size:10.5px;color:var(--faint);margin-top:2px}.speedCell strong{display:block;color:var(--orange3);font-size:13px}.speedCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px}.modelEmpty{padding:36px 16px;text-align:center;color:var(--faint)}
 .capHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.currentCapHero{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}.capHero .pad{padding:13px 15px;overflow:visible}.capHero .card:hover,.capHero .card:focus-within{z-index:50}.capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}.capHero .card:last-child .fieldtip:after{left:auto;right:0}.capHero .meter{font-size:28px;margin-top:4px}.capHero .subline{font-size:12px;margin-top:5px}.capStatBar{height:8px;margin-top:9px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.42)}.capStatBar i{display:block;width:0;height:100%;border-radius:999px;transition:width .35s ease;background:linear-gradient(90deg,var(--good),var(--accent));box-shadow:0 0 14px rgba(102,217,144,.3)}.capStatBar.mcp i{background:linear-gradient(90deg,#9d72f1,#c2a5ff);box-shadow:0 0 14px rgba(183,140,255,.3)}.capStatBar.skill i{background:linear-gradient(90deg,var(--accent),var(--orange3));box-shadow:0 0 14px rgba(0,188,235,.3)}.capStatBar.warn i{background:linear-gradient(90deg,var(--warn),var(--orange));box-shadow:0 0 14px rgba(255,180,87,.3)}.capReview{margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border-left:3px solid var(--warn)}.capReview.good{border-left-color:var(--good)}.capReviewTitle{font-size:15px;font-weight:800;margin-top:4px}.capReviewDetail{font-size:12px;color:var(--dim);margin-top:3px;max-width:880px}.capCharts{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}.capCharts .pad{padding:13px 17px}.defBar{height:12px;margin-top:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:flex}.defBar i{display:block;height:100%}.defBar .used{background:var(--good)}.defBar .unused{background:var(--warn)}.defBar .deferred{background:rgba(127,219,242,.42)}.capSource{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:rgba(255,255,255,.03);white-space:nowrap}.capFilters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:10px 0}.capTableWrap{overflow:auto;max-height:620px}.capTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.capTableWrap .tbl th.sortable{cursor:pointer;user-select:none;white-space:nowrap}.capTableWrap .tbl th.sortable:after{content:"\2195";display:inline-block;margin-left:6px;color:var(--faint);font-size:10px}.capTableWrap .tbl th.sortable.sort-asc:after{content:"\2191";color:var(--accent)}.capTableWrap .tbl th.sortable.sort-desc:after{content:"\2193";color:var(--accent)}.capTableWrap .tbl th.sortable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}.stateDot{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.stateDot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}.stateDot.on:before{background:var(--good)}.stateDot.off:before{background:var(--bad)}.stateDot.lazy:before{background:var(--orange3)}.capAction{border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.capAction:hover{border-color:var(--accent)}.capAction.disable{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}.capAction:disabled{opacity:.45;cursor:not-allowed}.capPath{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
 .capReviewActions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.tbtn.danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}.tbtn.danger:hover{background:rgba(255,180,87,.19)}
 .globalOverviewGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.overviewKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.overviewKpis .pad{padding:14px}.overviewKpis .v{font-size:24px;font-weight:820;margin-top:4px}.overviewKpis .subline{font-size:11.5px;margin-top:3px}.overviewRows{display:grid;gap:7px;margin-top:12px}.overviewRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.overviewRow:first-child{border-top:0;padding-top:0}.overviewRow .name{font-weight:740;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overviewRow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.overviewRow .value{text-align:right;font-weight:800}.priorityRows{display:grid;gap:8px;margin-top:12px}.priorityRow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line)}.priorityRow:first-child{border-top:0;padding-top:0}.priorityRow i{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--accent)}.priorityRow.warn i{background:var(--warn)}.priorityRow.good i{background:var(--good)}.priorityRow b{display:block}.priorityRow span{display:block;color:var(--dim);font-size:12px;margin-top:2px}
@@ -150,9 +151,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
-@media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.agentClients,.agentDisclosure,.promptCards{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}}
-@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}}
+@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}}
 </style></head><body>
 <div class=wrap>
  <div class=top>
@@ -161,6 +162,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <button class="tab on" id=tab-session>Current</button>
 	   <button class=tab id=tab-global>Global</button>
 	   <button class=tab id=tab-logs>Logs</button>
+	   <button class=tab id=tab-models>Model Stats</button>
 	   <button class=tab id=tab-daily>Daily</button>
 	   <button class=tab id=tab-capabilities>Tools &amp; Skills</button>
 	   <button class=tab id=tab-learn>Learn</button>
@@ -230,7 +232,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    </div>
    <div class=statgrid>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Total model input tokens, including uncached input, cache reads, and cache writes." data-tip="Total model input tokens, including uncached input, cache reads, and cache writes.">Input tokens</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Model output tokens produced by assistant executions." data-tip="Model output tokens produced by assistant executions.">Output tokens</div><div class="v mono" id=output-tok>0</div><div class=sm id=output-toksm></div></div>
+	    <div class=stat><div class="label fieldtip" tabindex=0 title="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred." data-tip="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred.">Output tokens</div><div class=outputPair><div class="v mono" id=output-tok>0</div><div class=outputRate><strong class=mono id=output-tps>--</strong><span>tok/s</span></div></div><div class=sm id=output-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking tokens</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool result tokens</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>active execution time</div></div>
@@ -421,6 +423,28 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=slist id=slist></div>
 	 </div>
 
+	 <div class=view id=view-models>
+	  <div class=modelHead>
+	   <div><h1>Model I/O performance</h1><p>Compare trace-reported input, output, and observed output throughput over time. Speed prefers completed tool-free work; end-to-end fallback includes tool time.</p></div>
+	   <div class=modelControls>
+	    <label class=filterControl><span>Model</span><select class=filterSelect id=m-model aria-label="Model Stats model filter"><option value="">All models</option></select></label>
+	    <label class=filterControl><span>History</span><select class=filterSelect id=m-range aria-label="Model Stats history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
+	   </div>
+	  </div>
+	  <div class=modelHero>
+	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 title="Counts all trace-reported model output, including reasoning and thinking tokens. Input, cache, and external tool-result tokens are excluded. The rate is weighted output divided by measured seconds; tool-free samples are preferred." data-tip="Counts all trace-reported model output, including reasoning and thinking tokens. Input, cache, and external tool-result tokens are excluded. The rate is weighted output divided by measured seconds; tool-free samples are preferred.">Observed output speed</div><div class="v mono" id=m-speed>--</div><div class=subline id=m-speed-note>waiting for timing evidence</div><div class=modelCoverage title="Share of selected output covered by reported timing"><i id=m-coverage-bar></i></div></div>
+	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 title="Weighted output speed in the latest half of the selected window compared with the preceding equal half." data-tip="Weighted output speed in the latest half of the selected window compared with the preceding equal half.">Speed change</div><div class="v mono" id=m-change>--</div><div class="subline modelDelta" id=m-change-note>needs two comparable windows</div></div>
+	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 title="All trace-reported model input in the selected window, including cached input." data-tip="All trace-reported model input in the selected window, including cached input.">Input tokens</div><div class="v mono" id=m-input>0</div><div class=subline id=m-input-note></div></div>
+	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 title="All trace-reported model output in the selected window, including provider-reported reasoning output." data-tip="All trace-reported model output in the selected window, including provider-reported reasoning output.">Output tokens</div><div class="v mono" id=m-output>0</div><div class=subline id=m-output-note></div></div>
+	  </div>
+	  <div class="card modelTrendCard">
+	   <div class=modelTrendHead><div><h2>Output speed and volume</h2><p id=m-trend-note>daily weighted throughput and trace-reported output</p></div><div class=modelLegend><span><i style="background:rgba(0,188,235,.26);border:1px solid rgba(0,188,235,.48)"></i>output volume</span><span><i style="background:var(--orange3);border-radius:50%"></i>output tok/s</span></div></div>
+	   <div class=modelChartWrap><svg class=modelChart id=m-chart viewBox="0 0 1040 270" preserveAspectRatio="none" role=img aria-label="Daily model output speed and output token volume"></svg><div class=modelChartTip id=m-chart-tip></div></div>
+	  </div>
+	  <div class="card pad modelTableWrap"><table class=tbl id=m-table><thead><tr><th>Model</th><th class=num>Logs (all)</th><th class=num>Executions</th><th class=num>Input</th><th class=num>Output</th><th class=num>Output / exec</th><th class=num><span class=fieldtip tabindex=0 title="Includes reasoning and thinking output; excludes input, cache, and external tool results. Hover a value for timing basis, samples, and coverage." data-tip="Includes reasoning and thinking output; excludes input, cache, and external tool results. Hover a value for timing basis, samples, and coverage.">Output speed</span></th></tr></thead><tbody></tbody></table></div>
+	  <div class=foot>Observed throughput includes reasoning/thinking output and excludes external tool results · tool-free timing is preferred · sparse timing stays unavailable</div>
+	 </div>
+
 	 <div class=view id=view-daily>
 	  <div class=dailyHead>
 	   <div><h1>Daily brief</h1><p>What changed, what drove spend, and what deserves attention.</p></div>
@@ -556,6 +580,7 @@ const compactNumber=n=>{n=Number(n)||0;const a=Math.abs(n);if(a>=1e9)return (n/1
 const money=n=>'$'+(Math.abs(n||0)>=1?(n||0).toFixed(2):(n||0).toFixed(3));
 const pct=n=>Math.round((n||0)*100)+'%';
 const countWord=(n,one,many=one+'s')=>Number(n)===1?one:many;
+const speedFmt=n=>{n=Number(n)||0;if(n<=0)return'--';if(n>=100)return n.toFixed(0);if(n>=10)return n.toFixed(1);return n.toFixed(2);};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function durationShort(seconds){
  seconds=Math.max(0,Math.round(seconds||0));
@@ -615,16 +640,18 @@ function setHashRoute(route,{replace=false,apply=true}={}){
 
 function showTab(t){
  $('tab-session').classList.toggle('on',t==='session');
- $('tab-global').classList.toggle('on',t==='global');
- $('tab-logs').classList.toggle('on',t==='logs');
- $('tab-daily').classList.toggle('on',t==='daily');
+	 $('tab-global').classList.toggle('on',t==='global');
+	 $('tab-logs').classList.toggle('on',t==='logs');
+	 $('tab-models').classList.toggle('on',t==='models');
+	 $('tab-daily').classList.toggle('on',t==='daily');
  $('tab-capabilities').classList.toggle('on',t==='capabilities');
  $('tab-learn').classList.toggle('on',t==='learn');
  $('tab-settings').classList.toggle('on',t==='settings');
  $('view-session').classList.toggle('on',t==='session');
- $('view-global').classList.toggle('on',t==='global');
- $('view-logs').classList.toggle('on',t==='logs');
- $('view-daily').classList.toggle('on',t==='daily');
+	 $('view-global').classList.toggle('on',t==='global');
+	 $('view-logs').classList.toggle('on',t==='logs');
+	 $('view-models').classList.toggle('on',t==='models');
+	 $('view-daily').classList.toggle('on',t==='daily');
  $('view-capabilities').classList.toggle('on',t==='capabilities');
  $('view-learn').classList.toggle('on',t==='learn');
  $('view-settings').classList.toggle('on',t==='settings');
@@ -634,6 +661,7 @@ function showTab(t){
 $('tab-session').onclick=()=>goToLatestSession();
 $('tab-global').onclick=()=>setHashRoute('global-overview');
 $('tab-logs').onclick=()=>setHashRoute('logs');
+$('tab-models').onclick=()=>setHashRoute('models');
 $('tab-daily').onclick=()=>setHashRoute('daily');
 $('tab-capabilities').onclick=()=>setHashRoute('capabilities');
 $('tab-learn').onclick=()=>setHashRoute('learn');
@@ -683,11 +711,16 @@ function applyHashRoute(){
   if(LATEST)renderGlobal(LATEST.xsession);
   return;
  }
- if(h==='daily'){
+	 if(h==='daily'){
   showTab('daily');
   if(LATEST)renderDaily(LATEST.xsession);
-  return;
- }
+	  return;
+	 }
+	 if(h==='models'){
+	  showTab('models');
+	  if(LATEST)renderModelStats(LATEST.xsession?.model_stats);
+	  return;
+	 }
  if(h==='capabilities'){
   showTab('capabilities');
   if(LATEST)renderCapabilities(LATEST.xsession?.capabilities);
@@ -1026,8 +1059,14 @@ let globalSearch=localStorage.getItem('tm_global_search')||'';
 let globalSort=localStorage.getItem('tm_global_sort')||'recent';
 let globalProject=localStorage.getItem('tm_global_project')||'';
 let globalTime=localStorage.getItem('tm_global_time')||'all';
+let modelFilter=localStorage.getItem('tm_model_filter')||'';
+let modelRange=localStorage.getItem('tm_model_range')||'30';
 if(!['recent','cost','tokens','executions'].includes(globalSort)) globalSort='recent';
 if(!['all','24h','7d','30d','90d'].includes(globalTime)) globalTime='all';
+if(!['7','30','90','all'].includes(modelRange))modelRange='30';
+$('m-range').value=modelRange;
+$('m-model').addEventListener('change',e=>{modelFilter=e.target.value;localStorage.setItem('tm_model_filter',modelFilter);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);});
+$('m-range').addEventListener('change',e=>{modelRange=e.target.value;localStorage.setItem('tm_model_range',modelRange);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);});
 function paintGlobalSort(){
  [...$('g-sort').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.gsort===globalSort));
  const label={recent:'recent activity',cost:'highest cost',tokens:'most tokens',executions:'most executions'}[globalSort]||'recent activity';
@@ -1545,16 +1584,18 @@ function renderSession(s){
  const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
  $('cost-tip').innerHTML=costTipHtml(s,tok);
  const inputTokens=(tok.input||0)+(tok.cache_read||0)+(tok.cache_write||0), outputTokens=tok.output||0;
- const thinkingTokens=sem.reasoning||0, toolCallTokens=tools.total_output_tokens||0;
- $('sub').innerHTML=`<b>${f(inputTokens)}</b> in · <b>${f(outputTokens)}</b> out · <b>${f(thinkingTokens)}</b> thinking · <b>${f(toolCallTokens)}</b> tool results · <b>${f(s.turns)}</b> executions`;
+	 const thinkingTokens=sem.reasoning||0, toolCallTokens=tools.total_output_tokens||0, throughput=s.throughput||{};
+	 const speedPart=throughput.available?` · <b>${speedFmt(throughput.output_tps)}</b> out tok/s`:'';
+	 $('sub').innerHTML=`<b>${f(inputTokens)}</b> in · <b>${f(outputTokens)}</b> out${speedPart} · <b>${f(thinkingTokens)}</b> thinking · <b>${f(toolCallTokens)}</b> tool results · <b>${f(s.turns)}</b> executions`;
  $('input-tok').textContent=f(inputTokens);
  $('input-toksm').textContent=`${f(tok.input||0)} uncached · ${f((tok.cache_read||0)+(tok.cache_write||0))} cache`;
  $('cache-hit').textContent=pct(cache.input_share||0);
  $('cache-hitsm').textContent=`${f(cache.total||0)} cached · ${f(cache.fresh||0)} uncached`;
  $('cache-tok').textContent=f(cache.total||0);
- $('cache-toksm').textContent=`${f(cache.read||0)} read · ${f(cache.write||0)} write · latest ${f(latestCache.tokens||0)}`;
- $('output-tok').textContent=f(outputTokens);
- $('output-toksm').textContent='of '+f(s.total_tokens)+' total';
+	 $('cache-toksm').textContent=`${f(cache.read||0)} read · ${f(cache.write||0)} write · latest ${f(latestCache.tokens||0)}`;
+	 $('output-tok').textContent=f(outputTokens);
+	 $('output-tps').textContent=throughput.available?speedFmt(throughput.output_tps):'--';
+	 $('output-toksm').textContent=throughput.available?`${throughput.basis==='tool_free'?'tool-free':'end-to-end'} · ${f(throughput.sample_count)} timed ${countWord(throughput.sample_count,'sample')} · ${pct(throughput.timing_coverage)} coverage`:`of ${f(s.total_tokens)} total · timing unavailable`;
  $('think-tok').textContent=f(thinkingTokens);
  $('think-toksm').textContent=f(s.analyses?.reasoning?.think_turns||0)+' reasoning exec';
  $('toolcall-tok').textContent=f(toolCallTokens);
@@ -2042,6 +2083,89 @@ $('learn-search').oninput=renderGlossary;
 [...document.querySelectorAll('[data-learn-route]')].forEach(button=>button.onclick=()=>setHashRoute(button.dataset.learnRoute));
 renderGlossary();
 
+const MODEL_COUNTER_KEYS=['input_tokens','output_tokens','executions','cost','timed_output_tokens','timed_seconds','timed_samples','tool_free_output_tokens','tool_free_seconds','tool_free_samples','ttft_total_s','ttft_samples'];
+function localDateKey(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
+function dateKeyAgo(days){const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()-days);return localDateKey(date);}
+function aggregateModelDays(rows){
+ const total=MODEL_COUNTER_KEYS.reduce((out,key)=>(out[key]=0,out),{});
+ (rows||[]).forEach(row=>MODEL_COUNTER_KEYS.forEach(key=>total[key]+=Number(row[key]||0)));
+ const toolFree=total.tool_free_samples>0&&total.tool_free_seconds>0;
+ const timed=total.timed_samples>0&&total.timed_seconds>0;
+ const seconds=toolFree?total.tool_free_seconds:total.timed_seconds;
+ const speedOutput=toolFree?total.tool_free_output_tokens:total.timed_output_tokens;
+ total.available=Boolean((toolFree||timed)&&seconds>0&&speedOutput>0);
+ total.output_tps=total.available?speedOutput/seconds:0;
+ total.throughput_basis=toolFree?'tool_free':timed?'end_to_end':'unavailable';
+ total.throughput_samples=toolFree?total.tool_free_samples:total.timed_samples;
+ total.timing_coverage=total.output_tokens?Math.min(1,speedOutput/total.output_tokens):0;
+ total.avg_ttft_ms=total.ttft_samples?total.ttft_total_s*1000/total.ttft_samples:0;
+ return total;
+}
+function mergeModelDays(models,cutoff=''){
+ const days=new Map();
+ (models||[]).forEach(model=>(model.daily||[]).forEach(day=>{
+  if(cutoff&&day.day<cutoff)return;
+  const target=days.get(day.day)||{day:day.day};
+  MODEL_COUNTER_KEYS.forEach(key=>target[key]=Number(target[key]||0)+Number(day[key]||0));
+  days.set(day.day,target);
+ }));
+ return [...days.values()].sort((a,b)=>a.day.localeCompare(b.day));
+}
+function filledModelDays(rows,range){
+ if(range==='all')return rows;
+ const byDay=new Map(rows.map(row=>[row.day,row]));
+ const result=[];
+ for(let ago=Number(range)-1;ago>=0;ago--){const day=dateKeyAgo(ago);result.push(byDay.get(day)||{day});}
+ return result;
+}
+function drawModelTrend(rows){
+ const svg=$('m-chart'),tip=$('m-chart-tip'),VW=1040,VH=270,ML=62,MR=72,MT=18,MB=38,PW=VW-ML-MR,PH=VH-MT-MB;
+ if(!rows.length){svg.innerHTML=`<text x="${VW/2}" y="${VH/2}" fill="${CHART.lbl}" text-anchor="middle" font-size="13">No model history in this window</text>`;tip.style.display='none';return;}
+ const points=rows.map(row=>({...row,perf:aggregateModelDays([row])}));
+ const maxOutput=Math.max(1,...points.map(row=>Number(row.output_tokens||0))),maxSpeed=Math.max(1,...points.map(row=>row.perf.output_tps||0));
+ const step=PW/Math.max(1,points.length),barW=Math.max(2,Math.min(22,step*.58));
+ const x=index=>ML+step*(index+.5),outY=value=>MT+PH-PH*(Number(value||0)/maxOutput),speedY=value=>MT+PH-PH*(Number(value||0)/maxSpeed);
+ let html='';
+ for(let i=0;i<=4;i++){const y=MT+PH*i/4;html+=`<line x1="${ML}" x2="${ML+PW}" y1="${y}" y2="${y}" stroke="${CHART.grid}" stroke-width="1"/><text x="${ML-8}" y="${y+4}" text-anchor="end" fill="${CHART.lbl}" font-size="10">${compactNumber(maxOutput*(1-i/4))}</text><text x="${ML+PW+8}" y="${y+4}" fill="${CHART.lbl}" font-size="10">${speedFmt(maxSpeed*(1-i/4))}</text>`;}
+ points.forEach((row,index)=>{const y=outY(row.output_tokens),h=MT+PH-y;html+=`<rect x="${x(index)-barW/2}" y="${y}" width="${barW}" height="${Math.max(0,h)}" rx="3" fill="rgba(0,188,235,.22)" stroke="rgba(0,188,235,.42)"/>`;});
+ let segment=[];
+ const flush=()=>{if(segment.length>1)html+=`<path d="${segment.map((point,index)=>`${index?'L':'M'}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(' ')}" fill="none" stroke="${CHART.output}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;segment=[];};
+ points.forEach((row,index)=>{if(!row.perf.available){flush();return;}segment.push([x(index),speedY(row.perf.output_tps)]);});flush();
+ points.forEach((row,index)=>{if(row.perf.available)html+=`<circle cx="${x(index)}" cy="${speedY(row.perf.output_tps)}" r="4" fill="${CHART.output}" stroke="#07090c" stroke-width="2"/>`;});
+ const labelEvery=Math.max(1,Math.ceil(points.length/8));
+	 points.forEach((row,index)=>{const remaining=points.length-1-index,showLabel=index===points.length-1||(index%labelEvery===0&&remaining>=Math.max(2,Math.ceil(labelEvery/2)));if(showLabel)html+=`<text x="${x(index)}" y="${VH-12}" text-anchor="middle" fill="${CHART.lbl}" font-size="10">${esc(row.day.slice(5))}</text>`;html+=`<rect data-model-day="${esc(row.day)}" x="${ML+step*index}" y="${MT}" width="${step}" height="${PH}" fill="transparent" pointer-events="all"/>`;});
+ html+=`<text x="8" y="12" fill="${CHART.lbl}" font-size="10">output</text><text x="${VW-8}" y="12" text-anchor="end" fill="${CHART.lbl}" font-size="10">tok/s</text>`;
+ svg.innerHTML=html;
+ const show=(event,row)=>{const perf=row.perf,rect=$('m-chart').parentElement.getBoundingClientRect();tip.innerHTML=`<div class=h>${esc(row.day)}</div><div class=r><span>output</span><b>${f(row.output_tokens||0)}</b></div><div class=r><span>input</span><b>${f(row.input_tokens||0)}</b></div><div class=r><span>executions</span><b>${f(row.executions||0)}</b></div><div class=r><span>output speed</span><b>${perf.available?speedFmt(perf.output_tps)+' tok/s':'--'}</b></div><div class=r><span>timing coverage</span><b>${pct(perf.timing_coverage)}</b></div>`;tip.style.display='block';tip.style.left=Math.min(rect.width-tip.offsetWidth-8,Math.max(8,event.clientX-rect.left+12))+'px';tip.style.top=Math.max(8,event.clientY-rect.top-tip.offsetHeight-10)+'px';};
+ [...svg.querySelectorAll('[data-model-day]')].forEach((hit,index)=>{hit.onpointerenter=event=>show(event,points[index]);hit.onpointermove=event=>show(event,points[index]);hit.onpointerleave=()=>tip.style.display='none';});
+}
+function renderModelStats(stats){
+ stats=stats||{models:[]};
+ const allModels=stats.models||[],names=allModels.map(row=>row.model).sort((a,b)=>a.localeCompare(b));
+ if(modelFilter&&!names.includes(modelFilter)){modelFilter='';localStorage.removeItem('tm_model_filter');}
+ $('m-model').innerHTML='<option value="">All models</option>'+names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
+ $('m-model').value=modelFilter;$('m-range').value=modelRange;
+ const selected=allModels.filter(row=>!modelFilter||row.model===modelFilter),cutoff=modelRange==='all'?'':dateKeyAgo(Number(modelRange)-1);
+ const observed=mergeModelDays(selected,cutoff),chartRows=filledModelDays(observed,modelRange),total=aggregateModelDays(observed);
+ $('m-speed').textContent=total.available?speedFmt(total.output_tps)+' tok/s':'--';
+ $('m-speed-note').textContent=total.available?`${total.throughput_basis==='tool_free'?'tool-free':'end-to-end'} · ${f(total.throughput_samples)} timed ${countWord(total.throughput_samples,'sample')} · ${pct(total.timing_coverage)} output coverage`:'no attributable timing in this window';
+ $('m-coverage-bar').style.width=Math.max(0,Math.min(100,100*total.timing_coverage))+'%';
+ $('m-input').textContent=compactNumber(total.input_tokens);$('m-input').title=f(total.input_tokens)+' input tokens';
+ $('m-input-note').textContent=`${f(selected.length)} ${countWord(selected.length,'model')} · ${money(total.cost)} estimated cost`;
+ $('m-output').textContent=compactNumber(total.output_tokens);$('m-output').title=f(total.output_tokens)+' output tokens';
+ $('m-output-note').textContent=`${f(total.executions)} ${countWord(total.executions,'execution')} · ${total.executions?compactNumber(total.output_tokens/total.executions):'0'} output / exec`;
+ const compareDays=modelRange==='all'?7:Math.max(1,Math.floor(Number(modelRange)/2)),currentStart=dateKeyAgo(compareDays-1),previousStart=dateKeyAgo(compareDays*2-1);
+ const current=aggregateModelDays(mergeModelDays(selected,currentStart));
+ const previous=aggregateModelDays(mergeModelDays(selected,previousStart).filter(row=>row.day<currentStart));
+ const changeEl=$('m-change-note');changeEl.className='subline modelDelta';
+	 if(current.available&&previous.available&&current.throughput_samples>=2&&previous.throughput_samples>=2){const change=current.output_tps/previous.output_tps-1;$('m-change').textContent=(change>=0?'+':'')+Math.round(change*100)+'%';changeEl.classList.add(change>=0?'up':'down');changeEl.textContent=`${speedFmt(current.output_tps)} vs ${speedFmt(previous.output_tps)} tok/s · ${f(current.throughput_samples)}/${f(previous.throughput_samples)} samples`;}
+ else{$('m-change').textContent='--';changeEl.textContent='needs timing in both comparison windows';}
+ $('m-trend-note').textContent=`${modelFilter||'All models'} · ${modelRange==='all'?'all recorded days':`last ${modelRange} days`} · bars are output volume`;
+ drawModelTrend(chartRows);
+ const tableRows=selected.map(model=>{const daily=(model.daily||[]).filter(row=>!cutoff||row.day>=cutoff);return {...model,window:aggregateModelDays(daily)};}).filter(row=>row.window.input_tokens||row.window.output_tokens).sort((a,b)=>b.window.output_tokens-a.window.output_tokens||b.window.input_tokens-a.window.input_tokens||a.model.localeCompare(b.model));
+	 $('m-table').querySelector('tbody').innerHTML=tableRows.length?tableRows.map(row=>{const data=row.window,basis=data.throughput_basis,basisLabel=basis==='tool_free'?'tool-free':basis==='end_to_end'?'end-to-end':'unavailable',coverage=pct(data.timing_coverage),timingTip=data.available?`Includes reasoning/thinking output; excludes external tool results. ${basisLabel} timing · ${f(data.throughput_samples)} timed ${countWord(data.throughput_samples,'sample')} · ${coverage} output coverage${data.avg_ttft_ms?` · ${Math.round(data.avg_ttft_ms)}ms avg TTFT`:''}.`:'No attributable completed timing samples in this window.';return `<tr><td><div class=modelName title="${esc(row.model)}">${esc(row.model)}</div><div class=modelRuntime>${esc((row.providers||[]).join(' + ')||'unknown runtime')}</div></td><td class="num mono" title="All scanned history">${f(row.logs)}</td><td class="num mono">${f(data.executions)}</td><td class="num mono">${compactNumber(data.input_tokens)}</td><td class="num mono">${compactNumber(data.output_tokens)}</td><td class="num mono">${data.executions?compactNumber(data.output_tokens/data.executions):'--'}</td><td class="num speedCell" title="${esc(timingTip)}"><strong class=mono>${data.available?speedFmt(data.output_tps)+' tok/s':'--'}</strong><span>${data.available?`${basisLabel} · ${f(data.throughput_samples)} ${countWord(data.throughput_samples,'sample')}`:'no timing'}</span></td></tr>`;}).join(''):`<tr><td colspan=7><div class=modelEmpty>No model I/O data in this window</div></td></tr>`;
+}
+
 function renderGlobal(xs){
  if(!xs)return;
  const generatedAt=Number(xs.generated_at||0);
@@ -2108,9 +2232,10 @@ function renderGlobal(xs){
   const avg=s.turns?money((s.cost||0)/s.turns):'$0.000';
   const dur=durationShort(s.duration_s||0);
   const modelText=(s.models||[]).join(', ')||'--';
-  return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}">
-   <div><span class="badge ${s.provider==='codex'?'codex':'claude'}">${esc(s.label||s.provider)}</span></div>
-   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${dur} · ${f(s.turns)} execs · ${avg}/exec</div><div class=sbar><i style="width:${Math.max(2,100*(s.cost||0)/maxCost)}%"></i></div></div>
+	  const throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} out tok/s`:'';
+	  return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}">
+	   <div><span class="badge ${s.provider==='codex'?'codex':'claude'}">${esc(s.label||s.provider)}</span></div>
+	   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${dur} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i style="width:${Math.max(2,100*(s.cost||0)/maxCost)}%"></i></div></div>
    <div class="badge models">${esc(modelText)}</div>
    <div class="badge tok">${f(s.tokens)} tok</div>
    <div class=smetrics><div class="c mono">${money(s.cost)}${s.cost_approx?' est':''}</div><div class=meta>${f(s.turns)} execs</div><button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button></div></div>`;
@@ -2187,8 +2312,9 @@ function applyLiveState(state){
  LATEST=state;$('live').classList.remove('dead');
  if(!pinned&&$('view-session').classList.contains('on'))renderSession(LATEST);
  else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='watching';
- if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
- if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
+	 if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+	 if($('view-models').classList.contains('on'))renderModelStats(LATEST.xsession?.model_stats);
+	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
 }
 async function refreshLiveState(){

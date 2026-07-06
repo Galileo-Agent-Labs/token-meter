@@ -720,6 +720,194 @@ def add_model_summary(stats, model, usage, cost):
     return input_tokens, output_tokens
 
 
+def add_model_daily(stats, model, usage, cost, ts):
+    """Accumulate exact trace-reported model I/O into local calendar days."""
+    if not ts:
+        return
+    input_tokens, output_tokens = usage_io_tokens(usage)
+    day = time.strftime("%Y-%m-%d", time.localtime(ts))
+    key = (model or "unknown", day)
+    row = stats.setdefault(key, {
+        "model": model or "unknown", "day": day, "cost": 0.0,
+        "input_tokens": 0, "output_tokens": 0, "executions": 0,
+    })
+    row["cost"] += float(cost or 0)
+    row["input_tokens"] += input_tokens
+    row["output_tokens"] += output_tokens
+    row["executions"] += 1
+
+
+def claude_performance_samples(objs):
+    """Return completed Claude turn samples with attributable reported timing."""
+    messages = {rec["id"]: rec for rec in iter_claude_messages(objs)}
+    samples = []
+    current = None
+
+    def ensure_current():
+        nonlocal current
+        if current is None:
+            current = {"message_ids": [], "seen": set()}
+        return current
+
+    def close_turn(obj):
+        nonlocal current
+        duration_ms = obj.get("durationMs")
+        try:
+            duration_ms = float(duration_ms or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        group = current
+        current = None
+        if not group or duration_ms <= 0:
+            return
+        records = [messages[mid] for mid in group["message_ids"] if mid in messages and not messages[mid].get("side")]
+        models = {rec.get("model") or DEFAULT_CLAUDE_MODEL for rec in records if rec.get("usage")}
+        if len(models) != 1:
+            return
+        input_tokens = output_tokens = 0
+        tool_ids = set()
+        for rec in records:
+            in_count, out_count = usage_io_tokens(rec.get("usage") or {})
+            input_tokens += in_count
+            output_tokens += out_count
+            for block in rec.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_ids.add(block.get("id") or (block.get("name"), len(tool_ids)))
+        if output_tokens <= 0:
+            return
+        ts = parse_iso(obj.get("timestamp", "")) or max((rec.get("ts") or 0 for rec in records), default=0)
+        samples.append({
+            "provider": "claude", "model": next(iter(models)),
+            "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+            "ts": ts or 0, "input_tokens": input_tokens, "output_tokens": output_tokens,
+            "duration_s": duration_ms / 1000.0, "generation_s": duration_ms / 1000.0,
+            "ttft_s": 0.0, "tool_calls": len(tool_ids), "timing_basis": "turn_duration",
+        })
+
+    for obj in objs:
+        otype = obj.get("type")
+        if otype == "user":
+            msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+            if claude_user_text(msg).strip():
+                current = {"message_ids": [], "seen": set()}
+            continue
+        if otype == "assistant":
+            msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+            mid = msg.get("id") or obj.get("uuid")
+            group = ensure_current()
+            if mid not in group["seen"]:
+                group["seen"].add(mid)
+                group["message_ids"].append(mid)
+            continue
+        if otype == "system" and obj.get("subtype") == "turn_duration":
+            close_turn(obj)
+    return samples
+
+
+def codex_performance_samples(objs, default_model=None):
+    """Return completed Codex task samples with model-attributable timing."""
+    model = default_model or DEFAULT_OPENAI_MODEL
+    samples = []
+    current = None
+
+    def ensure_current(ts=0):
+        nonlocal current
+        if current is None:
+            current = {"started_ts": ts or 0, "usage": {}, "tool_calls": 0}
+        return current
+
+    def close_task(payload, ts):
+        nonlocal current
+        task = current
+        current = None
+        if not task or len(task["usage"]) != 1:
+            return
+        duration_ms = payload.get("duration_ms")
+        ttft_ms = payload.get("time_to_first_token_ms")
+        try:
+            duration_ms = float(duration_ms or 0)
+            ttft_ms = float(ttft_ms or 0)
+        except (TypeError, ValueError):
+            return
+        if duration_ms <= 0:
+            return
+        sample_model, counts = next(iter(task["usage"].items()))
+        output_tokens = int(counts.get("output_tokens") or 0)
+        if output_tokens <= 0:
+            return
+        duration_s = duration_ms / 1000.0
+        generation_s = (duration_ms - ttft_ms) / 1000.0 if 0 < ttft_ms < duration_ms else duration_s
+        samples.append({
+            "provider": "codex", "model": sample_model,
+            "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+            "ts": ts or 0, "input_tokens": int(counts.get("input_tokens") or 0),
+            "output_tokens": output_tokens, "duration_s": duration_s,
+            "generation_s": generation_s, "ttft_s": max(0.0, ttft_ms / 1000.0),
+            "tool_calls": int(task.get("tool_calls") or 0), "timing_basis": "task_complete",
+        })
+
+    for obj in objs:
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        ptype = payload.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if obj.get("type") == "turn_context":
+            model = payload.get("model") or model
+            continue
+        if ptype == "task_started":
+            current = {"started_ts": ts, "usage": {}, "tool_calls": 0}
+            continue
+        if ptype in ("function_call", "custom_tool_call", "web_search_call", "tool_search_call"):
+            ensure_current(ts)["tool_calls"] += 1
+            continue
+        if ptype == "token_count":
+            raw = ((payload.get("info") or {}).get("last_token_usage") or {})
+            if not raw:
+                continue
+            usage = codex_usage(raw)
+            task = ensure_current(ts)
+            row = task["usage"].setdefault(model, {"input_tokens": 0, "output_tokens": 0})
+            input_count, output_count = usage_io_tokens(usage)
+            row["input_tokens"] += input_count
+            row["output_tokens"] += output_count
+            continue
+        if ptype == "task_complete":
+            close_task(payload, ts)
+    return samples
+
+
+def performance_summary(samples, total_output_tokens=0):
+    """Summarize weighted observed output throughput without averaging rates."""
+    timed = [row for row in (samples or []) if row.get("output_tokens", 0) > 0 and row.get("duration_s", 0) > 0]
+    tool_free = [row for row in timed if int(row.get("tool_calls") or 0) == 0]
+    selected = tool_free or timed
+    basis = "tool_free" if tool_free else ("end_to_end" if timed else "unavailable")
+
+    def seconds(row):
+        if basis == "tool_free":
+            return float(row.get("generation_s") or row.get("duration_s") or 0)
+        return float(row.get("duration_s") or 0)
+
+    measured_seconds = sum(seconds(row) for row in selected)
+    measured_output = sum(int(row.get("output_tokens") or 0) for row in selected)
+    latest = max(selected, key=lambda row: row.get("ts") or 0) if selected else None
+    latest_seconds = seconds(latest) if latest else 0
+    ttft_rows = [float(row.get("ttft_s") or 0) for row in selected if row.get("ttft_s", 0) > 0]
+    denominator = int(total_output_tokens or 0)
+    return {
+        "available": bool(measured_seconds > 0 and measured_output > 0),
+        "output_tps": (measured_output / measured_seconds) if measured_seconds > 0 else 0,
+        "latest_output_tps": ((latest.get("output_tokens") or 0) / latest_seconds) if latest_seconds > 0 else 0,
+        "basis": basis,
+        "sample_count": len(selected),
+        "timed_samples": len(timed),
+        "tool_free_samples": len(tool_free),
+        "measured_output_tokens": measured_output,
+        "measured_seconds": measured_seconds,
+        "timing_coverage": (measured_output / denominator) if denominator > 0 else 0,
+        "avg_ttft_ms": (sum(ttft_rows) * 1000 / len(ttft_rows)) if ttft_rows else 0,
+    }
+
+
 def codex_usage(raw):
     raw = raw or {}
     input_total = int(raw.get("input_tokens") or 0)
@@ -1362,9 +1550,11 @@ def recompute_claude(source):
     insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
                               "claude", primary_model, approx_cost)
 
-    return build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
-                       analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                       primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs))
+    state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
+                        analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
+                        primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs))
+    state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
+    return state
 
 
 def analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_tok, model_cost,
@@ -1720,9 +1910,11 @@ def recompute_codex(source):
     source["tools_deferred"] = tools_deferred
     source["tool_catalog"] = tool_catalog
     source["tool_namespaces"] = tool_namespaces
-    return build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
-                       analyses, insights, first_ts, last_ts, idle, biggest, len(coord_execs), True,
-                       primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs))
+    state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
+                        analyses, insights, first_ts, last_ts, idle, biggest, len(coord_execs), True,
+                        primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs))
+    state["throughput"] = performance_summary(codex_performance_samples(objs, source.get("model")), tot["output"])
+    return state
 
 
 def build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
@@ -2197,6 +2389,7 @@ def claude_summary(source, objs):
     models = set()
     model_cost, model_tok = defaultdict(float), defaultdict(int)
     model_stats = {}
+    model_daily = {}
     input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = False
@@ -2214,6 +2407,7 @@ def claude_summary(source, objs):
         model_cost[rec["model"]] += c
         model_tok[rec["model"]] += toks
         input_count, output_count = add_model_summary(model_stats, rec["model"], usage, c)
+        add_model_daily(model_daily, rec["model"], usage, c, rec["ts"])
         input_tokens += input_count
         output_tokens += output_count
         if rec["ts"]:
@@ -2232,8 +2426,10 @@ def claude_summary(source, objs):
                     title = compact_text(txt, 60)
                     break
 
+    performance = claude_performance_samples(objs)
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                      execution_timing("claude", objs), input_tokens, output_tokens, model_stats)
+                      execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
+                      list(model_daily.values()), performance)
     row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
     return row
 
@@ -2247,6 +2443,7 @@ def codex_summary(source, objs):
     models = set()
     model_cost, model_tok = defaultdict(float), defaultdict(int)
     model_stats = {}
+    model_daily = {}
     input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = True
@@ -2270,9 +2467,10 @@ def codex_summary(source, objs):
         model_cost[model] += c
         model_tok[model] += toks
         input_count, output_count = add_model_summary(model_stats, model, usage, c)
+        ts = parse_iso(obj.get("timestamp", ""))
+        add_model_daily(model_daily, model, usage, c, ts)
         input_tokens += input_count
         output_tokens += output_count
-        ts = parse_iso(obj.get("timestamp", ""))
         if ts:
             first_ts = ts if first_ts is None else min(first_ts, ts)
             last_ts = ts if last_ts is None else max(last_ts, ts)
@@ -2286,16 +2484,21 @@ def codex_summary(source, objs):
             if payload.get("type") == "user_message":
                 title = compact_text(payload.get("message") or "", 60)
                 break
+    performance = codex_performance_samples(objs, source.get("model"))
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                      execution_timing("codex", objs), input_tokens, output_tokens, model_stats)
+                      execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
+                      list(model_daily.values()), performance)
     row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
     return row
 
 
 def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
-                active_timing=None, input_tokens=0, output_tokens=0, model_stats=None):
+                active_timing=None, input_tokens=0, output_tokens=0, model_stats=None,
+                model_daily=None, performance_samples=None):
     active_timing = active_timing or {}
     model_stats = model_stats or {}
+    model_daily = model_daily or []
+    performance_samples = performance_samples or []
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     return {
         "id": source["id"],
@@ -2324,6 +2527,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
             }
             for model, values in model_stats.items()
         ], key=lambda row: (-row["cost"], -row["tokens"], row["model"])),
+        "throughput": performance_summary(performance_samples, output_tokens),
         "mtime": source["mtime"],
         "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(first_ts)) if first_ts else "",
         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(last_ts)) if last_ts else "",
@@ -2334,6 +2538,8 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "_model_cost": dict(model_cost),
         "_model_tok": dict(model_tok),
         "_day_cost": dict(day_cost),
+        "_model_daily": model_daily,
+        "_performance_samples": performance_samples,
     }
 
 
@@ -3355,6 +3561,119 @@ def daily_summaries(session_rows, limit=30):
     return result
 
 
+def _finalize_throughput_fields(row):
+    """Add weighted speed and coverage fields to a model or model/day row."""
+    tool_free_samples = int(row.get("tool_free_samples") or 0)
+    timed_samples = int(row.get("timed_samples") or 0)
+    if tool_free_samples and row.get("tool_free_seconds", 0) > 0:
+        speed_output = int(row.get("tool_free_output_tokens") or 0)
+        speed_seconds = float(row.get("tool_free_seconds") or 0)
+        basis = "tool_free"
+        sample_count = tool_free_samples
+    elif timed_samples and row.get("timed_seconds", 0) > 0:
+        speed_output = int(row.get("timed_output_tokens") or 0)
+        speed_seconds = float(row.get("timed_seconds") or 0)
+        basis = "end_to_end"
+        sample_count = timed_samples
+    else:
+        speed_output = 0
+        speed_seconds = 0.0
+        basis = "unavailable"
+        sample_count = 0
+    total_output = int(row.get("output_tokens") or 0)
+    row["output_tps"] = (speed_output / speed_seconds) if speed_seconds > 0 else 0
+    row["throughput_basis"] = basis
+    row["throughput_samples"] = sample_count
+    row["timing_coverage"] = (speed_output / total_output) if total_output > 0 else 0
+    ttft_samples = int(row.get("ttft_samples") or 0)
+    row["avg_ttft_ms"] = (float(row.get("ttft_total_s") or 0) * 1000 / ttft_samples) if ttft_samples else 0
+    return row
+
+
+def aggregate_model_stats(session_rows):
+    """Aggregate exact model I/O and attributable performance timing across logs."""
+    models = {}
+
+    def model_row(name):
+        return models.setdefault(name or "unknown", {
+            "model": name or "unknown", "providers": set(), "logs": 0,
+            "executions": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
+            "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
+            "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
+            "ttft_total_s": 0.0, "ttft_samples": 0, "last_ts": 0, "daily": {},
+        })
+
+    def daily_row(parent, day):
+        return parent["daily"].setdefault(day, {
+            "day": day, "input_tokens": 0, "output_tokens": 0,
+            "executions": 0, "cost": 0.0,
+            "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
+            "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
+            "ttft_total_s": 0.0, "ttft_samples": 0,
+        })
+
+    for session in session_rows or []:
+        provider = session.get("provider") or "unknown"
+        for stats in session.get("model_stats") or []:
+            row = model_row(stats.get("model"))
+            row["providers"].add(provider)
+            row["logs"] += 1
+            row["executions"] += int(stats.get("executions") or 0)
+            row["input_tokens"] += int(stats.get("input_tokens") or 0)
+            row["output_tokens"] += int(stats.get("output_tokens") or 0)
+            row["cost"] += float(stats.get("cost") or 0)
+        for stats in session.get("_model_daily") or []:
+            day = stats.get("day") or ""
+            if not day:
+                continue
+            row = model_row(stats.get("model"))
+            row["providers"].add(provider)
+            daily = daily_row(row, day)
+            for key in ("input_tokens", "output_tokens", "executions"):
+                daily[key] += int(stats.get(key) or 0)
+            daily["cost"] += float(stats.get("cost") or 0)
+        for sample in session.get("_performance_samples") or []:
+            row = model_row(sample.get("model"))
+            row["providers"].add(provider)
+            day = sample.get("day") or ""
+            targets = [row]
+            if day:
+                targets.append(daily_row(row, day))
+            output_tokens = int(sample.get("output_tokens") or 0)
+            duration_s = float(sample.get("duration_s") or 0)
+            generation_s = float(sample.get("generation_s") or duration_s)
+            ttft_s = float(sample.get("ttft_s") or 0)
+            for target in targets:
+                target["timed_output_tokens"] += output_tokens
+                target["timed_seconds"] += duration_s
+                target["timed_samples"] += 1
+                if int(sample.get("tool_calls") or 0) == 0:
+                    target["tool_free_output_tokens"] += output_tokens
+                    target["tool_free_seconds"] += generation_s
+                    target["tool_free_samples"] += 1
+                if ttft_s > 0:
+                    target["ttft_total_s"] += ttft_s
+                    target["ttft_samples"] += 1
+            row["last_ts"] = max(float(row.get("last_ts") or 0), float(sample.get("ts") or 0))
+
+    result = []
+    for row in models.values():
+        if not row.get("input_tokens") and not row.get("output_tokens"):
+            continue
+        daily = [_finalize_throughput_fields(item) for item in row.pop("daily").values()]
+        daily.sort(key=lambda item: item["day"])
+        row["providers"] = sorted(row["providers"])
+        row["daily"] = daily
+        result.append(_finalize_throughput_fields(row))
+    result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"], row["model"]))
+    return {
+        "models": result,
+        "total_models": len(result),
+        "first_day": min((day["day"] for row in result for day in row["daily"]), default=""),
+        "last_day": max((day["day"] for row in result for day in row["daily"]), default=""),
+    }
+
+
 def cross_session():
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
@@ -3411,6 +3730,7 @@ def cross_session():
             {"provider": k, "cost": provider_cost[k], "sessions": provider_sessions[k]}
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
+        "model_stats": aggregate_model_stats(internal_rows),
         "tool_waste": tool_waste,
         "daily": daily,
         "capabilities": capability_inventory(tool_waste),
@@ -4191,13 +4511,17 @@ def menubar_state(session_id=None):
     source = st.get("source") or {}
     context = st.get("context") or {}
     cache = st.get("cache") or {}
+    throughput = st.get("throughput") or {}
     activity = menubar_activity(st)
     recommendation = menubar_recommendation(st)
     verdict = menubar_verdict(st, recommendation)
     selected_id = source.get("id")
+    model = next((row.get("model") for row in reversed(st.get("executions") or [])
+                  if row.get("model")), None) or source.get("model") or "unknown"
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
+        "model": model,
         "source": {
             "label": source.get("label"),
             "id": source.get("id"),
@@ -4211,6 +4535,13 @@ def menubar_state(session_id=None):
         "cost_approx": st.get("cost_approx", False),
         "total_tokens": st.get("total_tokens", 0),
         "turns": st.get("turns", 0),
+        "throughput": {
+            "available": bool(throughput.get("available")),
+            "output_tps": throughput.get("output_tps", 0),
+            "basis": throughput.get("basis") or "unavailable",
+            "sample_count": throughput.get("sample_count", 0),
+            "timing_coverage": throughput.get("timing_coverage", 0),
+        },
         "cache": {
             "fresh": cache.get("fresh", 0),
             "read": cache.get("read", 0),

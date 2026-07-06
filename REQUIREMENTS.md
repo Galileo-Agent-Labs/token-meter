@@ -223,6 +223,20 @@ moment is already on screen the instant you stop. No second tool.
   collisions, and show restart guidance. A dismissible Current callout may
   provide one-time discovery and routes directly to Settings. Tools & Skills
   remains focused on capability evidence, optimization, and controls.
+- **FR22 Observed model throughput** — calculate weighted output tokens per
+  measured second for completed trace windows. Prefer tool-free Claude turns
+  and Codex tasks; for Codex tool-free work, subtract reported time to first
+  token when it is valid. If only tool-bearing timing exists, label the result
+  end-to-end because it includes tool time. Missing timing must render as
+  unavailable, not zero. The numerator includes trace-reported reasoning and
+  thinking output but excludes input, cache, and external tool-result tokens;
+  the UI must disclose this in an accessible tooltip.
+- **FR23 Model Stats history** — provide a first-class top-level view with
+  per-model input, output, cost, executions, output per execution, timing basis,
+  timing coverage, weighted output throughput, daily speed/volume history, and
+  equal-window speed comparison. Model and 7/30/90-day/all-history filters must
+  persist locally and recompute every displayed aggregate from the same daily
+  rows.
 
 ## 5. Non-functional requirements
 
@@ -241,6 +255,10 @@ moment is already on screen the instant you stop. No second tool.
   processed by that client's model provider.
 - **NFR7 Read-only and on demand** — agent tools cannot mutate configuration,
   stop a run, or change budgets, and they do not imply continuous monitoring.
+- **NFR8 Honest performance semantics** — call the metric observed output
+  throughput, not raw provider decode speed. Disclose sparse sample coverage,
+  distinguish tool-free from end-to-end timing, and aggregate tokens divided by
+  seconds rather than averaging per-execution rates.
 
 ---
 
@@ -481,19 +499,18 @@ TM !! $3.24 88% ctx
 TM off
 ```
 
-The dropdown answers the three operational questions that matter mid-session:
+The dropdown answers the three factual questions that matter mid-session:
 
-- Is the agent run okay?
-- How much has it cost?
-- Should I intervene now?
+- Which run and model is selected?
+- How much has it cost and how much context is in use?
+- What observed output speed does the trace support?
 
-It shows provider/project, live or idle state, current activity from the latest
-trace event, recommended action, cost, compact token count, context pressure, a
-small context bar, last execution cost, a verdict (`Healthy`, `Watch closely`,
-`Intervene now`, `Idle`, or `Server offline`), the top signal, and actions to
-open the dashboard, open the daily brief, open the current trace, open Tools &
-Skills, or quit the companion. These navigation actions stay together at the
-top of the menu. Their URLs are deterministic: Open Dashboard targets
+It shows provider/project, live or idle state, active model, cost, compact token
+count, context pressure and a small context bar, observed output speed with
+timing provenance, cache reuse, and last execution cost. It does not add Now,
+Action, or Status rows. Navigation actions open the dashboard, daily brief,
+current trace, Tools & Skills, or quit the companion. These actions stay
+together at the top of the menu. Their URLs are deterministic: Open Dashboard targets
 `#summary`, Open Daily Brief targets `#daily`, Open Trace targets `#activity`,
 and Tools & Skills targets `#capabilities`. Dashboard tab changes preserve the
 selected panel in the URL for direct links and reloads.
@@ -513,7 +530,9 @@ that need it. `GET /menubar` returns a compact subset for frequent polling:
 
 ```text
 ok, provider, source.label, source.id, source.project, source.pricing_note,
-session, project, total_cost, cost_approx, total_tokens, turns,
+session, project, model, total_cost, cost_approx, total_tokens, turns,
+throughput.available, throughput.output_tps, throughput.basis,
+throughput.sample_count, throughput.timing_coverage,
 context.latest, context.window, context.latest_pct, last_turn_cost,
 idle_s, ended, activity, recommendation, insights[0..3], selection,
 recent_sessions[0..4], ts

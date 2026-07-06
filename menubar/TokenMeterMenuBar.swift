@@ -120,6 +120,7 @@ struct MeterSnapshot {
     var verdict: Verdict
     var verdictDetail: String
     var provider: String
+    var model: String
     var project: String
     var session: String
     var pricingNote: String
@@ -127,6 +128,10 @@ struct MeterSnapshot {
     var estimatedCost: Bool
     var totalTokens: Int
     var turns: Int
+    var outputTokensPerSecond: Double?
+    var outputSpeedBasis: String
+    var outputSpeedSamples: Int
+    var outputSpeedCoverage: Double?
     var cacheInputShare: Double?
     var cacheTotalTokens: Int
     var contextPct: Double?
@@ -151,6 +156,7 @@ struct MeterSnapshot {
             verdict: .disconnected,
             verdictDetail: "Token Meter server is not reachable.",
             provider: "Token Meter",
+            model: "unknown",
             project: "",
             session: "",
             pricingNote: "",
@@ -158,6 +164,10 @@ struct MeterSnapshot {
             estimatedCost: false,
             totalTokens: 0,
             turns: 0,
+            outputTokensPerSecond: nil,
+            outputSpeedBasis: "unavailable",
+            outputSpeedSamples: 0,
+            outputSpeedCoverage: nil,
             cacheInputShare: nil,
             cacheTotalTokens: 0,
             contextPct: nil,
@@ -184,6 +194,7 @@ struct MeterSnapshot {
         let insights = dict["insights"] as? [[String: Any]] ?? []
 
         let provider = string(source["label"]) ?? string(dict["provider"]) ?? "Token Meter"
+        let model = string(dict["model"]) ?? string(source["model"]) ?? "unknown"
         let project = string(source["project"]) ?? string(dict["project"]) ?? ""
         let session = string(dict["session"]) ?? string(source["id"]) ?? ""
         let pricingNote = string(source["pricing_note"]) ?? ""
@@ -191,6 +202,11 @@ struct MeterSnapshot {
         let estimatedCost = bool(dict["cost_approx"]) || bool(source["approximate_cost"])
         let totalTokens = int(dict["total_tokens"])
         let turns = int(dict["turns"])
+        let throughput = dict["throughput"] as? [String: Any] ?? [:]
+        let outputTokensPerSecond = bool(throughput["available"]) ? optionalDouble(throughput["output_tps"]) : nil
+        let outputSpeedBasis = string(throughput["basis"]) ?? "unavailable"
+        let outputSpeedSamples = int(throughput["sample_count"])
+        let outputSpeedCoverage = bool(throughput["available"]) ? optionalDouble(throughput["timing_coverage"]) : nil
         let cacheInputShare = optionalDouble(cache["input_share"])
         let cacheTotalTokens = int(cache["total"])
         let contextPct = optionalDouble(context["latest_pct"])
@@ -237,6 +253,7 @@ struct MeterSnapshot {
             verdict: verdict,
             verdictDetail: serverVerdictDetail ?? MeterSnapshot.verdictFallbackDetail(verdict, contextPct: contextPct, lastTurnCost: lastTurnCost),
             provider: provider,
+            model: model,
             project: project,
             session: session,
             pricingNote: pricingNote,
@@ -244,6 +261,10 @@ struct MeterSnapshot {
             estimatedCost: estimatedCost,
             totalTokens: totalTokens,
             turns: turns,
+            outputTokensPerSecond: outputTokensPerSecond,
+            outputSpeedBasis: outputSpeedBasis,
+            outputSpeedSamples: outputSpeedSamples,
+            outputSpeedCoverage: outputSpeedCoverage,
             cacheInputShare: cacheInputShare,
             cacheTotalTokens: cacheTotalTokens,
             contextPct: contextPct,
@@ -295,7 +316,7 @@ struct MeterSnapshot {
 
     var statusTitle: String {
         if !connected { return verdict.prefix }
-        return "\(verdict.prefix) \(formatMoney(totalCost)) \(contextLabel)"
+        return "\(formatMoney(totalCost)) · \(contextLabel) · \(outputSpeedLabel) · \(model)"
     }
 
     var contextLabel: String {
@@ -309,25 +330,33 @@ struct MeterSnapshot {
         return "\(share)% input cached - \(formatCompactInt(cacheTotalTokens))"
     }
 
+    var outputSpeedLabel: String {
+        guard let rate = outputTokensPerSecond, rate > 0 else { return "-- tok/s" }
+        return "\(formatTokenRate(rate)) tok/s"
+    }
+
+    var outputSpeedTooltip: String {
+        guard outputTokensPerSecond != nil else {
+            return "Observed output throughput is unavailable because this log has no completed timed samples."
+        }
+        let basis = outputSpeedBasis == "tool_free" ? "tool-free timing" : "end-to-end timing"
+        let sampleWord = outputSpeedSamples == 1 ? "sample" : "samples"
+        let coverage = Int(((outputSpeedCoverage ?? 0) * 100).rounded())
+        let caveat = outputSpeedBasis == "tool_free"
+            ? "Tool execution time is excluded."
+            : "Tool execution time may be included."
+        return "Observed output throughput from \(outputSpeedSamples) timed \(sampleWord) using \(basis); \(coverage)% output coverage. \(caveat)"
+    }
+
     var idleLabel: String {
         if ended { return "pinned log" }
         if idleSeconds < 60 { return "live - \(idleSeconds)s idle" }
         return "live - \(idleSeconds / 60)m idle"
     }
 
-    var activitySummary: String {
-        if activityDetail.isEmpty { return activityTitle }
-        return "\(activityTitle) - \(activityDetail)"
-    }
-
-    var recommendationSummary: String {
-        if recommendationDetail.isEmpty { return recommendationLabel }
-        return "\(recommendationLabel) - \(recommendationDetail)"
-    }
-
     var statusTooltip: String {
         if !connected { return "Token Meter server is not reachable." }
-        return "\(verdict.label): \(verdictDetail)\nAction: \(recommendationSummary)\nNow: \(activitySummary)"
+        return "Cost: \(formatMoney(totalCost))\nContext: \(contextLabel)\nOutput speed: \(outputSpeedLabel)\nModel: \(model)"
     }
 }
 
@@ -444,29 +473,26 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         if snapshot.connected {
-            addActivityRow()
-            addRecommendationRow()
+            addMetricRow("Model", snapshot.model)
             addMetricRow("Cost", "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")")
-            addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
-            addMetricRow("Cache", snapshot.cacheLabel)
             addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))",
                          toolTip: "Context watch starts at 70%; intervene starts at 85%.")
             addContextBar()
+            addMetricRow("Output speed", snapshot.outputSpeedLabel, toolTip: snapshot.outputSpeedTooltip)
+            addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
+            addMetricRow("Cache", snapshot.cacheLabel)
             addMetricRow("Last execution", formatMoney(snapshot.lastTurnCost))
         } else {
             addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
         }
 
         menu.addItem(.separator())
-        addMetricRow("Status", snapshot.verdict.label, valueColor: snapshot.verdict.color, strong: true,
-                     toolTip: snapshot.verdictDetail)
-        menu.addItem(.separator())
         addAction("Quit Token Meter Menubar", #selector(quit))
     }
 
     private func updateStatusTitle() {
         let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: snapshot.verdict.color,
+            .foregroundColor: NSColor.labelColor,
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         ]
         statusItem.button?.attributedTitle = NSAttributedString(string: snapshot.statusTitle, attributes: attrs)
@@ -517,54 +543,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return image
         }
         return nil
-    }
-
-    private func addActivityRow() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 58))
-        let nameLabel = label("Now", frame: NSRect(x: 14, y: 36, width: 52, height: 15),
-                              font: .systemFont(ofSize: 11.5, weight: .semibold),
-                              color: .secondaryLabelColor)
-        let dot = NSView(frame: NSRect(x: 54, y: 40, width: 7, height: 7))
-        dot.wantsLayer = true
-        dot.layer?.cornerRadius = 3.5
-        dot.layer?.backgroundColor = activityColor(snapshot.activityKind).cgColor
-        let title = label(snapshot.activityTitle, frame: NSRect(x: 70, y: 32, width: menuWidth - 84, height: 19),
-                          font: .systemFont(ofSize: 13, weight: .semibold),
-                          color: .labelColor)
-        let detailText = snapshot.activityDetail.isEmpty ? snapshot.activityTime : snapshot.activityDetail
-        let detail = label(detailText, frame: NSRect(x: 70, y: 7, width: menuWidth - 84, height: 26),
-                           font: .systemFont(ofSize: 12, weight: .regular),
-                           color: .secondaryLabelColor)
-        detail.lineBreakMode = .byWordWrapping
-        detail.maximumNumberOfLines = 2
-        view.addSubview(nameLabel)
-        view.addSubview(dot)
-        view.addSubview(title)
-        view.addSubview(detail)
-        addViewItem(view)
-    }
-
-    private func addRecommendationRow() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 52))
-        view.toolTip = snapshot.recommendationSummary
-        let nameLabel = label("Action", frame: NSRect(x: 14, y: 31, width: 52, height: 15),
-                              font: .systemFont(ofSize: 11.5, weight: .semibold),
-                              color: .secondaryLabelColor)
-        let valueLabel = label(snapshot.recommendationLabel, frame: NSRect(x: 70, y: 28, width: menuWidth - 84, height: 19),
-                               font: .systemFont(ofSize: 13, weight: .semibold),
-                               color: recommendationColor(snapshot.recommendationSeverity))
-        let detail = label(snapshot.recommendationDetail, frame: NSRect(x: 70, y: 6, width: menuWidth - 84, height: 23),
-                           font: .systemFont(ofSize: 12, weight: .regular),
-                           color: .secondaryLabelColor)
-        nameLabel.toolTip = snapshot.recommendationSummary
-        valueLabel.toolTip = snapshot.recommendationSummary
-        detail.toolTip = snapshot.recommendationSummary
-        detail.lineBreakMode = .byWordWrapping
-        detail.maximumNumberOfLines = 2
-        view.addSubview(nameLabel)
-        view.addSubview(valueLabel)
-        view.addSubview(detail)
-        addViewItem(view)
     }
 
     private func addMetricRow(_ name: String, _ value: String, valueColor: NSColor = .labelColor, strong: Bool = false, toolTip: String? = nil) {
@@ -750,6 +728,12 @@ private func formatCompactInt(_ value: Int) -> String {
     return formatInt(value)
 }
 
+private func formatTokenRate(_ value: Double) -> String {
+    if value >= 100 { return String(format: "%.0f", value) }
+    if value >= 10 { return String(format: "%.1f", value) }
+    return String(format: "%.2f", value)
+}
+
 private func compactScaled(_ value: Double, suffix: String) -> String {
     let pattern: String
     if value >= 100 {
@@ -769,28 +753,6 @@ private func compactScaled(_ value: Double, suffix: String) -> String {
     return number + suffix
 }
 
-private func activityColor(_ kind: String) -> NSColor {
-    switch kind {
-    case "tool_call": return .tokenMeterBlue
-    case "tool_result": return .systemTeal
-    case "reasoning": return .systemPurple
-    case "complete": return .systemGreen
-    case "message": return .labelColor
-    case "offline": return .secondaryLabelColor
-    default: return .tokenMeterBlue
-    }
-}
-
-private func recommendationColor(_ severity: String) -> NSColor {
-    switch severity {
-    case "bad": return .tokenMeterBlue
-    case "warn": return .tokenMeterBlue
-    case "good": return .systemGreen
-    case "idle": return .tokenMeterBlue
-    default: return .labelColor
-    }
-}
-
 private func contextColor(_ pct: Double) -> NSColor {
     if pct >= 0.85 { return .tokenMeterBlue }
     if pct >= 0.70 { return .tokenMeterBlue }
@@ -806,9 +768,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         }
         let snapshot = MeterSnapshot.fromJSON(dict)
         print(snapshot.statusTitle)
-        print(snapshot.verdict.label)
-        print(snapshot.activitySummary)
-        print(snapshot.recommendationSummary)
+        print(snapshot.outputSpeedLabel)
         exit(0)
     } catch {
         fputs("Token Meter menubar smoke failed: \(error.localizedDescription)\n", stderr)

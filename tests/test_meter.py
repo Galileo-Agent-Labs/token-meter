@@ -50,6 +50,108 @@ class ExecutionTimingTests(unittest.TestCase):
         self.assertEqual(timing["basis"], "reported + observed")
 
 
+class ModelPerformanceTests(unittest.TestCase):
+    def test_claude_tool_free_turn_uses_reported_turn_duration(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-01T00:00:00.000Z",
+             "message": {"content": "hello"}},
+            {"type": "assistant", "timestamp": "2026-07-01T00:00:01.900Z", "message": {
+                "id": "msg-1", "model": "claude-sonnet-5", "content": [{"type": "text", "text": "done"}],
+                "usage": {"input_tokens": 20, "output_tokens": 10}, "stop_reason": "end_turn",
+            }},
+            {"type": "system", "subtype": "turn_duration", "timestamp": "2026-07-01T00:00:02.000Z",
+             "durationMs": 2000},
+        ]
+        samples = meter.claude_performance_samples(objs)
+        summary = meter.performance_summary(samples, 10)
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]["tool_calls"], 0)
+        self.assertEqual(summary["basis"], "tool_free")
+        self.assertEqual(summary["output_tps"], 5)
+
+    def test_codex_tool_free_speed_excludes_time_to_first_token(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-01T00:00:00.000Z", "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:09.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 200, "cached_input_tokens": 50,
+                    "output_tokens": 100, "total_tokens": 300,
+                }},
+            }},
+            {"timestamp": "2026-07-01T00:00:10.000Z", "payload": {
+                "type": "task_complete", "duration_ms": 10000, "time_to_first_token_ms": 2000,
+            }},
+        ]
+        samples = meter.codex_performance_samples(objs, "gpt-5.6")
+        summary = meter.performance_summary(samples, 100)
+        self.assertEqual(samples[0]["generation_s"], 8)
+        self.assertEqual(summary["output_tps"], 12.5)
+        self.assertEqual(summary["avg_ttft_ms"], 2000)
+
+    def test_tool_bearing_task_falls_back_to_end_to_end_throughput(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-01T00:00:00.000Z", "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:02.000Z", "payload": {
+                "type": "function_call", "name": "exec_command", "call_id": "call-1",
+            }},
+            {"timestamp": "2026-07-01T00:00:09.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "output_tokens": 100, "total_tokens": 200,
+                }},
+            }},
+            {"timestamp": "2026-07-01T00:00:10.000Z", "payload": {
+                "type": "task_complete", "duration_ms": 10000, "time_to_first_token_ms": 1000,
+            }},
+        ]
+        summary = meter.performance_summary(meter.codex_performance_samples(objs), 100)
+        self.assertEqual(summary["basis"], "end_to_end")
+        self.assertEqual(summary["tool_free_samples"], 0)
+        self.assertEqual(summary["output_tps"], 10)
+
+    def test_cross_log_model_aggregation_is_weighted_and_keeps_daily_io(self):
+        sessions = [{
+            "provider": "codex",
+            "model_stats": [{"model": "gpt-5.6", "cost": 1.0, "tokens": 330,
+                             "input_tokens": 300, "output_tokens": 30, "executions": 2}],
+            "_model_daily": [{"model": "gpt-5.6", "day": "2026-07-01", "cost": 1.0,
+                              "input_tokens": 300, "output_tokens": 30, "executions": 2}],
+            "_performance_samples": [
+                {"model": "gpt-5.6", "day": "2026-07-01", "ts": 10,
+                 "output_tokens": 10, "duration_s": 2, "generation_s": 1, "tool_calls": 0},
+                {"model": "gpt-5.6", "day": "2026-07-01", "ts": 20,
+                 "output_tokens": 20, "duration_s": 5, "generation_s": 3, "tool_calls": 0},
+            ],
+        }]
+        result = meter.aggregate_model_stats(sessions)
+        row = result["models"][0]
+        self.assertEqual(row["output_tps"], 7.5)
+        self.assertEqual(row["timing_coverage"], 1)
+        self.assertEqual(row["daily"][0]["input_tokens"], 300)
+        self.assertEqual(row["daily"][0]["throughput_samples"], 2)
+
+    def test_tool_free_speed_coverage_counts_only_selected_output(self):
+        summary = meter.performance_summary([
+            {"output_tokens": 10, "duration_s": 2, "generation_s": 1, "tool_calls": 0, "ts": 1},
+            {"output_tokens": 90, "duration_s": 9, "generation_s": 8, "tool_calls": 1, "ts": 2},
+        ], 100)
+        self.assertEqual(summary["basis"], "tool_free")
+        self.assertEqual(summary["output_tps"], 10)
+        self.assertEqual(summary["timing_coverage"], 0.1)
+
+    def test_model_aggregation_omits_rows_without_io(self):
+        result = meter.aggregate_model_stats([{
+            "provider": "claude",
+            "model_stats": [{"model": "<synthetic>", "input_tokens": 0,
+                             "output_tokens": 0, "executions": 2, "cost": 0}],
+        }])
+        self.assertEqual(result["models"], [])
+        self.assertEqual(result["total_models"], 0)
+
+
 class PricingTests(unittest.TestCase):
     def test_sonnet_5_uses_introductory_api_rates(self):
         price, approximate = meter.price_for("claude-sonnet-5", "claude")
@@ -217,6 +319,24 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("$('session-start-text').textContent=startMessage", self.page)
         self.assertLess(self.page.index("id=session-start"), self.page.index("id=session-tabs"))
 
+    def test_current_output_card_shows_trace_backed_output_speed(self):
+        for marker in ("id=output-tps", "s.throughput||{}", "speedFmt(throughput.output_tps)",
+                       "tool-free", "end-to-end", "reasoning and thinking output",
+                       "external tool-result tokens"):
+            self.assertIn(marker, self.page)
+
+    def test_model_stats_is_a_first_class_top_level_route(self):
+        for marker in ("id=tab-models", "id=view-models", "id=m-speed", "id=m-chart",
+                       "id=m-table", "renderModelStats", "aggregateModelDays"):
+            self.assertIn(marker, self.page)
+        self.assertIn("$('tab-models').onclick=()=>setHashRoute('models')", self.page)
+        self.assertIn("if(h==='models')", self.page)
+        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
+        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-daily"))
+        self.assertNotIn("Timing evidence", self.page)
+        self.assertIn("Hover a value for timing basis, samples, and coverage.", self.page)
+        self.assertIn("colspan=7", self.page)
+
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
             self.assertIn(marker, self.page)
@@ -346,6 +466,23 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('@objc private func openDailyBrief()', self.source)
         self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
 
+    def test_output_speed_is_a_dedicated_honest_metric_row(self):
+        self.assertIn('addMetricRow("Output speed", snapshot.outputSpeedLabel', self.source)
+        self.assertIn('addMetricRow("Model", snapshot.model)', self.source)
+        self.assertIn('· \(outputSpeedLabel) · \(model)', self.source)
+        self.assertIn('formatTokenRate(rate)', self.source)
+        self.assertIn('Tool execution time may be included.', self.source)
+        self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
+
+    def test_core_info_starts_with_amount_and_omits_operational_rows(self):
+        self.assertIn('return "\\(formatMoney(totalCost)) · \\(contextLabel) · \\(outputSpeedLabel) · \\(model)"', self.source)
+        self.assertNotIn('return "\\(verdict.prefix) \\(formatMoney(totalCost))', self.source)
+        self.assertNotIn('addActivityRow()', self.source)
+        self.assertNotIn('addRecommendationRow()', self.source)
+        self.assertNotIn('addMetricRow("Status"', self.source)
+        self.assertNotIn('label("Now"', self.source)
+        self.assertNotIn('label("Action"', self.source)
+
 
 class MenubarSessionTests(unittest.TestCase):
     def test_recent_sessions_are_limited_and_keep_an_older_pin_visible(self):
@@ -371,6 +508,9 @@ class MenubarSessionTests(unittest.TestCase):
         state = {
             "provider": "codex", "source": sources[0], "session": "pinned.jsonl",
             "project": "/repo/pinned-project", "context": {}, "cache": {}, "trace": [], "insights": [],
+            "executions": [{"idx": 1, "model": "gpt-5.6-sol"}],
+            "throughput": {"available": True, "output_tps": 42.5, "basis": "end_to_end",
+                           "sample_count": 2, "timing_coverage": 0.75},
         }
         with mock.patch.object(meter, "all_session_sources", return_value=sources), \
                 mock.patch.object(meter, "recompute", return_value=state):
@@ -380,6 +520,11 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertFalse(payload["selection"]["missing"])
         self.assertEqual(payload["selection"]["selected_id"], "pinned")
         self.assertEqual(payload["recent_sessions"][0]["name"], "Pinned task")
+        self.assertEqual(payload["model"], "gpt-5.6-sol")
+        self.assertEqual(payload["throughput"], {
+            "available": True, "output_tps": 42.5, "basis": "end_to_end",
+            "sample_count": 2, "timing_coverage": 0.75,
+        })
 
 
 class DynamicCatalogTests(unittest.TestCase):

@@ -6,7 +6,8 @@ Token Meter brings Claude Code, Claude Desktop Agent/Cowork, Codex CLI, and the
 Codex desktop app into one dashboard. It follows the newest local agent log,
 parses usage as it lands, and combines live runs with cross-app history so you
 can compare tokens, estimated spend, models, context pressure, and tool-result
-volume without hopping between apps.
+volume without hopping between apps. Trace-backed output throughput makes it
+possible to see when a model's observed generation pace changes across runs.
 
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
@@ -85,15 +86,16 @@ returned. Start a new agent session after connecting.
 
 ### 7. Keep The Live Signal In The Menu Bar
 
-The macOS companion shows the current run, latest completion, recommended
-action, estimated cost, token and execution count, cache reuse, context
-pressure, last-execution cost, and overall status. Its shortcuts open the
+The macOS companion shows the current run, estimated cost, token and execution
+count, cache reuse, context pressure, observed output speed, active model, and
+last-execution cost. The visible status-bar title starts with cost and keeps
+context use, tok/s, and model together. Its shortcuts open the
 Dashboard, Daily Brief, Trace, or Tools & Skills directly. When several Claude
 or Codex runs are active, select a recent session to pin it or choose **Follow
 Latest** to resume automatic switching.
 
 <p align="center">
-  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude and Codex sessions, current action, cost, tokens, cache reuse, context pressure, and status" width="420">
+  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude and Codex sessions, model, cost, tokens, output speed, cache reuse, and context pressure" width="420">
 </p>
 
 ### A Good First Five Minutes
@@ -117,6 +119,16 @@ Latest** to resume automatic switching.
 - **Token split**: separates input, output, thinking, and tool-result tokens so
   you can tell whether cost is coming from model output, cached context, or
   tool payloads.
+- **Observed output speed**: shows weighted output tokens per second on Current
+  and completed Logs. It prefers tool-free work with reported timing, falls
+  back to labeled end-to-end timing when tools are involved, and never turns
+  missing timing into a zero-speed claim. It includes trace-reported reasoning
+  and thinking output, while excluding input, cache, and external tool results.
+- **Model Stats view**: aggregates model input, output, cost, executions,
+  output per execution, timing coverage, and output speed across 7-, 30-, and
+  90-day or all-history windows. A daily speed/volume chart and equal-window
+  comparison make slowdowns and speedups visible without averaging per-run
+  rates incorrectly.
 - **Auto-following**: tracks the newest Claude Code CLI, Claude Desktop
   Agent/Cowork, Codex CLI, or Codex desktop app log across local projects
   without requiring a command per run.
@@ -162,7 +174,8 @@ Latest** to resume automatic switching.
 - **macOS menu bar companion**: shows a compact live status item backed by the
   same local dashboard endpoint, with actions to open the full dashboard and a
   five-session chooser that can pin one Claude or Codex run instead of flipping
-  between concurrently active traces.
+  between concurrently active traces. Its Output speed row uses the same
+  trace-backed tok/s, timing basis, sample count, and coverage semantics as Current.
 - **Local-only operation**: reads local JSONL logs and local capability
   configuration and sends no telemetry. Configuration changes happen only from
   an explicit dashboard action.

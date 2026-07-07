@@ -152,6 +152,94 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(result["total_models"], 0)
 
 
+class FrustrationSignalTests(unittest.TestCase):
+    def test_matches_whole_terms_and_counts_repeated_hits(self):
+        counts = meter.frustration_term_counts(
+            "Fuck, fuck this bullshit. Classify is safe.", ["fuck", "bullshit", "ass"]
+        )
+        self.assertEqual(counts, {"fuck": 2, "bullshit": 1})
+
+    def test_codex_prefers_canonical_user_events_and_tracks_model(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-07T08:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"type": "response_item", "timestamp": "2026-07-07T08:00:01.000Z",
+             "payload": {"type": "message", "role": "user", "content": [
+                 {"type": "input_text", "text": "# AGENTS.md instructions\nshit appears in config"}
+             ]}},
+            {"type": "response_item", "timestamp": "2026-07-07T08:00:02.000Z",
+             "payload": {"type": "message", "role": "user", "content": [
+                 {"type": "input_text", "text": "fuck this"}
+             ]}},
+            {"type": "event_msg", "timestamp": "2026-07-07T08:00:02.000Z",
+             "payload": {"type": "user_message", "message": "fuck this"}},
+            {"type": "event_msg", "timestamp": "2026-07-07T08:02:00.000Z",
+             "payload": {"type": "user_message", "message": "looks good"}},
+        ]
+        summary, events = meter.analyze_frustration("codex", objs, ["fuck", "shit"])
+        self.assertEqual(summary["user_turns"], 2)
+        self.assertEqual(summary["utterances"], 1)
+        self.assertEqual(summary["matches"], 1)
+        self.assertEqual(summary["rate"], 0.5)
+        self.assertEqual(summary["models"][0]["model"], "gpt-5.6")
+        self.assertNotIn("text", events[0])
+
+    def test_claude_skips_tool_and_sidechain_user_records(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-07T08:00:00.000Z",
+             "message": {"content": "this is fucking shit"}},
+            {"type": "assistant", "timestamp": "2026-07-07T08:00:02.000Z",
+             "message": {"model": "claude-opus-4-8", "content": []}},
+            {"type": "user", "timestamp": "2026-07-07T08:00:03.000Z",
+             "sourceToolAssistantUUID": "tool-call", "message": {"content": [
+                 {"type": "tool_result", "content": "idiot in command output"}
+             ]}},
+            {"type": "user", "timestamp": "2026-07-07T08:00:04.000Z",
+             "isSidechain": True, "message": {"content": "bullshit from an agent"}},
+            {"type": "user", "timestamp": "2026-07-07T08:01:00.000Z",
+             "message": {"content": "try again"}},
+            {"type": "assistant", "timestamp": "2026-07-07T08:01:02.000Z",
+             "message": {"model": "claude-sonnet-5", "content": []}},
+        ]
+        summary, _ = meter.analyze_frustration(
+            "claude", objs, ["fucking", "shit", "idiot", "bullshit"]
+        )
+        self.assertEqual(summary["user_turns"], 2)
+        self.assertEqual(summary["utterances"], 1)
+        self.assertEqual(summary["matches"], 2)
+        self.assertEqual([row["model"] for row in summary["models"]],
+                         ["claude-opus-4-8", "claude-sonnet-5"])
+
+    def test_aggregates_sessions_into_days_weeks_and_models(self):
+        event_one = {"ts": 1, "day": "2026-07-06", "week": "2026-07-06",
+                     "model": "gpt-5.6", "utterance": True, "matches": 2,
+                     "term_counts": {"fuck": 2}}
+        event_two = {"ts": 2, "day": "2026-07-07", "week": "2026-07-06",
+                     "model": "claude-opus-4-8", "utterance": False, "matches": 0,
+                     "term_counts": {}}
+        sessions = [
+            {"_frustration_events": [event_one], "frustration": {"user_turns": 1, "utterances": 1}},
+            {"_frustration_events": [event_two], "frustration": {"user_turns": 1, "utterances": 0}},
+        ]
+        result = meter.aggregate_frustration(sessions, ["fuck"])
+        self.assertEqual(result["user_turns"], 2)
+        self.assertEqual(result["utterances"], 1)
+        self.assertEqual(result["rate"], 0.5)
+        self.assertEqual(result["matches"], 2)
+        self.assertEqual(result["affected_sessions"], 1)
+        self.assertEqual(result["weekly"][0]["week"], "2026-07-06")
+        self.assertEqual(len(result["daily"]), 2)
+        self.assertEqual(len(result["models"]), 2)
+
+    def test_persists_machine_wide_terms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            result = meter.set_frustration_terms("Damn, custom phrase, damn", str(path))
+            loaded = meter.frustration_settings(str(path))
+        self.assertTrue(result["ok"])
+        self.assertEqual(loaded["terms"], ["damn", "custom phrase"])
+
+
 class PricingTests(unittest.TestCase):
     def test_sonnet_5_uses_introductory_api_rates(self):
         price, approximate = meter.price_for("claude-sonnet-5", "claude")
@@ -329,13 +417,34 @@ class DashboardLayoutTests(unittest.TestCase):
         for marker in ("id=tab-models", "id=view-models", "id=m-speed", "id=m-chart",
                        "id=m-table", "renderModelStats", "aggregateModelDays"):
             self.assertIn(marker, self.page)
+        self.assertRegex(self.page, r"id=tab-models[^>]*>Models</button>")
         self.assertIn("$('tab-models').onclick=()=>setHashRoute('models')", self.page)
         self.assertIn("if(h==='models')", self.page)
         self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
-        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-daily"))
+        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
         self.assertNotIn("Timing evidence", self.page)
         self.assertIn("Hover a value for timing basis, samples, and coverage.", self.page)
         self.assertIn("colspan=7", self.page)
+
+    def test_frustration_is_a_first_class_route_with_global_settings(self):
+        for marker in (
+            "id=tab-frustration", "id=view-frustration", "id=f-utterances",
+            "id=f-rate", "id=f-chart", "id=f-models", "id=f-chats",
+            "id=f-chat-mode", "drawFrustrationTrend",
+            "id=f-add-terms", "id=frustration-terms", "id=frustration-save",
+            "/settings/frustration",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("if(h==='frustration')", self.page)
+        self.assertIn("renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions)", self.page)
+        self.assertIn("$('f-add-terms').onclick=()=>{setHashRoute('settings')", self.page)
+        self.assertIn("$('frustration-settings').scrollIntoView", self.page)
+        self.assertIn("Add more terms", self.page)
+        self.assertIn("Save and recalculate", self.page)
+        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
+        self.assertLess(self.page.index("id=tab-frustration"), self.page.index("id=tab-capabilities"))
+        self.assertNotIn("id=f-model-table", self.page)
+        self.assertNotIn("id=f-session-table", self.page)
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
@@ -347,6 +456,7 @@ class DashboardLayoutTests(unittest.TestCase):
     def test_tools_and_skills_uses_removable_groups_and_review_filter(self):
         for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-mcp-observed"):
             self.assertIn(marker, self.page)
+        self.assertRegex(self.page, r"id=tab-capabilities[^>]*>Tools</button>")
         self.assertIn("data-cstate=review", self.page)
         self.assertIn("MCP servers remain read-only evidence", self.page)
 
@@ -374,14 +484,31 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("const GLOBAL_PANEL_KEYS=['overview','insights','evidence'];", self.page)
         self.assertIn("h==='logs'||h==='global-logs'", self.page)
         self.assertIn("live · updated ${new Date(generatedAt*1000).toLocaleTimeString", self.page)
-        self.assertLess(self.page.index("id=tab-global"), self.page.index("id=tab-logs"))
-        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-daily"))
+        self.assertLess(self.page.index("id=tab-daily"), self.page.index("id=tab-logs"))
+        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-global"))
         self.assertIn("id=d-day-select", self.page)
         self.assertIn("id=learn-glossary", self.page)
         self.assertIn("if(h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
         self.assertIn("if(h==='settings')", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
+
+    def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
+        tab_ids = [
+            "tab-session", "tab-daily", "tab-logs", "tab-global", "tab-models",
+            "tab-frustration", "tab-capabilities", "tab-learn", "tab-settings",
+        ]
+        positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
+        self.assertEqual(positions, sorted(positions))
+        for marker in (
+            "id=command-trigger", "id=command-palette", "id=command-search",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit9'",
+            "key==='k'", "event.key==='ArrowDown'", "event.key==='Enter'",
+            "aria-keyshortcuts=\"Meta+K Control+K\"",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("if(command.latest)goToLatestSession()", self.page)
+        self.assertIn("else setHashRoute(command.route)", self.page)
 
     def test_logs_support_project_and_time_range_filters(self):
         for marker in ("id=g-project", "id=g-time", "Projects filter", "Time range filter",

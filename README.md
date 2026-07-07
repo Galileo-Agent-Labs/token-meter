@@ -1,13 +1,37 @@
 # Token Meter
 
-A local, unified view of token consumption across Claude and Codex apps.
+Claude and Codex make it easy to start an agent session. They make it much
+harder to understand what happened during the run, what it cost, and whether
+your usage is changing over time. Token Meter reads their local traces and
+turns them into one live dashboard.
 
-Token Meter brings Claude Code, Claude Desktop Agent/Cowork, Codex CLI, and the
-Codex desktop app into one dashboard. It follows the newest local agent log,
-parses usage as it lands, and combines live runs with cross-app history so you
-can compare tokens, estimated spend, models, context pressure, and tool-result
-volume without hopping between apps. Trace-backed output throughput makes it
-possible to see when a model's observed generation pace changes across runs.
+It helps answer questions such as:
+
+- How is the context window growing during this session?
+- How much have I spent on this session?
+- How much have I spent on this project in the last week?
+- Is token output getting faster or slower over time, and how does that compare
+  across models?
+- Which loaded tools or skills am I not using, and which user-installed skill
+  packs should I review for disabling?
+- What do the cost, token, execution, and speed numbers look like for each
+  model?
+- What did I spend and work on each day?
+- Can I search or filter old logs by title, project, model, provider, or time,
+  then sort them by cost or tokens?
+- Which chats show signs of frustration? Token Meter can count configurable
+  terms such as `fuck`, `fck`, `shit`, `idiot`, and `bullshit` in human user
+  messages. This is a simple lexical signal, not sentiment analysis.
+- Can I ask Token Meter these questions directly from Claude or Codex through a
+  local, read-only MCP server?
+- When several sessions are running, can I pin one and follow it without Token
+  Meter switching to another run?
+
+Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, and
+the Codex desktop app. It follows local agent logs as they are written and
+combines live runs with cross-app history, so the answer is available while you
+are working and after the session ends. Costs are estimates based on the model
+rates configured in Token Meter.
 
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
@@ -62,7 +86,7 @@ trend to see what changed.
 
 ### 5. Inspect Tools, MCPs, And Skills
 
-Open **Tools & Skills** to see the capabilities found across scanned Claude and
+Open **Tools** to see the capabilities found across scanned Claude and
 Codex logs. Compare observed use, returned tokens, last-use evidence, and eager
 versus deferred catalog definitions. The view keeps MCP servers read-only and
 limits review and disable actions to eligible user-installed skill packs.
@@ -78,7 +102,9 @@ Codex, Claude Code, or both. Token Meter previews the exact command and manages
 only its own user-level entry. Connected agents can check the current run,
 review aggregate usage, or inspect user-installed skill-pack hygiene; prompts,
 reasoning, tool contents, credentials, and configuration values are never
-returned. Start a new agent session after connecting.
+returned. The same view holds the machine-wide frustration lexicon; edits are
+recalculated across every discovered session. Start a new agent session after
+connecting.
 
 <p align="center">
   <img src="images/mcp.png" alt="Token Meter Settings view for connecting read-only access from Codex and Claude Code" width="900">
@@ -90,7 +116,7 @@ The macOS companion shows the current run, estimated cost, token and execution
 count, cache reuse, context pressure, observed output speed, active model, and
 last-execution cost. The visible status-bar title starts with cost and keeps
 context use, tok/s, and model together. Its shortcuts open the
-Dashboard, Daily Brief, Trace, or Tools & Skills directly. When several Claude
+Dashboard, Daily Brief, Trace, or Tools directly. When several Claude
 or Codex runs are active, select a recent session to pin it or choose **Follow
 Latest** to resume automatic switching.
 
@@ -106,13 +132,16 @@ Latest** to resume automatic switching.
 4. Connect Codex or Claude Code from **Settings** if you want on-demand answers
    inside the agent.
 5. After a few runs, use **Global** and **Daily** to compare apps and explain
-   spend, then open **Logs** or **Tools & Skills** for the underlying evidence.
+   spend, then open **Logs** or **Tools** for the underlying evidence.
 
 ## Features
 
 - **Unified cross-app view**: combines supported Claude and Codex CLI and
   desktop-agent logs into one local view of tokens, estimated spend, models,
   runtimes, projects, and trends.
+- **Keyboard navigation**: opens a searchable command palette with Command/Ctrl+K,
+  arrow-key selection, and direct Option/Alt+1–9 shortcuts for the primary
+  workflow.
 - **Live log cost**: shows the running log/thread cost as entries are written,
   with a hover breakdown for uncached input, cached input, cache writes, and
   output tokens.
@@ -124,11 +153,16 @@ Latest** to resume automatic switching.
   back to labeled end-to-end timing when tools are involved, and never turns
   missing timing into a zero-speed claim. It includes trace-reported reasoning
   and thinking output, while excluding input, cache, and external tool results.
-- **Model Stats view**: aggregates model input, output, cost, executions,
+- **Models view**: aggregates model input, output, cost, executions,
   output per execution, timing coverage, and output speed across 7-, 30-, and
   90-day or all-history windows. A daily speed/volume chart and equal-window
   comparison make slowdowns and speedups visible without averaging per-run
   rates incorrectly.
+- **Frustration signals**: counts user turns containing configurable whole
+  terms, reports matched utterances and their share of human user turns, and
+  compares sessions and models across daily, weekly, 7-, 30-, 90-day, or
+  all-history windows. It is explicitly a lexical signal rather than sentiment
+  analysis; aggregate counts are retained, not message text.
 - **Auto-following**: tracks the newest Claude Code CLI, Claude Desktop
   Agent/Cowork, Codex CLI, or Codex desktop app log across local projects
   without requiring a command per run.
@@ -156,7 +190,7 @@ Latest** to resume automatic switching.
 - **Global tool-waste evidence**: ranks tools and MCP namespaces by returned
   tokens, flags oversized results, exact immediate repeats, and structured
   errors, and shows a 14-day result-token trend.
-- **Tools & Skills view**: inventories trace-observed tools, discovered MCP
+- **Tools view**: inventories trace-observed tools, discovered MCP
   servers, and installed Codex/Claude skills with runtime, source, state, use,
   returned tokens, and last-use evidence.
 - **Actionable capability optimization**: measures configured user-installed
@@ -425,10 +459,16 @@ always removes the session path and returns to the active newest log.
 
 Dashboard tabs are addressable routes. The menu bar opens `#summary` for Open
 Dashboard, `#daily` for Open Daily Brief, `#activity` for Open Trace, and
-`#capabilities` for Tools & Skills, and `#settings` for machine-level settings.
+`#capabilities` for Tools, and `#settings` for machine-level settings.
 Current-session panels keep their panel name in the hash. Logs use `#logs`,
 while Global subtabs use `#global-overview`, `#global-insights`, and
 `#global-evidence`; the old `#global-logs` route redirects to `#logs`.
+
+The top navigation follows the review sequence **Current → Daily → Logs →
+Global → Models → Frustration → Tools → Learn → Settings**.
+Press **Command+K** on macOS or **Ctrl+K** elsewhere to search every view plus
+Current and Global subtabs. **Option/Alt+1–9** opens the nine top-level views
+directly; Option/Alt+1 keeps Current's return-to-live behavior.
 
 ## What The Dashboard Shows
 
@@ -461,7 +501,7 @@ The Global tab includes:
 - A Capability evidence subtab with project concentration, last use, failures,
   recommendations, and server-level MCP evidence.
 - MCP rows remain read-only; supported user-installed skill-pack changes live
-  in the Tools & Skills tab.
+  in the Tools tab.
 
 The Logs tab includes the searchable log inventory with an exact Projects
 folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
@@ -479,7 +519,7 @@ appears without waiting for a newer Codex session (or vice versa). If a browser
 tab falls behind during a burst, Token Meter drops queued stale snapshots and
 keeps the newest one instead of silently detaching the live stream.
 
-The Tools & Skills tab includes:
+The Tools tab includes:
 
 - Prominent counts for enabled removable groups, groups used across scanned
   logs, review candidates, and observed MCP servers. MCP servers remain
@@ -498,8 +538,8 @@ The Tools & Skills tab includes:
   review-candidate IDs. MCP servers, runtime-owned tools, and standalone skills
   are read-only.
 
-To use it, open **Tools & Skills** in the dashboard or choose **Open Tools &
-Skills** from the macOS menu bar companion. Start with the optimization insight
+To use it, open **Tools** in the dashboard or choose **Open Tools** from the
+macOS menu bar companion. Start with the optimization insight
 to review enabled removable groups with no observed use. Then search or filter
 the inventory by Tools, MCPs, Skills, Enabled, Unused, or Review candidates.
 The `Use`, `Returned`, and `Last used` columns provide the trace evidence for
@@ -586,7 +626,7 @@ join.
 
 Regular cloud chats do not produce the local agent JSONL that contains usage
 and tool evidence. Start the task in Claude Desktop Agent mode/Cowork if you
-need trace-backed Token Meter metrics. The Tools & Skills tab reports how many
+need trace-backed Token Meter metrics. The Tools tab reports how many
 local Agent/Cowork traces it found and the latest one it can attribute.
 
 ### The dashboard says `page.html` is missing

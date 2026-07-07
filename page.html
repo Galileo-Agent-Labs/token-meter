@@ -42,6 +42,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .tab,.seg button{border:0;background:transparent;color:var(--dim);border-radius:6px;padding:7px 13px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:background .16s,border-color .16s,color .16s,transform .16s}
 .tab:hover,.seg button:hover{background:rgba(255,255,255,.045);color:var(--fg)}
 .tab.on,.seg button.on{background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.055));color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.22),var(--inset)}
+.top .tabs{min-width:0;overflow-x:auto;scrollbar-width:none}.top .tabs::-webkit-scrollbar{display:none}
+.commandTrigger{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(17,24,32,.86);border-radius:8px;padding:6px 8px;color:var(--dim);font:inherit;font-size:12px;font-weight:720;cursor:pointer;white-space:nowrap;box-shadow:var(--inset)}.commandTrigger:hover{border-color:var(--line2);color:var(--fg);background:rgba(255,255,255,.07)}.commandTrigger svg{width:14px;height:14px;stroke:currentColor}.commandTrigger kbd{border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:1px 5px;color:var(--fg);font:700 10.5px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:0 1px 0 rgba(255,255,255,.08)}
 .spacer{flex:1}
 .live,.notify,.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:rgba(17,24,32,.86);border-radius:999px;padding:6px 10px;font-size:12px;color:var(--dim);white-space:nowrap;box-shadow:var(--inset)}
 .pulse{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(102,217,144,.38);animation:p 2s infinite}
@@ -136,6 +138,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
 .glob-hero{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.spark{display:flex;align-items:flex-end;gap:5px;height:84px;margin-top:8px;padding:0 2px}.spark .b{flex:1;background:linear-gradient(180deg,var(--orange),rgba(0,188,235,.55));border-radius:3px 3px 0 0;min-height:3px;position:relative;box-shadow:0 -8px 18px rgba(0,188,235,.08)}.spark .b.anom{background:linear-gradient(180deg,var(--bad),rgba(255,111,111,.58))}.spark .b:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5;box-shadow:var(--shadow-soft)}
 .wasteHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.wasteHero .meter{font-size:28px;margin-top:5px}.globalWasteGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}.wasteBars{display:grid;gap:10px;margin-top:12px}.wasteBar .head{display:flex;justify-content:space-between;gap:12px;font-size:12px}.wasteBar .head span:first-child{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wasteBar .track{height:6px;margin-top:5px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.wasteBar .track i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--retrieval),var(--orange3))}.wasteTrend{height:150px;display:flex;align-items:flex-end;gap:6px;margin-top:12px;padding-top:18px}.wasteDay{flex:1;min-width:7px;height:100%;display:flex;align-items:flex-end;position:relative;border-radius:4px 4px 0 0;background:rgba(255,255,255,.035);overflow:visible}.wasteDay .total{width:100%;background:linear-gradient(180deg,rgba(0,188,235,.82),rgba(0,188,235,.3));border-radius:4px 4px 0 0;position:relative}.wasteDay .flagged{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,var(--warn),rgba(255,180,87,.48));border-radius:3px 3px 0 0}.wasteDay:hover:after{content:attr(data-l);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111820;color:var(--fg);border:1px solid var(--line2);font-size:10px;padding:3px 7px;border-radius:5px;white-space:nowrap;margin-bottom:5px;z-index:5}.globalInsightList{display:grid;gap:8px;margin-top:12px}.wasteTableWrap{overflow:auto;max-height:520px;margin-top:10px}.wasteTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.reco{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--dim);white-space:nowrap}.reco.disable,.reco.fix_or_disable{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.reco.narrow_results,.reco.reduce_repeats{color:var(--orange3);border-color:rgba(0,188,235,.3);background:rgba(0,188,235,.08)}.mcpDialog{width:min(560px,calc(100vw - 28px));border:1px solid var(--line2);border-radius:10px;background:linear-gradient(180deg,#17212b,#0d1218);color:var(--fg);padding:0;box-shadow:0 30px 90px rgba(0,0,0,.7)}.mcpDialog::backdrop{background:rgba(0,0,0,.68);backdrop-filter:blur(4px)}.mcpDialog .inner{padding:20px}.mcpDialog h3{margin:0 0 8px;font-size:20px}.mcpDialog .evidence{display:grid;gap:7px;margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.03);color:var(--dim);font-size:12px}.mcpDialog code{display:block;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:7px;background:#07090c;color:var(--orange3);overflow:auto}.mcpDialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.mcpDialog .danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}
+.commandPalette{width:min(660px,calc(100vw - 28px));max-height:min(680px,calc(100vh - 40px));border:1px solid rgba(0,188,235,.34);border-radius:12px;background:linear-gradient(180deg,#151e27,#0b1016);color:var(--fg);padding:0;overflow:hidden;box-shadow:0 34px 100px rgba(0,0,0,.76)}.commandPalette::backdrop{background:rgba(0,0,0,.7);backdrop-filter:blur(6px)}.commandShell{display:flex;max-height:min(680px,calc(100vh - 40px));flex-direction:column}.commandSearch{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line2);background:rgba(255,255,255,.025)}.commandSearch svg{width:19px;height:19px;stroke:var(--faint)}.commandSearch input{min-width:0;border:0;outline:0;background:transparent;color:var(--fg);font:650 16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif}.commandSearch input::placeholder{color:var(--faint)}.commandSearch kbd,.commandFooter kbd,.commandShortcut{border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.05);color:var(--dim);font:700 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:0 1px 0 rgba(255,255,255,.07)}.commandSearch kbd{padding:2px 6px}.commandList{min-height:100px;overflow:auto;padding:8px;scrollbar-color:var(--line2) transparent}.commandGroup{padding:8px 10px 5px;color:var(--faint);font-size:10px;font-weight:820;text-transform:uppercase;letter-spacing:.08em}.commandItem{width:100%;display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:10px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--fg);padding:9px 10px;text-align:left;font:inherit;cursor:pointer}.commandItem:hover,.commandItem.selected{border-color:rgba(0,188,235,.26);background:linear-gradient(90deg,rgba(0,188,235,.12),rgba(255,255,255,.035))}.commandGlyph{width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.04);color:var(--orange3);font:800 11px ui-monospace,"SF Mono",Menlo,monospace}.commandCopy{min-width:0}.commandLabel,.commandDescription{display:block}.commandLabel{font-size:13px;font-weight:780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.commandDescription{font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.commandShortcut{padding:3px 6px;white-space:nowrap}.commandEmpty{display:grid;place-items:center;min-height:120px;color:var(--faint);font-size:12px}.commandFooter{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 14px;border-top:1px solid var(--line);color:var(--faint);font-size:10.5px}.commandFooter span{display:flex;align-items:center;gap:5px}.commandFooter kbd{padding:1px 5px;color:var(--fg)}
 .globalControls{display:grid;grid-template-columns:minmax(220px,1fr) minmax(190px,.78fr) minmax(150px,.52fr) auto auto;gap:10px;align-items:end;margin:12px 0}.filterControl{display:grid;gap:5px;min-width:0}.filterControl>span{font-size:10px;line-height:1;text-transform:uppercase;color:var(--faint);font-weight:780}.searchbox,.filterSelect{width:100%;min-width:0;height:38px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;box-shadow:var(--inset)}.filterSelect{appearance:auto;padding-right:28px}.searchbox:focus,.filterSelect:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.filterSort .seg{min-height:38px;align-items:center}.filterClear{display:grid;gap:5px;justify-items:stretch;min-width:148px}.clearFilters{height:38px;background:rgba(255,255,255,.045);color:var(--dim)}.clearFilters:hover:not(:disabled){color:var(--fg)}.clearFilters:disabled{opacity:.42;cursor:not-allowed}.filterCount{text-align:right}.globalMeta{font-size:12px;color:var(--faint);white-space:nowrap}
 .logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
 .outputPair{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;min-width:0}.outputPair .v{min-width:0}.outputRate{display:grid;justify-items:end;line-height:1;padding-bottom:2px;white-space:nowrap}.outputRate strong{font-size:16px;color:var(--orange3);font-weight:840}.outputRate span{font-size:9.5px;color:var(--faint);font-weight:760;text-transform:uppercase;margin-top:3px}.modelHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}.modelHead h1{font-size:24px;line-height:1.2;margin:0}.modelHead p{color:var(--dim);margin:4px 0 0;font-size:13px;max-width:760px}.modelControls{display:grid;grid-template-columns:minmax(180px,260px) minmax(150px,190px);gap:9px;align-items:end}.modelHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.modelKpi{padding:15px;min-height:110px;overflow:visible}.modelKpi .v{font-size:28px;font-weight:840;line-height:1.08;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.modelKpi .subline{font-size:11.5px;margin-top:5px}.modelDelta{display:inline-flex;align-items:center;gap:6px;color:var(--dim)}.modelDelta:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}.modelDelta.up{color:var(--good)}.modelDelta.up:before{background:var(--good)}.modelDelta.down{color:var(--warn)}.modelDelta.down:before{background:var(--warn)}.modelCoverage{height:7px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:9px}.modelCoverage i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--orange3));border-radius:999px}.modelTrendCard{margin-top:12px;padding:16px 17px}.modelTrendHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.modelTrendHead h2{font-size:14px;margin:0}.modelTrendHead p{font-size:11.5px;color:var(--faint);margin:2px 0 0}.modelLegend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:var(--dim);font-size:11px}.modelLegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}.modelChartWrap{position:relative;margin-top:10px}.modelChart{display:block;width:100%;height:270px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.022)}.modelChartTip{position:absolute;z-index:5;display:none;min-width:210px;pointer-events:none;border:1px solid rgba(0,188,235,.5);background:linear-gradient(180deg,rgba(5,7,10,.98),rgba(13,18,24,.98));border-radius:8px;box-shadow:0 16px 34px rgba(0,0,0,.52);overflow:hidden;font:11.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;color:var(--dim)}.modelChartTip .h{padding:7px 10px;background:rgba(0,188,235,.14);font-weight:820;color:var(--fg)}.modelChartTip .r{display:flex;justify-content:space-between;gap:18px;padding:3px 10px}.modelChartTip .r b{color:var(--fg)}.modelTableWrap{margin-top:12px;overflow:auto;max-height:620px}.modelTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820;white-space:nowrap}.modelTableWrap .tbl th .fieldtip:after{bottom:auto;top:calc(100% + 7px);left:auto;right:0;z-index:4}.modelTableWrap .tbl td{vertical-align:middle}.modelName{font-weight:790;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelRuntime{font-size:10.5px;color:var(--faint);margin-top:2px}.speedCell strong{display:block;color:var(--orange3);font-size:13px}.speedCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px}.modelEmpty{padding:36px 16px;text-align:center;color:var(--faint)}
@@ -145,30 +148,39 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .dailyHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:16px}.dailyHead h1,.learnHead h1{font-size:24px;line-height:1.2;margin:0}.dailyHead p,.learnHead p{color:var(--dim);margin:4px 0 0;font-size:13px}.dailyPicker{display:flex;align-items:center;gap:7px}.dailyPicker select{min-width:172px;border:1px solid var(--line2);background:var(--panel);color:var(--fg);border-radius:7px;padding:7px 9px;font:inherit;font-weight:700}.iconBtn{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;font:inherit;font-size:20px;line-height:1;cursor:pointer}.iconBtn:hover:not(:disabled){border-color:var(--accent);background:rgba(0,188,235,.09)}.iconBtn:disabled{opacity:.4;cursor:not-allowed}.dailyOverview{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(330px,.65fr);gap:12px}.dailySpendCard{padding:20px;overflow:hidden;background:linear-gradient(145deg,rgba(24,37,48,.98),rgba(12,17,23,.98))}.dailySpendCard:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 78%)}.dailySpendTop{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dailySpendValue{font-size:52px;font-weight:840;line-height:1;margin-top:8px;letter-spacing:-2px}.dailyDelta{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;padding:5px 9px;background:rgba(255,255,255,.04);color:var(--dim);font-size:11.5px;font-weight:760;white-space:nowrap}.dailyDelta:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent)}.dailyDelta.good{color:var(--good);border-color:rgba(102,217,144,.32);background:rgba(102,217,144,.07)}.dailyDelta.good:before{background:var(--good)}.dailyDelta.warn{color:var(--warn);border-color:rgba(255,180,87,.34);background:rgba(255,180,87,.07)}.dailyDelta.warn:before{background:var(--warn)}.dailyMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:22px;border-top:1px solid var(--line)}.dailyMetric{padding:13px 14px 0;border-left:1px solid var(--line);min-width:0}.dailyMetric:first-child{padding-left:0;border-left:0}.dailyMetric .v{font-size:21px;font-weight:820;margin-top:3px}.dailyMetric .subline{margin-top:2px;font-size:11px}.dailyReadout{padding:18px;display:flex;flex-direction:column;min-height:100%}.dailyStatusTitle{font-size:20px;line-height:1.2;font-weight:830;margin-top:7px}.dailySummaryLine{margin:7px 0 13px;color:var(--dim);font-size:12.5px;line-height:1.45}.dailySummaryLine b{color:var(--fg)}.dailySignalList{margin-top:auto;border-top:1px solid var(--line)}.dailySignal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);align-items:center}.dailySignal:last-child{border-bottom:0;padding-bottom:0}.dailySignal .name{font-size:12px;color:var(--dim)}.dailySignal .note{font-size:10.5px;color:var(--faint);margin-top:1px}.dailySignal .value{font-weight:820;text-align:right}.dailyTrendCard{margin-top:12px;padding:17px 18px 14px}.dailySectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.dailySectionHead h2{font-size:14px;margin:0}.dailySectionHead p{font-size:11.5px;color:var(--faint);margin:2px 0 0}.dailyTrend{height:150px;display:flex;align-items:stretch;gap:5px;margin-top:9px;overflow-x:auto;overflow-y:hidden;padding:0 1px;scrollbar-color:var(--line2) transparent}.dailyBar{appearance:none;border:0;background:transparent;color:var(--faint);font:inherit;flex:1 0 42px;min-width:42px;display:grid;grid-template-rows:18px 1fr 22px;gap:3px;padding:0 2px;cursor:pointer;border-radius:6px}.dailyBar:hover,.dailyBar:focus-visible{background:rgba(255,255,255,.035);outline:none}.dailyBarValue{font-size:9.5px;white-space:nowrap;opacity:0;text-align:center;color:var(--dim)}.dailyBar:hover .dailyBarValue,.dailyBar.selected .dailyBarValue{opacity:1}.dailyBarTrack{height:100%;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line2)}.dailyBarFill{display:block;width:min(26px,72%);min-height:3px;border-radius:4px 4px 1px 1px;background:linear-gradient(180deg,var(--accent),rgba(0,188,235,.34));box-shadow:0 -7px 16px rgba(0,188,235,.08);transition:height .24s ease,filter .16s}.dailyBar:hover .dailyBarFill{filter:brightness(1.18)}.dailyBar.selected .dailyBarFill{background:linear-gradient(180deg,#fff,var(--accent));box-shadow:0 -8px 18px rgba(0,188,235,.22)}.dailyBarLabel{font-size:9.5px;white-space:nowrap;text-align:center;padding-top:2px}.dailyBar.selected .dailyBarLabel{color:var(--fg);font-weight:780}.dailyGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:12px;margin-top:12px}.dailyPanel{padding:17px 18px}.dailyPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.dailyPanelHead h2{font-size:14px;margin:0}.dailyPanelHead span{font-size:11px;color:var(--faint)}.dailySessions{display:grid;margin-top:8px}.dailySession{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;gap:11px;align-items:center;padding:11px 0;border-top:1px solid var(--line)}.dailySession:first-child{border-top:0}.dailyRank{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--faint);font:700 10px/1 ui-monospace,"SF Mono",monospace}.dailySessionMain{min-width:0}.dailySessionName{font-weight:760;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dailySessionMeta{font-size:11px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dailySessionTrack{height:4px;border-radius:999px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:7px}.dailySessionTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--orange3))}.dailySessionValue{text-align:right;min-width:70px}.dailySessionValue strong{display:block;font-size:13px}.dailySessionValue span{display:block;font-size:10.5px;color:var(--faint);margin-top:1px}.dailyProviders{display:grid;margin-top:9px}.dailyProvider{padding:11px 0;border-top:1px solid var(--line)}.dailyProvider:first-child{border-top:0}.dailyProviderTop{display:flex;justify-content:space-between;align-items:baseline;gap:12px}.dailyProviderName{display:flex;align-items:center;gap:8px;font-weight:760}.dailyProviderName i{width:8px;height:8px;border-radius:50%;background:var(--provider-color,var(--accent));box-shadow:0 0 10px color-mix(in srgb,var(--provider-color,var(--accent)) 35%,transparent)}.dailyProviderValue{text-align:right;font-weight:820}.dailyProviderValue span{color:var(--faint);font-size:10.5px;font-weight:600;margin-left:5px}.dailyProviderTrack{height:6px;background:rgba(255,255,255,.045);border-radius:999px;overflow:hidden;margin-top:7px}.dailyProviderTrack i{display:block;height:100%;border-radius:999px;background:var(--provider-color,var(--accent))}.dailyQuality{margin-top:12px;padding:17px 18px}.dailyQualityGrid{display:grid;grid-template-columns:minmax(180px,.55fr) minmax(280px,1.15fr) minmax(210px,.55fr);gap:24px;align-items:center;margin-top:12px}.dailyQualityVerdict{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;align-items:center}.dailyQualityScore{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(102,217,144,.38);background:radial-gradient(circle,rgba(102,217,144,.14),rgba(102,217,144,.025));color:var(--good);font-size:13px;font-weight:840}.dailyQualityScore.warn{border-color:rgba(255,180,87,.44);background:radial-gradient(circle,rgba(255,180,87,.15),rgba(255,180,87,.025));color:var(--warn)}.dailyQualityState{font-size:15px;font-weight:820}.dailyQuality .subline{font-size:11.5px;margin-top:3px}.dailyToolBar{height:10px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.04);overflow:hidden;display:flex;margin-top:9px}.dailyToolBar i{display:block;height:100%}.dailyToolBar .clean{background:linear-gradient(90deg,var(--good),var(--accent))}.dailyToolBar .flagged{background:var(--warn)}.dailyQualityLegend{display:flex;justify-content:space-between;gap:12px;margin-top:6px;color:var(--faint);font-size:10.5px}.dailyQualityNumbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dailyQualityNumber{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:rgba(255,255,255,.025)}.dailyQualityNumber .v{font-size:17px;font-weight:820;margin-top:2px}
 .learnHead{max-width:760px;margin-bottom:22px}.learnSection{padding:18px 0;border-top:1px solid var(--line2)}.learnSection h2{font-size:16px;margin:0}.learnSteps{margin-top:10px}.learnStep{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:14px;align-items:center;padding:15px 0;border-top:1px solid var(--line)}.learnStep:first-child{border-top:0}.learnStep .num{width:30px;height:30px;border:1px solid var(--line2);border-radius:50%;display:grid;place-items:center;color:var(--accent);font-weight:820}.learnStep h3{font-size:14px;margin:0}.learnStep p{font-size:12.5px;color:var(--dim);margin:3px 0 0;max-width:800px}.glossaryToolbar{display:grid;grid-template-columns:minmax(220px,420px) auto;gap:12px;align-items:center;margin-top:12px}.glossaryList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 28px;margin-top:8px}.termRow{padding:13px 0;border-top:1px solid var(--line)}.termRow dt{font-weight:800}.termRow dd{margin:3px 0 0;color:var(--dim);font-size:12.5px}.bulkControls{max-height:220px;white-space:pre-wrap}
 .agentDiscovery{display:flex;align-items:center;gap:14px;margin-bottom:12px;padding:12px 14px;border:1px solid rgba(0,188,235,.32);border-left:3px solid var(--accent);border-radius:8px;background:linear-gradient(90deg,rgba(0,188,235,.11),rgba(17,24,32,.88) 58%,rgba(17,24,32,.94));box-shadow:var(--shadow-soft)}.agentDiscovery[hidden]{display:none}.agentDiscoveryMain{flex:1;min-width:0}.agentDiscoveryTitle{font-weight:810}.agentDiscoveryText{color:var(--dim);font-size:12.5px;margin-top:2px}.agentDiscoveryClose{border:0;background:transparent;color:var(--faint);font:700 18px/1 inherit;cursor:pointer;padding:6px}.agentDiscoveryClose:hover{color:var(--fg)}
-.agentAccess{margin-bottom:12px;overflow:hidden;border-color:rgba(0,188,235,.22)}.agentAccess:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 72%)}.agentAccessHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.agentAccessHead h1,.agentAccessHead h2{font-size:20px;line-height:1.2;margin:3px 0 0}.agentAccessHead p{color:var(--dim);font-size:12.5px;margin:5px 0 0;max-width:760px}.agentAccessBadge{border:1px solid var(--line2);border-radius:999px;padding:4px 9px;color:var(--dim);font-size:11px;white-space:nowrap}.agentClients{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}.agentClient{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.028);padding:11px 12px}.agentClientName{font-weight:800}.agentClientState{font-size:11.5px;color:var(--faint);margin-top:2px}.agentClientState.connected{color:var(--good)}.agentClientState.warn{color:var(--warn)}.agentDisclosure{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px;border-top:1px solid var(--line);margin-top:13px;padding-top:12px;color:var(--dim);font-size:11.5px}.agentDisclosure b{color:var(--fg)}.agentTools{margin-top:10px;color:var(--faint);font-size:11.5px}.agentTools code{color:var(--orange3)}.promptCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}.promptCard{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.028);padding:12px;color:var(--dim);font-size:12.5px}.promptCard code{display:block;color:var(--fg);font:inherit;font-weight:720;white-space:normal;margin-bottom:5px}.learnActions{margin-top:12px}.agentCommand{white-space:pre-wrap;overflow-wrap:anywhere}
+.settingsPageHead{margin-bottom:14px}.settingsPageHead p{max-width:680px}.settingsGrid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);gap:12px;align-items:start}.agentAccess{overflow:hidden;border-color:rgba(0,188,235,.3);background:linear-gradient(145deg,rgba(19,31,41,.98),rgba(12,17,23,.98))}.agentAccess:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 76%)}.agentAccess .label{color:var(--orange3)}.agentAccessHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.agentAccessHead h1,.agentAccessHead h2{font-size:22px;line-height:1.15;margin:4px 0 0}.agentAccessHead p{color:var(--dim);font-size:12.5px;margin:5px 0 0;max-width:650px}.agentAccessBadge{border:1px solid var(--line2);border-radius:999px;padding:4px 9px;color:var(--dim);font-size:11px;white-space:nowrap;background:rgba(255,255,255,.035)}.agentClients{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:16px}.agentClient{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.035);padding:10px 11px}.agentClientName{display:flex;align-items:center;gap:7px;font-weight:800}.mcpMark{display:inline-flex;align-items:center;border:1px solid rgba(183,140,255,.34);border-radius:999px;padding:1px 5px;background:rgba(183,140,255,.09);color:#d4c0ff;font-size:9px;line-height:1.45;font-weight:820;letter-spacing:.04em}.agentClientState{font-size:11.5px;color:var(--faint);margin-top:2px}.agentClientState.connected{color:var(--good)}.agentClientState.warn{color:var(--warn)}.agentPromise{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:9px;margin-top:12px;padding:9px 10px;border:1px solid rgba(0,188,235,.16);border-radius:8px;background:rgba(0,188,235,.045);color:var(--dim);font-size:11.5px}.agentPromise b{color:var(--fg)}.agentPrivacy{margin-top:10px;border-top:1px solid var(--line)}.agentPrivacy summary{padding-top:9px;color:var(--dim);font-size:11.5px;font-weight:740;cursor:pointer;list-style-position:inside}.agentPrivacy summary:hover{color:var(--fg)}.agentDisclosure{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;margin-top:8px;color:var(--dim);font-size:11px}.agentDisclosure b{color:var(--fg)}.agentTools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;color:var(--faint);font-size:11px}.agentTools code{display:inline-flex;border:1px solid var(--line);border-radius:6px;background:rgba(0,0,0,.18);padding:3px 6px;color:var(--orange3);font-size:10px}.promptCards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}.promptCard{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.028);padding:12px;color:var(--dim);font-size:12.5px}.promptCard code{display:block;color:var(--fg);font:inherit;font-weight:720;white-space:normal;margin-bottom:5px}.learnActions{margin-top:12px}.agentCommand{white-space:pre-wrap;overflow-wrap:anywhere}
 .slist{display:flex;flex-direction:column;gap:8px}.srow{display:grid;grid-template-columns:86px minmax(0,1fr) auto auto auto;gap:12px;align-items:center;background:linear-gradient(180deg,rgba(20,28,37,.94),rgba(13,18,24,.94));border:1px solid var(--line);border-radius:8px;padding:12px 14px;cursor:pointer;box-shadow:var(--shadow-soft);transition:border-color .16s,background .16s,transform .16s;min-width:0}.srow:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(24,34,44,.96),rgba(14,20,27,.96));transform:translateY(-1px)}.srow.active{border-color:rgba(0,188,235,.62);box-shadow:0 0 0 1px rgba(0,188,235,.12),var(--shadow-soft)}.srow .t{font-weight:720;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.srow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.srow .c{font-weight:820;font-size:15px;text-align:right}.sMain{min-width:0}.sbar{height:4px;border-radius:4px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:8px}.sbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--orange));border-radius:4px}.smetrics{text-align:right;min-width:88px}.smetrics .meta{font-size:11px}.badge{font-size:10.5px;color:var(--dim);background:rgba(255,255,255,.045);border:1px solid var(--line);padding:3px 7px;border-radius:6px;box-shadow:var(--inset)}.badge.codex{color:var(--orange3);border-color:rgba(0,188,235,.42);background:rgba(0,188,235,.12)}.badge.claude{color:#d4c0ff;border-color:rgba(183,140,255,.42);background:rgba(183,140,255,.12)}
 .dailyGrid{align-items:start}
+.frustrationNotice{margin:0 0 12px;padding:9px 12px;border:1px solid rgba(255,180,87,.24);border-left:3px solid var(--warn);border-radius:8px;background:linear-gradient(90deg,rgba(255,180,87,.07),rgba(255,180,87,.018));color:var(--dim);font-size:12px}.frustrationNotice b{color:var(--fg)}
+.frustrationHero .modelKpi{min-height:100px;background:linear-gradient(155deg,rgba(24,33,43,.98),rgba(12,17,23,.98));overflow:hidden}.frustrationHero .modelKpi:before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,var(--warn),rgba(255,111,111,.55),transparent 78%)}.frustrationHero .modelKpi:nth-child(2):before{background:linear-gradient(90deg,var(--bad),var(--warn),transparent 78%)}.frustrationHero .modelKpi:nth-child(3):before{background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 78%)}.frustrationHero .modelKpi:nth-child(4):before{background:linear-gradient(90deg,#c7a7ff,var(--warn),transparent 78%)}
+.frustrationTrendCard{margin-top:12px;padding:16px 17px 13px}.frustrationTrendCard .modelTrendHead{align-items:center}.frustrationChart{height:286px}.frustrationLegend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:var(--dim);font-size:11px}.frustrationLegend span{white-space:nowrap}.frustrationLegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}.frustrationLegend .rateDot{border-radius:50%;background:var(--warn)}
+.frustrationBreakdown{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(250px,.7fr) minmax(390px,1.25fr);gap:12px;margin-top:12px;align-items:start}.signalPanel{padding:15px 16px;min-width:0}.signalPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.signalPanelHead h2{font-size:14px;margin:0}.signalPanelHead p{font-size:11px;color:var(--faint);margin:2px 0 0}.signalPanel .seg{flex:0 0 auto}.signalRankList{display:grid;gap:4px;margin-top:10px}.signalRank{appearance:none;width:100%;display:grid;gap:6px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;text-align:left;padding:9px 0 7px;min-width:0}.signalRank:first-child{border-top:0}.signalRank[data-frustration-model]{cursor:pointer;border-radius:6px;padding-left:7px;padding-right:7px}.signalRank[data-frustration-model]:hover,.signalRank[data-frustration-model].selected{background:rgba(255,255,255,.035)}.signalRank[data-frustration-model].selected{box-shadow:inset 2px 0 var(--warn)}.signalRankHead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:baseline}.signalRankName{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankValue{font-size:12px;font-weight:820;color:var(--fg)}.signalRankMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankTrack{height:6px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.04);overflow:hidden}.signalRankTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad));min-width:0}.termPanel .signalRankTrack i{background:linear-gradient(90deg,#c7a7ff,var(--warn))}.signalQuiet{font-size:11px;color:var(--faint);margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.chatSignalList{display:grid;gap:7px;margin-top:10px;max-height:378px;overflow:auto;padding-right:3px;scrollbar-color:var(--line2) transparent}.chatSignal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.018));padding:9px 10px;min-width:0}.chatSignal:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.024))}.chatSignal.quiet{opacity:.64}.chatSignalMain{min-width:0}.chatSignalTitle{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chatSignalMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}.chatSignalStats{display:flex;align-items:center;gap:7px;margin-top:7px}.chatSignalTrack{height:5px;flex:1;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden}.chatSignalTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad))}.chatSignalCount{font-size:10.5px;color:var(--dim);white-space:nowrap}.chatSignalSide{display:grid;justify-items:end;align-content:space-between;gap:7px}.signalRateBadge{display:inline-flex;border:1px solid rgba(255,180,87,.34);border-radius:999px;background:rgba(255,180,87,.08);color:var(--warn);padding:3px 7px;font:760 10.5px ui-monospace,"SF Mono",Menlo,monospace}.chatSignal.quiet .signalRateBadge{border-color:var(--line);background:rgba(255,255,255,.03);color:var(--faint)}.chatSignal .tbtn{padding:4px 8px;font-size:10.5px}.signalEmpty{display:grid;place-items:center;min-height:112px;text-align:center;color:var(--faint);font-size:12px;padding:18px}
+.settingsLexicon{box-shadow:var(--shadow-soft)}.settingsLexiconHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.settingsLexicon h2{font-size:16px;line-height:1.25;margin:4px 0}.settingsLexicon p{color:var(--dim);font-size:11.5px;line-height:1.45;margin:0;max-width:420px}.settingsField{display:grid;gap:6px;margin-top:12px}.settingsField span{font-size:10px;text-transform:uppercase;color:var(--faint);font-weight:780}.settingsField textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 10px;font:12px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:var(--inset)}.settingsField textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.settingsActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.settingsActions .tbtn{padding:6px 9px;font-size:11px}.settingsActions .clearFilters{height:auto}.settingsStatus{width:100%;font-size:11px;color:var(--faint)}.settingsStatus.good{color:var(--good)}.settingsStatus.warn{color:var(--warn)}
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1120px) and (min-width:901px){.frustrationBreakdown{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.frustrationBreakdown .chatPanel{grid-column:1/-1}}
 @media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
 @media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .live{grid-column:1;justify-self:start}.top .notify{grid-column:2;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.agentClients,.agentDisclosure,.promptCards{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}}
-@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top .live,.top .notify{grid-column:1/-1;justify-self:start}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}}
+@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.promptCards,.frustrationBreakdown{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
+@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
 </style></head><body>
 <div class=wrap>
  <div class=top>
   <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div> Token Meter</div>
 	  <div class=tabs>
-	   <button class="tab on" id=tab-session>Current</button>
-	   <button class=tab id=tab-global>Global</button>
-	   <button class=tab id=tab-logs>Logs</button>
-	   <button class=tab id=tab-models>Model Stats</button>
-	   <button class=tab id=tab-daily>Daily</button>
-	   <button class=tab id=tab-capabilities>Tools &amp; Skills</button>
-	   <button class=tab id=tab-learn>Learn</button>
-	   <button class=tab id=tab-settings>Settings</button>
+	   <button class="tab on" id=tab-session aria-keyshortcuts="Alt+1" title="Shortcut: Option+1">Current</button>
+	   <button class=tab id=tab-daily aria-keyshortcuts="Alt+2" title="Shortcut: Option+2">Daily</button>
+	   <button class=tab id=tab-logs aria-keyshortcuts="Alt+3" title="Shortcut: Option+3">Logs</button>
+	   <button class=tab id=tab-global aria-keyshortcuts="Alt+4" title="Shortcut: Option+4">Global</button>
+	   <button class=tab id=tab-models aria-keyshortcuts="Alt+5" title="Shortcut: Option+5">Models</button>
+	   <button class=tab id=tab-frustration aria-keyshortcuts="Alt+6" title="Shortcut: Option+6">Frustration</button>
+	   <button class=tab id=tab-capabilities aria-keyshortcuts="Alt+7" title="Shortcut: Option+7">Tools</button>
+	   <button class=tab id=tab-learn aria-keyshortcuts="Alt+8" title="Shortcut: Option+8">Learn</button>
+	   <button class=tab id=tab-settings aria-keyshortcuts="Alt+9" title="Shortcut: Option+9">Settings</button>
 	  </div>
   <div class=spacer></div>
+  <button class=commandTrigger id=command-trigger type=button aria-label="Open command palette" aria-haspopup=dialog aria-controls=command-palette aria-keyshortcuts="Meta+K Control+K" title="Open command palette"><svg viewBox="0 0 24 24" fill=none stroke-width=2 stroke-linecap=round aria-hidden=true><circle cx=11 cy=11 r=7></circle><path d="m20 20-4-4"></path></svg><kbd id=command-key>&#8984;K</kbd></button>
   <div class=live id=live><span class=pulse></span><span id=livetxt>connecting</span></div>
   <div class=notify id=notify><span class=sw></span><span id=notifytxt>Notify</span></div>
  </div>
@@ -190,7 +202,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <button class=unpin id=unpin>Back to live</button>
    <button class=sessionDelete id=session-delete type=button hidden>Delete session</button>
   </div>
-  <div class=sessionStart id=session-start hidden><span>Session started with</span><strong id=session-start-text></strong></div>
+  <div class=sessionStart id=session-start hidden><span>Started with</span><strong id=session-start-text></strong></div>
 
   <div class="seg session-tabs" id=session-tabs>
    <button data-panel=summary>Summary</button>
@@ -209,7 +221,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=hero>
    <div class="card costcard" tabindex=0>
     <div>
-     <div class="label fieldtip" tabindex=0 title="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it." data-tip="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it.">Current log cost</div>
+     <div class="label fieldtip" tabindex=0 title="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it." data-tip="Estimated cost for the selected local log/thread using the configured model rates. Executions are the individual model turns inside it.">Session cost</div>
      <div class="meter mono" id=cost>$0.00</div>
      <div class=subline id=sub></div>
     </div>
@@ -231,14 +243,14 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
     <div class=frozen id=frozen>pinned log - frozen view</div>
    </div>
    <div class=statgrid>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Total model input tokens, including uncached input, cache reads, and cache writes." data-tip="Total model input tokens, including uncached input, cache reads, and cache writes.">Input tokens</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
-	    <div class=stat><div class="label fieldtip" tabindex=0 title="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred." data-tip="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred.">Output tokens</div><div class=outputPair><div class="v mono" id=output-tok>0</div><div class=outputRate><strong class=mono id=output-tps>--</strong><span>tok/s</span></div></div><div class=sm id=output-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking tokens</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool result tokens</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Total model input tokens, including uncached input, cache reads, and cache writes." data-tip="Total model input tokens, including uncached input, cache reads, and cache writes.">Input</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
+	    <div class=stat><div class="label fieldtip" tabindex=0 title="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred." data-tip="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred.">Output</div><div class=outputPair><div class="v mono" id=output-tok>0</div><div class=outputRate><strong class=mono id=output-tps>--</strong><span>tok/s</span></div></div><div class=sm id=output-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool results</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>active execution time</div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated average cost per completed task or turn completion." data-tip="Estimated average cost per completed task or turn completion.">Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Input cached</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cached input</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Cache rate</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cache tokens</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated savings from cache reads versus charging those tokens at the normal input rate." data-tip="Estimated savings from cache reads versus charging those tokens at the normal input rate.">Cache saved</div><div class="v mono" id=cache-saved>$0</div><div class=sm id=cache-savedsm></div></div>
    </div>
   </div>
@@ -339,7 +351,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   </div>
   </div>
   </div>
-  <div class=foot>Local-only · reads <span class=mono>~/.claude</span> and <span class=mono>~/.codex</span> logs · settings saved in this browser</div>
+	  <div class=foot>Local-only · reads <span class=mono>~/.claude</span> and <span class=mono>~/.codex</span> logs · run preferences stay in this browser</div>
  </div>
 
 	 <div class=view id=view-global>
@@ -427,8 +439,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	  <div class=modelHead>
 	   <div><h1>Model I/O performance</h1><p>Compare trace-reported input, output, and observed output throughput over time. Speed prefers completed tool-free work; end-to-end fallback includes tool time.</p></div>
 	   <div class=modelControls>
-	    <label class=filterControl><span>Model</span><select class=filterSelect id=m-model aria-label="Model Stats model filter"><option value="">All models</option></select></label>
-	    <label class=filterControl><span>History</span><select class=filterSelect id=m-range aria-label="Model Stats history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
+	    <label class=filterControl><span>Model</span><select class=filterSelect id=m-model aria-label="Models filter"><option value="">All models</option></select></label>
+	    <label class=filterControl><span>History</span><select class=filterSelect id=m-range aria-label="Models history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
 	   </div>
 	  </div>
 	  <div class=modelHero>
@@ -443,6 +455,33 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	  </div>
 	  <div class="card pad modelTableWrap"><table class=tbl id=m-table><thead><tr><th>Model</th><th class=num>Logs (all)</th><th class=num>Executions</th><th class=num>Input</th><th class=num>Output</th><th class=num>Output / exec</th><th class=num><span class=fieldtip tabindex=0 title="Includes reasoning and thinking output; excludes input, cache, and external tool results. Hover a value for timing basis, samples, and coverage." data-tip="Includes reasoning and thinking output; excludes input, cache, and external tool results. Hover a value for timing basis, samples, and coverage.">Output speed</span></th></tr></thead><tbody></tbody></table></div>
 	  <div class=foot>Observed throughput includes reasoning/thinking output and excludes external tool results · tool-free timing is preferred · sparse timing stays unavailable</div>
+	 </div>
+
+	 <div class=view id=view-frustration>
+	  <div class=modelHead>
+	   <div><h1>Frustration signals</h1><p>Track configured frustration terms in human user messages across chats, models, days, and weeks.</p></div>
+	   <div class=modelControls>
+	    <label class=filterControl><span>Model</span><select class=filterSelect id=f-model aria-label="Frustration model filter"><option value="">All models</option></select></label>
+	    <label class=filterControl><span>History</span><select class=filterSelect id=f-range aria-label="Frustration history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
+	   </div>
+	  </div>
+	  <div class=frustrationNotice><b>Lexical signal, not sentiment analysis.</b> A user turn counts once when it contains any configured whole term. Quoted or discussed terms can also match.</div>
+	  <div class="modelHero frustrationHero">
+	   <div class="card modelKpi"><div class=label>Matched utterances</div><div class="v mono" id=f-utterances>0</div><div class=subline id=f-utterances-note>user turns with a configured term</div></div>
+	   <div class="card modelKpi"><div class=label>Share of user turns</div><div class="v mono" id=f-rate>0%</div><div class=subline id=f-rate-note>0 of 0 user turns</div></div>
+	   <div class="card modelKpi"><div class=label>Affected chats</div><div class="v mono" id=f-sessions>0</div><div class=subline id=f-sessions-note>among visible discovered logs</div></div>
+	   <div class="card modelKpi"><div class=label>Term hits</div><div class="v mono" id=f-matches>0</div><div class=subline>repeated terms count separately</div></div>
+	  </div>
+	  <div class="card frustrationTrendCard">
+	   <div class=modelTrendHead><div><h2>Signal over time</h2><p id=f-trend-note>user-turn volume, matched utterances, and rate</p></div><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end"><div class=frustrationLegend><span><i style="background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)"></i>user turns</span><span><i style="background:var(--warn)"></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
+	   <div class=modelChartWrap><svg class="modelChart frustrationChart" id=f-chart viewBox="0 0 1040 286" preserveAspectRatio=none role=img aria-label="Frustration rate and matched user utterances over time"></svg><div class=modelChartTip id=f-chart-tip></div></div>
+	  </div>
+	  <div class=frustrationBreakdown>
+	   <section class="card signalPanel modelPanel"><div class=signalPanelHead><div><h2>Models</h2><p>rate and matched user turns</p></div></div><div class=signalRankList id=f-models></div></section>
+	   <section class="card signalPanel termPanel"><div class=signalPanelHead><div><h2>Terms</h2><p>observed hits in this window</p></div><button class=tbtn id=f-add-terms type=button>Add more terms</button></div><div class=signalRankList id=f-terms></div></section>
+	   <section class="card signalPanel chatPanel"><div class=signalPanelHead><div><h2>Chats</h2><p id=f-chat-summary>sessions ranked by frustration rate</p></div><div class=seg id=f-chat-mode><button data-fchat=affected>Affected</button><button data-fchat=all>All</button></div></div><div class=chatSignalList id=f-chats></div></section>
+	  </div>
+	  <div class=foot>Only aggregate counts leave the parser · raw message text is not retained in frustration analytics · edit the lexicon in Settings</div>
 	 </div>
 
 	 <div class=view id=view-daily>
@@ -484,7 +523,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <div class=learnStep><div class=num>1</div><div><h3>Start with the current summary</h3><p>Check estimated spend, context use, cache behavior, and the latest execution before deciding whether the session needs intervention.</p></div><button class=tbtn data-learn-route=summary>Open Current</button></div>
 	   <div class=learnStep><div class=num>2</div><div><h3>Inspect execution spikes</h3><p>Use Activity to find the execution where tokens, cost, context, or tool calls changed sharply, then inspect the prompt and result around that point.</p></div><button class=tbtn data-learn-route=activity>Open Activity</button></div>
 	   <div class=learnStep><div class=num>3</div><div><h3>Act on evidence, not one-off noise</h3><p>Use Insights for immediate issues, then Global and Daily to confirm whether the pattern repeats across logs or days.</p></div><button class=tbtn data-learn-route=global-overview>Open Global</button></div>
-	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools &amp; Skills, review MCP usage as read-only evidence, and disable only user-installed skill packs that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
+	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools, review MCP usage as read-only evidence, and disable only user-installed skill packs that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
 	   <div class=learnStep><div class=num>5</div><div><h3>Close with the daily summary</h3><p>Compare today with recent days, note the dominant runtime and highest-cost logs, and capture any follow-up for the next run.</p></div><button class=tbtn data-learn-route=daily>Open Daily</button></div>
 	  </div></section>
 	  <section class=learnSection><h2>Ask from your agent</h2><div class=subline>After connecting Token Meter in Settings, ask naturally. The agent receives a bounded verdict and a link back to the evidence.</div><div class=promptCards>
@@ -517,16 +556,31 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
  </div>
 
 	 <div class=view id=view-settings>
-	  <div class=learnHead><h1>Settings</h1><p>Manage machine-level Token Meter connections. Run evidence and capability optimization stay in Tools &amp; Skills.</p></div>
-  <section class="card pad agentAccess" id=agent-access>
-   <div class=agentAccessHead><div><div class=label>Agent connections</div><h2>Ask Token Meter from Codex or Claude</h2><p>Let your agent check this run&rsquo;s cost, context, tool usage, and efficiency when you ask. This is on-demand advice, not continuous monitoring.</p></div><span class=agentAccessBadge id=agent-access-badge>Checking clients</span></div>
-   <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status</div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
-   <div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named user-installed skill packs only when requested.</div><div><b>Never shared:</b> prompts, messages, reasoning, tool content, credentials, or config values.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div>
-   <div class=agentTools>Read-only tools: <code>mcp__tokenmeter__check</code> · <code>mcp__tokenmeter__usage</code> · <code>mcp__tokenmeter__capabilities</code></div>
-  </section>
-	  <div class=foot>Capability review and controls remain in Tools &amp; Skills · run-specific budgets and notifications remain in Current → Alerts</div>
+	  <div class="learnHead settingsPageHead"><h1>Settings</h1><p>Connect Token Meter to your agents, then tune machine-wide analytics.</p></div>
+  <div class=settingsGrid>
+   <section class="card pad agentAccess" id=agent-access>
+    <div class=agentAccessHead><div><div class=label>MCP connection</div><h2>Token Meter MCP</h2><p>Give Codex and Claude read-only, on-demand access to cost, context, tool usage, and efficiency evidence.</p></div><span class=agentAccessBadge id=agent-access-badge>Checking clients</span></div>
+    <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status <span class=mcpMark>MCP</span></div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
+    <div class=agentPromise><b>Private by default</b><span>Local stdio connection. Prompts, messages, reasoning, tool content, credentials, and config values are never returned.</span></div>
+    <div class=agentTools><span>Read-only tools</span><code>mcp__tokenmeter__check</code><code>mcp__tokenmeter__usage</code><code>mcp__tokenmeter__capabilities</code></div>
+    <details class=agentPrivacy><summary>What the MCP can access</summary><div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named user-installed skill packs only when requested.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div></details>
+   </section>
+   <section class="card pad settingsLexicon" id=frustration-settings>
+    <div class=settingsLexiconHead><div><div class=label>Analytics</div><h2>Frustration terms</h2><p>One term or phrase per line. Matching is case-insensitive and re-applied to every discovered session.</p></div><span class=agentAccessBadge id=frustration-term-count>0 terms</span></div>
+    <label class=settingsField><span>Terms</span><textarea id=frustration-terms spellcheck=false placeholder="fuck&#10;fck&#10;shit&#10;idiot&#10;bullshit"></textarea></label>
+    <div class=settingsActions><button class=tbtn id=frustration-save type=button>Save and recalculate</button><button class="tbtn clearFilters" id=frustration-reset type=button>Restore defaults</button><span class=settingsStatus id=frustration-settings-status>Machine-wide · saved outside the browser</span></div>
+   </section>
+  </div>
+	  <div class=foot>MCP changes apply to new agent sessions · capability controls remain in Tools · budgets and notifications remain in Current → Alerts</div>
 	 </div>
 </div>
+<dialog class=commandPalette id=command-palette aria-labelledby=command-title>
+ <div class=commandShell>
+  <div class=commandSearch><svg viewBox="0 0 24 24" fill=none stroke-width=2 stroke-linecap=round aria-hidden=true><circle cx=11 cy=11 r=7></circle><path d="m20 20-4-4"></path></svg><input id=command-search type=search role=combobox aria-label="Search commands" aria-autocomplete=list aria-expanded=true aria-controls=command-list placeholder="Search views and actions" autocomplete=off spellcheck=false><kbd>ESC</kbd></div>
+  <div class=commandList id=command-list role=listbox aria-label="Available commands"></div>
+  <div class=commandFooter><span id=command-title>Quick navigation</span><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move <kbd>&crarr;</kbd> open <kbd id=command-alt-key>&#8997;1&ndash;9</kbd> direct</span></div>
+ </div>
+</dialog>
 <dialog class=mcpDialog id=cap-dialog>
  <div class=inner>
   <h3 id=cap-dialog-title>Change skill pack?</h3>
@@ -638,11 +692,100 @@ function setHashRoute(route,{replace=false,apply=true}={}){
  }else location.hash=route;
 }
 
+const IS_MAC=/Mac|iPhone|iPad|iPod/.test(navigator.userAgentData?.platform||navigator.platform||'');
+const NAV_COMMANDS=[
+ {id:'current',label:'Current',description:'Return to the live summary for the newest run',section:'Navigate',latest:true,directKey:'Digit1',shortcut:IS_MAC?'⌥1':'Alt+1',glyph:'1'},
+ {id:'daily',label:'Daily',description:"Review one day's spend and cost drivers",section:'Navigate',route:'daily',directKey:'Digit2',shortcut:IS_MAC?'⌥2':'Alt+2',glyph:'2'},
+ {id:'logs',label:'Logs',description:'Search, filter, and open recorded runs',section:'Navigate',route:'logs',directKey:'Digit3',shortcut:IS_MAC?'⌥3':'Alt+3',glyph:'3'},
+ {id:'global',label:'Global',description:'See cross-app spend, insights, and evidence',section:'Navigate',route:'global-overview',directKey:'Digit4',shortcut:IS_MAC?'⌥4':'Alt+4',glyph:'4'},
+ {id:'models',label:'Models',description:'Compare model cost, speed, and volume',section:'Navigate',route:'models',directKey:'Digit5',shortcut:IS_MAC?'⌥5':'Alt+5',glyph:'5'},
+ {id:'frustration',label:'Frustration',description:'Review configured lexical signals over time',section:'Navigate',route:'frustration',directKey:'Digit6',shortcut:IS_MAC?'⌥6':'Alt+6',glyph:'6'},
+ {id:'capabilities',label:'Tools',description:'Inspect tools, MCPs, and optional skill packs',section:'Navigate',route:'capabilities',directKey:'Digit7',shortcut:IS_MAC?'⌥7':'Alt+7',glyph:'7'},
+ {id:'learn',label:'Learn',description:'Open the review workflow and glossary',section:'Navigate',route:'learn',directKey:'Digit8',shortcut:IS_MAC?'⌥8':'Alt+8',glyph:'8'},
+ {id:'settings',label:'Settings',description:'Configure analytics and agent connections',section:'Navigate',route:'settings',directKey:'Digit9',shortcut:IS_MAC?'⌥9':'Alt+9',glyph:'9'},
+ {id:'current-activity',label:'Current · Activity',description:'Inspect execution-by-execution token flow',section:'Current session',route:'activity',glyph:'A'},
+ {id:'current-tools',label:'Current · Tools',description:'Inspect tool calls in the selected run',section:'Current session',route:'tools',glyph:'T'},
+ {id:'current-insights',label:'Current · Insights',description:'Review trace-backed issues and actions',section:'Current session',route:'insights',glyph:'I'},
+ {id:'current-alerts',label:'Current · Alerts',description:'Set the run budget and notification rules',section:'Current session',route:'alerts',glyph:'!'},
+ {id:'global-insights',label:'Global · Insights',description:'Review patterns across discovered runs',section:'Global',route:'global-insights',glyph:'I'},
+ {id:'global-evidence',label:'Global · Capability evidence',description:'Inspect cross-run tool and capability evidence',section:'Global',route:'global-evidence',glyph:'E'},
+];
+let visibleCommands=[],commandIndex=0,commandReturnFocus=null;
+function setCommandIndex(index,{scroll=true}={}){
+ const items=[...$('command-list').querySelectorAll('[data-command-index]')];
+ if(!items.length){commandIndex=0;$('command-search').removeAttribute('aria-activedescendant');return;}
+ commandIndex=(index+items.length)%items.length;
+ items.forEach((item,i)=>{const selected=i===commandIndex;item.classList.toggle('selected',selected);item.setAttribute('aria-selected',String(selected));});
+ const active=items[commandIndex];
+ $('command-search').setAttribute('aria-activedescendant',active.id);
+ if(scroll)active.scrollIntoView({block:'nearest'});
+}
+function renderCommandPalette(query=''){
+ const terms=query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+ visibleCommands=NAV_COMMANDS.filter(command=>{
+  const haystack=`${command.label} ${command.description} ${command.section}`.toLowerCase();
+  return terms.every(term=>haystack.includes(term));
+ });
+ let section='';
+ $('command-list').innerHTML=visibleCommands.length?visibleCommands.map((command,index)=>{
+  const heading=command.section!==section?`<div class=commandGroup role=presentation>${esc(command.section)}</div>`:'';
+  section=command.section;
+  return `${heading}<button class=commandItem id="command-option-${index}" type=button role=option aria-selected=false data-command-index="${index}"><span class=commandGlyph>${esc(command.glyph||'→')}</span><span class=commandCopy><span class=commandLabel>${esc(command.label)}</span><span class=commandDescription>${esc(command.description)}</span></span>${command.shortcut?`<kbd class=commandShortcut>${esc(command.shortcut)}</kbd>`:''}</button>`;
+ }).join(''):'<div class=commandEmpty>No matching commands</div>';
+ setCommandIndex(0,{scroll:false});
+}
+function openCommandPalette(){
+ const dialog=$('command-palette'),other=document.querySelector('dialog[open]');
+ if(other&&other!==dialog)return;
+ if(dialog.open)return;
+ commandReturnFocus=document.activeElement;
+ $('command-search').value='';
+ renderCommandPalette();
+ dialog.showModal();
+ requestAnimationFrame(()=>$('command-search').focus());
+}
+function closeCommandPalette(){if($('command-palette').open)$('command-palette').close();}
+function runNavigationCommand(command){
+ if(!command)return;
+ closeCommandPalette();
+ if(command.latest)goToLatestSession();
+ else setHashRoute(command.route);
+}
+$('command-key').textContent=IS_MAC?'⌘K':'Ctrl K';
+$('command-alt-key').textContent=IS_MAC?'⌥1–9':'Alt+1–9';
+[...document.querySelectorAll('.top .tab[aria-keyshortcuts]')].forEach((button,index)=>button.title=`Shortcut: ${IS_MAC?'Option':'Alt'}+${index+1}`);
+$('command-trigger').onclick=openCommandPalette;
+$('command-search').addEventListener('input',event=>renderCommandPalette(event.target.value));
+$('command-list').onclick=event=>{const item=event.target.closest('[data-command-index]');if(item)runNavigationCommand(visibleCommands[Number(item.dataset.commandIndex)]);};
+$('command-palette').addEventListener('click',event=>{if(event.target===$('command-palette'))closeCommandPalette();});
+$('command-palette').addEventListener('close',()=>{const target=commandReturnFocus;commandReturnFocus=null;if(target?.focus)target.focus();});
+document.addEventListener('keydown',event=>{
+ const palette=$('command-palette'),key=String(event.key||'').toLowerCase();
+ if((event.metaKey||event.ctrlKey)&&!event.altKey&&!event.shiftKey&&key==='k'){
+  event.preventDefault();
+  if(palette.open)closeCommandPalette();else openCommandPalette();
+  return;
+ }
+ if(palette.open){
+  if(event.key==='ArrowDown'){event.preventDefault();setCommandIndex(commandIndex+1);}
+  else if(event.key==='ArrowUp'){event.preventDefault();setCommandIndex(commandIndex-1);}
+  else if(event.key==='Enter'&&!event.isComposing){event.preventDefault();runNavigationCommand(visibleCommands[commandIndex]);}
+  return;
+ }
+ const target=event.target,editing=target instanceof HTMLElement&&(target.matches('input,textarea,select')||target.isContentEditable);
+ if(editing)return;
+ if(event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey){
+  const command=NAV_COMMANDS.find(item=>item.directKey===event.code);
+  if(command){event.preventDefault();runNavigationCommand(command);}
+ }
+});
+
 function showTab(t){
  $('tab-session').classList.toggle('on',t==='session');
 	 $('tab-global').classList.toggle('on',t==='global');
 	 $('tab-logs').classList.toggle('on',t==='logs');
 	 $('tab-models').classList.toggle('on',t==='models');
+	 $('tab-frustration').classList.toggle('on',t==='frustration');
 	 $('tab-daily').classList.toggle('on',t==='daily');
  $('tab-capabilities').classList.toggle('on',t==='capabilities');
  $('tab-learn').classList.toggle('on',t==='learn');
@@ -651,6 +794,7 @@ function showTab(t){
 	 $('view-global').classList.toggle('on',t==='global');
 	 $('view-logs').classList.toggle('on',t==='logs');
 	 $('view-models').classList.toggle('on',t==='models');
+	 $('view-frustration').classList.toggle('on',t==='frustration');
 	 $('view-daily').classList.toggle('on',t==='daily');
  $('view-capabilities').classList.toggle('on',t==='capabilities');
  $('view-learn').classList.toggle('on',t==='learn');
@@ -662,6 +806,7 @@ $('tab-session').onclick=()=>goToLatestSession();
 $('tab-global').onclick=()=>setHashRoute('global-overview');
 $('tab-logs').onclick=()=>setHashRoute('logs');
 $('tab-models').onclick=()=>setHashRoute('models');
+$('tab-frustration').onclick=()=>setHashRoute('frustration');
 $('tab-daily').onclick=()=>setHashRoute('daily');
 $('tab-capabilities').onclick=()=>setHashRoute('capabilities');
 $('tab-learn').onclick=()=>setHashRoute('learn');
@@ -721,6 +866,11 @@ function applyHashRoute(){
 	  if(LATEST)renderModelStats(LATEST.xsession?.model_stats);
 	  return;
 	 }
+	 if(h==='frustration'){
+	  showTab('frustration');
+	  if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);
+	  return;
+	 }
  if(h==='capabilities'){
   showTab('capabilities');
   if(LATEST)renderCapabilities(LATEST.xsession?.capabilities);
@@ -732,6 +882,7 @@ function applyHashRoute(){
  }
  if(h==='settings'){
   showTab('settings');
+  if(LATEST)renderFrustrationSettings(LATEST.xsession?.frustration);
   loadAgentAccess();
   return;
  }
@@ -795,6 +946,45 @@ function showAppToast(entry){
  while(box.children.length>4) box.firstElementChild.remove();
 }
 function agentActionToken(){return LATEST?.xsession?.capabilities?.actions?.token||'';}
+let frustrationSettingsDirty=false;
+function parsedFrustrationTerms(){
+ const seen=new Set(),terms=[];
+ $('frustration-terms').value.split(/[,\n]/).forEach(value=>{const term=value.trim().toLowerCase().replace(/\s+/g,' ');if(term&&!seen.has(term)){seen.add(term);terms.push(term);}});
+ return terms;
+}
+function paintFrustrationTermCount(){
+ const terms=parsedFrustrationTerms();
+ $('frustration-term-count').textContent=`${f(terms.length)} ${countWord(terms.length,'term')}`;
+ return terms;
+}
+function renderFrustrationSettings(signal){
+ signal=signal||{};
+ if(!frustrationSettingsDirty)$('frustration-terms').value=(signal.configured_terms||[]).join('\n');
+ paintFrustrationTermCount();
+ if(!frustrationSettingsDirty){$('frustration-settings-status').className='settingsStatus';$('frustration-settings-status').textContent=`Machine-wide · up to ${f(signal.max_terms||64)} terms`;}
+}
+$('frustration-terms').addEventListener('input',()=>{frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Unsaved changes';});
+$('frustration-reset').onclick=()=>{
+ $('frustration-terms').value=(LATEST?.xsession?.frustration?.default_terms||[]).join('\n');
+ frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Defaults loaded · save to apply';
+};
+$('frustration-save').onclick=async()=>{
+ const token=agentActionToken(),button=$('frustration-save'),terms=parsedFrustrationTerms();
+ if(!token){showAppToast({title:'Settings not ready',body:'Wait for Token Meter’s live state, then try again.',kind:'warn'});return;}
+ button.disabled=true;button.textContent='Recalculating…';
+ try{
+  const response=await fetch('/settings/frustration',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify({terms})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Could not save frustration terms.');
+  frustrationSettingsDirty=false;
+  if(LATEST?.xsession)LATEST.xsession.frustration=result.frustration||LATEST.xsession.frustration;
+  renderFrustrationSettings(result.frustration||{configured_terms:result.terms,default_terms:result.defaults,max_terms:result.max_terms});
+  if($('view-frustration').classList.contains('on'))renderFrustration(LATEST?.xsession?.frustration,LATEST?.xsession?.sessions);
+  $('frustration-settings-status').className='settingsStatus good';$('frustration-settings-status').textContent='Saved and recalculated';
+  showAppToast({title:'Frustration terms updated',body:terms.length?`${f(terms.length)} ${countWord(terms.length,'term')} applied to all discovered sessions.`:'Matching is disabled until terms are added.',kind:'good'});
+ }catch(error){$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent=error.message||String(error);showAppToast({title:'Settings could not be saved',body:error.message||String(error),kind:'warn',sticky:true});}
+ finally{button.disabled=false;button.textContent='Save and recalculate';}
+};
 function renderAgentAccess(status){
  AGENT_ACCESS=status;
  const clients=status?.clients||[];
@@ -805,7 +995,7 @@ function renderAgentAccess(status){
   const label=row.connected?'Disconnect':row.conflict?'Resolve manually':'Connect';
   const disabled=(!row.connected&&!row.available)||row.conflict;
   const detail=!row.detected?'CLI not found':!row.available?'Token Meter launcher unavailable':row.status;
-  return `<div class=agentClient><div><div class=agentClientName>${esc(row.label)}</div><div class="agentClientState ${stateClass}">${esc(detail)}${row.connected?' · available in new sessions':''}</div></div><button class="tbtn ${row.connected?'danger':''}" type=button data-agent-client="${esc(row.id)}" data-agent-enabled="${row.connected?'false':'true'}" ${disabled?'disabled':''}>${label}</button></div>`;
+  return `<div class=agentClient><div><div class=agentClientName>${esc(row.label)} <span class=mcpMark>MCP</span></div><div class="agentClientState ${stateClass}">${esc(detail)}${row.connected?' · available in new sessions':''}</div></div><button class="tbtn ${row.connected?'danger':''}" type=button data-agent-client="${esc(row.id)}" data-agent-enabled="${row.connected?'false':'true'}" ${disabled?'disabled':''}>${label}</button></div>`;
  }).join('')||'<div class=agentClient><div><div class=agentClientName>Status unavailable</div><div class=agentClientState>Refresh Token Meter and try again.</div></div></div>';
  const dismissed=localStorage.getItem('tm_agent_discovery_dismissed')==='1';
  $('agent-discovery').hidden=!!(dismissed||!status?.any_detected||status?.any_connected);
@@ -889,7 +1079,7 @@ function paintNotify(){
  }
  $('notify').classList.toggle('on',notifyOn);
  browserReason=browserBlockReason();
- $('notifytxt').textContent=notifyOn?'Browser alerts':(!canNotify?'Notify n/a':(Notification.permission==='denied'?'Notify blocked':'Notify'));
+ $('notifytxt').textContent=notifyOn?'Alerts':(!canNotify?'Unavailable':(Notification.permission==='denied'?'Blocked':'Alerts'));
  if(notifyOn) setNotifyState('Browser notifications ready.');
  else setNotifyState(browserReason||'Browser notifications are off.');
 }
@@ -1061,12 +1251,25 @@ let globalProject=localStorage.getItem('tm_global_project')||'';
 let globalTime=localStorage.getItem('tm_global_time')||'all';
 let modelFilter=localStorage.getItem('tm_model_filter')||'';
 let modelRange=localStorage.getItem('tm_model_range')||'30';
+let frustrationModel=localStorage.getItem('tm_frustration_model')||'';
+let frustrationRange=localStorage.getItem('tm_frustration_range')||'30';
+let frustrationGroup=localStorage.getItem('tm_frustration_group')||'day';
+let frustrationChatMode=localStorage.getItem('tm_frustration_chat_mode')||'affected';
 if(!['recent','cost','tokens','executions'].includes(globalSort)) globalSort='recent';
 if(!['all','24h','7d','30d','90d'].includes(globalTime)) globalTime='all';
 if(!['7','30','90','all'].includes(modelRange))modelRange='30';
+if(!['7','30','90','all'].includes(frustrationRange))frustrationRange='30';
+if(!['day','week'].includes(frustrationGroup))frustrationGroup='day';
+if(!['affected','all'].includes(frustrationChatMode))frustrationChatMode='affected';
 $('m-range').value=modelRange;
 $('m-model').addEventListener('change',e=>{modelFilter=e.target.value;localStorage.setItem('tm_model_filter',modelFilter);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);});
 $('m-range').addEventListener('change',e=>{modelRange=e.target.value;localStorage.setItem('tm_model_range',modelRange);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);});
+$('f-range').value=frustrationRange;
+$('f-model').addEventListener('change',e=>{frustrationModel=e.target.value;localStorage.setItem('tm_frustration_model',frustrationModel);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);});
+$('f-range').addEventListener('change',e=>{frustrationRange=e.target.value;localStorage.setItem('tm_frustration_range',frustrationRange);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);});
+$('f-group').onclick=e=>{if(e.target.dataset.fgroup){frustrationGroup=e.target.dataset.fgroup;localStorage.setItem('tm_frustration_group',frustrationGroup);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}};
+$('f-chat-mode').onclick=e=>{if(e.target.dataset.fchat){frustrationChatMode=e.target.dataset.fchat;localStorage.setItem('tm_frustration_chat_mode',frustrationChatMode);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}};
+$('f-add-terms').onclick=()=>{setHashRoute('settings');setTimeout(()=>$('frustration-settings').scrollIntoView({behavior:'smooth',block:'start'}),30);};
 function paintGlobalSort(){
  [...$('g-sort').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.gsort===globalSort));
  const label={recent:'recent activity',cost:'highest cost',tokens:'most tokens',executions:'most executions'}[globalSort]||'recent activity';
@@ -1579,7 +1782,7 @@ function renderSession(s){
  deleteButton.title=sessionActions.available?'Move this session log to macOS Trash.':'Session deletion is unavailable.';
  $('frozen').classList.toggle('on',frozen);
  $('live').classList.toggle('dead',frozen);
- $('livetxt').textContent=frozen?(pinned?'pinned log':'frozen log'):('watching · '+idleLabel(s.idle_s));
+ $('livetxt').textContent=frozen?(pinned?'pinned':'frozen'):('live · '+idleLabel(s.idle_s));
  $('cost').textContent=money(s.total_cost)+(s.cost_approx?' est':'');
  const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
  $('cost-tip').innerHTML=costTipHtml(s,tok);
@@ -2166,6 +2369,89 @@ function renderModelStats(stats){
 	 $('m-table').querySelector('tbody').innerHTML=tableRows.length?tableRows.map(row=>{const data=row.window,basis=data.throughput_basis,basisLabel=basis==='tool_free'?'tool-free':basis==='end_to_end'?'end-to-end':'unavailable',coverage=pct(data.timing_coverage),timingTip=data.available?`Includes reasoning/thinking output; excludes external tool results. ${basisLabel} timing · ${f(data.throughput_samples)} timed ${countWord(data.throughput_samples,'sample')} · ${coverage} output coverage${data.avg_ttft_ms?` · ${Math.round(data.avg_ttft_ms)}ms avg TTFT`:''}.`:'No attributable completed timing samples in this window.';return `<tr><td><div class=modelName title="${esc(row.model)}">${esc(row.model)}</div><div class=modelRuntime>${esc((row.providers||[]).join(' + ')||'unknown runtime')}</div></td><td class="num mono" title="All scanned history">${f(row.logs)}</td><td class="num mono">${f(data.executions)}</td><td class="num mono">${compactNumber(data.input_tokens)}</td><td class="num mono">${compactNumber(data.output_tokens)}</td><td class="num mono">${data.executions?compactNumber(data.output_tokens/data.executions):'--'}</td><td class="num speedCell" title="${esc(timingTip)}"><strong class=mono>${data.available?speedFmt(data.output_tps)+' tok/s':'--'}</strong><span>${data.available?`${basisLabel} · ${f(data.throughput_samples)} ${countWord(data.throughput_samples,'sample')}`:'no timing'}</span></td></tr>`;}).join(''):`<tr><td colspan=7><div class=modelEmpty>No model I/O data in this window</div></td></tr>`;
 }
 
+function frustrationSeries(data,group=frustrationGroup){
+ const rows=(data?.[group==='week'?'weekly':'daily']||[]).slice();
+ if(frustrationRange==='all')return rows;
+ const cutoff=dateKeyAgo(Number(frustrationRange)-1);
+ return rows.filter(row=>{
+  const key=row.day||row.week||'';
+  if(group==='day')return key>=cutoff;
+  const end=new Date(`${key}T12:00:00`);end.setDate(end.getDate()+6);
+  return localDayKey(end)>=cutoff;
+ });
+}
+function aggregateFrustrationRows(rows){
+ const terms=new Map(),total={user_turns:0,utterances:0,matches:0,terms:[]};
+ (rows||[]).forEach(row=>{total.user_turns+=Number(row.user_turns||0);total.utterances+=Number(row.utterances||0);total.matches+=Number(row.matches||0);(row.terms||[]).forEach(item=>terms.set(item.term,(terms.get(item.term)||0)+Number(item.count||0)));});
+ total.rate=total.user_turns?total.utterances/total.user_turns:0;
+ total.terms=[...terms].map(([term,count])=>({term,count})).sort((a,b)=>b.count-a.count||a.term.localeCompare(b.term));
+ return total;
+}
+function frustrationWindow(data){
+ if(!data)return aggregateFrustrationRows([]);
+ if(frustrationRange==='all')return {user_turns:Number(data.user_turns||0),utterances:Number(data.utterances||0),matches:Number(data.matches||0),rate:Number(data.rate||0),terms:data.terms||[]};
+ return aggregateFrustrationRows(frustrationSeries(data,'day'));
+}
+function frustrationPeriodLabel(row){
+ const key=row.day||row.week||'';
+ return frustrationGroup==='week'?`Week of ${shortDayLabel(key)}`:shortDayLabel(key);
+}
+function drawFrustrationTrend(rows){
+ const svg=$('f-chart'),tip=$('f-chart-tip'),points=(rows||[]).slice(-18);
+ if(!points.length){svg.innerHTML='<text x="520" y="143" text-anchor="middle" fill="var(--faint)" font-size="12">No dated user turns in this window</text>';tip.style.display='none';return;}
+ const VW=1040,VH=286,ML=50,MR=56,MT=20,MB=38,PW=VW-ML-MR,PH=VH-MT-MB,step=PW/points.length;
+ const maxTurns=Math.max(1,...points.map(row=>Number(row.user_turns||0))),barW=Math.max(10,Math.min(34,step*.54));
+ const x=index=>ML+step*(index+.5),turnY=value=>MT+PH*(1-Math.max(0,Number(value||0))/maxTurns),rateY=value=>MT+PH*(1-Math.max(0,Math.min(1,Number(value||0))));
+ let html='';
+ for(let i=0;i<=4;i++){const ratio=1-i/4,y=MT+PH*i/4;html+=`<line x1="${ML}" x2="${ML+PW}" y1="${y}" y2="${y}" stroke="${CHART.grid}" stroke-width="1"/><text x="${ML-8}" y="${y+4}" text-anchor="end" fill="${CHART.lbl}" font-size="10">${compactNumber(maxTurns*ratio)}</text><text x="${ML+PW+8}" y="${y+4}" fill="${CHART.lbl}" font-size="10">${Math.round(100*ratio)}%</text>`;}
+ points.forEach((row,index)=>{const tx=x(index),totalY=turnY(row.user_turns),matchY=turnY(row.utterances);html+=`<rect x="${tx-barW/2}" y="${totalY}" width="${barW}" height="${Math.max(0,MT+PH-totalY)}" rx="3" fill="rgba(0,188,235,.16)" stroke="rgba(0,188,235,.34)"/><rect x="${tx-barW/2}" y="${matchY}" width="${barW}" height="${Math.max(0,MT+PH-matchY)}" rx="3" fill="rgba(255,180,87,.82)"/>`;});
+ const path=points.map((row,index)=>`${index?'L':'M'}${x(index).toFixed(1)},${rateY(row.rate).toFixed(1)}`).join(' ');
+ html+=`<path d="${path}" fill="none" stroke="${cssVar('--warn')}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+ points.forEach((row,index)=>{const tx=x(index),ry=rateY(row.rate),active=Number(row.utterances||0)>0;html+=`<circle cx="${tx}" cy="${ry}" r="${active?4.5:3}" fill="${active?cssVar('--warn'):cssVar('--faint')}" stroke="#07090c" stroke-width="2"/>`;});
+ const every=Math.max(1,Math.ceil(points.length/8));
+ points.forEach((row,index)=>{if(index===points.length-1||index%every===0)html+=`<text x="${x(index)}" y="${VH-12}" text-anchor="middle" fill="${CHART.lbl}" font-size="10">${esc(frustrationPeriodLabel(row))}</text>`;html+=`<rect data-f-chart-index="${index}" x="${ML+step*index}" y="${MT}" width="${step}" height="${PH}" fill="transparent" pointer-events="all"/>`;});
+ html+=`<text x="8" y="12" fill="${CHART.lbl}" font-size="10">user turns</text><text x="${VW-8}" y="12" text-anchor="end" fill="${CHART.lbl}" font-size="10">rate</text>`;
+ svg.innerHTML=html;
+ const show=(event,row)=>{const rect=svg.parentElement.getBoundingClientRect();tip.innerHTML=`<div class=h>${esc(frustrationPeriodLabel(row))}</div><div class=r><span>user turns</span><b>${f(row.user_turns)}</b></div><div class=r><span>matched utterances</span><b>${f(row.utterances)}</b></div><div class=r><span>frustration rate</span><b>${pct(row.rate)}</b></div><div class=r><span>term hits</span><b>${f(row.matches)}</b></div>`;tip.style.display='block';tip.style.left=Math.min(rect.width-tip.offsetWidth-8,Math.max(8,event.clientX-rect.left+12))+'px';tip.style.top=Math.max(8,event.clientY-rect.top-tip.offsetHeight-10)+'px';};
+ [...svg.querySelectorAll('[data-f-chart-index]')].forEach((hit,index)=>{hit.onpointerenter=event=>show(event,points[index]);hit.onpointermove=event=>show(event,points[index]);hit.onpointerleave=()=>tip.style.display='none';});
+}
+function renderFrustration(signal,sessions){
+ signal=signal||{models:[],daily:[],weekly:[],configured_terms:[]};sessions=sessions||[];
+ const names=(signal.models||[]).map(row=>row.model).sort((a,b)=>a.localeCompare(b));
+ if(frustrationModel&&!names.includes(frustrationModel)){frustrationModel='';localStorage.removeItem('tm_frustration_model');}
+ $('f-model').innerHTML='<option value="">All models</option>'+names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
+ $('f-model').value=frustrationModel;$('f-range').value=frustrationRange;
+ [...$('f-group').querySelectorAll('button')].forEach(button=>button.classList.toggle('on',button.dataset.fgroup===frustrationGroup));
+ [...$('f-chat-mode').querySelectorAll('button')].forEach(button=>button.classList.toggle('on',button.dataset.fchat===frustrationChatMode));
+ const selected=frustrationModel?(signal.models||[]).find(row=>row.model===frustrationModel):signal;
+ const total=frustrationWindow(selected);
+ const sessionRows=sessions.map(session=>{
+  const base=frustrationModel?(session.frustration?.models||[]).find(row=>row.model===frustrationModel):session.frustration;
+  return {session,window:frustrationWindow(base)};
+ }).filter(row=>row.window.user_turns);
+ const affected=sessionRows.filter(row=>row.window.utterances);
+ const affectedCount=!frustrationModel&&frustrationRange==='all'?Number(signal.affected_sessions||0):affected.length;
+ $('f-utterances').textContent=f(total.utterances);$('f-utterances-note').textContent=`${f(total.matches)} ${countWord(total.matches,'term hit')} · ${frustrationModel||'all models'}`;
+ $('f-rate').textContent=pct(total.rate);$('f-rate-note').textContent=`${f(total.utterances)} of ${f(total.user_turns)} user turns`;
+ $('f-sessions').textContent=f(affectedCount);$('f-sessions-note').textContent=frustrationRange==='all'&&!frustrationModel?`${f(signal.sessions_with_user_turns||0)} chats with user turns`:`${f(sessionRows.length)} visible chats in this window`;
+ $('f-matches').textContent=f(total.matches);
+ const series=frustrationSeries(selected);
+ $('f-trend-note').textContent=`${frustrationModel||'All models'} · ${frustrationRange==='all'?'all recorded history':`last ${frustrationRange} days`} · volume bars with frustration-rate line`;
+ drawFrustrationTrend(series);
+ const modelRows=(signal.models||[]).map(row=>({model:row.model,window:frustrationWindow(row)})).filter(row=>row.window.user_turns).sort((a,b)=>b.window.utterances-a.window.utterances||b.window.rate-a.window.rate||b.window.user_turns-a.window.user_turns);
+ const maxModelRate=Math.max(.001,...modelRows.map(row=>row.window.rate||0));
+ $('f-models').innerHTML=modelRows.length?modelRows.map(row=>`<button class="signalRank${row.model===frustrationModel?' selected':''}" data-frustration-model="${esc(row.model)}" type=button title="Filter dashboard to ${esc(row.model)}"><div class=signalRankHead><span class=signalRankName>${esc(row.model)}</span><span class="signalRankValue mono">${pct(row.window.rate)}</span></div><div class=signalRankTrack><i style="width:${100*Number(row.window.rate||0)/maxModelRate}%"></i></div><div class=signalRankMeta>${f(row.window.utterances)} matched / ${f(row.window.user_turns)} user turns · ${f(row.window.matches)} hits</div></button>`).join(''):'<div class=signalEmpty>No model-attributed user turns</div>';
+ [...$('f-models').querySelectorAll('[data-frustration-model]')].forEach(button=>button.onclick=()=>{frustrationModel=button.dataset.frustrationModel;localStorage.setItem('tm_frustration_model',frustrationModel);renderFrustration(signal,sessions);});
+ const terms=total.terms||[],maxTerm=Math.max(1,...terms.map(row=>Number(row.count||0)));
+ $('f-terms').innerHTML=terms.length?terms.map(row=>`<div class=signalRank><div class=signalRankHead><span class=signalRankName>${esc(row.term)}</span><span class="signalRankValue mono">${f(row.count)}</span></div><div class=signalRankTrack><i style="width:${100*Number(row.count||0)/maxTerm}%"></i></div></div>`).join(''):'<div class=signalEmpty>No configured terms matched</div>';
+ sessionRows.sort((a,b)=>b.window.utterances-a.window.utterances||b.window.rate-a.window.rate||(b.session.mtime||0)-(a.session.mtime||0));
+ const chatRows=(frustrationChatMode==='affected'?affected:sessionRows).slice(0,50),quietCount=Math.max(0,sessionRows.length-affected.length);
+ $('f-chat-summary').textContent=frustrationChatMode==='affected'?`${f(affected.length)} affected · ${f(quietCount)} without matches`:`${f(sessionRows.length)} chats · affected first`;
+ $('f-chats').innerHTML=chatRows.length?chatRows.map(row=>{const modelNames=frustrationModel||((row.session.frustration?.models||[]).filter(item=>item.user_turns).map(item=>item.model).join(', ')||'unknown'),quiet=!row.window.utterances;return `<div class="chatSignal${quiet?' quiet':''}"><div class=chatSignalMain><div class=chatSignalTitle title="${esc(row.session.title||row.session.id)}">${esc(row.session.title||row.session.id)}</div><div class=chatSignalMeta>${esc(row.session.project||'local')} · ${esc(modelNames)}</div><div class=chatSignalStats><div class=chatSignalTrack><i style="width:${100*Math.max(0,Math.min(1,Number(row.window.rate||0)))}%"></i></div><span class=chatSignalCount>${f(row.window.utterances)} / ${f(row.window.user_turns)} turns</span></div></div><div class=chatSignalSide><span class=signalRateBadge>${pct(row.window.rate)}</span><button class=tbtn data-frustration-session="${esc(row.session.id)}" type=button>Open</button></div></div>`;}).join(''):'<div class=signalEmpty>No chats matched the configured terms</div>';
+ [...$('f-chats').querySelectorAll('[data-frustration-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.frustrationSession));
+ renderFrustrationSettings(signal);
+}
+
 function renderGlobal(xs){
  if(!xs)return;
  const generatedAt=Number(xs.generated_at||0);
@@ -2311,11 +2597,13 @@ let statePollBusy=false;
 function applyLiveState(state){
  LATEST=state;$('live').classList.remove('dead');
  if(!pinned&&$('view-session').classList.contains('on'))renderSession(LATEST);
- else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='watching';
+ else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='live';
 	 if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
 	 if($('view-models').classList.contains('on'))renderModelStats(LATEST.xsession?.model_stats);
+	 if($('view-frustration').classList.contains('on'))renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);
 	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
+ if($('view-settings').classList.contains('on'))renderFrustrationSettings(LATEST.xsession?.frustration);
 }
 async function refreshLiveState(){
  if(statePollBusy)return;

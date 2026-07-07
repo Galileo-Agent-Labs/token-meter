@@ -14,6 +14,7 @@ block. Claude parsing dedupes by message.id so costs are not double-counted.
 Codex uses token_count events instead; those are already one usage slice.
 """
 import calendar
+import datetime
 import glob
 import hashlib
 import html
@@ -39,7 +40,17 @@ CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
+TOKEN_METER_SETTINGS = os.path.expanduser(
+    os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
+)
 PORT = 8722
+
+DEFAULT_FRUSTRATION_TERMS = [
+    "fuck", "fck", "fucked", "fucking", "shit", "shitty", "bullshit",
+    "idiot", "stupid", "useless", "crap", "damn", "wtf",
+]
+MAX_FRUSTRATION_TERMS = 64
+MAX_FRUSTRATION_TERM_LENGTH = 40
 
 CLAUDE_PRICE = {
     "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
@@ -277,6 +288,72 @@ def atomic_write_text(path, text):
     if mode is not None:
         os.chmod(tmp, mode)
     os.replace(tmp, path)
+
+
+def normalize_frustration_terms(values):
+    """Normalize a user-editable term list while preserving display order."""
+    if isinstance(values, str):
+        values = re.split(r"[,\n]", values)
+    if not isinstance(values, list):
+        raise ValueError("Frustration terms must be a list or comma-separated text.")
+    normalized = []
+    seen = set()
+    for value in values:
+        term = " ".join(str(value or "").strip().lower().split())
+        if not term:
+            continue
+        if len(term) > MAX_FRUSTRATION_TERM_LENGTH:
+            raise ValueError(f"Each frustration term must be {MAX_FRUSTRATION_TERM_LENGTH} characters or fewer.")
+        if any(ord(char) < 32 for char in term):
+            raise ValueError("Frustration terms cannot contain control characters.")
+        if term not in seen:
+            normalized.append(term)
+            seen.add(term)
+    if len(normalized) > MAX_FRUSTRATION_TERMS:
+        raise ValueError(f"Use at most {MAX_FRUSTRATION_TERMS} frustration terms.")
+    return normalized
+
+
+def frustration_settings(path=None):
+    path = path or TOKEN_METER_SETTINGS
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    if "frustration_terms" not in settings:
+        terms = list(DEFAULT_FRUSTRATION_TERMS)
+    else:
+        try:
+            terms = normalize_frustration_terms(settings.get("frustration_terms"))
+        except ValueError:
+            terms = list(DEFAULT_FRUSTRATION_TERMS)
+    return {
+        "terms": terms,
+        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        "max_terms": MAX_FRUSTRATION_TERMS,
+    }
+
+
+def set_frustration_terms(values, path=None):
+    """Persist the machine-wide frustration lexicon used by every session."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        terms = normalize_frustration_terms(values)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    settings["frustration_terms"] = terms
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    return {
+        "ok": True,
+        "terms": terms,
+        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        "max_terms": MAX_FRUSTRATION_TERMS,
+    }
 
 
 def toml_named_sections(path, table):
@@ -1004,6 +1081,237 @@ def claude_user_text(msg):
         if btype in (None, "text"):
             pieces.append(block.get("text") or block.get("content") or "")
     return " ".join(p for p in pieces if isinstance(p, str))
+
+
+def frustration_term_counts(text, terms):
+    """Return exact configured term hits using word-safe, case-insensitive matching."""
+    text = str(text or "")
+    counts = {}
+    for term in terms or []:
+        escaped = re.escape(term).replace(r"\ ", r"\s+")
+        matches = re.findall(rf"(?<!\w){escaped}(?!\w)", text, flags=re.IGNORECASE)
+        if matches:
+            counts[term] = len(matches)
+    return counts
+
+
+def week_start(day):
+    if not day:
+        return ""
+    try:
+        value = datetime.date.fromisoformat(day)
+    except (TypeError, ValueError):
+        return ""
+    return (value - datetime.timedelta(days=value.weekday())).isoformat()
+
+
+def _claude_human_text(obj):
+    """Return human-authored Claude text, None for tool/meta/user-shaped records."""
+    if obj.get("type") != "user" or obj.get("isMeta") or obj.get("isSidechain"):
+        return None
+    if obj.get("sourceToolAssistantUUID") or obj.get("toolUseResult") is not None:
+        return None
+    msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+    content = msg.get("content")
+    if isinstance(content, list):
+        text_blocks = [
+            block.get("text") or block.get("content") or ""
+            for block in content
+            if isinstance(block, dict) and block.get("type") in (None, "text")
+        ]
+        if not text_blocks and any(
+            isinstance(block, dict) and block.get("type") == "tool_result" for block in content
+        ):
+            return None
+        text = " ".join(value for value in text_blocks if isinstance(value, str))
+    elif isinstance(content, str):
+        text = content
+    else:
+        text = ""
+    stripped = text.strip()
+    meta_prefixes = (
+        "<local-command-caveat>", "<local-command-stdout>",
+        "<command-name>", "<system-reminder>",
+    )
+    if stripped.startswith(meta_prefixes):
+        return None
+    return text
+
+
+def _dedupe_user_turns(turns, window_seconds=2.0):
+    result = []
+    for turn in turns:
+        fingerprint = " ".join(str(turn.get("text") or "").lower().split())
+        previous = result[-1] if result else None
+        if previous:
+            previous_fingerprint = " ".join(str(previous.get("text") or "").lower().split())
+            delta = abs(float(turn.get("ts") or 0) - float(previous.get("ts") or 0))
+            if fingerprint == previous_fingerprint and delta <= window_seconds:
+                continue
+        result.append(turn)
+    return result
+
+
+def claude_user_turns(objs, default_model=None):
+    turns = []
+    pending = []
+    current_model = default_model or DEFAULT_CLAUDE_MODEL
+    for obj in objs or []:
+        text = _claude_human_text(obj)
+        if text is not None:
+            turn = {
+                "ts": parse_iso(obj.get("timestamp", "")) or 0,
+                "text": text,
+                "model": None,
+            }
+            turns.append(turn)
+            pending.append(turn)
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+        model = msg.get("model") or current_model
+        current_model = model
+        if pending:
+            for turn in pending:
+                turn["model"] = model
+            pending = []
+    for turn in pending:
+        turn["model"] = current_model
+    return _dedupe_user_turns(turns)
+
+
+def _codex_fallback_user_text(payload):
+    if payload.get("type") != "message" or payload.get("role") != "user":
+        return None
+    text = text_from_content(payload.get("content"))
+    stripped = text.strip()
+    if stripped.startswith(("# AGENTS.md instructions", "<environment_context>")):
+        return None
+    return text
+
+
+def codex_user_turns(objs, default_model=None):
+    """Prefer canonical user_message events; fall back for older Codex logs."""
+    current_model = default_model or DEFAULT_OPENAI_MODEL
+    event_turns = []
+    fallback_turns = []
+    for obj in objs or []:
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        if obj.get("type") == "turn_context":
+            current_model = payload.get("model") or current_model
+            continue
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if payload.get("type") == "user_message":
+            event_turns.append({"ts": ts, "text": payload.get("message") or "", "model": current_model})
+            continue
+        text = _codex_fallback_user_text(payload)
+        if text is not None:
+            fallback_turns.append({"ts": ts, "text": text, "model": current_model})
+    return _dedupe_user_turns(event_turns or fallback_turns)
+
+
+def _new_frustration_bucket(**identity):
+    return {
+        **identity,
+        "user_turns": 0,
+        "utterances": 0,
+        "matches": 0,
+        "term_counts": defaultdict(int),
+    }
+
+
+def _add_frustration_event(bucket, event):
+    bucket["user_turns"] += 1
+    bucket["utterances"] += int(bool(event.get("utterance")))
+    bucket["matches"] += int(event.get("matches") or 0)
+    for term, count in (event.get("term_counts") or {}).items():
+        bucket["term_counts"][term] += int(count or 0)
+
+
+def _finish_frustration_bucket(bucket):
+    row = dict(bucket)
+    term_counts = row.pop("term_counts", {})
+    row["rate"] = (row["utterances"] / row["user_turns"]) if row["user_turns"] else 0.0
+    row["terms"] = sorted(
+        ({"term": term, "count": count} for term, count in term_counts.items() if count),
+        key=lambda item: (-item["count"], item["term"]),
+    )
+    return row
+
+
+def rollup_frustration_events(events):
+    total = _new_frustration_bucket()
+    days = {}
+    weeks = {}
+    models = {}
+    for event in events or []:
+        _add_frustration_event(total, event)
+        day = event.get("day") or ""
+        week = event.get("week") or ""
+        model = event.get("model") or "unknown"
+        if day:
+            _add_frustration_event(days.setdefault(day, _new_frustration_bucket(day=day)), event)
+        if week:
+            _add_frustration_event(weeks.setdefault(week, _new_frustration_bucket(week=week)), event)
+        model_row = models.setdefault(model, {
+            "total": _new_frustration_bucket(model=model), "daily": {}, "weekly": {},
+        })
+        _add_frustration_event(model_row["total"], event)
+        if day:
+            _add_frustration_event(
+                model_row["daily"].setdefault(day, _new_frustration_bucket(day=day)), event
+            )
+        if week:
+            _add_frustration_event(
+                model_row["weekly"].setdefault(week, _new_frustration_bucket(week=week)), event
+            )
+    result = _finish_frustration_bucket(total)
+    result["daily"] = [
+        _finish_frustration_bucket(days[key]) for key in sorted(days)
+    ]
+    result["weekly"] = [
+        _finish_frustration_bucket(weeks[key]) for key in sorted(weeks)
+    ]
+    result["models"] = []
+    for model in sorted(models):
+        model_data = models[model]
+        row = _finish_frustration_bucket(model_data["total"])
+        row["daily"] = [
+            _finish_frustration_bucket(model_data["daily"][key])
+            for key in sorted(model_data["daily"])
+        ]
+        row["weekly"] = [
+            _finish_frustration_bucket(model_data["weekly"][key])
+            for key in sorted(model_data["weekly"])
+        ]
+        result["models"].append(row)
+    result["models"].sort(key=lambda row: (-row["utterances"], -row["user_turns"], row["model"]))
+    return result
+
+
+def analyze_frustration(provider, objs, terms=None, default_model=None):
+    terms = list(frustration_settings()["terms"] if terms is None else terms)
+    turns = (
+        codex_user_turns(objs, default_model)
+        if provider == "codex"
+        else claude_user_turns(objs, default_model)
+    )
+    events = []
+    for turn in turns:
+        ts = turn.get("ts") or 0
+        day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
+        term_counts = frustration_term_counts(turn.get("text"), terms)
+        events.append({
+            "ts": ts,
+            "day": day,
+            "week": week_start(day),
+            "model": turn.get("model") or default_model or "unknown",
+            "utterance": bool(term_counts),
+            "matches": sum(term_counts.values()),
+            "term_counts": term_counts,
+        })
+    return rollup_frustration_events(events), events
 
 
 def user_prompt_preview(texts, limit=220):
@@ -2430,6 +2738,9 @@ def claude_summary(source, objs):
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance)
+    row["frustration"], row["_frustration_events"] = analyze_frustration(
+        "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
+    )
     row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
     return row
 
@@ -2488,6 +2799,9 @@ def codex_summary(source, objs):
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance)
+    row["frustration"], row["_frustration_events"] = analyze_frustration(
+        "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
+    )
     row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
     return row
 
@@ -3674,6 +3988,33 @@ def aggregate_model_stats(session_rows):
     }
 
 
+def aggregate_frustration(session_rows, terms=None):
+    """Aggregate lexical frustration evidence without retaining message content."""
+    settings = frustration_settings()
+    configured_terms = list(settings["terms"] if terms is None else terms)
+    events = [
+        event
+        for session in (session_rows or [])
+        for event in (session.get("_frustration_events") or [])
+    ]
+    result = rollup_frustration_events(events)
+    result.update({
+        "configured_terms": configured_terms,
+        "default_terms": list(settings["defaults"]),
+        "max_terms": settings["max_terms"],
+        "affected_sessions": sum(
+            1 for session in (session_rows or [])
+            if ((session.get("frustration") or {}).get("utterances") or 0) > 0
+        ),
+        "sessions_with_user_turns": sum(
+            1 for session in (session_rows or [])
+            if ((session.get("frustration") or {}).get("user_turns") or 0) > 0
+        ),
+        "method": "case-insensitive whole-term match; one matched user turn equals one utterance",
+    })
+    return result
+
+
 def cross_session():
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
@@ -3731,6 +4072,7 @@ def cross_session():
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
         "model_stats": aggregate_model_stats(internal_rows),
+        "frustration": aggregate_frustration(internal_rows),
         "tool_waste": tool_waste,
         "daily": daily,
         "capabilities": capability_inventory(tool_waste),
@@ -4708,7 +5050,8 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         req_path = urlparse(self.path).path
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
-                            "/agent-access/toggle", "/session/delete"):
+                            "/agent-access/toggle", "/session/delete",
+                            "/settings/frustration"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -4739,6 +5082,15 @@ class H(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._send(json.dumps({"ok": False, "error": "Invalid JSON."}),
                        "application/json", status=400)
+            return
+        if req_path == "/settings/frustration":
+            result = set_frustration_terms(payload.get("terms"))
+            if result.get("ok"):
+                _summary_cache.clear()
+                cross = refresh_cross_session_state()
+                result["frustration"] = cross.get("frustration") or {}
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
             return
         if req_path == "/agent-access/toggle":
             result = set_agent_access(payload.get("client"), payload.get("enabled"))

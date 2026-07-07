@@ -221,7 +221,7 @@ moment is already on screen the instant you stop. No second tool.
   Claude Code independently from a dedicated Settings tab, show the exact native CLI
   command before confirmation, manage only an exact Token Meter entry, refuse
   collisions, and show restart guidance. A dismissible Current callout may
-  provide one-time discovery and routes directly to Settings. Tools & Skills
+  provide one-time discovery and routes directly to Settings. Tools
   remains focused on capability evidence, optimization, and controls.
 - **FR22 Observed model throughput** — calculate weighted output tokens per
   measured second for completed trace windows. Prefer tool-free Claude turns
@@ -231,12 +231,24 @@ moment is already on screen the instant you stop. No second tool.
   unavailable, not zero. The numerator includes trace-reported reasoning and
   thinking output but excludes input, cache, and external tool-result tokens;
   the UI must disclose this in an accessible tooltip.
-- **FR23 Model Stats history** — provide a first-class top-level view with
+- **FR23 Models history** — provide a first-class top-level view with
   per-model input, output, cost, executions, output per execution, timing basis,
   timing coverage, weighted output throughput, daily speed/volume history, and
   equal-window speed comparison. Model and 7/30/90-day/all-history filters must
   persist locally and recompute every displayed aggregate from the same daily
   rows.
+- **FR24 Frustration signals** — count a human user turn once when it contains
+  one or more configured case-insensitive whole terms, report both matched
+  utterances and raw term hits, and divide utterances by human user turns for
+  the session/model/window rate. Provide per-chat, per-model, daily, and weekly
+  views with 7/30/90-day/all-history filters. Store one machine-wide editable
+  term list and recalculate all discovered sessions after an explicit save.
+- **FR25 Navigation and command palette** — order the primary navigation by
+  review workflow: Current, Daily, Logs, Global, Models, Frustration, Tools,
+  Learn, and Settings. Provide a searchable command palette
+  that opens with Command/Ctrl+K, supports arrow-key selection, Enter, Escape,
+  and direct Option/Alt+1–9 navigation without firing inside editable fields.
+  Current must retain its existing return-to-live behavior.
 
 ## 5. Non-functional requirements
 
@@ -452,7 +464,7 @@ cards, and denser dashboard surfaces. The Session view now includes:
 
 - Execution overview cards.
 - Cross-session tool, MCP, and skill utilization cards in Current Summary,
-  rendered from the same capability summary as Tools & Skills.
+  rendered from the same capability summary as Tools.
 - A trace timeline that grows as SSE state changes.
 - An adjustable input/output chart with Linear, Sqrt, and Log Y-scale modes.
 - Tools and MCP usage by namespace and by execution.
@@ -509,10 +521,10 @@ It shows provider/project, live or idle state, active model, cost, compact token
 count, context pressure and a small context bar, observed output speed with
 timing provenance, cache reuse, and last execution cost. It does not add Now,
 Action, or Status rows. Navigation actions open the dashboard, daily brief,
-current trace, Tools & Skills, or quit the companion. These actions stay
+current trace, Tools, or quit the companion. These actions stay
 together at the top of the menu. Their URLs are deterministic: Open Dashboard targets
 `#summary`, Open Daily Brief targets `#daily`, Open Trace targets `#activity`,
-and Tools & Skills targets `#capabilities`. Dashboard tab changes preserve the
+and Tools targets `#capabilities`. Dashboard tab changes preserve the
 selected panel in the URL for direct links and reloads.
 The dropdown also lists up to five recently active sessions with a Claude or
 Codex icon, provider label, and title/project identifier. Selecting a row pins
@@ -656,7 +668,7 @@ Agent/Cowork metadata instead of inventing token totals for a cloud chat.
 
 ## 15. v7 — capability inventory, utilization, and controls (2026-06-30)
 
-The Tools & Skills tab combines trace evidence with local runtime configuration.
+The Tools tab combines trace evidence with local runtime configuration.
 It intentionally keeps three evidence levels separate:
 
 - Tools are runtime-reported when present in Codex `dynamic_tools`; built-in
@@ -667,13 +679,13 @@ It intentionally keeps three evidence levels separate:
   caches. Activation is inferred only when a tool-call argument references a
   concrete `SKILL.md` path, so the UI labels skill utilization as inferred.
 
-Current Summary and Tools & Skills answer different questions. Current Summary
+Current Summary and Tools answer different questions. Current Summary
 reports activity for the selected log: observed tool types, total calls, and the
 maximum calls in one execution. Those counts may include default tools and
 result-only instrumentation because they explain what happened. They are never
 used as a removal denominator.
 
-Tools & Skills reports optimization at the removable skill-pack level. One
+Tools reports optimization at the removable skill-pack level. One
 configured user plugin pack is one group regardless of how many skills it
 contains. Any inferred skill activation marks its group used. MCP servers,
 default tools, standalone skills, Cowork built-ins, Codex/Claude runtime packs,
@@ -727,3 +739,26 @@ locate spikes in Activity, confirm repeated patterns in Global and Daily, review
 runtime-qualified capability controls, and close with a daily comparison. Its
 glossary defines the cost, token, cache, context, timing, tool, and capability
 terms used by the dashboard.
+
+---
+
+## 17. v9 — frustration signals (2026-07-07)
+
+Frustration analytics are lexical and trace-backed, not inferred sentiment.
+Token Meter reads only human user-message boundaries, excluding Claude tool
+results, metadata, sidechains, and duplicated Codex response records. A turn
+with at least one configured term contributes one utterance; repeated words
+also contribute to the separate term-hit count. The denominator is human user
+turns, never assistant executions.
+
+The top-level Frustration view compares the same aggregate across chats,
+models, local calendar days, and Monday-based weeks. Daily rows remain the
+source for finite-window KPIs even when the trend display switches to weeks, so
+changing chart granularity does not change the selected time window.
+
+Settings persists the normalized term list in
+`~/.token-meter/settings.json`. `POST /settings/frustration` requires the same
+local action token as other dashboard mutations, clears cached session
+summaries, and republishes the recalculated cross-session snapshot. Parser
+events retain timestamps, model identity, and aggregate matches only; raw user
+message text is not included in the frustration payload.

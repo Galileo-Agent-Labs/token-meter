@@ -36,6 +36,43 @@ rates configured in Token Meter.
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
 
+## Quick Start
+
+### Download And Install On macOS
+
+For most users, open the repository's [`dist/`](dist/) folder, download the
+latest `TokenMeter-*.pkg`, then double-click the downloaded package and follow
+the installer. It may ask for an administrator password. The package is currently 
+unsigned, so macOS may show a security warning. To update, download and double-click 
+the newer package the same way.
+
+Token Meter starts its local server and menu bar widget automatically. Open the
+dashboard at:
+
+```text
+http://localhost:8722
+```
+
+Start a Claude or Codex run and Token Meter will follow its local log. 
+
+### Run From Source
+
+Use this path for development, local changes, or non-package installs:
+
+```bash
+git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+cd token-meter
+./scripts/start-token-meter
+```
+
+The menu bar item starts automatically. Open the dashboard at:
+
+```text
+http://localhost:8722
+```
+
+For source installs that should start automatically, see [Launch At Login](#launch-at-login).
+
 ## Visual Tour
 
 ### 1. Follow The Current Run
@@ -228,98 +265,6 @@ The web dashboard has no third-party Python packages. `meter.py` uses only the
 Python standard library. Dashboard-only mode is available for development,
 troubleshooting, and non-macOS use, but the normal experience includes the menu
 bar companion.
-
-## Quick Start
-
-Choose one install path.
-
-### Option 1: Install The macOS Package
-
-This is the easiest path for most macOS users. We are not using GitHub Releases
-yet, so open the repository's [`dist/`](dist/) folder, download the latest
-`TokenMeter-*.pkg` there, then open it with Finder. The installer may ask for an
-administrator password because it installs under
-`/Library/Application Support`.
-
-If you have a local clone, you can open the checked-in package from the
-repository root:
-
-```bash
-open dist/TokenMeter-0.1.0.pkg
-```
-
-The checked-in package is currently unsigned, so macOS may show a Gatekeeper
-warning. A public release should use a Developer ID-signed and notarized
-installer; building from source remains available in the meantime.
-
-The installer:
-
-- installs Token Meter to `/Library/Application Support/Token Meter`
-- installs a per-user LaunchAgent at
-  `~/Library/LaunchAgents/com.token-meter.menubar.plist`
-- starts the local Python server
-- launches the prebuilt menu bar widget
-- writes runtime logs to `~/Library/Logs/Token Meter`
-
-After install, open the full dashboard at:
-
-```text
-http://localhost:8722
-```
-
-If no supported Claude or Codex logs exist yet, the dashboard will show an
-empty state. Start a CLI or desktop agent run, then refresh or leave the
-dashboard open; Token Meter will follow the newest local log automatically.
-
-Check that the local server is healthy:
-
-```bash
-curl http://127.0.0.1:8722/health
-```
-
-Package users do not need the Swift toolchain. They do need Python 3.8 or newer
-available as `/usr/bin/python3`, `/opt/homebrew/bin/python3`,
-`/usr/local/bin/python3`, or on `PATH` as `python3`.
-
-To update, download the newer `.pkg` from `dist/` and install it the same way.
-The postinstall hook refreshes the installed files and restarts the Token Meter
-LaunchAgent.
-
-To uninstall a package install:
-
-```bash
-sudo "/Library/Application Support/Token Meter/bin/uninstall-token-meter"
-```
-
-Local unsigned packages can trigger macOS security prompts. Public distribution
-should use a Developer ID signed and notarized package.
-
-### Option 2: Traditional Source Method
-
-Use this path for development, local changes, or non-package installs:
-
-```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
-cd token-meter
-./scripts/start-token-meter
-```
-
-The menu bar item starts automatically from that script. Open the full
-dashboard at:
-
-```text
-http://localhost:8722
-```
-
-Check that the local server is healthy:
-
-```bash
-curl http://127.0.0.1:8722/health
-```
-
-Stop the foreground server with `Ctrl-C` in the terminal that started it.
-
-For source installs that should start automatically, see [Launch At Login](#launch-at-login).
 
 ## Ask From Codex Or Claude
 

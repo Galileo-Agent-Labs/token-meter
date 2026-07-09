@@ -37,6 +37,8 @@ CLAUDE_DESKTOP_DATA_ROOTS = [os.path.expanduser("~/Library/Application Support/C
 CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
+CLAUDE_HISTORY = os.path.expanduser("~/.claude/history.jsonl")
+_HISTORY_QUERY_CACHE = {"mtime": None, "counts": {}}
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
@@ -1428,6 +1430,173 @@ def claude_user_events(objs):
     return sorted(events, key=lambda e: e["ts"])
 
 
+def normalize_query_text(text):
+    return " ".join(str(text or "").lower().split())
+
+
+def query_fingerprint(text):
+    normalized = normalize_query_text(text)
+    if not normalized:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def claude_history_query_counts():
+    """Return normalized query fingerprint counts from Claude history.jsonl."""
+    global _HISTORY_QUERY_CACHE
+    try:
+        mtime = os.path.getmtime(CLAUDE_HISTORY)
+    except OSError:
+        return {}
+    if _HISTORY_QUERY_CACHE["mtime"] == mtime:
+        return _HISTORY_QUERY_CACHE["counts"]
+    counts = defaultdict(int)
+    for obj in load(CLAUDE_HISTORY):
+        fp = query_fingerprint(obj.get("display") or "")
+        if fp:
+            counts[fp] += 1
+    counts = dict(counts)
+    _HISTORY_QUERY_CACHE = {"mtime": mtime, "counts": counts}
+    return counts
+
+
+def claude_session_context(objs):
+    """Latest session-level metadata from Claude user records."""
+    ctx = {"git_branch": None, "entrypoint": None, "version": None, "branches_seen": []}
+    branches = set()
+    for obj in objs:
+        if obj.get("type") != "user":
+            continue
+        branch = obj.get("gitBranch")
+        if branch:
+            branches.add(str(branch))
+            ctx["git_branch"] = str(branch)
+        entrypoint = obj.get("entrypoint")
+        if entrypoint:
+            ctx["entrypoint"] = str(entrypoint)
+        version = obj.get("version")
+        if version:
+            ctx["version"] = str(version)
+    ctx["branches_seen"] = sorted(branches)
+    return ctx
+
+
+def claude_usage_extras(msgs):
+    """Aggregate Claude usage fields beyond the four billing buckets."""
+    extras = {
+        "service_tiers": {},
+        "speeds": {},
+        "cache_ephemeral_5m": 0,
+        "cache_ephemeral_1h": 0,
+        "web_search_requests": 0,
+        "web_fetch_requests": 0,
+    }
+    for rec in msgs:
+        usage = rec.get("usage") or {}
+        tier = usage.get("service_tier")
+        if tier:
+            key = str(tier)
+            extras["service_tiers"][key] = extras["service_tiers"].get(key, 0) + 1
+        speed = usage.get("speed")
+        if speed:
+            key = str(speed)
+            extras["speeds"][key] = extras["speeds"].get(key, 0) + 1
+        cache_creation = usage.get("cache_creation") or {}
+        extras["cache_ephemeral_5m"] += int(cache_creation.get("ephemeral_5m_input_tokens") or 0)
+        extras["cache_ephemeral_1h"] += int(cache_creation.get("ephemeral_1h_input_tokens") or 0)
+        server_tool_use = usage.get("server_tool_use") or {}
+        extras["web_search_requests"] += int(server_tool_use.get("web_search_requests") or 0)
+        extras["web_fetch_requests"] += int(server_tool_use.get("web_fetch_requests") or 0)
+    return extras
+
+
+def claude_stop_reason_summary(msgs):
+    counts = defaultdict(int)
+    for rec in msgs:
+        reason = rec.get("stop_reason")
+        if reason:
+            counts[str(reason)] += 1
+    total = sum(counts.values())
+    end_turn = counts.get("end_turn", 0)
+    return {
+        "counts": dict(counts),
+        "total": total,
+        "end_turn": end_turn,
+        "tool_use": counts.get("tool_use", 0),
+        "max_tokens": counts.get("max_tokens", 0),
+        "completion_rate": (end_turn / total) if total else 0.0,
+    }
+
+
+def claude_edited_files(msgs):
+    paths = set()
+    for rec in msgs:
+        for block in rec.get("content") or []:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
+                continue
+            name = str(block.get("name") or "")
+            if name not in ("Edit", "Write"):
+                continue
+            inp = block.get("input")
+            if not isinstance(inp, dict):
+                continue
+            path = inp.get("file_path") or inp.get("path")
+            if path:
+                paths.add(str(path))
+    return sorted(paths)
+
+
+def claude_human_turn_count(objs):
+    return sum(1 for obj in objs if _claude_human_text(obj))
+
+
+def claude_repeat_queries(objs, history_counts=None):
+    """Count human user turns that repeat a prior query in history or this session."""
+    history_counts = history_counts if history_counts is not None else claude_history_query_counts()
+    seen_in_session = set()
+    human_turns = 0
+    repeat_queries = 0
+    for obj in objs:
+        text = _claude_human_text(obj)
+        if not text or not str(text).strip():
+            continue
+        human_turns += 1
+        fp = query_fingerprint(text)
+        if not fp:
+            continue
+        if fp in seen_in_session or history_counts.get(fp, 0) > 1:
+            repeat_queries += 1
+        seen_in_session.add(fp)
+    return {
+        "human_turns": human_turns,
+        "repeat_queries": repeat_queries,
+        "repeat_rate": (repeat_queries / human_turns) if human_turns else 0.0,
+    }
+
+
+def claude_edge_telemetry(objs, msgs, total_tokens, tool_calls):
+    """Extract documented Claude JSONL gaps and derived session metrics."""
+    human_turns = claude_human_turn_count(objs)
+    stop_reasons = claude_stop_reason_summary(msgs)
+    repeats = claude_repeat_queries(objs)
+    edited_files = claude_edited_files(msgs)
+    return {
+        "session": claude_session_context(objs),
+        "usage": claude_usage_extras(msgs),
+        "stop_reasons": stop_reasons,
+        "derived": {
+            "completion_rate": stop_reasons["completion_rate"],
+            "tokens_per_tool_call": (total_tokens / tool_calls) if tool_calls else None,
+            "tokens_per_turn": (total_tokens / human_turns) if human_turns else None,
+            "files_edited": len(edited_files),
+            "human_turns": human_turns,
+            "repeat_queries": repeats["repeat_queries"],
+            "repeat_rate": repeats["repeat_rate"],
+        },
+        "edited_files": edited_files,
+    }
+
+
 def tool_summary(executions):
     by_name = {}
     by_namespace = {}
@@ -1809,6 +1978,7 @@ def recompute_claude(source):
             "reasoning": out_tok if has_think else 0,
             "user_message": user_input,
             "user_input": user_input,
+            "stop_reason": rec.get("stop_reason"),
         })
         executions.append({
             "id": rec["id"],
@@ -1832,6 +2002,7 @@ def recompute_claude(source):
             "summary": f"Turn {idx}: {out_tok:,} out / {in_tok:,} in",
             "user_message": user_input,
             "user_input": user_input,
+            "stop_reason": rec.get("stop_reason"),
         })
         if biggest is None or tc > biggest["cost"]:
             biggest = {"cost": tc, "idx": idx}
@@ -1862,6 +2033,9 @@ def recompute_claude(source):
                         analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
                         primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs))
     state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
+    state["edge_telemetry"] = claude_edge_telemetry(
+        objs, msgs, total_tokens, tool_data["total_calls"],
+    )
     return state
 
 

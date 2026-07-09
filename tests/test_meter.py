@@ -1,5 +1,6 @@
 import unittest
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -1230,6 +1231,83 @@ class CapabilityConfigTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertTrue(result["verified"])
         self.assertFalse(written["enabledPlugins"]["docs@personal"])
+
+
+class EdgeTelemetryTests(unittest.TestCase):
+    def _sample_objs(self):
+        return [
+            {"type": "user", "timestamp": "2026-07-09T00:00:00.000Z",
+             "gitBranch": "main", "entrypoint": "cli", "version": "2.1.196",
+             "message": {"content": "fix the parser"}},
+            {"type": "assistant", "timestamp": "2026-07-09T00:00:01.000Z",
+             "message": {
+                 "id": "msg-1", "model": "claude-sonnet-4-6",
+                 "stop_reason": "tool_use",
+                 "content": [{"type": "tool_use", "id": "tu-1", "name": "Edit",
+                              "input": {"file_path": "/repo/a.py"}}],
+                 "usage": {
+                     "input_tokens": 10, "output_tokens": 5,
+                     "cache_creation_input_tokens": 4, "cache_read_input_tokens": 6,
+                     "service_tier": "standard", "speed": "standard",
+                     "cache_creation": {"ephemeral_5m_input_tokens": 4, "ephemeral_1h_input_tokens": 0},
+                     "server_tool_use": {"web_search_requests": 1, "web_fetch_requests": 0},
+                 },
+             }},
+            {"type": "user", "timestamp": "2026-07-09T00:00:30.000Z",
+             "gitBranch": "feature/edge", "entrypoint": "vscode", "version": "2.1.196",
+             "message": {"content": "fix the parser"}},
+            {"type": "assistant", "timestamp": "2026-07-09T00:00:31.000Z",
+             "message": {
+                 "id": "msg-2", "model": "claude-sonnet-4-6",
+                 "stop_reason": "end_turn",
+                 "content": [{"type": "text", "text": "done"}],
+                 "usage": {"input_tokens": 8, "output_tokens": 12},
+             }},
+        ]
+
+    def test_extracts_session_usage_and_stop_reason_fields(self):
+        msgs = meter.iter_claude_messages(self._sample_objs())
+        edge = meter.claude_edge_telemetry(self._sample_objs(), msgs, 45, 1)
+        self.assertEqual(edge["session"]["git_branch"], "feature/edge")
+        self.assertEqual(edge["session"]["entrypoint"], "vscode")
+        self.assertEqual(edge["session"]["version"], "2.1.196")
+        self.assertEqual(sorted(edge["session"]["branches_seen"]), ["feature/edge", "main"])
+        self.assertEqual(edge["usage"]["cache_ephemeral_5m"], 4)
+        self.assertEqual(edge["usage"]["web_search_requests"], 1)
+        self.assertEqual(edge["stop_reasons"]["end_turn"], 1)
+        self.assertEqual(edge["stop_reasons"]["tool_use"], 1)
+        self.assertAlmostEqual(edge["stop_reasons"]["completion_rate"], 0.5)
+        self.assertEqual(edge["edited_files"], ["/repo/a.py"])
+        self.assertEqual(edge["derived"]["files_edited"], 1)
+        self.assertEqual(edge["derived"]["tokens_per_tool_call"], 45)
+        self.assertEqual(edge["derived"]["human_turns"], 2)
+
+    def test_repeat_queries_use_history_counts(self):
+        objs = [
+            {"type": "user", "message": {"content": "repeat me"}},
+            {"type": "assistant", "message": {
+                "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
+                "usage": {"input_tokens": 1, "output_tokens": 1}, "stop_reason": "end_turn",
+            }},
+        ]
+        history = {"repeat-me-fp": 2}
+        with mock.patch.object(meter, "query_fingerprint", return_value="repeat-me-fp"):
+            repeats = meter.claude_repeat_queries(objs, history_counts=history)
+        self.assertEqual(repeats["repeat_queries"], 1)
+
+    def test_recompute_claude_includes_edge_telemetry(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+            for obj in self._sample_objs():
+                fh.write(json.dumps(obj) + "\n")
+            path = fh.name
+        try:
+            source = meter.source_from_path(path)
+            state = meter.recompute(source)
+            self.assertIn("edge_telemetry", state)
+            self.assertEqual(state["edge_telemetry"]["derived"]["files_edited"], 1)
+            self.assertEqual(state["executions"][0]["stop_reason"], "tool_use")
+        finally:
+            os.unlink(path)
 
 
 class DailySummaryTests(unittest.TestCase):

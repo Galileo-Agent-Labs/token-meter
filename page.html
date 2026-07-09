@@ -66,11 +66,12 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .section-h{display:flex;align-items:center;gap:10px;margin:24px 0 10px}
 .section-h h2{font-size:14px;margin:0;font-weight:780}
 .section-h .hint{font-size:12px;color:var(--faint)}
-.sessionhead{display:flex;align-items:center;gap:9px;margin-bottom:10px;min-width:0}
+.sessionhead{display:flex;align-items:center;gap:9px;margin-bottom:10px;min-width:0;flex-wrap:wrap}
 .sessionStart{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:9px;align-items:baseline;margin-bottom:12px;padding:9px 11px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:rgba(0,188,235,.055);min-width:0}.sessionStart[hidden]{display:none}.sessionStart span{color:var(--faint);font-size:10.5px;font-weight:800;text-transform:uppercase;white-space:nowrap}.sessionStart strong{font-size:12.5px;font-weight:680;line-height:1.4;overflow-wrap:anywhere}
 .repo,.sessid{border:1px solid var(--line);background:rgba(17,24,32,.76);border-radius:8px;padding:6px 10px;font-size:12px;min-width:0;box-shadow:var(--inset)}
 .repo{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sessid{color:var(--dim);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sessid.wrap,.ov .sm.wrap{max-width:none;overflow:visible;text-overflow:unset;white-space:normal;line-height:1.4;overflow-wrap:anywhere}
 .unpin{display:none;border:1px solid var(--line2);background:rgba(17,24,32,.9);border-radius:8px;color:var(--dim);font:inherit;font-size:12px;padding:6px 11px;cursor:pointer;box-shadow:var(--inset)}
 .unpin.on{display:inline-block}.unpin:hover{color:var(--fg);border-color:var(--accent)}
 .sessionDelete{border:1px solid rgba(255,111,111,.36);background:rgba(255,111,111,.07);border-radius:8px;color:#ffaaaa;font:inherit;font-size:12px;font-weight:720;padding:6px 10px;cursor:pointer;box-shadow:var(--inset);white-space:nowrap}.sessionDelete:hover:not(:disabled){border-color:rgba(255,111,111,.68);background:rgba(255,111,111,.13);color:#ffd0d0}.sessionDelete:disabled{opacity:.42;cursor:not-allowed}.sessionDelete[hidden]{display:none}.smetrics .sessionDelete{font-size:10.5px;padding:4px 7px;margin-top:5px}
@@ -197,6 +198,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <span class=badge id=s-provider>source</span>
    <span class=repo id=s-repo>--</span>
    <span class="sessid mono" id=s-id></span>
+   <span class="sessid mono wrap" id=s-meta hidden></span>
    <span class=pill id=s-pricing></span>
    <span class=spacer></span>
    <button class=unpin id=unpin>Back to live</button>
@@ -260,7 +262,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Active execution time from reported turn or task durations. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Active execution time from reported turn or task durations. Idle gaps are excluded and overlapping execution windows are counted once.">Active duration</div><div class="v mono" id=ov-duration>--</div><div class=sm id=ov-idle></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
    <div class="card ov"><div class="label fieldtip" id=ov-loaded-label tabindex=0 title="Runtime-advertised catalog entries when available; otherwise observed tool types. Catalog entries may be default/read-only and are not an optimization denominator." data-tip="Runtime-advertised catalog entries when available; otherwise observed tool types. Catalog entries may be default/read-only and are not an optimization denominator.">Catalog advertised</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
-   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Number of priced model executions observed in this log/thread." data-tip="Number of priced model executions observed in this log/thread.">Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div></div>
+   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Number of priced model executions observed in this log/thread." data-tip="Number of priced model executions observed in this log/thread.">Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div><div class="sm wrap" id=ov-model-edge hidden></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Estimated log/thread cost divided by execution count." data-tip="Estimated log/thread cost divided by execution count.">Avg cost</div><div class="v mono" id=ov-avg>$0</div><div class=sm>per execution</div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Total tool calls observed in this log/thread." data-tip="Total tool calls observed in this log/thread.">Tool calls</div><div class="v mono" id=ov-tools>0</div><div class=sm id=ov-tooltok></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Highest observed input/context token count in this log/thread." data-tip="Highest observed input/context token count in this log/thread.">Context peak</div><div class="v mono" id=ov-peak>0</div><div class=sm>max input tokens</div></div>
@@ -1607,6 +1609,10 @@ function renderOverview(s){
  $('ov-loaded').textContent=f(tools.loaded||0);
  $('ov-loadedsm').textContent=tools.loaded_known?`${f(tools.eager||0)} eager · ${f(tools.deferred||0)} deferred · partial catalog`:`${f(tools.unique_used||0)} observed · catalog unavailable`;
  $('ov-exec').textContent=f(s.turns); $('ov-model').textContent=s.primary_model||'';
+ const edge=s.edge_telemetry||{}, derived=edge.derived||{};
+ const execNote=[derived.human_turns?`${f(derived.human_turns)} human turns`:null,derived.tokens_per_turn!=null?`${f(Math.round(derived.tokens_per_turn))} tok/turn`:null,derived.tokens_per_tool_call!=null?`${f(Math.round(derived.tokens_per_tool_call))} tok/tool`:null,derived.repeat_queries?`${f(derived.repeat_queries)} repeat queries`:null,derived.files_edited?`${f(derived.files_edited)} files edited`:null].filter(Boolean).join(' · ');
+ const edgeEl=$('ov-model-edge');
+ if(execNote){edgeEl.textContent=execNote;edgeEl.hidden=false;}else{edgeEl.textContent='';edgeEl.hidden=true;}
  $('ov-avg').textContent=money(avg);
  $('ov-tools').textContent=f(tools.total_calls||0); $('ov-tooltok').textContent=f(tools.total_output_tokens||0)+' returned tok';
  $('ov-peak').textContent=f(peak);
@@ -1772,6 +1778,10 @@ function renderSession(s){
  $('s-repo').textContent=s.project||source.project||'';
  $('s-id').textContent=s.session||source.id||'';
  $('s-pricing').textContent=source.pricing_note||'';
+ const edge=s.edge_telemetry||{}, sess=edge.session||{}, derived=edge.derived||{};
+ const metaParts=[sess.git_branch&&`branch ${sess.git_branch}`,sess.entrypoint&&sess.entrypoint,sess.version&&`cli ${sess.version}`].filter(Boolean);
+ const metaEl=$('s-meta');
+ if(metaParts.length){metaEl.textContent=metaParts.join(' · ');metaEl.hidden=false;}else metaEl.hidden=true;
  const startMessage=sessionStartMessage(s);
  $('session-start').hidden=!startMessage;
  $('session-start-text').textContent=startMessage;
@@ -1808,7 +1818,11 @@ function renderSession(s){
  $('burn').textContent=timing.duration_available?money(s.burn_usd_min):'--';
  $('burnsm').textContent=timing.duration_available?`${f(s.burn_tok_min)} tok/min · active`:'execution timing unavailable';
  $('cpt').textContent=money(s.analyses?.cost_per_task?.per_task||0);
- $('cptsm').textContent=f(s.analyses?.cost_per_task?.completed||0)+' completed';
+ const completed=s.analyses?.cost_per_task?.completed||edge.stop_reasons?.end_turn||0;
+ const completionRate=derived.completion_rate??edge.stop_reasons?.completion_rate;
+ const cptParts=[f(completed)+' completed'];
+ if(completionRate!=null&&!Number.isNaN(completionRate))cptParts.push(pct(completionRate)+' end_turn');
+ $('cptsm').textContent=cptParts.join(' · ');
  renderOverview(s); renderCurrentOptimization(s); renderTrace(s.trace); renderTools(s.tools);
 
  const semTot=Object.values(sem).reduce((a,b)=>a+(b||0),0)||1;

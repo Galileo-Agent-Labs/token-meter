@@ -280,6 +280,8 @@ moment is already on screen the instant you stop. No second tool.
 ~/.claude/projects/*/*.jsonl   (Claude writes per-turn)
 ~/Library/Application Support/Claude/claude-code-sessions/**/local_*.json
                               (Claude Desktop attribution metadata)
+~/Library/Application Support/Claude-3p/{claude-code-sessions,local-agent-mode-sessions}/**
+                              (third-party-provider Desktop/Cowork metadata and traces)
         │  tail newest by mtime, reparse on change
         ▼
    watcher thread ──► recompute(state) ──► publish()

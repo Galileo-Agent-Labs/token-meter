@@ -679,6 +679,22 @@ class DynamicCatalogTests(unittest.TestCase):
 
 
 class ClaudeDesktopDiscoveryTests(unittest.TestCase):
+    def test_default_discovery_scans_standard_and_third_party_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            standard = Path(tmp) / "Claude"
+            third_party = Path(tmp) / "Claude-3p"
+            standard_metadata = standard / "claude-code-sessions" / "account" / "workspace" / "local_standard.json"
+            third_party_metadata = third_party / "local-agent-mode-sessions" / "account" / "workspace" / "local_bedrock.json"
+            standard_metadata.parent.mkdir(parents=True)
+            third_party_metadata.parent.mkdir(parents=True)
+            standard_metadata.write_text(json.dumps({"cliSessionId": "standard-cli"}))
+            third_party_metadata.write_text(json.dumps({"cliSessionId": "bedrock-cli"}))
+
+            with mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", [str(standard), str(third_party)]):
+                paths = set(meter.claude_desktop_metadata_paths())
+
+        self.assertEqual(paths, {str(standard_metadata), str(third_party_metadata)})
+
     def test_indexes_desktop_metadata_by_cli_session(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "account" / "workspace" / "local_desktop-session.json"

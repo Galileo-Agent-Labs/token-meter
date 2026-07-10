@@ -33,7 +33,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
-CLAUDE_DESKTOP_DATA_ROOTS = [os.path.expanduser("~/Library/Application Support/Claude")]
+CLAUDE_DESKTOP_DATA_ROOTS = [
+    os.path.expanduser("~/Library/Application Support/Claude"),
+    # Claude Desktop's third-party provider builds (including Bedrock-backed
+    # Cowork) keep the same metadata and nested Claude trace layout here.
+    os.path.expanduser("~/Library/Application Support/Claude-3p"),
+]
 CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")

@@ -373,8 +373,8 @@ Token Meter reads local log stores:
 
 ```text
 Claude Code CLI:          ~/.claude/projects/*/*.jsonl
-Claude Desktop metadata:  ~/Library/Application Support/Claude/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
-Claude Desktop Agent:     ~/Library/Application Support/Claude/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
+Claude Desktop metadata:  ~/Library/Application Support/{Claude,Claude-3p}/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
+Claude Desktop Agent:     ~/Library/Application Support/{Claude,Claude-3p}/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
 Codex CLI + desktop app:   ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 ```
 
@@ -385,7 +385,9 @@ cost, token, tool, and execution parser without appearing twice. They are
 labeled `Claude Desktop` in Current and Global views.
 
 Agent/Cowork sessions without a workspace are joined to their nested JSONL and
-labeled `No project`. A regular Claude Desktop cloud
+labeled `No project`. Third-party-provider builds, including Bedrock-backed
+Cowork, use the parallel `Claude-3p` application-support root and are discovered
+the same way. A regular Claude Desktop cloud
 conversation still is not written to the local agent JSONL store, so its tokens
 and tool calls cannot be attributed reliably.
 

@@ -736,6 +736,23 @@ class ClaudeDesktopDiscoveryTests(unittest.TestCase):
         self.assertEqual(sources[0]["client"], "claude_desktop")
         self.assertEqual(sources[0]["title"], "No-project task")
 
+    def test_agent_uses_user_selected_folder_as_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "local-agent-mode-sessions" / "account" / "org"
+            metadata = root / "local_agent-session.json"
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(json.dumps({
+                "sessionId": "local_agent-session",
+                "cliSessionId": "cli-agent-id",
+                "cwd": str(root / "local_agent-session" / "outputs"),
+                "userSelectedFolders": ["/tmp/selected-project"],
+                "lastActivityAt": 123456,
+            }))
+            idx = meter.claude_desktop_index(tmp)
+
+        self.assertEqual(idx["cli-agent-id"]["cwd"], "/tmp/selected-project")
+        self.assertEqual(idx["cli-agent-id"]["project"], "/tmp/selected-project")
+
 
 class ToolEvidenceTests(unittest.TestCase):
     def test_tool_summary_reconciles_types_calls_and_per_execution_peak(self):

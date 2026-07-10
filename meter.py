@@ -557,8 +557,18 @@ def claude_desktop_index(root=None):
             title = ""
         source_kind = "agent" if f"{os.sep}local-agent-mode-sessions{os.sep}" in path else "project"
         origin_cwd = row.get("originCwd") or ""
-        raw_cwd = origin_cwd or row.get("cwd") or ""
-        no_project = bool(source_kind == "agent" and not origin_cwd and os.path.basename(raw_cwd) == "outputs")
+        selected_folders = row.get("userSelectedFolders") or []
+        selected_cwd = next(
+            (folder for folder in selected_folders if isinstance(folder, str) and folder.strip()),
+            "",
+        ) if isinstance(selected_folders, list) else ""
+        raw_cwd = origin_cwd or selected_cwd or row.get("cwd") or ""
+        no_project = bool(
+            source_kind == "agent"
+            and not origin_cwd
+            and not selected_cwd
+            and os.path.basename(raw_cwd) == "outputs"
+        )
         candidate = {
             "client": "claude_desktop",
             "label": "Claude Desktop",

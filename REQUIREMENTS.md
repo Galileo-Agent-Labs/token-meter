@@ -656,8 +656,10 @@ JSONL.
 Token Meter indexes the targeted metadata locations, joins by `cliSessionId`,
 and parses only the authoritative JSONL. This keeps one logical session and one
 cost total while allowing Current and Global views to show `Claude Desktop`,
-the Desktop title, and the actual project directory. Agent sessions whose cwd
-is only their managed `outputs` folder are labeled `No project`. A missing
+the Desktop title, and the actual project directory. For Agent sessions,
+`userSelectedFolders` supplies the project when the runtime cwd is only the
+managed `outputs` folder; only sessions without a selected folder are labeled
+`No project`. A missing
 metadata file remains a normal `Claude Code` source, and malformed Desktop
 metadata is skipped without affecting other logs.
 

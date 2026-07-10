@@ -384,8 +384,10 @@ trace under `~/.claude/projects`, so Desktop sessions use the same validated
 cost, token, tool, and execution parser without appearing twice. They are
 labeled `Claude Desktop` in Current and Global views.
 
-Agent/Cowork sessions without a workspace are joined to their nested JSONL and
-labeled `No project`. Third-party-provider builds, including Bedrock-backed
+Agent/Cowork sessions use Claude Desktop's selected workspace folder when the
+trace itself runs from the managed `outputs` directory. Sessions without a
+selected workspace are joined to their nested JSONL and labeled `No project`.
+Third-party-provider builds, including Bedrock-backed
 Cowork, use the parallel `Claude-3p` application-support root and are discovered
 the same way. A regular Claude Desktop cloud
 conversation still is not written to the local agent JSONL store, so its tokens

@@ -191,19 +191,27 @@ Latest** to resume automatic switching.
 - **Token split**: separates input, output, thinking, and tool-result tokens so
   you can tell whether cost is coming from model output, cached context, or
   tool payloads.
-- **Observed output speed**: shows weighted output tokens per second on Current
+- **Observed output pace**: shows weighted output tokens per second on Current
   and completed Logs. It prefers tool-free work with reported timing, falls
   back to labeled end-to-end timing when tools are involved, and never turns
   missing timing into a zero-speed claim. It includes trace-reported reasoning
   and thinking output, while excluding input, cache, and external tool results.
+  This remains a diagnostic because Claude and Codex expose different
+  time-to-first-token evidence.
 - **Wait time**: measures wall-clock time from a user prompt until the completed
   response. It includes reasoning and tool use because the user is still
-  waiting. Current shows per-request history, Logs and Global show cumulative
-  wait, and Models plus Daily provide average-wait comparisons and trends.
-- **Models view**: aggregates model input, output, cost, executions,
-  output per execution, timing coverage, output speed, and average wait across
-  7-, 30-, and 90-day or all-history windows. The daily chart switches between
-  speed and wait while retaining output volume for context.
+  waiting, but observed timing removes trace-visible pauses where the agent
+  explicitly waits for human input. Current shows per-request history, Logs and
+  Global show cumulative wait, and Models uses median wait for typical
+  comparisons while retaining average, p95, and longest-wait evidence.
+- **Models view**: keeps model/runtime identities separate, so Claude Code,
+  Claude Desktop, Claude-3P, and Codex timing are never silently pooled. It
+  compares exactly two selected runtimes with matched completed turns that have
+  similar peak context, cumulative input, output, cache-read share, model calls,
+  tool shape, and recency. A verdict requires at least 20 matched pairs and 30%
+  coverage of the smaller history and includes a bootstrap 95% confidence
+  interval. The view also retains typical wait, typical workload, observed
+  output pace, timing coverage, and 7-, 30-, 90-day or all-history trends.
 - **Frustration signals**: counts user turns containing configurable whole
   terms, reports matched utterances and their share of human user turns, and
   compares sessions and models across daily, weekly, 7-, 30-, 90-day, or
@@ -229,8 +237,9 @@ Latest** to resume automatic switching.
 - **Daily summary**: attributes spend and completed-request wait to recorded
   local days, with active logs, projects, runtime mix, highest-cost logs, and a
   Spend/Wait trend switch.
-- **Learn view**: provides a practical Token Meter review workflow with direct
-  links to each view and a searchable glossary of dashboard terms.
+- **Learn view**: provides a practical Token Meter review workflow, a plain-
+  language guide to matched model-speed comparisons, direct links to each
+  view, and a searchable glossary of dashboard terms.
 - **Ask from Codex or Claude**: connects a local, read-only MCP server so an
   agent can answer whether to continue, explain aggregate usage change, or
   review optional capabilities with bounded evidence and a dashboard link.
@@ -437,7 +446,9 @@ The Current tab includes:
   active minute, cache behavior, context pressure, per-execution input/output
   trajectory, per-request wait history, session tool activity, optional
   skill-pack use, and unused user-installed packs. Gaps between prompts are
-  excluded from wait time and burn rate.
+  excluded from wait time and burn rate. Observed wait timing also excludes
+  trace-visible pauses where the agent asks for human input and waits for the
+  answer.
 - Activity: normalized event trace for messages, reasoning, tool calls, tool
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.

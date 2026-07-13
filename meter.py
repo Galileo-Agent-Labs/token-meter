@@ -22,6 +22,7 @@ import json
 import math
 import os
 import queue
+import random
 import re
 import secrets
 import shlex
@@ -167,6 +168,42 @@ def _claude_user_prompt(obj):
         and str(block.get("text") or "").strip()
         for block in content
     )
+
+
+def _is_user_input_tool(name):
+    """Return whether a tool explicitly pauses the agent for human input."""
+    normalized = re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+    return normalized in ("askuserquestion", "requestuserinput")
+
+
+def _track_claude_user_pause(group, block, ts):
+    if not group or not isinstance(block, dict) or block.get("type") != "tool_use":
+        return
+    if not _is_user_input_tool(block.get("name")):
+        return
+    tool_id = block.get("id")
+    if tool_id:
+        group.setdefault("user_pause_starts", {}).setdefault(tool_id, float(ts or 0))
+
+
+def _close_claude_user_pauses(group, message, ts):
+    if not group or not isinstance(message, dict):
+        return
+    starts = group.setdefault("user_pause_starts", {})
+    for block in message.get("content") or []:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        started = starts.pop(block.get("tool_use_id"), None)
+        if started is not None and float(ts or 0) >= started:
+            group["user_pause_s"] = float(group.get("user_pause_s") or 0) + float(ts or 0) - started
+
+
+def _claude_effective_duration(group, duration_s, timing_basis):
+    """Remove trace-visible human-response pauses from observed wall time."""
+    duration_s = float(duration_s or 0)
+    paused_s = float((group or {}).get("user_pause_s") or 0)
+    excluded_s = min(duration_s, paused_s) if timing_basis == "observed" else 0.0
+    return max(0.0, duration_s - excluded_s), excluded_s
 
 
 def execution_timing(provider, objs):
@@ -395,6 +432,25 @@ def safe_mtime(path):
 def home_shorten(path):
     home = os.path.expanduser("~")
     return path.replace(home, "~", 1) if path and path.startswith(home) else path
+
+
+def source_runtime_label(source):
+    """Return the trace runtime whose timing semantics produced this session."""
+    source = source or {}
+    if source.get("runtime"):
+        return str(source["runtime"])
+    provider = source.get("provider") or "unknown"
+    if provider == "codex":
+        return "Codex"
+    if provider != "claude":
+        return str(source.get("label") or provider)
+    if source.get("client") != "claude_desktop":
+        return "Claude Code"
+    metadata_path = os.path.abspath(os.path.expanduser(str(source.get("metadata_path") or "")))
+    third_party_root = os.path.abspath(CLAUDE_DESKTOP_DATA_ROOTS[1])
+    if metadata_path == third_party_root or metadata_path.startswith(third_party_root + os.sep):
+        return "Claude-3P"
+    return "Claude Desktop"
 
 
 def decode_claude_project(name):
@@ -843,6 +899,7 @@ def claude_performance_samples(objs):
             current = {
                 "message_ids": [], "seen": set(), "start_ts": ts or 0,
                 "last_ts": ts or 0, "terminal": False,
+                "user_pause_starts": {}, "user_pause_s": 0.0,
             }
         return current
 
@@ -865,16 +922,27 @@ def claude_performance_samples(objs):
             timing_basis = "observed"
         if duration_s <= 0:
             return
+        wall_duration_s = duration_s
+        duration_s, user_pause_s = _claude_effective_duration(group, duration_s, timing_basis)
+        if duration_s <= 0:
+            return
         records = [messages[mid] for mid in group["message_ids"] if mid in messages and not messages[mid].get("side")]
         models = {rec.get("model") or DEFAULT_CLAUDE_MODEL for rec in records if rec.get("usage")}
         if len(models) != 1:
             return
         input_tokens = output_tokens = 0
+        uncached_input_tokens = cache_read_tokens = cache_write_tokens = 0
+        peak_input_tokens = 0
         tool_ids = set()
         for rec in records:
-            in_count, out_count = usage_io_tokens(rec.get("usage") or {})
+            usage = rec.get("usage") or {}
+            in_count, out_count = usage_io_tokens(usage)
             input_tokens += in_count
             output_tokens += out_count
+            uncached_input_tokens += int(usage.get("input_tokens") or 0)
+            cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
+            cache_write_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+            peak_input_tokens = max(peak_input_tokens, in_count)
             for block in rec.get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     tool_ids.add(block.get("id") or (block.get("name"), len(tool_ids)))
@@ -887,8 +955,14 @@ def claude_performance_samples(objs):
             "provider": "claude", "model": next(iter(models)),
             "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
             "ts": ts or 0, "input_tokens": input_tokens, "output_tokens": output_tokens,
+            "peak_input_tokens": peak_input_tokens,
+            "uncached_input_tokens": uncached_input_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+            "model_calls": len(records),
             "duration_s": duration_s, "generation_s": duration_s,
             "ttft_s": 0.0, "tool_calls": len(tool_ids), "timing_basis": timing_basis,
+            "wall_duration_s": wall_duration_s, "user_pause_s": user_pause_s,
         })
 
     for obj in objs:
@@ -901,7 +975,10 @@ def claude_performance_samples(objs):
                 current = {
                     "message_ids": [], "seen": set(), "start_ts": ts,
                     "last_ts": ts, "terminal": False,
+                    "user_pause_starts": {}, "user_pause_s": 0.0,
                 }
+            elif current:
+                _close_claude_user_pauses(current, msg, ts)
             continue
         if otype == "assistant":
             msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
@@ -911,6 +988,8 @@ def claude_performance_samples(objs):
                 group["seen"].add(mid)
                 group["message_ids"].append(mid)
             group["last_ts"] = max(float(group.get("last_ts") or 0), ts)
+            for block in msg.get("content") or []:
+                _track_claude_user_pause(group, block, ts)
             if msg.get("stop_reason") and msg.get("stop_reason") != "tool_use":
                 group["terminal"] = True
             continue
@@ -959,6 +1038,11 @@ def codex_performance_samples(objs, default_model=None):
             "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
             "ts": ts or 0, "input_tokens": int(counts.get("input_tokens") or 0),
             "output_tokens": output_tokens, "duration_s": duration_s,
+            "peak_input_tokens": int(counts.get("peak_input_tokens") or 0),
+            "uncached_input_tokens": int(counts.get("uncached_input_tokens") or 0),
+            "cache_read_tokens": int(counts.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(counts.get("cache_write_tokens") or 0),
+            "model_calls": int(counts.get("model_calls") or 0),
             "generation_s": generation_s, "ttft_s": max(0.0, ttft_ms / 1000.0),
             "tool_calls": int(task.get("tool_calls") or 0), "timing_basis": "task_complete",
         })
@@ -982,17 +1066,27 @@ def codex_performance_samples(objs, default_model=None):
                 continue
             usage = codex_usage(raw)
             task = ensure_current(ts)
-            row = task["usage"].setdefault(model, {"input_tokens": 0, "output_tokens": 0})
+            row = task["usage"].setdefault(model, {
+                "input_tokens": 0, "output_tokens": 0, "peak_input_tokens": 0,
+                "uncached_input_tokens": 0, "cache_read_tokens": 0,
+                "cache_write_tokens": 0, "model_calls": 0,
+            })
             input_count, output_count = usage_io_tokens(usage)
             row["input_tokens"] += input_count
             row["output_tokens"] += output_count
+            row["peak_input_tokens"] = max(row["peak_input_tokens"], input_count)
+            row["uncached_input_tokens"] += int(usage.get("input_tokens") or 0)
+            row["cache_read_tokens"] += int(usage.get("cache_read_input_tokens") or 0)
+            row["cache_write_tokens"] += int(usage.get("cache_creation_input_tokens") or 0)
+            row["model_calls"] += 1
             continue
         if ptype == "task_complete":
             close_task(payload, ts)
     return samples
 
 
-def _wait_sample(group, end_ts, duration_s, timing_basis, provider):
+def _wait_sample(group, end_ts, duration_s, timing_basis, provider,
+                 wall_duration_s=None, user_pause_s=0.0):
     """Return one completed prompt-to-response wall-clock sample."""
     if not group or duration_s <= 0:
         return None
@@ -1008,6 +1102,8 @@ def _wait_sample(group, end_ts, duration_s, timing_basis, provider):
         "tool_calls": int(group.get("tool_calls") or 0),
         "output_tokens": int(group.get("output_tokens") or 0),
         "timing_basis": timing_basis,
+        "wall_duration_s": float(wall_duration_s if wall_duration_s is not None else duration_s),
+        "user_pause_s": float(user_pause_s or 0),
     }
 
 
@@ -1039,8 +1135,10 @@ def claude_wait_samples(objs):
             basis = "observed"
         else:
             return
+        wall_duration_s = duration_s
+        duration_s, user_pause_s = _claude_effective_duration(group, duration_s, basis)
         sample = _wait_sample(group, end_ts or group.get("last_ts") or 0,
-                              duration_s, basis, "claude")
+                              duration_s, basis, "claude", wall_duration_s, user_pause_s)
         if sample:
             samples.append(sample)
 
@@ -1053,7 +1151,13 @@ def claude_wait_samples(objs):
                 "start_ts": ts, "last_ts": ts, "models": set(),
                 "tool_ids": set(), "tool_calls": 0, "output_tokens": 0,
                 "seen_usage": set(), "terminal": False,
+                "user_pause_starts": {}, "user_pause_s": 0.0,
             }
+            continue
+        if otype == "user" and current:
+            msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+            _close_claude_user_pauses(current, msg, ts)
+            current["last_ts"] = max(float(current.get("last_ts") or 0), ts)
             continue
         if otype == "assistant" and current:
             msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
@@ -1071,6 +1175,7 @@ def claude_wait_samples(objs):
                     continue
                 tool_id = block.get("id") or (block.get("name"), len(current["tool_ids"]))
                 current["tool_ids"].add(tool_id)
+                _track_claude_user_pause(current, block, ts)
             current["tool_calls"] = len(current["tool_ids"])
             if msg.get("stop_reason") and msg.get("stop_reason") != "tool_use":
                 current["terminal"] = True
@@ -1161,6 +1266,7 @@ def wait_time_summary(samples):
         "sample_count": count,
         "reported_samples": sum(row.get("timing_basis") == "reported" for row in rows),
         "observed_samples": sum(row.get("timing_basis") == "observed" for row in rows),
+        "user_pause_s": sum(float(row.get("user_pause_s") or 0) for row in rows),
     }
 
 
@@ -2489,6 +2595,7 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     source_obj = {
         "provider": source["provider"],
         "client": source.get("client") or source["provider"],
+        "runtime": source_runtime_label(source),
         "label": source["label"],
         "id": source["id"],
         "desktop_session_id": source.get("desktop_session_id"),
@@ -3057,6 +3164,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "path": source["path"],
         "provider": source["provider"],
         "client": source.get("client") or source["provider"],
+        "runtime": source_runtime_label(source),
         "label": source["label"],
         "desktop_session_id": source.get("desktop_session_id"),
         "project": source.get("project") or "",
@@ -4146,6 +4254,158 @@ def daily_summaries(session_rows, limit=30):
     return result
 
 
+MATCHED_PACE_MIN_PAIRS = 20
+MATCHED_PACE_MIN_COVERAGE = 0.30
+
+
+def _pace_log_distance(left, right, max_distance):
+    left = max(1.0, float(left or 0))
+    right = max(1.0, float(right or 0))
+    distance = abs(math.log(left / right, 2))
+    return None if distance > max_distance else distance / max_distance
+
+
+def pace_match_distance(left, right):
+    """Return workload distance, or None when two completed turns are not comparable."""
+    left_tools = int(left.get("tool_calls") or 0)
+    right_tools = int(right.get("tool_calls") or 0)
+    if bool(left_tools) != bool(right_tools):
+        return None
+    dimensions = [
+        (_pace_log_distance(
+            left.get("peak_input_tokens") or left.get("input_tokens"),
+            right.get("peak_input_tokens") or right.get("input_tokens"), 2.0,
+        ), 0.28),
+        (_pace_log_distance(left.get("input_tokens"), right.get("input_tokens"), 3.0), 0.17),
+        (_pace_log_distance(left.get("output_tokens"), right.get("output_tokens"), 2.0), 0.22),
+        (_pace_log_distance(left.get("model_calls") or 1, right.get("model_calls") or 1, 2.0), 0.16),
+    ]
+    if left_tools:
+        dimensions.append((_pace_log_distance(left_tools, right_tools, 2.0), 0.12))
+    if any(distance is None for distance, _ in dimensions):
+        return None
+    left_input = max(1, int(left.get("input_tokens") or 0))
+    right_input = max(1, int(right.get("input_tokens") or 0))
+    left_cache = min(1.0, float(left.get("cache_read_tokens") or 0) / left_input)
+    right_cache = min(1.0, float(right.get("cache_read_tokens") or 0) / right_input)
+    cache_distance = abs(left_cache - right_cache)
+    if cache_distance > 0.60:
+        return None
+    score = sum(distance * weight for distance, weight in dimensions)
+    score += (cache_distance / 0.60) * 0.05
+    recency_days = abs(float(left.get("ts") or 0) - float(right.get("ts") or 0)) / 86400.0
+    score += min(1.0, recency_days / 90.0) * 0.03
+    return score
+
+
+def _percentile(values, quantile):
+    if not values:
+        return 0.0
+    ordered = sorted(float(value) for value in values)
+    return ordered[min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * quantile))))]
+
+
+def _bootstrap_median_interval(values, seed_key, repetitions=400):
+    if not values:
+        return 0.0, 0.0
+    if len(values) == 1:
+        return float(values[0]), float(values[0])
+    seed = int(hashlib.sha256(str(seed_key).encode("utf-8")).hexdigest()[:16], 16)
+    rng = random.Random(seed)
+    medians = []
+    for _ in range(repetitions):
+        medians.append(statistics.median(rng.choice(values) for _ in values))
+    return _percentile(medians, 0.025), _percentile(medians, 0.975)
+
+
+def matched_pace_comparison(a_id, a_samples, b_id, b_samples):
+    """Compare two model-runtime histories using deterministic workload matching."""
+    def usable(sample):
+        return (
+            float(sample.get("duration_s") or 0) > 0
+            and int(sample.get("input_tokens") or 0) > 0
+            and int(sample.get("output_tokens") or 0) > 0
+        )
+
+    a_rows = [sample for sample in (a_samples or []) if usable(sample)]
+    b_rows = [sample for sample in (b_samples or []) if usable(sample)]
+    result = {
+        "a_id": a_id, "b_id": b_id,
+        "a_samples": len(a_rows), "b_samples": len(b_rows),
+        "matched_pairs": 0, "coverage": 0.0, "pace_ratio": 0.0,
+        "ci_low": 0.0, "ci_high": 0.0, "available": False,
+    }
+    smaller = min(len(a_rows), len(b_rows))
+    if smaller < MATCHED_PACE_MIN_PAIRS:
+        result["reason"] = f"needs {MATCHED_PACE_MIN_PAIRS} timed turns per runtime"
+        return result
+
+    candidates = []
+    for a_index, left in enumerate(a_rows):
+        for b_index, right in enumerate(b_rows):
+            distance = pace_match_distance(left, right)
+            if distance is not None:
+                candidates.append((distance, abs(float(left.get("ts") or 0) - float(right.get("ts") or 0)),
+                                   a_index, b_index))
+    candidates.sort()
+    used_a = set()
+    used_b = set()
+    ratios = []
+    for _, _, a_index, b_index in candidates:
+        if a_index in used_a or b_index in used_b:
+            continue
+        used_a.add(a_index)
+        used_b.add(b_index)
+        left_duration = float(a_rows[a_index].get("duration_s") or 0)
+        right_duration = float(b_rows[b_index].get("duration_s") or 0)
+        ratios.append(right_duration / left_duration)
+
+    matched_pairs = len(ratios)
+    coverage = matched_pairs / smaller if smaller else 0.0
+    result["matched_pairs"] = matched_pairs
+    result["coverage"] = coverage
+    if ratios:
+        result["pace_ratio"] = statistics.median(ratios)
+    if matched_pairs >= MATCHED_PACE_MIN_PAIRS:
+        result["ci_low"], result["ci_high"] = _bootstrap_median_interval(
+            ratios, f"{a_id}|{b_id}|{matched_pairs}"
+        )
+    if matched_pairs < MATCHED_PACE_MIN_PAIRS:
+        result["reason"] = f"only {matched_pairs} comparable turns; needs {MATCHED_PACE_MIN_PAIRS}"
+    elif coverage < MATCHED_PACE_MIN_COVERAGE:
+        result["reason"] = f"only {round(coverage * 100)}% of the smaller history overlaps"
+    else:
+        result["available"] = True
+        result["reason"] = ""
+    return result
+
+
+def matched_pace_windows(sample_groups, now_ts=None):
+    """Build pairwise matched-pace comparisons for every dashboard history window."""
+    today = datetime.date.fromtimestamp(float(now_ts if now_ts is not None else time.time()))
+    windows = {"7": 7, "30": 30, "90": 90, "all": None}
+    result = {}
+    ids = sorted(sample_groups)
+    for window, days in windows.items():
+        cutoff = (today - datetime.timedelta(days=days - 1)).isoformat() if days else ""
+        groups = {
+            row_id: [sample for sample in sample_groups[row_id]
+                     if not cutoff or str(sample.get("day") or "") >= cutoff]
+            for row_id in ids
+        }
+        comparisons = []
+        for a_index, a_id in enumerate(ids):
+            for b_id in ids[a_index + 1:]:
+                comparisons.append(matched_pace_comparison(a_id, groups[a_id], b_id, groups[b_id]))
+        result[window] = comparisons
+    return {
+        "method": "nearest workload match on context, input, output, cache, model calls, tools, and recency",
+        "min_pairs": MATCHED_PACE_MIN_PAIRS,
+        "min_coverage": MATCHED_PACE_MIN_COVERAGE,
+        "windows": result,
+    }
+
+
 def _finalize_throughput_fields(row):
     """Add weighted speed and coverage fields to a model or model/day row."""
     tool_free_samples = int(row.get("tool_free_samples") or 0)
@@ -4174,21 +4434,47 @@ def _finalize_throughput_fields(row):
     row["avg_ttft_ms"] = (float(row.get("ttft_total_s") or 0) * 1000 / ttft_samples) if ttft_samples else 0
     wait_samples = int(row.get("wait_samples") or 0)
     row["avg_wait_s"] = (float(row.get("wait_seconds") or 0) / wait_samples) if wait_samples else 0
+    durations = sorted(
+        float(value) for value in (row.get("wait_durations_s") or [])
+        if float(value or 0) > 0
+    )
+    p95_index = min(len(durations) - 1, max(0, math.ceil(len(durations) * 0.95) - 1)) if durations else 0
+    row["median_wait_s"] = statistics.median(durations) if durations else 0
+    row["p95_wait_s"] = durations[p95_index] if durations else 0
+    workload_fields = {
+        "workload_peak_inputs": "median_peak_input_tokens",
+        "workload_outputs": "median_workload_output_tokens",
+        "workload_tool_calls": "median_tool_calls",
+        "workload_model_calls": "median_model_calls",
+        "workload_cache_ratios": "median_cache_ratio",
+    }
+    for source_key, target_key in workload_fields.items():
+        values = [float(value) for value in (row.get(source_key) or []) if float(value or 0) >= 0]
+        row[target_key] = statistics.median(values) if values else 0
     return row
 
 
 def aggregate_model_stats(session_rows):
-    """Aggregate exact model I/O and attributable performance timing across logs."""
+    """Aggregate model I/O by runtime and build workload-matched pace comparisons."""
     models = {}
+    pace_groups = defaultdict(list)
 
-    def model_row(name):
-        return models.setdefault(name or "unknown", {
-            "model": name or "unknown", "providers": set(), "logs": 0,
+    def model_row(name, runtime):
+        name = name or "unknown"
+        runtime = runtime or "unknown runtime"
+        row_id = f"{name}::{runtime}"
+        return models.setdefault(row_id, {
+            "id": row_id, "model": name, "runtime": runtime,
+            "providers": set(), "logs": 0,
             "executions": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
             "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0, "last_ts": 0, "daily": {},
             "wait_seconds": 0.0, "wait_samples": 0, "max_wait_s": 0.0,
+            "wait_durations_s": [], "user_pause_seconds": 0.0,
+            "workload_peak_inputs": [], "workload_outputs": [],
+            "workload_tool_calls": [], "workload_model_calls": [],
+            "workload_cache_ratios": [],
         })
 
     def daily_row(parent, day):
@@ -4199,12 +4485,17 @@ def aggregate_model_stats(session_rows):
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0,
             "wait_seconds": 0.0, "wait_samples": 0, "max_wait_s": 0.0,
+            "wait_durations_s": [], "user_pause_seconds": 0.0,
+            "workload_peak_inputs": [], "workload_outputs": [],
+            "workload_tool_calls": [], "workload_model_calls": [],
+            "workload_cache_ratios": [],
         })
 
     for session in session_rows or []:
         provider = session.get("provider") or "unknown"
+        runtime = session.get("runtime") or source_runtime_label(session)
         for stats in session.get("model_stats") or []:
-            row = model_row(stats.get("model"))
+            row = model_row(stats.get("model"), runtime)
             row["providers"].add(provider)
             row["logs"] += 1
             row["executions"] += int(stats.get("executions") or 0)
@@ -4215,14 +4506,14 @@ def aggregate_model_stats(session_rows):
             day = stats.get("day") or ""
             if not day:
                 continue
-            row = model_row(stats.get("model"))
+            row = model_row(stats.get("model"), runtime)
             row["providers"].add(provider)
             daily = daily_row(row, day)
             for key in ("input_tokens", "output_tokens", "executions"):
                 daily[key] += int(stats.get(key) or 0)
             daily["cost"] += float(stats.get("cost") or 0)
         for sample in session.get("_performance_samples") or []:
-            row = model_row(sample.get("model"))
+            row = model_row(sample.get("model"), runtime)
             row["providers"].add(provider)
             day = sample.get("day") or ""
             targets = [row]
@@ -4232,6 +4523,12 @@ def aggregate_model_stats(session_rows):
             duration_s = float(sample.get("duration_s") or 0)
             generation_s = float(sample.get("generation_s") or duration_s)
             ttft_s = float(sample.get("ttft_s") or 0)
+            input_tokens = int(sample.get("input_tokens") or 0)
+            peak_input_tokens = int(sample.get("peak_input_tokens") or input_tokens)
+            tool_calls = int(sample.get("tool_calls") or 0)
+            model_calls = max(1, int(sample.get("model_calls") or 1))
+            cache_read_tokens = int(sample.get("cache_read_tokens") or 0)
+            cache_ratio = min(1.0, cache_read_tokens / input_tokens) if input_tokens else 0.0
             for target in targets:
                 target["timed_output_tokens"] += output_tokens
                 target["timed_seconds"] += duration_s
@@ -4243,12 +4540,25 @@ def aggregate_model_stats(session_rows):
                 if ttft_s > 0:
                     target["ttft_total_s"] += ttft_s
                     target["ttft_samples"] += 1
+                target["workload_peak_inputs"].append(peak_input_tokens)
+                target["workload_outputs"].append(output_tokens)
+                target["workload_tool_calls"].append(tool_calls)
+                target["workload_model_calls"].append(model_calls)
+                target["workload_cache_ratios"].append(cache_ratio)
+            if duration_s > 0 and input_tokens > 0 and output_tokens > 0:
+                pace_groups[row["id"]].append({
+                    "day": day, "ts": float(sample.get("ts") or 0),
+                    "duration_s": duration_s, "input_tokens": input_tokens,
+                    "peak_input_tokens": peak_input_tokens,
+                    "output_tokens": output_tokens, "tool_calls": tool_calls,
+                    "model_calls": model_calls, "cache_read_tokens": cache_read_tokens,
+                })
             row["last_ts"] = max(float(row.get("last_ts") or 0), float(sample.get("ts") or 0))
         for sample in session.get("_wait_samples") or []:
             model = sample.get("model") or ""
             if not model or model in ("mixed", "unknown"):
                 continue
-            row = model_row(model)
+            row = model_row(model, runtime)
             row["providers"].add(provider)
             day = sample.get("day") or ""
             targets = [row]
@@ -4261,6 +4571,8 @@ def aggregate_model_stats(session_rows):
                 target["wait_seconds"] += duration_s
                 target["wait_samples"] += 1
                 target["max_wait_s"] = max(float(target.get("max_wait_s") or 0), duration_s)
+                target["wait_durations_s"].append(duration_s)
+                target["user_pause_seconds"] += float(sample.get("user_pause_s") or 0)
 
     result = []
     for row in models.values():
@@ -4271,12 +4583,17 @@ def aggregate_model_stats(session_rows):
         row["providers"] = sorted(row["providers"])
         row["daily"] = daily
         result.append(_finalize_throughput_fields(row))
-    result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"], row["model"]))
+    result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"], row["model"], row["runtime"]))
+    valid_ids = {row["id"] for row in result}
     return {
         "models": result,
         "total_models": len(result),
+        "total_model_names": len({row["model"] for row in result}),
         "first_day": min((day["day"] for row in result for day in row["daily"]), default=""),
         "last_day": max((day["day"] for row in result for day in row["daily"]), default=""),
+        "matched_pace": matched_pace_windows({
+            row_id: samples for row_id, samples in pace_groups.items() if row_id in valid_ids
+        }),
     }
 
 

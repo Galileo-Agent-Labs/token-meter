@@ -211,7 +211,8 @@ moment is already on screen the instant you stop. No second tool.
   pack identifiers before mutation, and report partial failures explicitly.
 - **FR19 Global guidance views** — open Global on an operational overview, add a
   date-selectable Daily summary from trace-backed day attribution, and provide a
-  Learn view with a practical workflow and searchable glossary.
+  Learn view with a practical workflow, a plain-language model-comparison
+  guide, and searchable glossary.
 - **FR20 Read-only agent access** — expose a local stdio MCP server named
   `tokenmeter` with exactly three tools: `check` for matched-current-run
   decisions, `usage` for anonymous aggregate history, and `capabilities` for
@@ -223,7 +224,7 @@ moment is already on screen the instant you stop. No second tool.
   collisions, and show restart guidance. A dismissible Current callout may
   provide one-time discovery and routes directly to Settings. Tools
   remains focused on capability evidence, optimization, and controls.
-- **FR22 Observed model throughput** — calculate weighted output tokens per
+- **FR22 Observed model output pace** — calculate weighted output tokens per
   measured second for completed trace windows. Prefer tool-free Claude turns
   and Codex tasks; for Codex tool-free work, subtract reported time to first
   token when it is valid. If only tool-bearing timing exists, label the result
@@ -231,12 +232,21 @@ moment is already on screen the instant you stop. No second tool.
   unavailable, not zero. The numerator includes trace-reported reasoning and
   thinking output but excludes input, cache, and external tool-result tokens;
   the UI must disclose this in an accessible tooltip.
-- **FR23 Models history** — provide a first-class top-level view with
-  per-model input, output, cost, executions, output per execution, timing basis,
-  timing coverage, weighted output throughput, daily speed/volume history, and
-  equal-window speed comparison. Model and 7/30/90-day/all-history filters must
-  persist locally and recompute every displayed aggregate from the same daily
-  rows.
+- **FR23 Models history and matched pace** — provide a first-class top-level
+  view whose rows are keyed by model plus trace runtime, keeping Claude Code,
+  standard Claude Desktop, Claude-3P, and Codex timing separate. Retain input,
+  output, cost, executions, timing basis, coverage, output pace, typical wait,
+  typical workload, and daily pace/volume history. When exactly two runtimes are
+  selected, match completed turns on trace-backed peak context, cumulative
+  input, output, cache-read share, model-call count, tool shape, and recency;
+  report a median end-to-end pace ratio with a deterministic bootstrap 95%
+  confidence interval. Require at least 20 pairs and 30% coverage of the
+  smaller history, otherwise explain why the comparison is unavailable. Model
+  and 7/30/90-day/all-history filters must persist locally. Legacy model-only
+  filters migrate to that model's dominant runtime row. KPI labels, timing
+  coverage, and table columns must expose keyboard-focusable
+  explanations of runtime identity, scope, provenance, thresholds, and metric
+  limitations.
 - **FR24 Frustration signals** — count a human user turn once when it contains
   one or more configured case-insensitive whole terms, report both matched
   utterances and raw term hits, and divide utterances by human user turns for
@@ -252,11 +262,13 @@ moment is already on screen the instant you stop. No second tool.
 - **FR26 Wait time** — measure one completed user request from prompt/task start
   through the completed response as end-to-end wall-clock time. Reasoning and
   tool use count because the user is still waiting; gaps between requests do
-  not. Preserve reported provider duration when available and label timestamp
-  fallback as observed. Show cumulative, average, longest, and sample-count
-  evidence where appropriate across Current, Logs, Global, Models, and Daily.
-  Provide request-level, model/day, and daily trend charts without conflating
-  wait time with output-token throughput.
+  not, and trace-visible spans where the agent explicitly waits for human input
+  must be excluded from observed timing. Preserve reported provider duration
+  when available and label timestamp fallback as observed. Show cumulative,
+  median, average, p95, longest, and sample-count evidence where appropriate
+  across Current, Logs, Global, Models, and Daily. Use median as the primary
+  typical-wait comparison in Models. Provide request-level, model/day, and
+  daily trend charts without conflating wait time with output-token throughput.
 
 ## 5. Non-functional requirements
 
@@ -275,10 +287,13 @@ moment is already on screen the instant you stop. No second tool.
   processed by that client's model provider.
 - **NFR7 Read-only and on demand** — agent tools cannot mutate configuration,
   stop a run, or change budgets, and they do not imply continuous monitoring.
-- **NFR8 Honest performance semantics** — call the metric observed output
-  throughput, not raw provider decode speed. Disclose sparse sample coverage,
+- **NFR8 Honest performance semantics** — call the raw metric observed output
+  pace, not provider decode speed. Disclose sparse sample coverage,
   distinguish tool-free from end-to-end timing, and aggregate tokens divided by
-  seconds rather than averaging per-execution rates.
+  seconds rather than averaging per-execution rates. Treat matched pace as an
+  observational workload comparison, not proof of equal semantic difficulty;
+  show its overlap, sample count, and confidence interval and withhold weak
+  verdicts.
 - **NFR9 Honest wait semantics** — define wait as prompt-to-completed-response
   wall time, disclose that cross-log totals are cumulative agent wait rather
   than de-duplicated human time, and leave missing completed timing unavailable
@@ -785,19 +800,74 @@ message text is not included in the frustration payload.
 
 Wait time is the end-to-end wall clock from a user prompt or task start until
 the completed response. It deliberately includes model reasoning, tool calls,
-and tool execution. Output speed remains a separate output-token throughput
-metric and can still prefer tool-free generation timing.
+and tool execution. Trace-visible pauses after an explicit human-input tool are
+removed because the agent is waiting for the user during that span. Output
+pace remains a separate output-token throughput metric and can still prefer
+tool-free generation timing.
 
 Claude uses `turn_duration.durationMs` when present and otherwise falls back to
 the observed human-prompt-to-final-assistant span. Claude tool-result messages
-do not begin new waits, and split assistant records are deduplicated by message
-identity. Codex uses `task_complete.duration_ms`, with an observed task-start
-fallback when the completion exists without a reported duration. Incomplete
-requests do not become completed wait samples.
+do not begin new waits. For observed Claude spans, time between an
+`AskUserQuestion` or `request_user_input` call and its matching result is
+excluded. Split assistant records are deduplicated by message identity. Codex
+uses `task_complete.duration_ms`, with an observed task-start fallback when the
+completion exists without a reported duration. Incomplete requests do not
+become completed wait samples.
 
 Current shows cumulative wait plus a request-level chart. Logs adds filtered
 wait totals and Wait sorting. Global shows cumulative agent wait with an
-explicit parallel-overlap caveat. Models compares average wait by model and
-switches its daily line between output speed and average wait. Daily reports
-total and average completed-request wait and switches its trend between Spend
-and Wait.
+explicit parallel-overlap caveat. Models compares typical wait by model and
+switches its daily line between output throughput and median wait. The Models
+KPI and table lead with median typical wait while retaining average, p95,
+longest, and excluded-human-pause evidence. Daily reports total and average
+completed-request wait and switches its trend between Spend and Wait.
+
+---
+
+## 19. v11 — workload-matched model pace (2026-07-13)
+
+The Models view no longer uses an adjacent-window output-speed delta as its
+headline comparison. That statistic changed with context size, output length,
+tool mix, and which runtime produced the trace. The replacement is a pairwise
+matched-pace metric over completed turns.
+
+Performance samples retain peak and cumulative input, cache-read and
+cache-write tokens, output, model-call count, tool-call count, duration, model,
+date, and runtime. Runtime identity is part of the row key: the same model on
+Claude Code and Claude-3P produces two rows. Output pace remains visible but is
+explicitly secondary because Codex can expose TTFT while current Claude traces
+cannot.
+
+For two selected model runtimes, matching requires the same tool-free/tool-
+bearing shape and bounded distance across context, total input, output, cache
+share, model calls, tools, and recency. Candidate pairs are ordered by workload
+distance and matched without replacement. The displayed ratio is the median of
+paired end-to-end duration ratios, with a deterministic bootstrap 95%
+confidence interval. If the interval crosses parity, the UI reports
+approximately the same rather than declaring a winner. Fewer than 20 pairs or
+less than 30% smaller-history coverage yields an unavailable verdict with the
+reason shown. This reduces observable task-mix bias but does not infer semantic
+complexity or response quality.
+
+---
+
+## 20. v12 — model comparison guidance (2026-07-13)
+
+The Models view makes metric semantics discoverable without adding permanent
+explanatory prose to every card. KPI labels, timing coverage, and table columns
+expose the existing hover/focus tooltip pattern; Models and History remain plain
+control labels. Tooltips explain runtime separation, filter scope, token provenance,
+median versus average wait, matching thresholds, confidence intervals, and why
+observed output pace is secondary. All `.fieldtip` help uses the custom tooltip
+only; native `title` attributes are removed at startup and omitted from dynamic
+help to avoid a second delayed browser tooltip anywhere in the dashboard.
+Dense cards elevate on hover or keyboard focus so tooltip content is not
+clipped by adjacent cards.
+
+Learn includes a four-step model-comparison guide: select two exact runtime
+histories, read matched pace first, check pair count/coverage/confidence, then
+use observed tok/s only as a diagnostic. It explicitly states that measurable
+workload matching cannot prove equal semantic difficulty and that sparse
+history yields no verdict. The searchable glossary now defines matched pace,
+match coverage, confidence interval, model runtime, observed output pace,
+typical workload, and typical wait.

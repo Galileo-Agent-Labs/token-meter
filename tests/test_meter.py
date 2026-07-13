@@ -106,6 +106,30 @@ class WaitTimeTests(unittest.TestCase):
         self.assertEqual(sample["output_tokens"], 40)
         self.assertEqual(sample["model"], "gpt-5.6")
 
+    def test_claude_observed_wait_excludes_time_waiting_for_user_input(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-13T00:00:00.000Z",
+             "message": {"content": "start"}},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:10.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8", "stop_reason": "tool_use",
+                "usage": {"input_tokens": 20, "output_tokens": 10},
+                "content": [{"type": "tool_use", "id": "question-1", "name": "AskUserQuestion"}],
+            }},
+            {"type": "user", "timestamp": "2026-07-13T00:01:40.000Z", "message": {
+                "content": [{"type": "tool_result", "tool_use_id": "question-1", "content": "answer"}],
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:01:50.000Z", "message": {
+                "id": "msg-2", "model": "claude-opus-4-8", "stop_reason": "end_turn",
+                "usage": {"input_tokens": 25, "output_tokens": 20},
+                "content": [{"type": "text", "text": "finished"}],
+            }},
+        ]
+        sample = meter.claude_wait_samples(objs)[0]
+        self.assertEqual(sample["wall_duration_s"], 110)
+        self.assertEqual(sample["user_pause_s"], 90)
+        self.assertEqual(sample["duration_s"], 20)
+        self.assertEqual(meter.wait_time_summary([sample])["user_pause_s"], 90)
+
     def test_wait_summary_reports_average_p95_and_longest(self):
         summary = meter.wait_time_summary([
             {"duration_s": 2, "timing_basis": "reported"},
@@ -135,6 +159,8 @@ class ModelPerformanceTests(unittest.TestCase):
         summary = meter.performance_summary(samples, 10)
         self.assertEqual(len(samples), 1)
         self.assertEqual(samples[0]["tool_calls"], 0)
+        self.assertEqual(samples[0]["peak_input_tokens"], 20)
+        self.assertEqual(samples[0]["model_calls"], 1)
         self.assertEqual(summary["basis"], "tool_free")
         self.assertEqual(summary["output_tps"], 5)
 
@@ -169,6 +195,29 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(samples[0]["tool_calls"], 1)
         self.assertEqual(meter.performance_summary(samples, 50)["output_tps"], 5)
 
+    def test_claude_observed_throughput_excludes_user_input_pause(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-13T00:00:00.000Z",
+             "message": {"content": "start"}},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:10.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8", "stop_reason": "tool_use",
+                "usage": {"input_tokens": 20, "output_tokens": 10},
+                "content": [{"type": "tool_use", "id": "question-1", "name": "AskUserQuestion"}],
+            }},
+            {"type": "user", "timestamp": "2026-07-13T00:01:40.000Z", "message": {
+                "content": [{"type": "tool_result", "tool_use_id": "question-1", "content": "answer"}],
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:01:50.000Z", "message": {
+                "id": "msg-2", "model": "claude-opus-4-8", "stop_reason": "end_turn",
+                "usage": {"input_tokens": 25, "output_tokens": 20},
+                "content": [{"type": "text", "text": "finished"}],
+            }},
+        ]
+        sample = meter.claude_performance_samples(objs)[0]
+        self.assertEqual(sample["wall_duration_s"], 110)
+        self.assertEqual(sample["user_pause_s"], 90)
+        self.assertEqual(sample["duration_s"], 20)
+
     def test_codex_tool_free_speed_excludes_time_to_first_token(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
@@ -187,6 +236,10 @@ class ModelPerformanceTests(unittest.TestCase):
         samples = meter.codex_performance_samples(objs, "gpt-5.6")
         summary = meter.performance_summary(samples, 100)
         self.assertEqual(samples[0]["generation_s"], 8)
+        self.assertEqual(samples[0]["peak_input_tokens"], 200)
+        self.assertEqual(samples[0]["cache_read_tokens"], 50)
+        self.assertEqual(samples[0]["uncached_input_tokens"], 150)
+        self.assertEqual(samples[0]["model_calls"], 1)
         self.assertEqual(summary["output_tps"], 12.5)
         self.assertEqual(summary["avg_ttft_ms"], 2000)
 
@@ -237,6 +290,9 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(row["daily"][0]["input_tokens"], 300)
         self.assertEqual(row["daily"][0]["throughput_samples"], 2)
         self.assertEqual(row["avg_wait_s"], 10)
+        self.assertEqual(row["median_wait_s"], 10)
+        self.assertEqual(row["p95_wait_s"], 12)
+        self.assertEqual(row["daily"][0]["wait_durations_s"], [8, 12])
         self.assertEqual(row["daily"][0]["max_wait_s"], 12)
 
     def test_tool_free_speed_coverage_counts_only_selected_output(self):
@@ -256,6 +312,79 @@ class ModelPerformanceTests(unittest.TestCase):
         }])
         self.assertEqual(result["models"], [])
         self.assertEqual(result["total_models"], 0)
+
+    def test_model_aggregation_splits_same_model_by_runtime(self):
+        def session(runtime, output):
+            return {
+                "provider": "claude", "runtime": runtime,
+                "model_stats": [{"model": "claude-opus", "cost": 1, "tokens": 100,
+                                 "input_tokens": 90, "output_tokens": output, "executions": 1}],
+                "_model_daily": [], "_performance_samples": [], "_wait_samples": [],
+            }
+        result = meter.aggregate_model_stats([
+            session("Claude Code", 10), session("Claude-3P", 20),
+        ])
+        self.assertEqual(len(result["models"]), 2)
+        self.assertEqual(
+            {(row["model"], row["runtime"], row["id"]) for row in result["models"]},
+            {
+                ("claude-opus", "Claude Code", "claude-opus::Claude Code"),
+                ("claude-opus", "Claude-3P", "claude-opus::Claude-3P"),
+            },
+        )
+
+    def test_runtime_label_distinguishes_claude_desktop_roots(self):
+        standard = {
+            "provider": "claude", "client": "claude_desktop",
+            "metadata_path": str(Path(meter.CLAUDE_DESKTOP_DATA_ROOTS[0]) / "sessions" / "one.json"),
+        }
+        third_party = {
+            "provider": "claude", "client": "claude_desktop",
+            "metadata_path": str(Path(meter.CLAUDE_DESKTOP_DATA_ROOTS[1]) / "sessions" / "two.json"),
+        }
+        self.assertEqual(meter.source_runtime_label(standard), "Claude Desktop")
+        self.assertEqual(meter.source_runtime_label(third_party), "Claude-3P")
+        self.assertEqual(meter.source_runtime_label({"provider": "claude", "client": "claude_code"}),
+                         "Claude Code")
+        self.assertEqual(meter.source_runtime_label({"provider": "codex"}), "Codex")
+
+    def test_matched_pace_reports_ratio_confidence_and_coverage(self):
+        def sample(duration, ts):
+            return {
+                "duration_s": duration, "ts": ts, "day": "2026-07-13",
+                "input_tokens": 100000, "peak_input_tokens": 50000,
+                "cache_read_tokens": 70000, "output_tokens": 2000,
+                "tool_calls": 4, "model_calls": 3,
+            }
+        left = [sample(10, index * 60) for index in range(24)]
+        right = [sample(20, index * 60 + 1) for index in range(24)]
+        comparison = meter.matched_pace_comparison("left", left, "right", right)
+        self.assertTrue(comparison["available"])
+        self.assertEqual(comparison["matched_pairs"], 24)
+        self.assertEqual(comparison["coverage"], 1)
+        self.assertEqual(comparison["pace_ratio"], 2)
+        self.assertEqual(comparison["ci_low"], 2)
+        self.assertEqual(comparison["ci_high"], 2)
+
+    def test_matched_pace_withholds_sparse_or_different_tool_shapes(self):
+        base = {
+            "duration_s": 10, "ts": 1, "day": "2026-07-13",
+            "input_tokens": 10000, "peak_input_tokens": 10000,
+            "output_tokens": 1000, "model_calls": 1, "cache_read_tokens": 0,
+        }
+        sparse = meter.matched_pace_comparison(
+            "a", [{**base, "tool_calls": 0}] * 19,
+            "b", [{**base, "tool_calls": 0}] * 19,
+        )
+        different = meter.matched_pace_comparison(
+            "a", [{**base, "tool_calls": 0}] * 20,
+            "b", [{**base, "tool_calls": 1}] * 20,
+        )
+        self.assertFalse(sparse["available"])
+        self.assertIn("20 timed turns", sparse["reason"])
+        self.assertFalse(different["available"])
+        self.assertEqual(different["matched_pairs"], 0)
+        self.assertIn("comparable turns", different["reason"])
 
 
 class FrustrationSignalTests(unittest.TestCase):
@@ -529,18 +658,24 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
         self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
         self.assertNotIn("Timing evidence", self.page)
-        self.assertIn("Hover a value for timing basis, samples, and coverage.", self.page)
+        self.assertIn("Observed output pace is a secondary diagnostic.", self.page)
         self.assertIn("colspan=8", self.page)
 
     def test_model_stats_supports_multi_model_comparison(self):
         for marker in (
             "id=m-model-picker", "id=m-model-options", "id=m-model-summary",
             "tm_model_filters", "MODEL_COLORS", "buildModelTrend",
-            "bars show output", "lines show tok/s", "id=m-legend",
+            "bars show output", "observed tok/s", "id=m-legend",
             "modelTipMetrics", "<small>input</small>", "<small>executions</small>",
+            "Typical wait", "median wait", "human pause excluded",
+            "modelWaitDistribution", "wait_durations_s", "p95_wait_s",
+            "Matched pace", "renderMatchedPace", "modelRuntimeLabel",
+            "migrateModelRuntimeFilters", "Typical workload", "median_peak_input_tokens",
+            "95% CI", "select exactly two model runtimes", "TTFT unavailable",
         ):
             self.assertIn(marker, self.page)
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
+        self.assertNotIn("Speed change", self.page)
 
     def test_wait_time_is_first_class_across_current_logs_global_models_and_daily(self):
         for marker in (
@@ -685,6 +820,36 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("Should I keep this run going?", self.page)
         self.assertIn("Why was the last phase expensive?", self.page)
         self.assertIn("What should I change before the next phase?", self.page)
+
+    def test_model_comparison_has_tooltips_and_learn_guidance(self):
+        for marker in (
+            "modelHelp", "id=m-coverage", 'aria-label="Output timing coverage"',
+            "same model can appear more than once",
+            "A ratio above 1 favors the named faster runtime",
+            "The median is primary because the average can be pulled upward",
+            "id=learn-model-guide", "Compare model speed without fooling yourself",
+            "Select two model runtimes", "Read matched pace first",
+            "Check coverage and uncertainty", "Treat tok/s as diagnostic",
+            "What matching cannot prove", "data-learn-route=models",
+            "Confidence interval", "Match coverage", "Matched pace",
+            "Model runtime", "Observed output pace", "Typical workload",
+            "Typical wait", "semantic difficulty", "less than 30% coverage",
+            "The 95% confidence interval crosses 1.00",
+            "$('m-coverage').setAttribute('aria-valuenow'",
+            "stripNativeFieldTipTitles", "removeAttribute('title')",
+            "aria-description",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn('<div class=filterControl><span>Models</span>', self.page)
+        self.assertIn('<label class=filterControl><span>History</span>', self.page)
+        self.assertNotIn("Select model-runtime histories, not just model names.", self.page)
+        self.assertNotIn("Limits tokens, executions, workload summaries", self.page)
+
+    def test_custom_fieldtips_remove_delayed_native_tooltips_globally(self):
+        self.assertIn("root.querySelectorAll('.fieldtip[title]')", self.page)
+        self.assertIn("stripNativeFieldTipTitles();", self.page)
+        self.assertIn('return `class=fieldtip tabindex=0 aria-description="${safe}" data-tip="${safe}"`', self.page)
+        self.assertNotIn('return `class=fieldtip tabindex=0 title="${safe}"', self.page)
 
     def test_daily_omits_tool_result_health_and_uses_the_logs_open_path(self):
         self.assertNotIn("Tool-result health", self.page)

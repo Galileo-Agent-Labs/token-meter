@@ -50,6 +50,75 @@ class ExecutionTimingTests(unittest.TestCase):
         self.assertEqual(timing["basis"], "reported + observed")
 
 
+class WaitTimeTests(unittest.TestCase):
+    def test_claude_wait_is_prompt_to_completion_and_dedupes_split_messages(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-13T00:00:00.000Z",
+             "message": {"content": "do the work"}},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:02.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": "working"}],
+                "usage": {"input_tokens": 20, "output_tokens": 30}, "stop_reason": "tool_use",
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:03.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "tool_use", "id": "tool-1", "name": "Read"}],
+                "usage": {"input_tokens": 20, "output_tokens": 30}, "stop_reason": "tool_use",
+            }},
+            {"type": "user", "timestamp": "2026-07-13T00:00:04.000Z", "message": {
+                "content": [{"type": "tool_result", "tool_use_id": "tool-1", "content": "done"}],
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:09.000Z", "message": {
+                "id": "msg-2", "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": "finished"}],
+                "usage": {"input_tokens": 25, "output_tokens": 20}, "stop_reason": "end_turn",
+            }},
+            {"type": "system", "subtype": "turn_duration",
+             "timestamp": "2026-07-13T00:00:10.000Z", "durationMs": 10000},
+        ]
+        samples = meter.claude_wait_samples(objs)
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]["duration_s"], 10)
+        self.assertEqual(samples[0]["tool_calls"], 1)
+        self.assertEqual(samples[0]["output_tokens"], 50)
+        self.assertEqual(samples[0]["timing_basis"], "reported")
+
+    def test_codex_wait_uses_reported_duration_and_includes_tool_time(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-13T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-13T00:00:00.000Z", "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-13T00:00:02.000Z", "payload": {
+                "type": "function_call", "name": "exec_command", "call_id": "call-1",
+            }},
+            {"timestamp": "2026-07-13T00:00:08.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "output_tokens": 40, "total_tokens": 140,
+                }},
+            }},
+            {"timestamp": "2026-07-13T00:00:10.000Z", "payload": {
+                "type": "task_complete", "duration_ms": 10000,
+            }},
+        ]
+        sample = meter.codex_wait_samples(objs)[0]
+        self.assertEqual(sample["duration_s"], 10)
+        self.assertEqual(sample["tool_calls"], 1)
+        self.assertEqual(sample["output_tokens"], 40)
+        self.assertEqual(sample["model"], "gpt-5.6")
+
+    def test_wait_summary_reports_average_p95_and_longest(self):
+        summary = meter.wait_time_summary([
+            {"duration_s": 2, "timing_basis": "reported"},
+            {"duration_s": 6, "timing_basis": "observed"},
+            {"duration_s": 10, "timing_basis": "reported"},
+        ])
+        self.assertEqual(summary["total_s"], 18)
+        self.assertEqual(summary["avg_s"], 6)
+        self.assertEqual(summary["median_s"], 6)
+        self.assertEqual(summary["p95_s"], 10)
+        self.assertEqual(summary["max_s"], 10)
+
+
 class ModelPerformanceTests(unittest.TestCase):
     def test_claude_tool_free_turn_uses_reported_turn_duration(self):
         objs = [
@@ -68,6 +137,37 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(samples[0]["tool_calls"], 0)
         self.assertEqual(summary["basis"], "tool_free")
         self.assertEqual(summary["output_tps"], 5)
+
+    def test_claude_desktop_uses_observed_turn_timing_without_duration_records(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-13T00:00:00.000Z",
+             "message": {"content": "inspect the project"}},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:02.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": "checking"}],
+                "usage": {"input_tokens": 20, "output_tokens": 30}, "stop_reason": "tool_use",
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:04.000Z", "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "tool_use", "id": "tool-1", "name": "Read"}],
+                "usage": {"input_tokens": 20, "output_tokens": 30}, "stop_reason": "tool_use",
+            }},
+            {"type": "user", "timestamp": "2026-07-13T00:00:05.000Z", "message": {
+                "content": [{"type": "tool_result", "tool_use_id": "tool-1", "content": "done"}],
+            }},
+            {"type": "assistant", "timestamp": "2026-07-13T00:00:10.000Z", "message": {
+                "id": "msg-2", "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": "finished"}],
+                "usage": {"input_tokens": 25, "output_tokens": 20}, "stop_reason": "end_turn",
+            }},
+        ]
+        samples = meter.claude_performance_samples(objs)
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]["timing_basis"], "observed")
+        self.assertEqual(samples[0]["duration_s"], 10)
+        self.assertEqual(samples[0]["output_tokens"], 50)
+        self.assertEqual(samples[0]["tool_calls"], 1)
+        self.assertEqual(meter.performance_summary(samples, 50)["output_tps"], 5)
 
     def test_codex_tool_free_speed_excludes_time_to_first_token(self):
         objs = [
@@ -125,6 +225,10 @@ class ModelPerformanceTests(unittest.TestCase):
                 {"model": "gpt-5.6", "day": "2026-07-01", "ts": 20,
                  "output_tokens": 20, "duration_s": 5, "generation_s": 3, "tool_calls": 0},
             ],
+            "_wait_samples": [
+                {"model": "gpt-5.6", "day": "2026-07-01", "duration_s": 8},
+                {"model": "gpt-5.6", "day": "2026-07-01", "duration_s": 12},
+            ],
         }]
         result = meter.aggregate_model_stats(sessions)
         row = result["models"][0]
@@ -132,6 +236,8 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(row["timing_coverage"], 1)
         self.assertEqual(row["daily"][0]["input_tokens"], 300)
         self.assertEqual(row["daily"][0]["throughput_samples"], 2)
+        self.assertEqual(row["avg_wait_s"], 10)
+        self.assertEqual(row["daily"][0]["max_wait_s"], 12)
 
     def test_tool_free_speed_coverage_counts_only_selected_output(self):
         summary = meter.performance_summary([
@@ -424,7 +530,28 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
         self.assertNotIn("Timing evidence", self.page)
         self.assertIn("Hover a value for timing basis, samples, and coverage.", self.page)
-        self.assertIn("colspan=7", self.page)
+        self.assertIn("colspan=8", self.page)
+
+    def test_model_stats_supports_multi_model_comparison(self):
+        for marker in (
+            "id=m-model-picker", "id=m-model-options", "id=m-model-summary",
+            "tm_model_filters", "MODEL_COLORS", "buildModelTrend",
+            "bars show output", "lines show tok/s", "id=m-legend",
+            "modelTipMetrics", "<small>input</small>", "<small>executions</small>",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
+
+    def test_wait_time_is_first_class_across_current_logs_global_models_and_daily(self):
+        for marker in (
+            "data-chart=wait", "drawWaitChart", "id=g-wait", "data-gsort=wait",
+            "id=lf-wait", "id=m-wait", "id=m-metric", "data-model-metric=wait",
+            "id=d-wait", "id=d-trend-mode", "data-daily-trend=wait",
+            "Prompt-to-completed-response", "lower is better",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("wait_time?.total_s", self.page)
+        self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
     def test_frustration_is_a_first_class_route_with_global_settings(self):
         for marker in (
@@ -582,6 +709,14 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertTrue(meter.TokenMeterHTTPServer.daemon_threads)
         self.assertGreaterEqual(meter.TokenMeterHTTPServer.request_queue_size, 32)
 
+    def test_dynamic_responses_cannot_be_reused_from_an_http_cache(self):
+        handler = mock.Mock()
+        meter.H._send(handler, "{}", "application/json")
+
+        handler.send_header.assert_any_call("Cache-Control", "no-store, max-age=0")
+        handler.send_header.assert_any_call("Pragma", "no-cache")
+        handler.send_header.assert_any_call("Expires", "0")
+
 
 class MenubarSourceTests(unittest.TestCase):
     @classmethod
@@ -609,6 +744,11 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertNotIn('addMetricRow("Status"', self.source)
         self.assertNotIn('label("Now"', self.source)
         self.assertNotIn('label("Action"', self.source)
+
+    def test_live_polling_bypasses_cached_menubar_responses(self):
+        self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
+        self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")', self.source)
+        self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Pragma")', self.source)
 
 
 class MenubarSessionTests(unittest.TestCase):
@@ -1269,9 +1409,14 @@ class DailySummaryTests(unittest.TestCase):
     def test_aggregates_daily_spend_providers_and_logs(self):
         sessions = [
             {"id": "one", "title": "One", "project": "/repo/a", "provider": "codex",
-             "label": "Codex", "_day_cost": {"2026-07-01": 1.25}},
+             "label": "Codex", "_day_cost": {"2026-07-01": 1.25},
+             "_wait_samples": [
+                 {"day": "2026-07-01", "duration_s": 20},
+                 {"day": "2026-07-01", "duration_s": 40},
+             ]},
             {"id": "two", "title": "Two", "project": "/repo/b", "provider": "claude",
-             "label": "Claude Code", "_day_cost": {"2026-07-01": 0.75, "2026-06-30": 0.5}},
+             "label": "Claude Code", "_day_cost": {"2026-07-01": 0.75, "2026-06-30": 0.5},
+             "_wait_samples": [{"day": "2026-07-01", "duration_s": 30}]},
         ]
         days = meter.daily_summaries(sessions)
         self.assertEqual(days[0]["day"], "2026-07-01")
@@ -1280,7 +1425,12 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual(days[0]["projects"], 2)
         self.assertNotIn("tool_tokens", days[0])
         self.assertNotIn("flagged_tokens", days[0])
-        self.assertEqual(days[0]["providers"][0], {"provider": "codex", "cost": 1.25})
+        self.assertEqual(days[0]["providers"][0], {
+            "provider": "codex", "cost": 1.25, "wait_s": 60.0, "wait_samples": 2,
+        })
+        self.assertEqual(days[0]["wait_time"]["total_s"], 90)
+        self.assertEqual(days[0]["wait_time"]["avg_s"], 30)
+        self.assertEqual(days[0]["wait_time"]["max_s"], 40)
 
 
 if __name__ == "__main__":

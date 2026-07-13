@@ -249,6 +249,14 @@ moment is already on screen the instant you stop. No second tool.
   that opens with Command/Ctrl+K, supports arrow-key selection, Enter, Escape,
   and direct Option/Alt+1–9 navigation without firing inside editable fields.
   Current must retain its existing return-to-live behavior.
+- **FR26 Wait time** — measure one completed user request from prompt/task start
+  through the completed response as end-to-end wall-clock time. Reasoning and
+  tool use count because the user is still waiting; gaps between requests do
+  not. Preserve reported provider duration when available and label timestamp
+  fallback as observed. Show cumulative, average, longest, and sample-count
+  evidence where appropriate across Current, Logs, Global, Models, and Daily.
+  Provide request-level, model/day, and daily trend charts without conflating
+  wait time with output-token throughput.
 
 ## 5. Non-functional requirements
 
@@ -271,6 +279,10 @@ moment is already on screen the instant you stop. No second tool.
   throughput, not raw provider decode speed. Disclose sparse sample coverage,
   distinguish tool-free from end-to-end timing, and aggregate tokens divided by
   seconds rather than averaging per-execution rates.
+- **NFR9 Honest wait semantics** — define wait as prompt-to-completed-response
+  wall time, disclose that cross-log totals are cumulative agent wait rather
+  than de-duplicated human time, and leave missing completed timing unavailable
+  instead of rendering it as zero.
 
 ---
 
@@ -766,3 +778,26 @@ local action token as other dashboard mutations, clears cached session
 summaries, and republishes the recalculated cross-session snapshot. Parser
 events retain timestamps, model identity, and aggregate matches only; raw user
 message text is not included in the frustration payload.
+
+---
+
+## 18. v10 — wait time (2026-07-13)
+
+Wait time is the end-to-end wall clock from a user prompt or task start until
+the completed response. It deliberately includes model reasoning, tool calls,
+and tool execution. Output speed remains a separate output-token throughput
+metric and can still prefer tool-free generation timing.
+
+Claude uses `turn_duration.durationMs` when present and otherwise falls back to
+the observed human-prompt-to-final-assistant span. Claude tool-result messages
+do not begin new waits, and split assistant records are deduplicated by message
+identity. Codex uses `task_complete.duration_ms`, with an observed task-start
+fallback when the completion exists without a reported duration. Incomplete
+requests do not become completed wait samples.
+
+Current shows cumulative wait plus a request-level chart. Logs adds filtered
+wait totals and Wait sorting. Global shows cumulative agent wait with an
+explicit parallel-overlap caveat. Models compares average wait by model and
+switches its daily line between output speed and average wait. Daily reports
+total and average completed-request wait and switches its trend between Spend
+and Wait.

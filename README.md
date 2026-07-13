@@ -12,6 +12,8 @@ It helps answer questions such as:
 - How much have I spent on this project in the last week?
 - Is token output getting faster or slower over time, and how does that compare
   across models?
+- How long am I waiting from prompt to completed response, and which models or
+  days make that wait worse?
 - Which loaded tools or skills am I not using, and which user-installed skill
   packs should I review for disabling?
 - What do the cost, token, execution, and speed numbers look like for each
@@ -78,9 +80,11 @@ For source installs that should start automatically, see [Launch At Login](#laun
 ### 1. Follow The Current Run
 
 Start on **Current** while an agent is working. The top cards show estimated
-cost, input/output/thinking tokens, tool-result volume, and cache behavior. Use
+cost, prompt-to-response wait time, input/output/thinking tokens, tool-result
+volume, and cache behavior. Use
 **Execution Overview** and the chart below it to spot context growth, expensive
-executions, or unusually large tool results before deciding whether to continue.
+executions, long waits, or unusually large tool results before deciding whether
+to continue.
 
 <p align="center">
   <img src="images/dashboard.png" alt="Token Meter Current view with live cost, token, context, and execution metrics" width="900">
@@ -89,7 +93,8 @@ executions, or unusually large tool results before deciding whether to continue.
 ### 2. See All Apps In One View
 
 Open **Global** to combine local Claude and Codex history in one place. Compare
-token consumption and estimated spend by runtime and model, see the 14-day
+token consumption, estimated spend, and cumulative wait time by runtime and
+model, see the 14-day
 trend, and jump directly to the highest-cost logs or review candidates. This is
 the cross-app view for answering what you used, where you used it, and what
 deserves attention next.
@@ -101,8 +106,9 @@ deserves attention next.
 ### 3. Find Expensive Or Noisy Logs
 
 Open **Logs** to search by title, project, model, or provider. Project and time
-filters recalculate the cost, token, execution, and model summaries above the
-list. Sort by cost or tokens to find the runs worth reviewing first; opening a
+filters recalculate the cost, token, execution, wait-time, and model summaries
+above the list. Sort by cost, tokens, or wait time to find the runs worth
+reviewing first; opening a
 row preserves that run as a frozen view, while Delete moves only its JSONL log
 to macOS Trash after confirmation.
 
@@ -114,8 +120,8 @@ to macOS Trash after confirmation.
 
 Open **Daily** to inspect a recorded local day. The brief compares spend with
 the previous day and recent pace, identifies the largest cost driver, and breaks
-the day down by project, runtime, and highest-cost logs. Select any day in the
-trend to see what changed.
+the day down by project, runtime, highest-cost logs, and completed request wait.
+Switch the trend between Spend and Wait, then select any day to see what changed.
 
 <p align="center">
   <img src="images/daily.png" alt="Token Meter Daily brief with spend trend, day-over-day comparison, highest-cost logs, and Claude versus Codex runtime split" width="900">
@@ -190,11 +196,14 @@ Latest** to resume automatic switching.
   back to labeled end-to-end timing when tools are involved, and never turns
   missing timing into a zero-speed claim. It includes trace-reported reasoning
   and thinking output, while excluding input, cache, and external tool results.
+- **Wait time**: measures wall-clock time from a user prompt until the completed
+  response. It includes reasoning and tool use because the user is still
+  waiting. Current shows per-request history, Logs and Global show cumulative
+  wait, and Models plus Daily provide average-wait comparisons and trends.
 - **Models view**: aggregates model input, output, cost, executions,
-  output per execution, timing coverage, and output speed across 7-, 30-, and
-  90-day or all-history windows. A daily speed/volume chart and equal-window
-  comparison make slowdowns and speedups visible without averaging per-run
-  rates incorrectly.
+  output per execution, timing coverage, output speed, and average wait across
+  7-, 30-, and 90-day or all-history windows. The daily chart switches between
+  speed and wait while retaining output volume for context.
 - **Frustration signals**: counts user turns containing configurable whole
   terms, reports matched utterances and their share of human user turns, and
   compares sessions and models across daily, weekly, 7-, 30-, 90-day, or
@@ -209,16 +218,17 @@ Latest** to resume automatic switching.
   volume, and execution so large tool outputs are easy to spot.
 - **Efficiency signals**: highlights reasoning share, tool/retrieval bloat,
   coordination tax, cost per task, context pressure, and spend anomalies.
-- **Global view**: summarizes local spend across logs, model mix, provider mix,
-  trend, anomalies, review priorities, expensive logs, and trace-backed tool
-  waste across sessions.
+- **Global view**: summarizes local spend and cumulative completed-request wait
+  across logs, model mix, provider mix, trend, anomalies, review priorities,
+  expensive logs, and trace-backed tool waste across sessions.
 - **Logs view**: provides a dedicated searchable and sortable list of every
   discovered Claude and Codex log, with Projects folder and time-range filters
-  plus filter-responsive cost, input/output, execution, and model statistics
-  and durable links to frozen run views. Confirmed session deletion moves only
-  the underlying JSONL log to macOS Trash.
-- **Daily summary**: attributes spend to recorded local days, with active logs,
-  projects, runtime mix, and highest-cost logs.
+  plus filter-responsive cost, input/output, execution, wait, and model
+  statistics and durable links to frozen run views. Confirmed session deletion
+  moves only the underlying JSONL log to macOS Trash.
+- **Daily summary**: attributes spend and completed-request wait to recorded
+  local days, with active logs, projects, runtime mix, highest-cost logs, and a
+  Spend/Wait trend switch.
 - **Learn view**: provides a practical Token Meter review workflow with direct
   links to each view and a searchable glossary of dashboard terms.
 - **Ask from Codex or Claude**: connects a local, read-only MCP server so an
@@ -423,10 +433,11 @@ directly; Option/Alt+1 keeps Current's return-to-live behavior.
 
 The Current tab includes:
 
-- Summary: live cost, tokens, active execution duration, burn rate per active
-  minute, cache behavior, context pressure, per-execution input/output
-  trajectory, session tool activity, optional skill-pack use, and unused
-  user-installed packs. Idle gaps are excluded from duration and burn rate.
+- Summary: live cost, tokens, completed prompt-to-response wait, burn rate per
+  active minute, cache behavior, context pressure, per-execution input/output
+  trajectory, per-request wait history, session tool activity, optional
+  skill-pack use, and unused user-installed packs. Gaps between prompts are
+  excluded from wait time and burn rate.
 - Activity: normalized event trace for messages, reasoning, tool calls, tool
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.
@@ -440,6 +451,7 @@ as Logs and warns when the selected session appears to still be live.
 The Global tab includes:
 
 - Total spend across supported local Claude and Codex logs.
+- Cumulative completed-request wait, with average and timed-request count.
 - Provider and model mix.
 - 14-day spend trend with anomaly markers.
 - An Overview-first subtab with today, runtime/model mix, review priorities, and
@@ -454,12 +466,12 @@ The Global tab includes:
 
 The Logs tab includes the searchable log inventory with an exact Projects
 folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
-Recent, Cost, Tokens, and Executions sorting. Filters persist in the browser.
+Recent, Cost, Tokens, Executions, and Wait sorting. Filters persist in the browser.
 Clear filters resets search, Projects, and time range without changing the
 selected sort order.
 The summary above the matching logs recalculates filtered cost, total input
-(fresh plus cached), output tokens, executions, and per-model cost and token
-mix whenever any filter changes.
+(fresh plus cached), output tokens, executions, cumulative wait, and per-model
+cost and token mix whenever any filter changes.
 Each row has a Delete action. Deletion requires an explicit confirmation and
 moves the exact discovered JSONL file to macOS Trash so it remains recoverable.
 Provider metadata, project files, and configuration are not changed.

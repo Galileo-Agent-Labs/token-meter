@@ -409,7 +409,14 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func fetchState() {
         let requestedSessionID = pinnedSessionID
         let requestURL = menubarRequestURL(sessionID: requestedSessionID)
-        URLSession.shared.dataTask(with: requestURL) { [weak self] data, _, error in
+        var request = URLRequest(
+            url: requestURL,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 5.0
+        )
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 guard requestedSessionID == self.pinnedSessionID else { return }

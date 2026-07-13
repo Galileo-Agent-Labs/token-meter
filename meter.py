@@ -19,6 +19,7 @@ import glob
 import hashlib
 import html
 import json
+import math
 import os
 import queue
 import re
@@ -26,6 +27,7 @@ import secrets
 import shlex
 import shutil
 import subprocess
+import statistics
 import time
 import threading
 from collections import defaultdict
@@ -830,27 +832,38 @@ def add_model_daily(stats, model, usage, cost, ts):
 
 
 def claude_performance_samples(objs):
-    """Return completed Claude turn samples with attributable reported timing."""
+    """Return completed Claude turn samples with attributable trace timing."""
     messages = {rec["id"]: rec for rec in iter_claude_messages(objs)}
     samples = []
     current = None
 
-    def ensure_current():
+    def ensure_current(ts=0):
         nonlocal current
         if current is None:
-            current = {"message_ids": [], "seen": set()}
+            current = {
+                "message_ids": [], "seen": set(), "start_ts": ts or 0,
+                "last_ts": ts or 0, "terminal": False,
+            }
         return current
 
-    def close_turn(obj):
+    def close_turn(obj=None):
         nonlocal current
-        duration_ms = obj.get("durationMs")
+        duration_ms = obj.get("durationMs") if obj else 0
         try:
             duration_ms = float(duration_ms or 0)
         except (TypeError, ValueError):
             duration_ms = 0
         group = current
         current = None
-        if not group or duration_ms <= 0:
+        if not group:
+            return
+        if duration_ms > 0:
+            duration_s = duration_ms / 1000.0
+            timing_basis = "turn_duration"
+        else:
+            duration_s = float(group.get("last_ts") or 0) - float(group.get("start_ts") or 0)
+            timing_basis = "observed"
+        if duration_s <= 0:
             return
         records = [messages[mid] for mid in group["message_ids"] if mid in messages and not messages[mid].get("side")]
         models = {rec.get("model") or DEFAULT_CLAUDE_MODEL for rec in records if rec.get("usage")}
@@ -867,32 +880,44 @@ def claude_performance_samples(objs):
                     tool_ids.add(block.get("id") or (block.get("name"), len(tool_ids)))
         if output_tokens <= 0:
             return
-        ts = parse_iso(obj.get("timestamp", "")) or max((rec.get("ts") or 0 for rec in records), default=0)
+        ts = (parse_iso(obj.get("timestamp", "")) if obj else 0) or group.get("last_ts") or max(
+            (rec.get("last_ts") or rec.get("ts") or 0 for rec in records), default=0
+        )
         samples.append({
             "provider": "claude", "model": next(iter(models)),
             "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
             "ts": ts or 0, "input_tokens": input_tokens, "output_tokens": output_tokens,
-            "duration_s": duration_ms / 1000.0, "generation_s": duration_ms / 1000.0,
-            "ttft_s": 0.0, "tool_calls": len(tool_ids), "timing_basis": "turn_duration",
+            "duration_s": duration_s, "generation_s": duration_s,
+            "ttft_s": 0.0, "tool_calls": len(tool_ids), "timing_basis": timing_basis,
         })
 
     for obj in objs:
         otype = obj.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
         if otype == "user":
             msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
             if claude_user_text(msg).strip():
-                current = {"message_ids": [], "seen": set()}
+                close_turn()
+                current = {
+                    "message_ids": [], "seen": set(), "start_ts": ts,
+                    "last_ts": ts, "terminal": False,
+                }
             continue
         if otype == "assistant":
             msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
             mid = msg.get("id") or obj.get("uuid")
-            group = ensure_current()
+            group = ensure_current(ts)
             if mid not in group["seen"]:
                 group["seen"].add(mid)
                 group["message_ids"].append(mid)
+            group["last_ts"] = max(float(group.get("last_ts") or 0), ts)
+            if msg.get("stop_reason") and msg.get("stop_reason") != "tool_use":
+                group["terminal"] = True
             continue
         if otype == "system" and obj.get("subtype") == "turn_duration":
             close_turn(obj)
+    if current and current.get("terminal"):
+        close_turn()
     return samples
 
 
@@ -965,6 +990,178 @@ def codex_performance_samples(objs, default_model=None):
         if ptype == "task_complete":
             close_task(payload, ts)
     return samples
+
+
+def _wait_sample(group, end_ts, duration_s, timing_basis, provider):
+    """Return one completed prompt-to-response wall-clock sample."""
+    if not group or duration_s <= 0:
+        return None
+    models = sorted(name for name in (group.get("models") or set()) if name)
+    model = models[0] if len(models) == 1 else ("mixed" if models else "unknown")
+    return {
+        "provider": provider,
+        "model": model,
+        "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+        "ts": end_ts or 0,
+        "start_ts": float(group.get("start_ts") or 0),
+        "duration_s": float(duration_s),
+        "tool_calls": int(group.get("tool_calls") or 0),
+        "output_tokens": int(group.get("output_tokens") or 0),
+        "timing_basis": timing_basis,
+    }
+
+
+def claude_wait_samples(objs):
+    """Return completed Claude prompt-to-response wait samples.
+
+    Wait time is deliberately end to end: reasoning, tool use, and model output
+    all count because the user is still waiting for the turn to finish.
+    """
+    samples = []
+    current = None
+
+    def close_turn(end_ts=0, duration_ms=0, allow_observed=False):
+        nonlocal current
+        group = current
+        current = None
+        if not group:
+            return
+        try:
+            duration_ms = float(duration_ms or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        if duration_ms > 0:
+            duration_s = duration_ms / 1000.0
+            basis = "reported"
+        elif allow_observed:
+            end_ts = end_ts or group.get("last_ts") or 0
+            duration_s = float(end_ts or 0) - float(group.get("start_ts") or 0)
+            basis = "observed"
+        else:
+            return
+        sample = _wait_sample(group, end_ts or group.get("last_ts") or 0,
+                              duration_s, basis, "claude")
+        if sample:
+            samples.append(sample)
+
+    for obj in objs:
+        otype = obj.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if _claude_user_prompt(obj):
+            close_turn(allow_observed=bool(current and current.get("terminal")))
+            current = {
+                "start_ts": ts, "last_ts": ts, "models": set(),
+                "tool_ids": set(), "tool_calls": 0, "output_tokens": 0,
+                "seen_usage": set(), "terminal": False,
+            }
+            continue
+        if otype == "assistant" and current:
+            msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+            model = msg.get("model")
+            if model:
+                current["models"].add(model)
+            current["last_ts"] = max(float(current.get("last_ts") or 0), ts)
+            message_id = msg.get("id") or obj.get("uuid")
+            if message_id not in current["seen_usage"]:
+                current["seen_usage"].add(message_id)
+                _, output_tokens = usage_io_tokens(msg.get("usage") or {})
+                current["output_tokens"] += output_tokens
+            for block in msg.get("content") or []:
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    continue
+                tool_id = block.get("id") or (block.get("name"), len(current["tool_ids"]))
+                current["tool_ids"].add(tool_id)
+            current["tool_calls"] = len(current["tool_ids"])
+            if msg.get("stop_reason") and msg.get("stop_reason") != "tool_use":
+                current["terminal"] = True
+            continue
+        if otype == "system" and obj.get("subtype") == "turn_duration":
+            close_turn(ts, obj.get("durationMs"), allow_observed=True)
+    if current and current.get("terminal"):
+        close_turn(current.get("last_ts") or 0, allow_observed=True)
+    return samples
+
+
+def codex_wait_samples(objs, default_model=None):
+    """Return completed Codex task prompt-to-response wait samples."""
+    samples = []
+    model = default_model or DEFAULT_OPENAI_MODEL
+    current = None
+
+    def close_task(end_ts=0, duration_ms=0, allow_observed=False):
+        nonlocal current
+        group = current
+        current = None
+        if not group:
+            return
+        try:
+            duration_ms = float(duration_ms or 0)
+        except (TypeError, ValueError):
+            duration_ms = 0
+        if duration_ms > 0:
+            duration_s = duration_ms / 1000.0
+            basis = "reported"
+        elif allow_observed:
+            end_ts = end_ts or group.get("last_ts") or 0
+            duration_s = float(end_ts or 0) - float(group.get("start_ts") or 0)
+            basis = "observed"
+        else:
+            return
+        sample = _wait_sample(group, end_ts or group.get("last_ts") or 0,
+                              duration_s, basis, "codex")
+        if sample:
+            samples.append(sample)
+
+    for obj in objs:
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        ptype = payload.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if obj.get("type") == "turn_context":
+            model = payload.get("model") or model
+            if current:
+                current["models"].add(model)
+            continue
+        if ptype == "task_started":
+            close_task(allow_observed=False)
+            current = {
+                "start_ts": ts, "last_ts": ts, "models": {model},
+                "tool_calls": 0, "output_tokens": 0,
+            }
+            continue
+        if not current:
+            continue
+        current["last_ts"] = max(float(current.get("last_ts") or 0), ts)
+        if ptype in ("function_call", "custom_tool_call", "web_search_call", "tool_search_call"):
+            current["tool_calls"] += 1
+            continue
+        if ptype == "token_count":
+            raw = ((payload.get("info") or {}).get("last_token_usage") or {})
+            if raw:
+                current["output_tokens"] += usage_io_tokens(codex_usage(raw))[1]
+            continue
+        if ptype == "task_complete":
+            close_task(ts, payload.get("duration_ms"), allow_observed=True)
+    return samples
+
+
+def wait_time_summary(samples):
+    """Summarize completed prompt-to-response wall-clock waits."""
+    rows = [row for row in (samples or []) if float(row.get("duration_s") or 0) > 0]
+    durations = sorted(float(row.get("duration_s") or 0) for row in rows)
+    count = len(durations)
+    total = sum(durations)
+    p95_index = min(count - 1, max(0, math.ceil(count * 0.95) - 1)) if count else 0
+    return {
+        "available": bool(count),
+        "total_s": total,
+        "avg_s": total / count if count else 0,
+        "median_s": statistics.median(durations) if count else 0,
+        "p95_s": durations[p95_index] if count else 0,
+        "max_s": durations[-1] if count else 0,
+        "sample_count": count,
+        "reported_samples": sum(row.get("timing_basis") == "reported" for row in rows),
+        "observed_samples": sum(row.get("timing_basis") == "observed" for row in rows),
+    }
 
 
 def performance_summary(samples, total_output_tokens=0):
@@ -1587,6 +1784,7 @@ def iter_claude_messages(objs):
                 "usage": msg.get("usage") or {},
                 "stop_reason": msg.get("stop_reason"),
                 "ts": parse_iso(obj.get("timestamp", "")),
+                "last_ts": parse_iso(obj.get("timestamp", "")),
                 "side": bool(obj.get("isSidechain")),
                 "content": [],
             }
@@ -1599,6 +1797,7 @@ def iter_claude_messages(objs):
             rec["usage"] = msg.get("usage") or rec["usage"]
         if msg.get("stop_reason"):
             rec["stop_reason"] = msg.get("stop_reason")
+        rec["last_ts"] = max(rec.get("last_ts") or 0, parse_iso(obj.get("timestamp", "")) or 0)
     return [by_id[i] for i in order]
 
 
@@ -1873,9 +2072,11 @@ def recompute_claude(source):
     insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
                               "claude", primary_model, approx_cost)
 
+    wait_samples = claude_wait_samples(objs)
     state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                         analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                        primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs))
+                        primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs),
+                        wait_samples)
     state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
     return state
 
@@ -2233,18 +2434,22 @@ def recompute_codex(source):
     source["tools_deferred"] = tools_deferred
     source["tool_catalog"] = tool_catalog
     source["tool_namespaces"] = tool_namespaces
+    wait_samples = codex_wait_samples(objs, source.get("model"))
     state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                         analyses, insights, first_ts, last_ts, idle, biggest, len(coord_execs), True,
-                        primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs))
+                        primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs),
+                        wait_samples)
     state["throughput"] = performance_summary(codex_performance_samples(objs, source.get("model")), tot["output"])
     return state
 
 
 def build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                 analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                primary_model, pricing_note, active_timing=None):
+                primary_model, pricing_note, active_timing=None, wait_samples=None):
     elapsed = (last_ts - first_ts) if (first_ts and last_ts) else 0
     active_timing = active_timing or {}
+    wait_samples = wait_samples or []
+    wait_time = wait_time_summary(wait_samples)
     active_seconds = float(active_timing.get("duration_s") or 0)
     active_available = bool(active_timing.get("available") and active_seconds > 0)
     minutes = max(active_seconds / 60.0, 1e-9)
@@ -2332,6 +2537,21 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
             "wall_duration_s": int(elapsed),
             "timezone": time.tzname[time.localtime().tm_isdst > 0],
             "end_label": "Last activity",
+        },
+        "wait_time": {
+            **wait_time,
+            "samples": [
+                {
+                    "i": index,
+                    "duration_s": row["duration_s"],
+                    "model": row.get("model") or "unknown",
+                    "tool_calls": int(row.get("tool_calls") or 0),
+                    "output_tokens": int(row.get("output_tokens") or 0),
+                    "timing_basis": row.get("timing_basis") or "observed",
+                    "ts": row.get("ts") or 0,
+                }
+                for index, row in enumerate(wait_samples, 1)
+            ],
         },
         "context": {
             "window": context_window,
@@ -2750,9 +2970,10 @@ def claude_summary(source, objs):
                     break
 
     performance = claude_performance_samples(objs)
+    wait_samples = claude_wait_samples(objs)
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
-                      list(model_daily.values()), performance)
+                      list(model_daily.values()), performance, wait_samples)
     row["frustration"], row["_frustration_events"] = analyze_frustration(
         "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
     )
@@ -2811,9 +3032,10 @@ def codex_summary(source, objs):
                 title = compact_text(payload.get("message") or "", 60)
                 break
     performance = codex_performance_samples(objs, source.get("model"))
+    wait_samples = codex_wait_samples(objs, source.get("model"))
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
-                      list(model_daily.values()), performance)
+                      list(model_daily.values()), performance, wait_samples)
     row["frustration"], row["_frustration_events"] = analyze_frustration(
         "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
     )
@@ -2823,11 +3045,12 @@ def codex_summary(source, objs):
 
 def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                 active_timing=None, input_tokens=0, output_tokens=0, model_stats=None,
-                model_daily=None, performance_samples=None):
+                model_daily=None, performance_samples=None, wait_samples=None):
     active_timing = active_timing or {}
     model_stats = model_stats or {}
     model_daily = model_daily or []
     performance_samples = performance_samples or []
+    wait_samples = wait_samples or []
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     return {
         "id": source["id"],
@@ -2857,6 +3080,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
             for model, values in model_stats.items()
         ], key=lambda row: (-row["cost"], -row["tokens"], row["model"])),
         "throughput": performance_summary(performance_samples, output_tokens),
+        "wait_time": wait_time_summary(wait_samples),
         "mtime": source["mtime"],
         "start": time.strftime("%Y-%m-%d %H:%M", time.localtime(first_ts)) if first_ts else "",
         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(last_ts)) if last_ts else "",
@@ -2869,6 +3093,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "_day_cost": dict(day_cost),
         "_model_daily": model_daily,
         "_performance_samples": performance_samples,
+        "_wait_samples": wait_samples,
     }
 
 
@@ -3848,43 +4073,74 @@ def refresh_capability_state():
 
 
 def daily_summaries(session_rows, limit=30):
-    """Aggregate exact per-day spend plus daily log and provider evidence."""
+    """Aggregate exact per-day spend and completed end-to-end wait time."""
     days = {}
 
     def day_row(day):
         return days.setdefault(day, {
-            "day": day, "cost": 0.0, "providers": defaultdict(float),
-            "sessions": {}, "projects": set(),
+            "day": day, "cost": 0.0, "providers": {},
+            "sessions": {}, "projects": set(), "wait_s": 0.0,
+            "wait_samples": 0, "longest_wait_s": 0.0,
+        })
+
+    def provider_row(row, provider):
+        return row["providers"].setdefault(provider, {
+            "provider": provider, "cost": 0.0, "wait_s": 0.0, "wait_samples": 0,
+        })
+
+    def session_row(row, session, provider, project):
+        session_id = session.get("id") or session.get("path") or "unknown"
+        return row["sessions"].setdefault(session_id, {
+            "id": session_id, "title": session.get("title") or session_id,
+            "project": project, "provider": provider,
+            "label": session.get("label") or provider, "cost": 0.0,
+            "wait_s": 0.0, "wait_samples": 0, "longest_wait_s": 0.0,
         })
 
     for session in session_rows or []:
+        provider = session.get("provider") or "unknown"
+        project = session.get("project") or "local"
         for day, value in (session.get("_day_cost") or {}).items():
             cost = float(value or 0)
             row = day_row(day)
             row["cost"] += cost
-            provider = session.get("provider") or "unknown"
-            row["providers"][provider] += cost
-            project = session.get("project") or "local"
+            provider_row(row, provider)["cost"] += cost
             row["projects"].add(project)
-            session_id = session.get("id") or session.get("path") or "unknown"
-            daily_session = row["sessions"].setdefault(session_id, {
-                "id": session_id, "title": session.get("title") or session_id,
-                "project": project, "provider": provider,
-                "label": session.get("label") or provider, "cost": 0.0,
-            })
-            daily_session["cost"] += cost
+            session_row(row, session, provider, project)["cost"] += cost
+        for sample in session.get("_wait_samples") or []:
+            day = sample.get("day") or ""
+            duration_s = float(sample.get("duration_s") or 0)
+            if not day or duration_s <= 0:
+                continue
+            row = day_row(day)
+            row["wait_s"] += duration_s
+            row["wait_samples"] += 1
+            row["longest_wait_s"] = max(row["longest_wait_s"], duration_s)
+            row["projects"].add(project)
+            runtime = provider_row(row, provider)
+            runtime["wait_s"] += duration_s
+            runtime["wait_samples"] += 1
+            daily_session = session_row(row, session, provider, project)
+            daily_session["wait_s"] += duration_s
+            daily_session["wait_samples"] += 1
+            daily_session["longest_wait_s"] = max(daily_session["longest_wait_s"], duration_s)
 
     result = []
     for day in sorted((value for value in days if value), reverse=True)[:limit]:
         row = days[day]
         sessions = sorted(row["sessions"].values(), key=lambda value: (-value["cost"], value["title"]))
-        providers = sorted([
-            {"provider": provider, "cost": cost}
-            for provider, cost in row["providers"].items()
-        ], key=lambda value: (-value["cost"], value["provider"]))
+        providers = sorted(row["providers"].values(),
+                           key=lambda value: (-value["cost"], -value["wait_s"], value["provider"]))
         result.append({
             "day": day, "cost": row["cost"], "sessions": len(sessions),
             "projects": len(row["projects"]), "providers": providers,
+            "wait_time": {
+                "available": bool(row["wait_samples"]),
+                "total_s": row["wait_s"],
+                "avg_s": row["wait_s"] / row["wait_samples"] if row["wait_samples"] else 0,
+                "max_s": row["longest_wait_s"],
+                "sample_count": row["wait_samples"],
+            },
             "top_sessions": sessions[:8],
         })
     return result
@@ -3916,6 +4172,8 @@ def _finalize_throughput_fields(row):
     row["timing_coverage"] = (speed_output / total_output) if total_output > 0 else 0
     ttft_samples = int(row.get("ttft_samples") or 0)
     row["avg_ttft_ms"] = (float(row.get("ttft_total_s") or 0) * 1000 / ttft_samples) if ttft_samples else 0
+    wait_samples = int(row.get("wait_samples") or 0)
+    row["avg_wait_s"] = (float(row.get("wait_seconds") or 0) / wait_samples) if wait_samples else 0
     return row
 
 
@@ -3930,6 +4188,7 @@ def aggregate_model_stats(session_rows):
             "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0, "last_ts": 0, "daily": {},
+            "wait_seconds": 0.0, "wait_samples": 0, "max_wait_s": 0.0,
         })
 
     def daily_row(parent, day):
@@ -3939,6 +4198,7 @@ def aggregate_model_stats(session_rows):
             "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0,
+            "wait_seconds": 0.0, "wait_samples": 0, "max_wait_s": 0.0,
         })
 
     for session in session_rows or []:
@@ -3984,6 +4244,23 @@ def aggregate_model_stats(session_rows):
                     target["ttft_total_s"] += ttft_s
                     target["ttft_samples"] += 1
             row["last_ts"] = max(float(row.get("last_ts") or 0), float(sample.get("ts") or 0))
+        for sample in session.get("_wait_samples") or []:
+            model = sample.get("model") or ""
+            if not model or model in ("mixed", "unknown"):
+                continue
+            row = model_row(model)
+            row["providers"].add(provider)
+            day = sample.get("day") or ""
+            targets = [row]
+            if day:
+                targets.append(daily_row(row, day))
+            duration_s = float(sample.get("duration_s") or 0)
+            if duration_s <= 0:
+                continue
+            for target in targets:
+                target["wait_seconds"] += duration_s
+                target["wait_samples"] += 1
+                target["max_wait_s"] = max(float(target.get("max_wait_s") or 0), duration_s)
 
     result = []
     for row in models.values():
@@ -4071,6 +4348,11 @@ def cross_session():
                + model_cost.get("gpt-5.5", 0))
     tool_waste = global_tool_waste(internal_rows)
     daily = daily_summaries(internal_rows)
+    global_wait = wait_time_summary([
+        sample
+        for row in internal_rows
+        for sample in (row.get("_wait_samples") or [])
+    ])
     data = {
         "generated_at": int(now),
         "sessions": sessions[:60],
@@ -4080,6 +4362,7 @@ def cross_session():
         "total_sessions": len(sessions),
         "total_executions": sum(int(row.get("turns") or 0) for row in internal_rows),
         "total_tokens": sum(int(row.get("tokens") or 0) for row in internal_rows),
+        "wait_time": global_wait,
         "opus_share": (premium / total) if total else 0.0,
         "premium_share": (premium / total) if total else 0.0,
         "providers": sorted([
@@ -5047,6 +5330,9 @@ class H(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body)
 

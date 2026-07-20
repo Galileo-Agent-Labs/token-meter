@@ -654,9 +654,8 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertRegex(self.page, r"id=tab-models[^>]*>Models</button>")
         self.assertIn("$('tab-models').onclick=()=>setHashRoute('models')", self.page)
-        self.assertIn("if(h==='models')", self.page)
+        self.assertIn("if(h==='models'||h==='frustration')", self.page)
         self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
-        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
         self.assertNotIn("Timing evidence", self.page)
         self.assertIn("Observed output pace is a secondary diagnostic.", self.page)
         self.assertIn("colspan=8", self.page)
@@ -688,23 +687,25 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("wait_time?.total_s", self.page)
         self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
-    def test_frustration_is_a_first_class_route_with_global_settings(self):
+    def test_frustration_is_inside_models_with_global_settings(self):
         for marker in (
-            "id=tab-frustration", "id=view-frustration", "id=f-utterances",
+            "id=model-frustration", "id=f-utterances",
             "id=f-rate", "id=f-chart", "id=f-models", "id=f-chats",
             "id=f-chat-mode", "drawFrustrationTrend",
             "id=f-add-terms", "id=frustration-terms", "id=frustration-save",
             "/settings/frustration",
         ):
             self.assertIn(marker, self.page)
-        self.assertIn("if(h==='frustration')", self.page)
+        self.assertIn("if(h==='models'||h==='frustration')", self.page)
         self.assertIn("renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions)", self.page)
         self.assertIn("$('f-add-terms').onclick=()=>{setHashRoute('settings')", self.page)
         self.assertIn("$('frustration-settings').scrollIntoView", self.page)
         self.assertIn("Add more terms", self.page)
         self.assertIn("Save and recalculate", self.page)
-        self.assertLess(self.page.index("id=tab-models"), self.page.index("id=tab-frustration"))
-        self.assertLess(self.page.index("id=tab-frustration"), self.page.index("id=tab-capabilities"))
+        self.assertNotIn("id=tab-frustration", self.page)
+        self.assertNotIn("id=view-frustration", self.page)
+        self.assertLess(self.page.index("id=view-models"), self.page.index("id=model-frustration"))
+        self.assertLess(self.page.index("id=model-frustration"), self.page.index("id=view-daily"))
         self.assertNotIn("id=f-model-table", self.page)
         self.assertNotIn("id=f-session-table", self.page)
 
@@ -758,19 +759,22 @@ class DashboardLayoutTests(unittest.TestCase):
     def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
             "tab-session", "tab-daily", "tab-logs", "tab-global", "tab-models",
-            "tab-frustration", "tab-capabilities", "tab-learn", "tab-settings",
+            "tab-capabilities", "tab-learn", "tab-settings",
         ]
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-trigger", "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit9'",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit8'",
             "key==='k'", "event.key==='ArrowDown'", "event.key==='Enter'",
             "aria-keyshortcuts=\"Meta+K Control+K\"",
         ):
             self.assertIn(marker, self.page)
         self.assertIn("if(command.latest)goToLatestSession()", self.page)
         self.assertIn("else setHashRoute(command.route)", self.page)
+        self.assertNotIn("shortcut:'⌥", self.page)
+        self.assertNotIn("id=command-alt-key", self.page)
+        self.assertNotIn("class=commandShortcut", self.page)
 
     def test_logs_support_project_and_time_range_filters(self):
         for marker in ("id=g-project", "id=g-time", "Projects filter", "Time range filter",

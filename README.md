@@ -1,6 +1,6 @@
 # Token Meter
 
-Claude and Codex make it easy to start an agent session. They make it much
+Claude, Codex, and Cursor make it easy to start an agent session. They make it much
 harder to understand what happened during the run, what it cost, and whether
 your usage is changing over time. Token Meter reads their local traces and
 turns them into one live dashboard.
@@ -29,11 +29,17 @@ It helps answer questions such as:
 - When several sessions are running, can I pin one and follow it without Token
   Meter switching to another run?
 
-Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, and
-the Codex desktop app. It follows local agent logs as they are written and
+Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, the
+Codex desktop app, and Cursor Agent/Composer. It follows local agent logs as they are written and
 combines live runs with cross-app history, so the answer is available while you
-are working and after the session ends. Costs are estimates based on the model
-rates configured in Token Meter.
+are working and after the session ends. Claude and Codex costs are estimates
+based on the model rates configured in Token Meter. Cursor's local traces do not
+persist authoritative billing usage, so Token Meter shows a clearly labeled
+local estimate: one context snapshot per execution plus model-authored text
+persisted in conversation bubbles. It applies the persisted model variant's
+public rate, including Composer 2.5 Fast versus Standard. Cache, hidden
+reasoning, repeated internal model-call input, and dashboard billing remain
+excluded and are never presented as zero.
 
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
@@ -55,7 +61,7 @@ dashboard at:
 http://localhost:8722
 ```
 
-Start a Claude or Codex run and Token Meter will follow its local log. 
+Start a Claude, Codex, or Cursor run and Token Meter will follow its local log.
 
 ### Run From Source
 
@@ -92,15 +98,15 @@ to continue.
 
 ### 2. See All Apps In One View
 
-Open **Global** to combine local Claude and Codex history in one place. Compare
-token consumption, estimated spend, and cumulative wait time by runtime and
-model, see the 14-day
+Open **Global** to combine local Claude, Codex, and Cursor history in one place.
+Compare covered token consumption and estimated spend, plus cumulative wait
+time by runtime and model, see the 14-day
 trend, and jump directly to the highest-cost logs or review candidates. This is
 the cross-app view for answering what you used, where you used it, and what
 deserves attention next.
 
 <p align="center">
-  <img src="images/global.png" alt="Token Meter Global view combining Claude and Codex token consumption, spend, model mix, and review priorities" width="900">
+  <img src="images/global.png" alt="Token Meter Global view combining Claude, Codex, and Cursor activity, covered spend, model mix, and review priorities" width="900">
 </p>
 
 ### 3. Find Expensive Or Noisy Logs
@@ -164,12 +170,12 @@ or Codex runs are active, select a recent session to pin it or choose **Follow
 Latest** to resume automatic switching.
 
 <p align="center">
-  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude and Codex sessions, model, cost, tokens, output speed, cache reuse, and context pressure" width="420">
+  <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude, Codex, and Cursor sessions, model, available metrics, and context pressure" width="420">
 </p>
 
 ### A Good First Five Minutes
 
-1. Install or start Token Meter, then begin a Claude or Codex task.
+1. Install or start Token Meter, then begin a Claude, Codex, or Cursor task.
 2. Confirm **Current** follows the run and check cost plus context pressure.
 3. Set a session budget or enable notifications under **Current → Alerts**.
 4. Connect Codex or Claude Code from **Settings** if you want on-demand answers
@@ -179,9 +185,10 @@ Latest** to resume automatic switching.
 
 ## Features
 
-- **Unified cross-app view**: combines supported Claude and Codex CLI and
-  desktop-agent logs into one local view of tokens, estimated spend, models,
-  runtimes, projects, and trends.
+- **Unified cross-app view**: combines supported Claude, Codex, and Cursor
+  agent logs into one local view of covered tokens and estimated spend plus
+  models, runtimes, projects, context, wait, and trends. Coverage labels make
+  mixed-runtime billing totals explicitly partial.
 - **Keyboard navigation**: opens a searchable command palette with Command/Ctrl+K,
   arrow-key selection, and direct Option/Alt+1–9 shortcuts for the primary
   workflow.
@@ -205,12 +212,14 @@ Latest** to resume automatic switching.
   Global show cumulative wait, and Models uses median wait for typical
   comparisons while retaining average, p95, and longest-wait evidence.
 - **Models view**: keeps model/runtime identities separate, so Claude Code,
-  Claude Desktop, Claude-3P, and Codex timing are never silently pooled. It
+  Claude Desktop, Claude-3P, Codex, and Cursor timing are never silently pooled. It
   compares exactly two selected runtimes with matched completed turns that have
   similar peak context, cumulative input, output, cache-read share, model calls,
   tool shape, and recency. A verdict requires at least 20 matched pairs and 30%
   coverage of the smaller history and includes a bootstrap 95% confidence
-  interval. The view also retains typical wait, typical workload, observed
+  interval. Cursor histories remain visible but are withheld from matched pace
+  because their context/input and visible-output values are local proxies rather
+  than provider-reported tokens. The view also retains typical wait, typical workload, observed
   output pace, timing coverage, and 7-, 30-, 90-day or all-history trends.
 - **Frustration signals**: counts user turns containing configurable whole
   terms, reports matched utterances and their share of human user turns, and
@@ -218,7 +227,7 @@ Latest** to resume automatic switching.
   all-history windows. It is explicitly a lexical signal rather than sentiment
   analysis; aggregate counts are retained, not message text.
 - **Auto-following**: tracks the newest Claude Code CLI, Claude Desktop
-  Agent/Cowork, Codex CLI, or Codex desktop app log across local projects
+  Agent/Cowork, Codex CLI, Codex desktop app, or Cursor Agent/Composer log across local projects
   without requiring a command per run.
 - **Execution trace**: normalizes messages, reasoning, tool calls, tool results,
   usage events, coordination events, and completion events into one timeline.
@@ -230,7 +239,7 @@ Latest** to resume automatic switching.
   across logs, model mix, provider mix, trend, anomalies, review priorities,
   expensive logs, and trace-backed tool waste across sessions.
 - **Logs view**: provides a dedicated searchable and sortable list of every
-  discovered Claude and Codex log, with Projects folder and time-range filters
+  discovered Claude, Codex, and Cursor log, with Projects folder and time-range filters
   plus filter-responsive cost, input/output, execution, wait, and model
   statistics and durable links to frozen run views. Confirmed session deletion
   moves only the underlying JSONL log to macOS Trash.
@@ -248,7 +257,8 @@ Latest** to resume automatic switching.
   errors, and shows a 14-day result-token trend.
 - **Tools view**: inventories trace-observed tools, discovered MCP
   servers, and installed Codex/Claude skills with runtime, source, state, use,
-  returned tokens, and last-use evidence.
+  returned tokens, and last-use evidence. Ordinary tools are kept separate by
+  runtime and the inventory can be filtered to Cursor, Codex, or Claude.
 - **Actionable capability optimization**: measures configured user-installed
   skill packs, groups child skills under their real native control, and excludes
   MCP servers, default tools, and other read-only capabilities from removal
@@ -263,12 +273,13 @@ Latest** to resume automatic switching.
   spikes, and notable log insights.
 - **macOS menu bar companion**: shows a compact live status item backed by the
   same local dashboard endpoint, with actions to open the full dashboard and a
-  five-session chooser that can pin one Claude or Codex run instead of flipping
+  five-session chooser that can pin one Claude, Codex, or Cursor run instead of flipping
   between concurrently active traces. Its Output speed row uses the same
   trace-backed tok/s, timing basis, sample count, and coverage semantics as Current.
-- **Local-only operation**: reads local JSONL logs and local capability
-  configuration and sends no telemetry. Configuration changes happen only from
-  an explicit dashboard action.
+- **Local-only operation**: reads local JSONL logs, Cursor's shared local
+  SQLite/request-trace enrichment, and local capability configuration and sends
+  no telemetry. Cursor enrichment is strictly read-only. Configuration changes
+  happen only from an explicit dashboard action.
 
 ## Requirements
 
@@ -382,7 +393,7 @@ python3 meter.py
 
 The menu bar companion polls the local `/menubar` endpoint and shows compact
 status for the active log. Its Recent sessions section labels each entry as
-Claude or Codex, uses the session title or project as an identifier, and keeps a
+Claude, Codex, or Cursor, uses the session title or project as an identifier, and keeps a
 selected pin in macOS preferences. Choose `Follow Latest` to resume automatic
 tracking. It does not parse logs directly.
 
@@ -395,6 +406,9 @@ Claude Code CLI:          ~/.claude/projects/*/*.jsonl
 Claude Desktop metadata:  ~/Library/Application Support/{Claude,Claude-3p}/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
 Claude Desktop Agent:     ~/Library/Application Support/{Claude,Claude-3p}/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
 Codex CLI + desktop app:   ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+Cursor transcript anchor:  ~/.cursor/projects/*/agent-transcripts/<composer-id>/<composer-id>.jsonl
+Cursor conversation data:  ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
+Cursor request timing:      ~/Library/Application Support/Cursor/logs/**/cursor.requestTraces.log
 ```
 
 Claude Desktop metadata contains the Desktop title, project directory, model,
@@ -415,8 +429,22 @@ and tool calls cannot be attributed reliably.
 Codex CLI and the Codex desktop app use the same local session store, so Token
 Meter discovers both through `~/.codex/sessions`.
 
-It picks the newest source by modification time and recomputes state whenever
-that source changes.
+Cursor uses the per-session transcript as the durable discovery anchor. Token
+Meter joins its composer id to Cursor's shared SQLite state database for ordered
+conversation bubbles, workspace, title, model, context estimates, tools, and
+reasoning duration. It reads completed request-trace spans for prompt-to-finish
+wait, active attempt time, TTFT, failures, and retries. The database is opened
+read-only with WAL visibility; missing, busy, corrupt, or changed enrichment
+data degrades to transcript-only parsing instead of hiding the session. Cursor
+subagent composers are excluded from the top-level session list. Transcript
+replicas with the same Composer ID are counted once, using the newest replica,
+because Cursor can retain the same conversation under multiple window/workspace
+folders.
+
+It picks the newest source by session-specific activity time and recomputes
+state whenever that source or its enrichment changes. Shared Cursor database
+and request-log timestamps invalidate cached parsing but do not make every
+Cursor session look equally recent.
 
 The Global tab keeps spend/model/trend cards visible and uses `Overview`,
 `Global insights`, and `Capability evidence` subtabs. Logs have a dedicated
@@ -461,7 +489,9 @@ as Logs and warns when the selected session appears to still be live.
 
 The Global tab includes:
 
-- Total spend across supported local Claude and Codex logs.
+- Total estimated spend across supported local traces. Cursor values are marked
+  as local estimates; partial coverage appears only when a trace lacks enough
+  context or public pricing evidence.
 - Cumulative completed-request wait, with average and timed-request count.
 - Provider and model mix.
 - 14-day spend trend with anomaly markers.
@@ -503,7 +533,8 @@ The Tools tab includes:
   schema tokens across session catalogs.
 - Searchable Tools, MCPs, and Skills inventory with sortable runtime, source,
   state, observed calls/activations, returned tokens, last use, and control
-  columns. Skill identifiers include runtime and origin or plugin pack so
+  columns, plus a runtime filter. Cursor tools are observed-only and read-only.
+  Skill identifiers include runtime and origin or plugin pack so
   same-named built-in and user-installed skills remain distinct.
 - Skill-pack enable/disable actions for configured Codex and Claude plugins.
   **Disable all unused** confirms and submits only the exact current
@@ -536,6 +567,18 @@ Claude costs are computed from the local `CLAUDE_PRICE` table in `meter.py`.
 Codex costs are computed from the local `OPENAI_PRICE` table and are shown as
 estimates because Codex subscription billing can differ from public API-rate
 accounting.
+
+Cursor costs are intentionally rougher local estimates. Input uses one
+trace-visible context snapshot per execution, with sparse intermediate
+checkpoints interpolated between persisted values. Output uses deduplicated
+assistant and thinking text at four characters per token. The persisted model
+and speed variant select the rate; Composer 2.5 uses its separate Standard or
+Fast rate. These values make Current, Logs, Daily, Global, Models, MCP, and the
+menu bar useful, but they are not a replacement for Cursor's billing dashboard.
+Cache usage, hidden reasoning, and repeated internal model-call input are not
+available locally. Token Meter therefore labels Cursor tokens, cost, and output
+pace `est`, keeps cache unavailable, and does not fire budget/spike alerts from
+the Cursor proxy.
 
 Pre-flight estimation is out of scope. Token Meter reads logs after usage is
 recorded, so it shows cost as it accrues rather than predicting the next
@@ -576,10 +619,13 @@ Confirm that at least one of these directories exists and contains JSONL logs:
 ```bash
 ls ~/.claude/projects
 ls ~/.codex/sessions
+ls ~/.cursor/projects
+ls "$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
 ```
 
-Then run a supported Claude or Codex CLI/desktop agent task and reload the
-dashboard.
+Then run a supported Claude, Codex, or Cursor agent task and reload the
+dashboard. A Cursor session needs its matching `agent-transcripts` JSONL; the
+SQLite database and request logs are optional enrichment.
 
 ### Claude Desktop projects appear as Claude Code
 
@@ -656,7 +702,7 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8');
 python3 -c 'import meter; st=meter.recompute(meter.newest_source()); print(st["provider"], st["turns"], len(st["trace"]), st["tools"]["total_calls"])'
 ```
 
-The final command requires at least one supported local Claude or Codex log.
+The final command requires at least one supported local Claude, Codex, or Cursor log.
 
 ## Repository Layout
 

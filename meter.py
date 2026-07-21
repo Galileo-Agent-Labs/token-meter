@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Token Meter - a live cost and efficiency instrument for Claude Code and Codex.
+Token Meter - a live cost and efficiency instrument for Claude, Codex, and Cursor.
 
 Tails local agent logs, parses each execution as it lands, and serves a
 localhost dashboard over SSE with Current and Global views. Stdlib only; nothing
@@ -27,6 +27,7 @@ import re
 import secrets
 import shlex
 import shutil
+import sqlite3
 import subprocess
 import statistics
 import time
@@ -48,6 +49,11 @@ CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
+CURSOR_PROJECTS = os.path.expanduser("~/.cursor/projects")
+CURSOR_STATE_DB = os.path.expanduser(
+    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+)
+CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -78,6 +84,17 @@ OPENAI_PRICE = {
     "gpt-5.4": {"input": 2.50, "output": 15.0, "cache_write": 0.0, "cache_read": 0.25},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "cache_write": 0.0, "cache_read": 0.075},
 }
+CURSOR_PRICE = {
+    # Cursor's first-party Composer 2.5 rates. The persisted model configuration
+    # distinguishes the Fast and Standard variants used for a session.
+    "composer-2.5-standard": {
+        "input": 0.50, "output": 2.50, "cache_write": 0.0, "cache_read": 0.0,
+    },
+    "composer-2.5-fast": {
+        "input": 3.0, "output": 15.0, "cache_write": 0.0, "cache_read": 0.0,
+    },
+}
+ZERO_PRICE = {"input": 0.0, "output": 0.0, "cache_write": 0.0, "cache_read": 0.0}
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-4-8"
 DEFAULT_OPENAI_MODEL = "gpt-5.5"
@@ -104,6 +121,7 @@ _xsess = {"data": None, "at": 0.0}
 _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
+_cursor_request_cache = {}
 _ACTION_TOKEN = secrets.token_urlsafe(24)
 AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
@@ -280,7 +298,7 @@ def execution_timing(provider, objs):
         basis = "observed"
     else:
         basis = "unavailable"
-    return {
+    row = {
         "duration_s": duration_s,
         "available": duration_s > 0,
         "reported_executions": reported,
@@ -288,6 +306,7 @@ def execution_timing(provider, objs):
         "execution_count": reported + observed,
         "basis": basis,
     }
+    return row
 
 
 def load(path):
@@ -295,13 +314,14 @@ def load(path):
     if not path:
         return out
     try:
-        for line in open(path, encoding="utf-8").read().splitlines():
-            if not line.strip():
-                continue
-            try:
-                out.append(json.loads(line))
-            except Exception:
-                pass
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    pass
     except FileNotFoundError:
         pass
     return out
@@ -442,6 +462,8 @@ def source_runtime_label(source):
     provider = source.get("provider") or "unknown"
     if provider == "codex":
         return "Codex"
+    if provider == "cursor":
+        return "Cursor"
     if provider != "claude":
         return str(source.get("label") or provider)
     if source.get("client") != "claude_desktop":
@@ -453,12 +475,115 @@ def source_runtime_label(source):
     return "Claude Desktop"
 
 
+def metric_availability(provider, **overrides):
+    """Describe which normalized metrics are backed by the provider trace.
+
+    Missing availability remains backward compatible elsewhere, but every new
+    state carries this object so unavailable Cursor billing values cannot look
+    like measured zeroes.
+    """
+    if provider == "cursor":
+        result = {
+            "cost": False,
+            "tokens": False,
+            "input_tokens": False,
+            "output_tokens": False,
+            "cache": False,
+            "throughput": False,
+            "context": False,
+            "timing": False,
+            "tool_results": False,
+        }
+    else:
+        result = {
+            "cost": True,
+            "tokens": True,
+            "input_tokens": True,
+            "output_tokens": True,
+            "cache": True,
+            "throughput": True,
+            "context": True,
+            "timing": True,
+            "tool_results": True,
+        }
+    result.update({key: bool(value) for key, value in overrides.items() if key in result})
+    return result
+
+
+def metric_available(row, metric):
+    """Treat absent availability as available for legacy states and fixtures."""
+    availability = (row or {}).get("availability")
+    return not isinstance(availability, dict) or availability.get(metric) is not False
+
+
+def make_usage_provenance(session_ids, estimated_ids=(), available_ids=None,
+                          estimated_cost=0.0, estimated_tokens=0):
+    """Describe evidence quality separately from metric coverage."""
+    session_ids = set(session_ids or ())
+    estimated_ids = set(estimated_ids or ()) & session_ids
+    available_ids = session_ids if available_ids is None else set(available_ids or ()) & session_ids
+    estimated_ids &= available_ids
+    reported_ids = available_ids - estimated_ids
+    unavailable_ids = session_ids - available_ids
+    if estimated_ids and reported_ids:
+        basis = "mixed"
+    elif estimated_ids:
+        basis = "local_estimate"
+    elif reported_ids:
+        basis = "reported"
+    else:
+        basis = "unavailable"
+    return {
+        "usage_basis": basis,
+        "reported_sessions": len(reported_ids),
+        "estimated_sessions": len(estimated_ids),
+        "unavailable_sessions": len(unavailable_ids),
+        "estimated_cost": float(estimated_cost or 0),
+        "estimated_tokens": int(estimated_tokens or 0),
+    }
+
+
+def usage_provenance(rows):
+    """Roll up reported versus local-estimate sessions without changing coverage."""
+    rows = list(rows or [])
+    ids = set()
+    estimated_ids = set()
+    available_ids = set()
+    estimated_cost = 0.0
+    estimated_tokens = 0
+    for index, row in enumerate(rows):
+        row = row or {}
+        session_id = row.get("id") or row.get("path") or f"row-{index}"
+        ids.add(session_id)
+        available = metric_available(row, "cost") or metric_available(row, "tokens")
+        if available:
+            available_ids.add(session_id)
+        if row.get("token_estimate"):
+            estimated_ids.add(session_id)
+            if metric_available(row, "cost"):
+                estimated_cost += float(row.get("cost") or 0)
+            if metric_available(row, "tokens"):
+                estimated_tokens += int(row.get("tokens") or 0)
+    return make_usage_provenance(
+        ids, estimated_ids, available_ids, estimated_cost, estimated_tokens
+    )
+
+
 def decode_claude_project(name):
     user = os.environ.get("USER", "")
     prefix = "-Users-" + user
     if user and name.startswith(prefix):
         name = "~" + name[len(prefix):]
     return name.strip("-").replace("-", "/").replace("~/", "~/")
+
+
+def decode_cursor_project(name):
+    """Best-effort fallback for Cursor's lossy project directory encoding."""
+    user = os.environ.get("USER", "")
+    prefix = f"Users-{user}-" if user else ""
+    if prefix and name.startswith(prefix):
+        return home_shorten("/Users/" + user + "/" + name[len(prefix):].replace("-", "/"))
+    return name.replace("-", "/") if name else ""
 
 
 def claude_trace_cwd(path, max_lines=120):
@@ -584,6 +709,234 @@ def codex_index():
         if sid:
             idx[sid] = row
     return idx
+
+
+def _cursor_json(value, default=None):
+    """Decode one Cursor SQLite JSON value without failing the whole session."""
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return {} if default is None else default
+    if isinstance(value, dict):
+        return value
+    try:
+        decoded = json.loads(value) if value else ({} if default is None else default)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {} if default is None else default
+    return decoded
+
+
+def _cursor_db_connection(path=None):
+    """Open Cursor's live database read-only while retaining WAL visibility."""
+    path = os.path.abspath(os.path.expanduser(path or CURSOR_STATE_DB))
+    uri = f"file:{quote(path, safe='/')}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=0.05)
+    conn.execute("PRAGMA query_only = ON")
+    conn.execute("PRAGMA busy_timeout = 50")
+    return conn
+
+
+def cursor_workspace_path(*values):
+    """Extract a local workspace path from Cursor header/composer metadata."""
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        workspace = value.get("workspaceIdentifier")
+        if isinstance(workspace, dict):
+            uri = workspace.get("uri")
+            if isinstance(uri, dict):
+                path = uri.get("fsPath") or uri.get("path")
+                if isinstance(path, str) and path.strip():
+                    return path.strip()
+        repos = value.get("trackedGitRepos")
+        if isinstance(repos, list):
+            for repo in repos:
+                path = repo.get("repoPath") if isinstance(repo, dict) else None
+                if isinstance(path, str) and path.strip():
+                    return path.strip()
+    return ""
+
+
+def cursor_model(composer, header=None):
+    config = composer.get("modelConfig") if isinstance(composer, dict) else {}
+    if isinstance(config, dict) and config.get("modelName"):
+        return str(config["modelName"])
+    for value in (composer, header):
+        if isinstance(value, dict) and value.get("model"):
+            return str(value["model"])
+    return "unknown"
+
+
+def cursor_metadata_index(db_path=None):
+    """Return top-level Cursor Composer metadata in one read-only snapshot."""
+    result = {}
+    try:
+        with _cursor_db_connection(db_path) as conn:
+            headers = conn.execute(
+                "SELECT composerId, workspaceId, createdAt, lastUpdatedAt, "
+                "isArchived, isSubagent, checkpointAt, value FROM composerHeaders"
+            ).fetchall()
+            composer_values = {
+                str(key).split(":", 1)[1]: _cursor_json(value)
+                for key, value in conn.execute(
+                    "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'"
+                ).fetchall()
+                if str(key).startswith("composerData:")
+            }
+    except (OSError, sqlite3.Error):
+        return result
+
+    for composer_id, workspace_id, created_at, updated_at, archived, subagent, checkpoint_at, raw in headers:
+        header = _cursor_json(raw)
+        composer = composer_values.get(str(composer_id), {})
+        result[str(composer_id)] = {
+            "workspace_id": workspace_id,
+            "created_at": int(created_at or header.get("createdAt") or composer.get("createdAt") or 0),
+            "updated_at": int(updated_at or header.get("lastUpdatedAt") or composer.get("lastUpdatedAt") or 0),
+            "checkpoint_at": int(checkpoint_at or 0),
+            "archived": bool(archived),
+            "is_subagent": bool(subagent or header.get("isBestOfNSubcomposer") or
+                                composer.get("isBestOfNSubcomposer")),
+            "title": compact_text(str(header.get("name") or composer.get("name") or ""), 90),
+            "project": cursor_workspace_path(header, composer),
+            "model": cursor_model(composer, header),
+            "header": header,
+            "composer": composer,
+        }
+    return result
+
+
+def cursor_snapshot(composer_id, db_path=None):
+    """Read one ordered Cursor conversation, degrading cleanly on schema drift."""
+    try:
+        with _cursor_db_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT workspaceId, createdAt, lastUpdatedAt, isArchived, "
+                "isSubagent, checkpointAt, value FROM composerHeaders WHERE composerId = ?",
+                (composer_id,),
+            ).fetchone()
+            if not row:
+                return {"available": False, "header": {}, "composer": {}, "bubbles": []}
+            composer_row = conn.execute(
+                "SELECT value FROM cursorDiskKV WHERE key = ?", (f"composerData:{composer_id}",)
+            ).fetchone()
+            header = _cursor_json(row[6])
+            composer = _cursor_json(composer_row[0]) if composer_row else {}
+            ordered = composer.get("fullConversationHeadersOnly") or []
+            bubble_ids = [
+                str(item.get("bubbleId")) for item in ordered
+                if isinstance(item, dict) and item.get("bubbleId")
+            ]
+            values = {}
+            if bubble_ids:
+                keys = [f"bubbleId:{composer_id}:{bubble_id}" for bubble_id in bubble_ids]
+                for offset in range(0, len(keys), 400):
+                    chunk = keys[offset:offset + 400]
+                    placeholders = ",".join("?" for _ in chunk)
+                    values.update(conn.execute(
+                        f"SELECT key, value FROM cursorDiskKV WHERE key IN ({placeholders})", chunk
+                    ).fetchall())
+            bubbles = []
+            for bubble_id in bubble_ids:
+                value = values.get(f"bubbleId:{composer_id}:{bubble_id}")
+                bubble = _cursor_json(value, None)
+                if isinstance(bubble, dict) and bubble:
+                    bubbles.append(bubble)
+            return {
+                "available": True,
+                "header": header,
+                "composer": composer,
+                "bubbles": bubbles,
+                "created_at": int(row[1] or 0),
+                "updated_at": int(row[2] or 0),
+                "checkpoint_at": int(row[5] or 0),
+                "is_subagent": bool(row[4]),
+            }
+    except (OSError, sqlite3.Error, TypeError, ValueError):
+        return {"available": False, "header": {}, "composer": {}, "bubbles": []}
+
+
+CURSOR_TRACE_SPANS = {
+    "client.ttft",
+    "agent.request.attempt",
+    "rpc.run",
+    "ComposerChatService.submitChatMaybeAbortCurrent",
+}
+CURSOR_TRACE_FIELD_RE = re.compile(r'(\w+)=("[^"]*"|\S+)')
+
+
+def _cursor_request_file(path):
+    """Parse only bounded timing metadata from one Cursor request trace."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return []
+    signature = (stat.st_mtime_ns, stat.st_size)
+    cached = _cursor_request_cache.get(path)
+    if cached and cached["signature"] == signature:
+        return cached["rows"]
+    rows = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if " span_completed " not in line:
+                    continue
+                fields = {
+                    key: value[1:-1] if value.startswith('"') and value.endswith('"') else value
+                    for key, value in CURSOR_TRACE_FIELD_RE.findall(line)
+                }
+                name = fields.get("name")
+                composer_id = fields.get("composerId")
+                if name not in CURSOR_TRACE_SPANS or not composer_id:
+                    continue
+                try:
+                    duration_ms = float(fields.get("durationMs") or 0)
+                except (TypeError, ValueError):
+                    continue
+                end_ts = cursor_timestamp(line.split(" ", 1)[0])
+                if not end_ts or duration_ms < 0 or duration_ms > 24 * 60 * 60 * 1000:
+                    continue
+                rows.append({
+                    "composer_id": composer_id,
+                    "request_id": fields.get("requestId") or "",
+                    "trace_id": fields.get("traceId") or "",
+                    "name": name,
+                    "end_ts": float(end_ts),
+                    "start_ts": float(end_ts) - duration_ms / 1000.0,
+                    "duration_s": duration_ms / 1000.0,
+                    "error": str(fields.get("error") or "").lower() == "true",
+                })
+    except OSError:
+        rows = []
+    _cursor_request_cache[path] = {"signature": signature, "rows": rows}
+    return rows
+
+
+def cursor_request_spans(composer_id, root=None):
+    root = os.path.expanduser(root or CURSOR_REQUEST_LOGS)
+    paths = glob.glob(os.path.join(root, "**", "cursor.requestTraces.log"), recursive=True)
+    current = set(paths)
+    for path in list(_cursor_request_cache):
+        if path.startswith(root + os.sep) and path not in current:
+            _cursor_request_cache.pop(path, None)
+    return sorted(
+        (row for path in paths for row in _cursor_request_file(path)
+         if row.get("composer_id") == composer_id),
+        key=lambda row: (row["end_ts"], row["name"]),
+    )
+
+
+def cursor_enrichment_mtime(db_path=None, log_root=None):
+    db_path = os.path.expanduser(db_path or CURSOR_STATE_DB)
+    log_root = os.path.expanduser(log_root or CURSOR_REQUEST_LOGS)
+    values = [safe_mtime(db_path), safe_mtime(db_path + "-wal")]
+    values.extend(safe_mtime(path) for path in glob.glob(
+        os.path.join(log_root, "**", "cursor.requestTraces.log"), recursive=True
+    ))
+    return max(values, default=0)
 
 
 def claude_desktop_metadata_paths(root=None):
@@ -728,6 +1081,52 @@ def all_session_sources():
             "tool_namespaces": meta.get("tool_namespaces") or [],
         })
 
+    cursor_idx = cursor_metadata_index()
+    enrichment_mtime = cursor_enrichment_mtime()
+    cursor_pattern = os.path.join(
+        CURSOR_PROJECTS, "*", "agent-transcripts", "*", "*.jsonl"
+    )
+    cursor_sources = {}
+    for path in glob.glob(cursor_pattern):
+        sid = os.path.basename(path).rsplit(".", 1)[0]
+        if os.path.basename(os.path.dirname(path)) != sid:
+            continue
+        metadata = cursor_idx.get(sid) or {}
+        if metadata.get("is_subagent"):
+            continue
+        project_dir = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path))))
+        project = metadata.get("project") or decode_cursor_project(project_dir)
+        metadata_mtime = max(
+            float(metadata.get("updated_at") or 0) / 1000.0,
+            float(metadata.get("checkpoint_at") or 0) / 1000.0,
+        )
+        activity_mtime = max(safe_mtime(path), metadata_mtime)
+        trace_mtime = safe_mtime(path)
+        candidate = {
+            "provider": "cursor",
+            "client": "cursor",
+            "label": "Cursor",
+            "runtime": "Cursor",
+            "id": sid,
+            "session": os.path.basename(path),
+            "path": path,
+            "project": home_shorten(project),
+            # Activity ordering must stay session-specific. Cursor's shared DB and
+            # request log are only cache-invalidation signals; using their global
+            # mtimes here would make every Cursor session look equally recent.
+            "mtime": activity_mtime,
+            "signature_mtime": max(activity_mtime, enrichment_mtime),
+            "trace_mtime": trace_mtime,
+            "title": metadata.get("title") or None,
+            "model": metadata.get("model") or "unknown",
+        }
+        previous = cursor_sources.get(sid)
+        if not previous or (trace_mtime, path) > (
+                float(previous.get("trace_mtime") or 0), previous.get("path") or ""):
+            cursor_sources[sid] = candidate
+
+    sources.extend(cursor_sources.values())
+
     return sources
 
 
@@ -747,6 +1146,25 @@ def source_from_path(path):
             "tools_deferred": meta.get("tools_deferred") or 0,
             "tool_catalog": meta.get("tool_catalog") or [],
             "tool_namespaces": meta.get("tool_namespaces") or [],
+        }
+    if path and path.startswith(os.path.expanduser("~/.cursor/")):
+        sid = os.path.basename(path).rsplit(".", 1)[0]
+        metadata = cursor_metadata_index().get(sid) or {}
+        project_dir = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path))))
+        metadata_mtime = max(
+            float(metadata.get("updated_at") or 0) / 1000.0,
+            float(metadata.get("checkpoint_at") or 0) / 1000.0,
+        )
+        activity_mtime = max(safe_mtime(path), metadata_mtime)
+        return {
+            "provider": "cursor", "client": "cursor", "label": "Cursor",
+            "runtime": "Cursor", "id": sid, "session": os.path.basename(path),
+            "path": path,
+            "project": home_shorten(metadata.get("project") or decode_cursor_project(project_dir)),
+            "mtime": activity_mtime,
+            "signature_mtime": max(activity_mtime, cursor_enrichment_mtime()),
+            "trace_mtime": safe_mtime(path), "title": metadata.get("title") or None,
+            "model": metadata.get("model") or "unknown",
         }
     sid = os.path.basename(path).rsplit(".", 1)[0]
     trace_cwd = claude_trace_cwd(path)
@@ -818,21 +1236,67 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
     }
 
 
-def price_for(model, provider="claude"):
+def _matching_price(model, table):
+    if model in table:
+        return table[model]
+    compact = str(model or "").replace(" ", "-").lower()
+    for key, price in table.items():
+        if compact.startswith(key):
+            return price
+    return None
+
+
+def cursor_model_parameters(composer, model=None):
+    """Return persisted parameters for the selected Cursor model."""
+    config = composer.get("modelConfig") if isinstance(composer, dict) else {}
+    selected = config.get("selectedModels") if isinstance(config, dict) else []
+    fallback = {}
+    for row in selected or []:
+        if not isinstance(row, dict):
+            continue
+        params = {
+            str(item.get("id")): item.get("value")
+            for item in (row.get("parameters") or []) if isinstance(item, dict) and item.get("id")
+        }
+        fallback = fallback or params
+        if not model or str(row.get("modelId") or "") == str(model):
+            return params
+    return fallback
+
+
+def cursor_price_variant(composer, model):
+    compact = str(model or "").replace(" ", "-").lower()
+    if not compact.startswith("composer-2.5"):
+        return ""
+    fast = cursor_model_parameters(composer, model).get("fast")
+    if str(fast).lower() == "true":
+        return "fast"
+    if str(fast).lower() == "false":
+        return "standard"
+    return ""
+
+
+def price_for(model, provider="claude", variant=None):
+    if provider == "cursor":
+        compact = str(model or "").replace(" ", "-").lower()
+        if compact.startswith("composer-2.5"):
+            price = CURSOR_PRICE.get(f"composer-2.5-{variant or ''}")
+            return (price or dict(ZERO_PRICE)), True
+        price = _matching_price(model, OPENAI_PRICE) or _matching_price(model, CLAUDE_PRICE)
+        return (price or dict(ZERO_PRICE)), True
+    if provider not in ("claude", "codex"):
+        return dict(ZERO_PRICE), True
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
     table = OPENAI_PRICE if provider == "codex" else CLAUDE_PRICE
     default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL
-    if model in table:
-        return table[model], False
-    compact = model.replace(" ", "-").lower()
-    for key, price in table.items():
-        if compact.startswith(key):
-            return price, False
+    price = _matching_price(model, table)
+    if price:
+        return price, False
     return table[default], True
 
 
-def cost_of(u, model, provider="claude"):
-    p, _ = price_for(model, provider)
+def cost_of(u, model, provider="claude", variant=None):
+    p, _ = price_for(model, provider, variant)
     return {
         "input": u.get("input_tokens", 0) * p["input"] / 1e6,
         "cache_write": u.get("cache_creation_input_tokens", 0) * p["cache_write"] / 1e6,
@@ -1529,6 +1993,19 @@ def codex_user_turns(objs, default_model=None):
     return _dedupe_user_turns(event_turns or fallback_turns)
 
 
+def cursor_user_turns(objs, default_model=None):
+    """Extract human turns from Cursor's durable transcript without wrappers."""
+    turns = []
+    for row in objs or []:
+        if not isinstance(row, dict) or row.get("role") != "user":
+            continue
+        text = text_from_content(cursor_message_content(row))
+        match = re.search(r"<user_query>\s*(.*?)\s*</user_query>", text, flags=re.DOTALL)
+        turns.append({"ts": 0, "text": match.group(1) if match else text,
+                      "model": default_model or "unknown"})
+    return turns
+
+
 def _new_frustration_bucket(**identity):
     return {
         **identity,
@@ -1568,12 +2045,16 @@ def rollup_frustration_events(events):
         day = event.get("day") or ""
         week = event.get("week") or ""
         model = event.get("model") or "unknown"
+        runtime = event.get("runtime") or ""
+        model_id = event.get("model_id") or model
         if day:
             _add_frustration_event(days.setdefault(day, _new_frustration_bucket(day=day)), event)
         if week:
             _add_frustration_event(weeks.setdefault(week, _new_frustration_bucket(week=week)), event)
-        model_row = models.setdefault(model, {
-            "total": _new_frustration_bucket(model=model), "daily": {}, "weekly": {},
+        model_row = models.setdefault(model_id, {
+            "total": _new_frustration_bucket(
+                id=model_id, model=model, runtime=runtime
+            ), "daily": {}, "weekly": {},
         })
         _add_frustration_event(model_row["total"], event)
         if day:
@@ -1592,8 +2073,8 @@ def rollup_frustration_events(events):
         _finish_frustration_bucket(weeks[key]) for key in sorted(weeks)
     ]
     result["models"] = []
-    for model in sorted(models):
-        model_data = models[model]
+    for model_id in sorted(models):
+        model_data = models[model_id]
         row = _finish_frustration_bucket(model_data["total"])
         row["daily"] = [
             _finish_frustration_bucket(model_data["daily"][key])
@@ -1604,17 +2085,20 @@ def rollup_frustration_events(events):
             for key in sorted(model_data["weekly"])
         ]
         result["models"].append(row)
-    result["models"].sort(key=lambda row: (-row["utterances"], -row["user_turns"], row["model"]))
+    result["models"].sort(key=lambda row: (
+        -row["utterances"], -row["user_turns"], row["model"], row.get("runtime") or ""
+    ))
     return result
 
 
 def analyze_frustration(provider, objs, terms=None, default_model=None):
     terms = list(frustration_settings()["terms"] if terms is None else terms)
-    turns = (
-        codex_user_turns(objs, default_model)
-        if provider == "codex"
-        else claude_user_turns(objs, default_model)
-    )
+    if provider == "codex":
+        turns = codex_user_turns(objs, default_model)
+    elif provider == "cursor":
+        turns = cursor_user_turns(objs, default_model)
+    else:
+        turns = claude_user_turns(objs, default_model)
     events = []
     for turn in turns:
         ts = turn.get("ts") or 0
@@ -1978,6 +2462,604 @@ def claude_tool_results(objs):
     return chars_by_id, ts_by_id, errors_by_id
 
 
+CURSOR_TOOL_IDENTITIES = {
+    "read_file_v2": ("Read", "files"),
+    "ripgrep_raw_search": ("Grep", "search"),
+    "glob_file_search": ("Glob", "search"),
+    "run_terminal_command_v2": ("Shell", "shell"),
+    "edit_file_v2": ("Edit", "files"),
+    "apply_patch": ("Apply patch", "files"),
+    "todo_write": ("Todo", "planning"),
+    "web_search": ("Web search", "web"),
+    "web_fetch": ("Web fetch", "web"),
+    "delete_file": ("Delete", "files"),
+    "await": ("Await", "orchestration"),
+}
+CURSOR_TOOL_ALIASES = {
+    "read": "read_file_v2", "readfile": "read_file_v2", "read_file": "read_file_v2",
+    "grep": "ripgrep_raw_search", "rg": "ripgrep_raw_search",
+    "glob": "glob_file_search", "shell": "run_terminal_command_v2",
+    "edit": "edit_file_v2", "applypatch": "apply_patch",
+    "todowrite": "todo_write", "websearch": "web_search", "webfetch": "web_fetch",
+    "delete": "delete_file", "deletefile": "delete_file",
+}
+
+
+def cursor_tool_identity(name):
+    raw = str(name or "?")
+    alias = re.sub(r"[^a-z0-9_]", "", raw.lower())
+    canonical = CURSOR_TOOL_ALIASES.get(alias, raw)
+    display, namespace = CURSOR_TOOL_IDENTITIES.get(canonical, (canonical, "cursor"))
+    return {"name": canonical, "display": display, "namespace": namespace, "kind": "tool"}
+
+
+def cursor_timestamp(value):
+    if isinstance(value, (int, float)):
+        return float(value) / 1000.0 if float(value) > 10_000_000_000 else float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except (TypeError, ValueError):
+            return float(parse_iso(value) or 0)
+    return 0.0
+
+
+def cursor_message_content(row):
+    message = row.get("message") if isinstance(row, dict) else {}
+    content = message.get("content") if isinstance(message, dict) else []
+    return content if isinstance(content, list) else []
+
+
+def cursor_transcript_groups(rows, source):
+    """Reconstruct coarse turns when Cursor SQLite enrichment is unavailable."""
+    groups = []
+    current = None
+    for row in rows or []:
+        role = row.get("role") if isinstance(row, dict) else None
+        if role == "user":
+            if current:
+                groups.append(current)
+            user_text = text_from_content(cursor_message_content(row))
+            query = re.search(r"<user_query>\s*(.*?)\s*</user_query>", user_text, flags=re.DOTALL)
+            current = {
+                "user_text": query.group(1) if query else user_text,
+                "model": source.get("model") or "unknown", "bubbles": [],
+                "completed": False,
+            }
+            continue
+        if role == "assistant":
+            if current is None:
+                current = {"user_text": "", "model": source.get("model") or "unknown",
+                           "bubbles": [], "completed": False}
+            current["bubbles"].append({"type": 2, "content": cursor_message_content(row)})
+            continue
+        if row.get("type") == "turn_ended" and current:
+            current["completed"] = row.get("status") in (None, "success", "completed")
+            groups.append(current)
+            current = None
+    if current:
+        groups.append(current)
+    return groups
+
+
+def cursor_enriched_groups(snapshot):
+    groups = []
+    current = None
+    for bubble in snapshot.get("bubbles") or []:
+        if bubble.get("type") == 1:
+            if current:
+                groups.append(current)
+            model_info = bubble.get("modelInfo") if isinstance(bubble.get("modelInfo"), dict) else {}
+            current = {
+                "user_text": str(bubble.get("text") or ""),
+                "model": model_info.get("modelName") or
+                         cursor_model(snapshot.get("composer") or {}, snapshot.get("header") or {}),
+                "request_id": bubble.get("requestId") or "",
+                "start_ts": cursor_timestamp(bubble.get("createdAt")),
+                "context": bubble.get("contextWindowStatusAtCreation")
+                           if isinstance(bubble.get("contextWindowStatusAtCreation"), dict) else {},
+                "bubbles": [], "completed": False,
+            }
+            continue
+        if bubble.get("type") != 2:
+            continue
+        if current is None:
+            current = {
+                "user_text": "", "model": cursor_model(
+                    snapshot.get("composer") or {}, snapshot.get("header") or {}
+                ), "request_id": "", "start_ts": 0, "context": {}, "bubbles": [],
+                "completed": False,
+            }
+        current["bubbles"].append(bubble)
+        if bubble.get("turnDurationMs") is not None:
+            current["completed"] = True
+            current["turn_duration_ms"] = bubble.get("turnDurationMs")
+    if current:
+        groups.append(current)
+    return groups
+
+
+def cursor_turn_timing(spans, start_ts, next_start_ts=0, terminal_ts=0, turn_duration_ms=0):
+    boundary = float(next_start_ts or (terminal_ts + 24 * 60 * 60) or float("inf"))
+    matches = [
+        row for row in spans or []
+        if row.get("end_ts", 0) >= float(start_ts or 0) - 1
+        and row.get("start_ts", 0) < boundary
+        and row.get("end_ts", 0) <= boundary + 1
+    ]
+    submits = [row for row in matches if row.get("name") == "ComposerChatService.submitChatMaybeAbortCurrent"]
+    attempts = [row for row in matches if row.get("name") == "agent.request.attempt"]
+    rpc_errors = {
+        row.get("request_id") for row in matches
+        if row.get("name") == "rpc.run" and row.get("error") and row.get("request_id")
+    }
+    ttfts = [row for row in matches if row.get("name") == "client.ttft" and row.get("duration_s", 0) > 0]
+    final_ts = max((row["end_ts"] for row in submits), default=float(terminal_ts or 0))
+    intervals = [(row["start_ts"], row["end_ts"]) for row in attempts]
+    try:
+        fallback_s = max(0.0, float(turn_duration_ms or 0) / 1000.0)
+    except (TypeError, ValueError):
+        fallback_s = 0.0
+    if not intervals and fallback_s and terminal_ts:
+        intervals = [(max(0.0, float(terminal_ts) - fallback_s), float(terminal_ts))]
+    active_s = _merge_execution_intervals(intervals)
+    if final_ts and start_ts and final_ts >= start_ts:
+        wait_s = final_ts - start_ts
+    else:
+        wait_s = fallback_s
+        final_ts = float(terminal_ts or (start_ts + fallback_s if start_ts else 0))
+    failed = sum(bool(row.get("error") or row.get("request_id") in rpc_errors) for row in attempts)
+    return {
+        "end_ts": final_ts,
+        "wait_s": max(0.0, wait_s),
+        "active_s": max(0.0, active_s),
+        "active_intervals": intervals,
+        "timing_basis": "request_trace" if (submits or attempts) else
+                        ("turn_duration" if fallback_s else "unavailable"),
+        "ttft_s": min((row["duration_s"] for row in ttfts), default=0.0),
+        "attempts": len(attempts),
+        "failed_attempts": failed,
+        "retries": max(0, len(attempts) - 1),
+    }
+
+
+def cursor_prompt_breakdown(composer):
+    raw = composer.get("promptTokenBreakdown") if isinstance(composer, dict) else {}
+    categories = raw.get("categories") if isinstance(raw, dict) else []
+    return [
+        {
+            "id": str(row.get("id") or "unknown"),
+            "label": str(row.get("label") or row.get("id") or "Unknown"),
+            "estimated_tokens": int(row.get("estimatedTokens") or 0),
+        }
+        for row in (categories or []) if isinstance(row, dict)
+    ]
+
+
+def cursor_context_estimates(groups, latest_tokens=0, latest_window=0):
+    """Fill sparse Cursor context checkpoints without calling them billable input."""
+    rows = []
+    for group in groups or []:
+        context = group.get("context") if isinstance(group.get("context"), dict) else {}
+        rows.append({
+            "tokens": max(0, int(context.get("tokensUsed") or 0)),
+            "window": max(0, int(context.get("tokenLimit") or 0)),
+            "interpolated": False,
+        })
+    if not rows:
+        return rows
+    if latest_tokens:
+        rows[-1]["tokens"] = max(0, int(latest_tokens))
+    if latest_window:
+        rows[-1]["window"] = max(0, int(latest_window))
+
+    known_tokens = [index for index, row in enumerate(rows) if row["tokens"] > 0]
+    for index, row in enumerate(rows):
+        if row["tokens"] > 0:
+            continue
+        previous = max((known for known in known_tokens if known < index), default=None)
+        following = min((known for known in known_tokens if known > index), default=None)
+        if following is not None and previous is not None:
+            span = following - previous
+            share = (index - previous) / span
+            start = rows[previous]["tokens"]
+            row["tokens"] = max(1, round(start + (rows[following]["tokens"] - start) * share))
+        elif following is not None:
+            row["tokens"] = max(1, round(rows[following]["tokens"] * (index + 1) / (following + 1)))
+        elif previous is not None:
+            row["tokens"] = rows[previous]["tokens"]
+        row["interpolated"] = bool(row["tokens"])
+
+    known_windows = [index for index, row in enumerate(rows) if row["window"] > 0]
+    for index, row in enumerate(rows):
+        if row["window"] > 0:
+            continue
+        nearest = min(known_windows, key=lambda known: abs(known - index)) if known_windows else None
+        if nearest is not None:
+            row["window"] = rows[nearest]["window"]
+    return rows
+
+
+def cursor_visible_output(bubbles):
+    """Estimate only model-authored text that Cursor persisted in its bubbles."""
+    assistant_chars = 0
+    reasoning_chars = 0
+    for bubble in bubbles or []:
+        if not isinstance(bubble, dict):
+            continue
+        seen = set()
+        text = bubble.get("text")
+        if isinstance(text, str) and text.strip():
+            seen.add(text)
+            assistant_chars += len(text)
+        for block in bubble.get("content") or []:
+            if not isinstance(block, dict) or block.get("type") != "text":
+                continue
+            value = block.get("text")
+            if isinstance(value, str) and value.strip() and value not in seen:
+                seen.add(value)
+                assistant_chars += len(value)
+        thinking = bubble.get("thinking")
+        if isinstance(thinking, str) and thinking.strip() and thinking not in seen:
+            reasoning_chars += len(thinking)
+    return {
+        "assistant_chars": assistant_chars,
+        "reasoning_chars": reasoning_chars,
+        "assistant_tokens": math.ceil(assistant_chars / CHARS_PER_TOKEN) if assistant_chars else 0,
+        "reasoning_tokens": math.ceil(reasoning_chars / CHARS_PER_TOKEN) if reasoning_chars else 0,
+    }
+
+
+def cursor_model_call_count(bubbles):
+    call_ids = set()
+    has_model_activity = False
+    for bubble in bubbles or []:
+        if not isinstance(bubble, dict):
+            continue
+        tool_data = bubble.get("toolFormerData")
+        if isinstance(tool_data, dict):
+            call_id = tool_data.get("modelCallId")
+            if call_id:
+                call_ids.add(str(call_id))
+            has_model_activity = has_model_activity or bool(tool_data.get("name"))
+        has_model_activity = has_model_activity or bool(str(bubble.get("text") or "").strip())
+        has_model_activity = has_model_activity or any(
+            isinstance(block, dict) and block.get("type") in ("text", "tool_use")
+            for block in (bubble.get("content") or [])
+        )
+    return max(len(call_ids), int(has_model_activity))
+
+
+def cursor_pricing_note(model, variant, supported):
+    basis = "one context snapshot per execution plus trace-visible model text"
+    if not supported:
+        return f"Local Cursor token estimate ({basis}); no configured public rate for {model}."
+    if str(model or "").replace(" ", "-").lower().startswith("composer-2.5"):
+        rate = f"Composer 2.5 {variant.title()} public rates"
+    else:
+        rate = "selected-model public API rates"
+    return f"Local Cursor estimate ({basis}), priced with {rate}; cache and hidden model work are excluded."
+
+
+def recompute_cursor(source):
+    """Build explicitly estimated usage from Cursor's locally persisted evidence."""
+    transcript = load(source.get("path"))
+    snapshot = cursor_snapshot(source.get("id"))
+    enriched = bool(snapshot.get("available") and snapshot.get("bubbles"))
+    groups = cursor_enriched_groups(snapshot) if enriched else cursor_transcript_groups(transcript, source)
+    if not groups:
+        return None
+    spans = cursor_request_spans(source.get("id")) if enriched else []
+    composer = snapshot.get("composer") or {}
+    latest_context = int(composer.get("contextTokensUsed") or 0)
+    latest_window = int(composer.get("contextTokenLimit") or 0)
+    context_rows = cursor_context_estimates(groups, latest_context, latest_window)
+    tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    model_tok, model_cost = defaultdict(int), defaultdict(float)
+    series, executions, trace = [], [], []
+    wait_samples, performance_samples, active_intervals = [], [], []
+    first_ts = last_ts = 0.0
+
+    for position, group in enumerate(groups):
+        idx = position + 1
+        start_ts = float(group.get("start_ts") or 0)
+        next_start = float(groups[position + 1].get("start_ts") or 0) if position + 1 < len(groups) else 0
+        bubbles = group.get("bubbles") or []
+        bubble_ts = [cursor_timestamp(bubble.get("createdAt")) for bubble in bubbles
+                     if isinstance(bubble, dict) and bubble.get("createdAt")]
+        terminal_ts = max(bubble_ts, default=start_ts)
+        turn_duration_ms = group.get("turn_duration_ms") or max(
+            (bubble.get("turnDurationMs") or 0 for bubble in bubbles if isinstance(bubble, dict)),
+            default=0,
+        )
+        timing = cursor_turn_timing(spans, start_ts, next_start, terminal_ts, turn_duration_ms)
+        end_ts = timing.get("end_ts") or terminal_ts or start_ts
+        active_intervals.extend(timing.get("active_intervals") or [])
+        model = str(group.get("model") or source.get("model") or "unknown")
+        user_text = compact_text(str(group.get("user_text") or ""), 220)
+        context_row = context_rows[position]
+        context_tokens = int(context_row.get("tokens") or 0)
+        context_window = int(context_row.get("window") or 0)
+        visible = cursor_visible_output(bubbles)
+        assistant_tokens = int(visible["assistant_tokens"])
+        reasoning_tokens = int(visible["reasoning_tokens"])
+        output_tokens = assistant_tokens + reasoning_tokens
+        model_calls = cursor_model_call_count(bubbles)
+        variant = cursor_price_variant(composer, model)
+        price, _ = price_for(model, "cursor", variant)
+        pricing_supported = any(float(value or 0) > 0 for value in price.values())
+        usage = {"input_tokens": context_tokens, "output_tokens": output_tokens}
+        cost_available = bool(context_tokens and pricing_supported)
+        cost_breakdown = cost_of(usage, model, "cursor", variant) if cost_available else dict(ZERO_PRICE)
+        execution_cost = sum(cost_breakdown.values())
+        tools = []
+        reasoning_ms = 0.0
+        assistant_text = ""
+        if user_text:
+            trace.append(trace_event(start_ts, "user", "User message", compact_text(user_text, 84),
+                                     idx, severity="start", model=model))
+
+        for bubble in bubbles:
+            if not isinstance(bubble, dict):
+                continue
+            ts = cursor_timestamp(bubble.get("createdAt")) or terminal_ts
+            thinking = bubble.get("thinking")
+            try:
+                thinking_ms = float(bubble.get("thinkingDurationMs") or 0)
+            except (TypeError, ValueError):
+                thinking_ms = 0.0
+            if thinking is not None or thinking_ms > 0:
+                reasoning_ms += max(0.0, thinking_ms)
+                trace.append(trace_event(
+                    ts, "reasoning", "Reasoning",
+                    duration_label(thinking_ms / 1000.0) if thinking_ms else "Trace-visible reasoning",
+                    idx, severity="reasoning", model=model, duration_ms=thinking_ms or None,
+                ))
+            tool_data = bubble.get("toolFormerData")
+            if isinstance(tool_data, dict) and tool_data.get("name"):
+                ident = cursor_tool_identity(tool_data.get("name"))
+                arguments = tool_data.get("params") or tool_data.get("rawArgs") or {}
+                result_value = tool_data.get("result")
+                if result_value in (None, "", [], {}):
+                    result_value = tool_data.get("additionalData")
+                result_present = result_value not in (None, "", [], {})
+                output_chars = observable_output_chars(result_value) if result_present else 0
+                status = str(tool_data.get("status") or "").lower()
+                errored = bool(status in ("error", "failed", "failure") or
+                               tool_data.get("error") not in (None, "", False) or
+                               tool_result_is_error(result_value, False))
+                tool = {
+                    **ident,
+                    "id": tool_data.get("toolCallId") or bubble.get("bubbleId"),
+                    "call_id": tool_data.get("toolCallId") or bubble.get("bubbleId"),
+                    "args_chars": len(str(arguments or "")),
+                    "args_fingerprint": argument_fingerprint(arguments),
+                    "output_chars": output_chars,
+                    "output_tokens": output_chars // CHARS_PER_TOKEN,
+                    "result_available": result_present,
+                    "error": errored,
+                    "skills": skill_names_from_value(arguments),
+                }
+                tools.append(tool)
+                trace.append(trace_event(
+                    ts, "tool_call", ident["display"], ident["namespace"], idx,
+                    tool=ident["name"], severity="tool", model=model,
+                    args_chars=tool["args_chars"], tool_kind=ident["kind"],
+                ))
+                if result_present or errored:
+                    trace.append(trace_event(
+                        ts, "tool_result", ident["display"],
+                        f"~{tool['output_tokens']:,} returned tokens" if result_present else "Tool error",
+                        idx, tool=ident["name"], tokens=tool["output_tokens"],
+                        severity="warn" if errored else "retrieval", model=model,
+                        output_chars=output_chars, retrieval_tokens=tool["output_tokens"], error=errored,
+                    ))
+            text = bubble.get("text")
+            if isinstance(text, str) and text.strip():
+                assistant_text = compact_text(text, 84)
+                trace.append(trace_event(ts, "message", "Assistant message", assistant_text,
+                                         idx, model=model))
+            for block in bubble.get("content") or []:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text" and str(block.get("text") or "").strip():
+                    assistant_text = compact_text(str(block.get("text")), 84)
+                    trace.append(trace_event(ts, "message", "Assistant message", assistant_text,
+                                             idx, model=model))
+                elif block.get("type") == "tool_use":
+                    ident = cursor_tool_identity(block.get("name"))
+                    arguments = block.get("input") or {}
+                    tool = {
+                        **ident, "id": block.get("id"), "call_id": block.get("id"),
+                        "args_chars": len(str(arguments or "")),
+                        "args_fingerprint": argument_fingerprint(arguments),
+                        "output_chars": 0, "output_tokens": 0,
+                        "result_available": False, "error": False,
+                        "skills": skill_names_from_value(arguments),
+                    }
+                    tools.append(tool)
+                    trace.append(trace_event(ts, "tool_call", ident["display"], ident["namespace"],
+                                             idx, tool=ident["name"], severity="tool", model=model,
+                                             args_chars=tool["args_chars"], tool_kind="tool"))
+
+        if timing.get("retries"):
+            trace.append(trace_event(
+                end_ts, "retry", "Request retried",
+                f"{timing['attempts']} attempts · {timing['failed_attempts']} failed",
+                idx, severity="warn", model=model, attempts=timing["attempts"],
+                failed_attempts=timing["failed_attempts"], retries=timing["retries"],
+            ))
+        trace.append(trace_event(
+            end_ts, "complete", "Execution complete",
+            duration_label(timing.get("wait_s") or 0) if timing.get("wait_s") else "",
+            idx, severity="good" if group.get("completed") else "neutral", model=model,
+            duration_ms=(timing.get("wait_s") or 0) * 1000 or None,
+            cost=execution_cost if cost_available else None,
+        ))
+
+        retrieval = sum(int(tool.get("output_tokens") or 0) for tool in tools)
+        context_pct = context_tokens / context_window if context_window else None
+        output_available = bool(bubbles)
+        token_available = bool(context_tokens or output_available)
+        execution_availability = metric_availability(
+            "cursor", cost=cost_available, tokens=token_available,
+            input_tokens=bool(context_tokens), output_tokens=output_available,
+            throughput=bool(output_tokens and timing.get("active_s")),
+            context=bool(context_window), timing=bool(timing.get("wait_s")),
+            tool_results=any(tool.get("result_available") for tool in tools),
+        )
+        series.append({
+            "i": idx, "in": context_tokens, "out": output_tokens, "cost": execution_cost,
+            "fresh_input": context_tokens, "cache": 0, "cache_read": 0, "cache_write": 0,
+            "think": bool(reasoning_tokens or reasoning_ms), "tools": len(tools), "side": False,
+            "reasoning": reasoning_tokens, "reasoning_ms": reasoning_ms,
+            "context_pct": context_pct, "context_tokens": context_tokens,
+            "user_message": user_text, "user_input": user_text,
+            "availability": execution_availability,
+        })
+        execution = {
+            "id": f"{source['id']}:{idx}", "idx": idx, "ts": end_ts or start_ts,
+            "time": local_tm(end_ts or start_ts), "model": model,
+            "tokens": {"input": context_tokens, "output": output_tokens,
+                       "reasoning": reasoning_tokens, "retrieval": retrieval,
+                       "fresh_input": context_tokens, "cache": 0, "cache_read": 0,
+                       "cache_write": 0, "total": context_tokens + output_tokens},
+            "cost": execution_cost, "cost_breakdown": cost_breakdown, "tools": tools,
+            "tool_count": len(tools), "model_calls": model_calls,
+            "reasoning_tokens": reasoning_tokens, "reasoning_duration_ms": reasoning_ms,
+            "context_tokens": context_tokens, "context_window": context_window,
+            "context_interpolated": bool(context_row.get("interpolated")),
+            "context_pct": context_pct, "duration_ms": (timing.get("active_s") or 0) * 1000 or None,
+            "wait_duration_ms": (timing.get("wait_s") or 0) * 1000 or None,
+            "ttft_ms": (timing.get("ttft_s") or 0) * 1000 or None,
+            "attempts": timing.get("attempts") or 0,
+            "failed_attempts": timing.get("failed_attempts") or 0,
+            "retries": timing.get("retries") or 0,
+            "timing_basis": timing.get("timing_basis"), "pricing_variant": variant,
+            "summary": (f"Execution {idx}: {len(tools)} tools · ${execution_cost:.3f} local estimate"
+                        if cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable"),
+            "user_message": user_text, "user_input": user_text,
+            "availability": execution_availability,
+        }
+        executions.append(execution)
+        tot["input"] += context_tokens
+        tot["output"] += output_tokens
+        if cost_available:
+            for key in cost:
+                cost[key] += float(cost_breakdown.get(key) or 0)
+        model_tok[model] += context_tokens + output_tokens
+        model_cost[model] += execution_cost
+        if timing.get("wait_s"):
+            wait_samples.append({
+                "provider": "cursor", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                "ts": end_ts, "start_ts": start_ts, "duration_s": timing["wait_s"],
+                "tool_calls": len(tools), "output_tokens": output_tokens,
+                "context_tokens": context_tokens, "model_calls": model_calls,
+                "timing_basis": timing.get("timing_basis") or "observed",
+                "ttft_s": timing.get("ttft_s") or 0,
+                "attempts": timing.get("attempts") or 0,
+                "failed_attempts": timing.get("failed_attempts") or 0,
+                "retries": timing.get("retries") or 0,
+            })
+        if output_tokens and timing.get("active_s"):
+            performance_samples.append({
+                "provider": "cursor", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                "ts": end_ts, "input_tokens": context_tokens, "output_tokens": output_tokens,
+                "peak_input_tokens": context_tokens, "uncached_input_tokens": context_tokens,
+                "cache_read_tokens": 0, "cache_write_tokens": 0, "model_calls": model_calls,
+                "duration_s": timing["active_s"], "generation_s": timing["active_s"],
+                "ttft_s": timing.get("ttft_s") or 0, "tool_calls": len(tools),
+                "timing_basis": timing.get("timing_basis") or "observed",
+            })
+        if start_ts:
+            first_ts = min(first_ts or start_ts, start_ts)
+        if end_ts:
+            last_ts = max(last_ts, end_ts)
+
+    total_tokens = sum(tot.values())
+    total_cost = sum(cost.values())
+    tool_data = tool_summary(executions)
+    model_names = [execution.get("model") or "unknown" for execution in executions]
+    primary_model = max(set(model_names), key=model_names.count) if model_names else source.get("model") or "unknown"
+    reasoning_total = sum(int(execution.get("reasoning_tokens") or 0) for execution in executions)
+    reasoning_cost = sum(
+        float((execution.get("cost_breakdown") or {}).get("output") or 0)
+        * int(execution.get("reasoning_tokens") or 0)
+        / max(1, int((execution.get("tokens") or {}).get("output") or 0))
+        for execution in executions
+    )
+    analyses = analysis_block(
+        tot, total_cost, reasoning_total,
+        sum(bool(execution.get("reasoning_tokens") or execution.get("reasoning_duration_ms"))
+            for execution in executions),
+        reasoning_cost, model_tok, model_cost, tool_data, 0.0, 0,
+        sum(bool(group.get("completed")) for group in groups),
+    )
+    active_s = _merge_execution_intervals(active_intervals)
+    if not active_s:
+        active_s = sum(float(execution.get("duration_ms") or 0) / 1000.0 for execution in executions)
+    source = dict(source)
+    primary_variant = cursor_price_variant(composer, primary_model)
+    primary_price, _ = price_for(primary_model, "cursor", primary_variant)
+    pricing_supported = any(float(value or 0) > 0 for value in primary_price.values())
+    pricing_note = cursor_pricing_note(primary_model, primary_variant, pricing_supported)
+    source.update({
+        "context_latest": latest_context or (executions[-1].get("context_tokens") if executions else 0),
+        "context_window": latest_window or max((e.get("context_window") or 0 for e in executions), default=0),
+        "context_breakdown": cursor_prompt_breakdown(composer),
+        "token_estimate": True,
+        "estimate_basis": "context_proxy_and_visible_output",
+        "pricing_variant": primary_variant,
+    })
+    input_available = bool(executions and all(metric_available(e, "input_tokens") for e in executions))
+    output_available = bool(executions and all(metric_available(e, "output_tokens") for e in executions))
+    cost_available = bool(executions and all(metric_available(e, "cost") for e in executions))
+    throughput = performance_summary(performance_samples, tot["output"])
+    availability = metric_availability(
+        "cursor", cost=cost_available, tokens=bool(input_available or output_available),
+        input_tokens=input_available, output_tokens=output_available,
+        throughput=bool(throughput.get("available")),
+        context=bool(source["context_window"]), timing=bool(active_s or wait_samples),
+        tool_results=any(tool.get("result_available") for e in executions for tool in e.get("tools") or []),
+    )
+    biggest = max(
+        ({"cost": execution.get("cost") or 0, "idx": execution.get("idx")} for execution in executions),
+        key=lambda row: row["cost"], default=None,
+    )
+    state = build_state(
+        source, tot, cost, total_tokens, total_cost, series, executions, trace,
+        {"reasoning": reasoning_total, "output": max(0, tot["output"] - reasoning_total),
+         "retrieval": tool_data["total_output_tokens"], "coordination": 0},
+        analyses, [], first_ts, last_ts,
+        (time.time() - last_ts) if last_ts else 1e9, biggest, 0, cost_available,
+        primary_model, pricing_note,
+        {"duration_s": active_s, "available": bool(active_s),
+         "reported_executions": sum(bool(e.get("duration_ms")) for e in executions),
+         "observed_executions": 0, "execution_count": len(executions),
+         "basis": "request trace" if spans else ("turn duration" if active_s else "unavailable")},
+        wait_samples, availability=availability,
+    )
+    state["throughput"] = throughput
+    state["token_estimate"] = True
+    state["estimation"] = {
+        "basis": "one context snapshot per execution plus trace-visible model text",
+        "input": "context proxy",
+        "output": "visible text estimate",
+        "excluded": ["cache accounting", "hidden reasoning", "repeated internal model-call input"],
+    }
+    state["context"]["breakdown"] = source.get("context_breakdown") or []
+    state["context"]["estimated"] = True
+    state["cursor_enrichment"] = {
+        "database": enriched,
+        "request_traces": bool(spans),
+        "transcript_fallback": not enriched,
+    }
+    return state
+
+
 def recompute(source):
     if isinstance(source, str):
         source = source_from_path(source)
@@ -1985,7 +3067,11 @@ def recompute(source):
         return None
     if source["provider"] == "codex":
         return recompute_codex(source)
-    return recompute_claude(source)
+    if source["provider"] == "claude":
+        return recompute_claude(source)
+    if source["provider"] == "cursor":
+        return recompute_cursor(source)
+    return None
 
 
 def recompute_claude(source):
@@ -2551,7 +3637,8 @@ def recompute_codex(source):
 
 def build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                 analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
-                primary_model, pricing_note, active_timing=None, wait_samples=None):
+                primary_model, pricing_note, active_timing=None, wait_samples=None,
+                availability=None):
     elapsed = (last_ts - first_ts) if (first_ts and last_ts) else 0
     active_timing = active_timing or {}
     wait_samples = wait_samples or []
@@ -2563,9 +3650,15 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
     cache = cache_block(tot, cost, executions, source["provider"], primary_model)
     tool_data = tool_summary(executions)
-    context_window = max((e.get("context_window") or 0 for e in executions), default=0) or None
-    context_peak = max((e.get("context_tokens") or e.get("tokens", {}).get("input", 0) for e in executions), default=0)
-    context_latest = executions[-1].get("context_tokens", 0) if executions else 0
+    context_window = (source.get("context_window") or
+                      max((e.get("context_window") or 0 for e in executions), default=0) or None)
+    context_peak = max(
+        int(source.get("context_latest") or 0),
+        max((e.get("context_tokens") or e.get("tokens", {}).get("input", 0)
+             for e in executions), default=0),
+    )
+    context_latest = int(source.get("context_latest") or
+                         (executions[-1].get("context_tokens", 0) if executions else 0))
     context_pct = (context_latest / context_window) if context_window else None
     context_peak_pct = (context_peak / context_window) if context_window else None
     tools_loaded = int(source.get("tools_loaded") or 0)
@@ -2590,6 +3683,13 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     tool_data["catalog_coverage"] = catalog_coverage
     tool_data["loaded_namespaces"] = list(source.get("tool_namespaces") or [])
     tool_data["catalog"] = tool_catalog[:80]
+    availability = availability or metric_availability(
+        source["provider"], context=bool(context_window),
+        timing=bool(active_available or wait_samples),
+        tool_results=True,
+    )
+    cache["available"] = bool(availability.get("cache"))
+    tool_data["results_available"] = bool(availability.get("tool_results"))
     insights = enrich_insights(insights, executions, tool_data, context_window, context_latest, context_peak,
                                source["provider"])
     source_obj = {
@@ -2603,17 +3703,22 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
         "project": source.get("project") or "",
         "pricing_note": pricing_note,
         "approximate_cost": bool(approx_cost),
+        "token_estimate": bool(source.get("token_estimate")),
+        "estimate_basis": source.get("estimate_basis") or "",
+        "pricing_variant": source.get("pricing_variant") or "",
         "tools_loaded": tools_loaded,
         "tools_loaded_known": loaded_known,
         "tools_advertised": advertised,
         "tools_eager": eager,
         "tools_deferred": deferred,
         "tool_catalog_coverage": catalog_coverage,
+        "availability": availability,
     }
     return {
         "provider": source["provider"],
         "client": source.get("client") or source["provider"],
         "source": source_obj,
+        "availability": availability,
         "session": source["session"],
         "project": source.get("project") or "",
         "tokens": tot,
@@ -2653,9 +3758,15 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
                     "duration_s": row["duration_s"],
                     "model": row.get("model") or "unknown",
                     "tool_calls": int(row.get("tool_calls") or 0),
+                    "model_calls": int(row.get("model_calls") or 0),
                     "output_tokens": int(row.get("output_tokens") or 0),
+                    "context_tokens": int(row.get("context_tokens") or 0),
                     "timing_basis": row.get("timing_basis") or "observed",
                     "ts": row.get("ts") or 0,
+                    "ttft_s": float(row.get("ttft_s") or 0),
+                    "attempts": int(row.get("attempts") or 0),
+                    "failed_attempts": int(row.get("failed_attempts") or 0),
+                    "retries": int(row.get("retries") or 0),
                 }
                 for index, row in enumerate(wait_samples, 1)
             ],
@@ -3152,12 +4263,14 @@ def codex_summary(source, objs):
 
 def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                 active_timing=None, input_tokens=0, output_tokens=0, model_stats=None,
-                model_daily=None, performance_samples=None, wait_samples=None):
+                model_daily=None, performance_samples=None, wait_samples=None,
+                availability=None):
     active_timing = active_timing or {}
     model_stats = model_stats or {}
     model_daily = model_daily or []
     performance_samples = performance_samples or []
     wait_samples = wait_samples or []
+    availability = availability or metric_availability(source.get("provider"))
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     return {
         "id": source["id"],
@@ -3171,6 +4284,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "title": title or source.get("title") or "(untitled log)",
         "cost": cost,
         "cost_approx": bool(approx),
+        "availability": availability,
         "tokens": tokens,
         "input_tokens": int(input_tokens or 0),
         "output_tokens": int(output_tokens or 0),
@@ -3184,6 +4298,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
                 "input_tokens": int(values.get("input_tokens") or 0),
                 "output_tokens": int(values.get("output_tokens") or 0),
                 "executions": int(values.get("executions") or 0),
+                "availability": values.get("availability") or availability,
             }
             for model, values in model_stats.items()
         ], key=lambda row: (-row["cost"], -row["tokens"], row["model"])),
@@ -3203,18 +4318,139 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "_performance_samples": performance_samples,
         "_wait_samples": wait_samples,
     }
+    row["provenance"] = usage_provenance([row])
+    row["usage_basis"] = row["provenance"]["usage_basis"]
+    return row
+
+
+def cursor_summary(source, objs=None):
+    """Build a cross-session Cursor row from the same local-estimate contract."""
+    state = recompute_cursor(source)
+    if not state:
+        availability = metric_availability("cursor")
+        return summary_row(
+            source, source.get("title"), 0.0, 0, 0, set(), None, None,
+            {}, {}, {}, False, availability=availability,
+        )
+    executions = state.get("executions") or []
+    availability = state.get("availability") or metric_availability("cursor")
+    model_stats = {}
+    model_daily = {}
+    model_cost = defaultdict(float)
+    model_tok = defaultdict(int)
+    day_cost = defaultdict(float)
+    performance_samples = []
+    wait_samples = []
+    for execution in executions:
+        model = execution.get("model") or "unknown"
+        token_data = execution.get("tokens") or {}
+        input_tokens = int(token_data.get("input") or 0)
+        output_tokens = int(token_data.get("output") or 0)
+        execution_cost = float(execution.get("cost") or 0)
+        stats = model_stats.setdefault(model, {
+            "cost": 0.0, "tokens": 0, "input_tokens": 0,
+            "output_tokens": 0, "executions": 0, "availability": availability,
+        })
+        stats["cost"] += execution_cost
+        stats["tokens"] += input_tokens + output_tokens
+        stats["input_tokens"] += input_tokens
+        stats["output_tokens"] += output_tokens
+        stats["executions"] += 1
+        model_cost[model] += execution_cost
+        model_tok[model] += input_tokens + output_tokens
+        ts = float(execution.get("ts") or 0)
+        if ts:
+            day = time.strftime("%Y-%m-%d", time.localtime(ts))
+            day_cost[day] += execution_cost
+            daily = model_daily.setdefault((model, day), {
+                "model": model, "day": day, "cost": 0.0,
+                "input_tokens": 0, "output_tokens": 0, "executions": 0,
+                "availability": availability,
+            })
+            daily["cost"] += execution_cost
+            daily["input_tokens"] += input_tokens
+            daily["output_tokens"] += output_tokens
+            daily["executions"] += 1
+        duration_s = float(execution.get("duration_ms") or 0) / 1000.0
+        if output_tokens and duration_s:
+            performance_samples.append({
+                "provider": "cursor", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+                "ts": ts, "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "peak_input_tokens": int(execution.get("context_tokens") or input_tokens),
+                "uncached_input_tokens": input_tokens, "cache_read_tokens": 0,
+                "cache_write_tokens": 0, "model_calls": int(execution.get("model_calls") or 0),
+                "duration_s": duration_s, "generation_s": duration_s,
+                "ttft_s": float(execution.get("ttft_ms") or 0) / 1000.0,
+                "tool_calls": int(execution.get("tool_count") or 0),
+                "timing_basis": execution.get("timing_basis") or "observed",
+            })
+    for sample in (state.get("wait_time") or {}).get("samples") or []:
+        ts = float(sample.get("ts") or 0)
+        wait_samples.append({
+            **sample,
+            "provider": "cursor",
+            "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+        })
+    first_ts = float((state.get("timing") or {}).get("start_ts") or 0) or None
+    last_ts = float((state.get("timing") or {}).get("end_ts") or 0) or None
+    active = {
+        "duration_s": float((state.get("timing") or {}).get("duration_s") or 0),
+        "available": bool((state.get("timing") or {}).get("duration_available")),
+        "basis": (state.get("timing") or {}).get("duration_basis") or "unavailable",
+    }
+    row = summary_row(
+        source, source.get("title"), float(state.get("total_cost") or 0),
+        int(state.get("total_tokens") or 0), len(executions), set(model_stats),
+        first_ts, last_ts, model_cost, model_tok, day_cost, bool(state.get("cost_approx")), active,
+        int((state.get("tokens") or {}).get("input") or 0),
+        int((state.get("tokens") or {}).get("output") or 0),
+        model_stats, list(model_daily.values()), performance_samples, wait_samples,
+        availability,
+    )
+    row["token_estimate"] = bool(state.get("token_estimate"))
+    row["provenance"] = usage_provenance([row])
+    row["usage_basis"] = row["provenance"]["usage_basis"]
+    terms = frustration_settings()["terms"]
+    events = []
+    for execution in executions:
+        ts = float(execution.get("ts") or 0)
+        day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
+        term_counts = frustration_term_counts(execution.get("user_input") or "", terms)
+        events.append({
+            "ts": ts, "day": day, "week": week_start(day),
+            "model": execution.get("model") or "unknown",
+            "utterance": bool(term_counts), "matches": sum(term_counts.values()),
+            "term_counts": term_counts,
+        })
+    row["frustration"] = rollup_frustration_events(events)
+    row["_frustration_events"] = events
+    calls = []
+    for execution in executions:
+        for tool in execution.get("tools") or []:
+            calls.append({**tool, "ts": execution.get("ts") or 0})
+    row["_tool_evidence"] = summarize_tool_evidence(calls)
+    row["context"] = state.get("context") or {}
+    row["tool_calls"] = int((state.get("tools") or {}).get("total_calls") or 0)
+    row["tool_errors"] = int((state.get("tools") or {}).get("total_errors") or 0)
+    return row
 
 
 def session_summary(source):
     cached = _summary_cache.get(source["path"])
-    mtime = source.get("mtime") or safe_mtime(source["path"])
+    mtime = source.get("signature_mtime") or source.get("mtime") or safe_mtime(source["path"])
     if cached and cached.get("mtime") == mtime:
         return cached["row"]
     objs = load(source["path"])
     if source["provider"] == "codex":
         row = codex_summary(source, objs)
-    else:
+    elif source["provider"] == "claude":
         row = claude_summary(source, objs)
+    elif source["provider"] == "cursor":
+        row = cursor_summary(source, objs)
+    else:
+        row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
+                          {}, {}, {}, False, availability=metric_availability("unknown"))
     _summary_cache[source["path"]] = {"mtime": mtime, "row": row}
     return row
 
@@ -3236,10 +4472,16 @@ def global_tool_waste(session_rows):
     advertised_names = set()
     used_advertised_names = set()
 
+    def evidence_key(name, kind, provider):
+        # Keep the existing cross-runtime MCP view unchanged. Plain tools are
+        # runtime-owned, so identical Cursor/Codex/Claude names stay separate.
+        return name if kind == "mcp" else f"{provider}::{name}"
+
     for session in session_rows:
         evidence = session.get("_tool_evidence") or {}
         project = session.get("project") or "local"
         provider = session.get("provider") or "unknown"
+        runtime = session.get("runtime") or source_runtime_label(session)
         session_id = session.get("id") or session.get("path")
         for key in ("total_calls", "total_output_tokens", "flagged_tokens", "oversized_calls",
                     "oversized_tokens", "repeat_calls", "repeat_tokens", "errors", "error_tokens",
@@ -3253,11 +4495,14 @@ def global_tool_waste(session_rows):
 
         for item in evidence.get("tools") or []:
             name = item.get("name") or "?"
-            row = by_name.setdefault(name, {
+            kind = item.get("kind") or "tool"
+            key = evidence_key(name, kind, provider)
+            row = by_name.setdefault(key, {
+                "id": key,
                 "name": name,
                 "display": item.get("display") or name,
                 "namespace": item.get("namespace") or "unknown",
-                "kind": item.get("kind") or "tool",
+                "kind": kind, "runtime": runtime,
                 "calls": 0, "output_tokens": 0, "flagged_tokens": 0,
                 "errors": 0, "oversized_calls": 0, "repeat_calls": 0,
                 "last_ts": 0, "sessions": set(), "projects": set(),
@@ -3275,8 +4520,10 @@ def global_tool_waste(session_rows):
             row["providers"].add(provider)
 
             namespace = row["namespace"]
-            ns = by_namespace.setdefault(namespace, {
-                "namespace": namespace, "kind": row["kind"], "calls": 0,
+            namespace_key = evidence_key(namespace, row["kind"], provider)
+            ns = by_namespace.setdefault(namespace_key, {
+                "id": namespace_key, "namespace": namespace, "kind": row["kind"],
+                "runtime": runtime, "providers": set(), "calls": 0,
                 "output_tokens": 0, "flagged_tokens": 0, "errors": 0,
                 "sessions": set(), "projects": set(),
             })
@@ -3286,6 +4533,7 @@ def global_tool_waste(session_rows):
             ns["errors"] += int(item.get("errors") or 0)
             ns["sessions"].add(session_id)
             ns["projects"].add(project)
+            ns["providers"].add(provider)
 
         for item in evidence.get("skills") or []:
             name = item.get("name") or "?"
@@ -3302,13 +4550,16 @@ def global_tool_waste(session_rows):
         session_used = {item.get("name") for item in evidence.get("tools") or []}
         for item in evidence.get("catalog") or []:
             name = item.get("name") or "?"
+            kind = item.get("kind") or "tool"
+            key = evidence_key(name, kind, provider)
             advertised_names.add(name)
             if name in session_used:
                 used_advertised_names.add(name)
-            row = by_name.setdefault(name, {
+            row = by_name.setdefault(key, {
+                "id": key,
                 "name": name, "display": name,
                 "namespace": item.get("namespace") or "unknown",
-                "kind": item.get("kind") or "tool",
+                "kind": kind, "runtime": runtime,
                 "calls": 0, "output_tokens": 0, "flagged_tokens": 0,
                 "errors": 0, "oversized_calls": 0, "repeat_calls": 0,
                 "last_ts": 0, "sessions": set(), "projects": set(),
@@ -3365,8 +4616,9 @@ def global_tool_waste(session_rows):
             reason = f"{project_share * 100:.0f}% of calls came from {top_project}."
 
         tool_rows.append({
-            "name": row["name"], "display": row["display"],
+            "id": row["id"], "name": row["name"], "display": row["display"],
             "namespace": row["namespace"], "kind": row["kind"],
+            "runtime": row["runtime"],
             "calls": row["calls"], "output_tokens": row["output_tokens"],
             "flagged_tokens": row["flagged_tokens"], "errors": row["errors"],
             "oversized_calls": row["oversized_calls"], "repeat_calls": row["repeat_calls"],
@@ -3389,7 +4641,8 @@ def global_tool_waste(session_rows):
     namespace_rows = []
     for row in by_namespace.values():
         namespace_rows.append({
-            "namespace": row["namespace"], "kind": row["kind"],
+            "id": row["id"], "namespace": row["namespace"], "kind": row["kind"],
+            "runtime": row["runtime"], "providers": sorted(row["providers"]),
             "calls": row["calls"], "output_tokens": row["output_tokens"],
             "flagged_tokens": row["flagged_tokens"], "errors": row["errors"],
             "sessions_used": len(row["sessions"]), "projects": sorted(row["projects"]),
@@ -3652,8 +4905,9 @@ def capability_inventory(waste=None):
         if advertised:
             state = "Eager" if eager and not deferred else ("Deferred" if deferred and not eager else "Mixed")
         tool_items.append({
-            "id": f"tool:{row.get('name')}", "type": "tool", "name": row.get("display") or row.get("name"),
-            "identity": row.get("name"), "runtime": ", ".join(row.get("providers") or []) or "trace",
+            "id": f"tool:{row.get('id') or row.get('name')}", "type": "tool",
+            "name": row.get("display") or row.get("name"),
+            "identity": row.get("name"), "runtime": row.get("runtime") or "Trace",
             "source": row.get("namespace") or "unknown", "state": state,
             "enabled": True, "mutable": False, "used": bool(row.get("calls")),
             "calls": int(row.get("calls") or 0), "returned_tokens": int(row.get("output_tokens") or 0),
@@ -4181,19 +5435,28 @@ def refresh_capability_state():
 
 
 def daily_summaries(session_rows, limit=30):
-    """Aggregate exact per-day spend and completed end-to-end wait time."""
+    """Aggregate daily spend, usage provenance, and completed wait time."""
     days = {}
 
     def day_row(day):
         return days.setdefault(day, {
-            "day": day, "cost": 0.0, "providers": {},
+            "day": day, "cost": 0.0, "tokens": 0,
+            "input_tokens": 0, "output_tokens": 0, "providers": {},
             "sessions": {}, "projects": set(), "wait_s": 0.0,
             "wait_samples": 0, "longest_wait_s": 0.0,
+            "session_ids": set(), "cost_covered_ids": set(), "token_covered_ids": set(),
+            "cache_covered_ids": set(), "estimated_ids": set(),
+            "estimated_cost": 0.0, "estimated_tokens": 0,
         })
 
     def provider_row(row, provider):
         return row["providers"].setdefault(provider, {
-            "provider": provider, "cost": 0.0, "wait_s": 0.0, "wait_samples": 0,
+            "provider": provider, "cost": 0.0, "tokens": 0,
+            "input_tokens": 0, "output_tokens": 0,
+            "wait_s": 0.0, "wait_samples": 0,
+            "session_ids": set(), "cost_covered_ids": set(), "token_covered_ids": set(),
+            "cache_covered_ids": set(), "estimated_ids": set(),
+            "estimated_cost": 0.0, "estimated_tokens": 0,
         })
 
     def session_row(row, session, provider, project):
@@ -4202,30 +5465,80 @@ def daily_summaries(session_rows, limit=30):
             "id": session_id, "title": session.get("title") or session_id,
             "project": project, "provider": provider,
             "label": session.get("label") or provider, "cost": 0.0,
+            "tokens": 0, "input_tokens": 0, "output_tokens": 0,
             "wait_s": 0.0, "wait_samples": 0, "longest_wait_s": 0.0,
+            "availability": session.get("availability") or metric_availability(provider),
+            "token_estimate": bool(session.get("token_estimate")),
         })
 
     for session in session_rows or []:
         provider = session.get("provider") or "unknown"
         project = session.get("project") or "local"
+        session_id = session.get("id") or session.get("path") or "unknown"
+        estimated = bool(session.get("token_estimate"))
+
+        def mark_coverage(row):
+            row["session_ids"].add(session_id)
+            if metric_available(session, "cost"):
+                row["cost_covered_ids"].add(session_id)
+            if metric_available(session, "tokens"):
+                row["token_covered_ids"].add(session_id)
+            if metric_available(session, "cache"):
+                row["cache_covered_ids"].add(session_id)
+            if estimated:
+                row["estimated_ids"].add(session_id)
+
         for day, value in (session.get("_day_cost") or {}).items():
             cost = float(value or 0)
             row = day_row(day)
             row["cost"] += cost
-            provider_row(row, provider)["cost"] += cost
+            runtime = provider_row(row, provider)
+            runtime["cost"] += cost
+            if estimated:
+                row["estimated_cost"] += cost
+                runtime["estimated_cost"] += cost
+            mark_coverage(row)
+            mark_coverage(runtime)
             row["projects"].add(project)
             session_row(row, session, provider, project)["cost"] += cost
+        for stats in session.get("_model_daily") or []:
+            day = stats.get("day") or ""
+            if not day:
+                continue
+            input_tokens = int(stats.get("input_tokens") or 0)
+            output_tokens = int(stats.get("output_tokens") or 0)
+            tokens = input_tokens + output_tokens
+            row = day_row(day)
+            runtime = provider_row(row, provider)
+            mark_coverage(row)
+            mark_coverage(runtime)
+            row["tokens"] += tokens
+            row["input_tokens"] += input_tokens
+            row["output_tokens"] += output_tokens
+            runtime["tokens"] += tokens
+            runtime["input_tokens"] += input_tokens
+            runtime["output_tokens"] += output_tokens
+            if estimated:
+                row["estimated_tokens"] += tokens
+                runtime["estimated_tokens"] += tokens
+            row["projects"].add(project)
+            daily_session = session_row(row, session, provider, project)
+            daily_session["tokens"] += tokens
+            daily_session["input_tokens"] += input_tokens
+            daily_session["output_tokens"] += output_tokens
         for sample in session.get("_wait_samples") or []:
             day = sample.get("day") or ""
             duration_s = float(sample.get("duration_s") or 0)
             if not day or duration_s <= 0:
                 continue
             row = day_row(day)
+            mark_coverage(row)
             row["wait_s"] += duration_s
             row["wait_samples"] += 1
             row["longest_wait_s"] = max(row["longest_wait_s"], duration_s)
             row["projects"].add(project)
             runtime = provider_row(row, provider)
+            mark_coverage(runtime)
             runtime["wait_s"] += duration_s
             runtime["wait_samples"] += 1
             daily_session = session_row(row, session, provider, project)
@@ -4236,12 +5549,91 @@ def daily_summaries(session_rows, limit=30):
     result = []
     for day in sorted((value for value in days if value), reverse=True)[:limit]:
         row = days[day]
-        sessions = sorted(row["sessions"].values(), key=lambda value: (-value["cost"], value["title"]))
-        providers = sorted(row["providers"].values(),
+        sessions = []
+        for daily_session in row["sessions"].values():
+            session_id = daily_session["id"]
+            available = set()
+            if metric_available(daily_session, "cost"):
+                available.add(session_id)
+            if metric_available(daily_session, "tokens"):
+                available.add(session_id)
+            estimated_ids = {session_id} if daily_session.get("token_estimate") else set()
+            daily_session["provenance"] = make_usage_provenance(
+                {session_id}, estimated_ids, available,
+                daily_session["cost"] if estimated_ids else 0,
+                daily_session["tokens"] if estimated_ids else 0,
+            )
+            daily_session["usage_basis"] = daily_session["provenance"]["usage_basis"]
+            sessions.append(daily_session)
+        sessions.sort(key=lambda value: (-value["cost"], value["title"]))
+        providers = []
+        for provider in row["providers"].values():
+            session_ids = provider.pop("session_ids")
+            cost_ids = provider.pop("cost_covered_ids")
+            token_ids = provider.pop("token_covered_ids")
+            cache_ids = provider.pop("cache_covered_ids")
+            estimated_ids = provider.pop("estimated_ids")
+            total_sessions = len(session_ids)
+            cost_covered = len(cost_ids)
+            token_covered = len(token_ids)
+            cache_covered = len(cache_ids)
+            provider_coverage = {
+                "cost": {"covered_sessions": cost_covered, "total_sessions": total_sessions,
+                         "complete": cost_covered == total_sessions},
+                "tokens": {"covered_sessions": token_covered, "total_sessions": total_sessions,
+                           "complete": token_covered == total_sessions},
+                "cache": {"covered_sessions": cache_covered, "total_sessions": total_sessions,
+                          "complete": cache_covered == total_sessions},
+            }
+            provider["coverage"] = provider_coverage
+            provider["availability"] = {
+                "cost": cost_covered > 0, "tokens": token_covered > 0,
+                "input_tokens": token_covered > 0, "output_tokens": token_covered > 0,
+                "cache": cache_covered > 0, "throughput": token_covered > 0,
+                "context": True, "timing": bool(provider["wait_samples"]), "tool_results": True,
+            }
+            provider["provenance"] = make_usage_provenance(
+                session_ids, estimated_ids, cost_ids | token_ids,
+                provider.pop("estimated_cost"), provider.pop("estimated_tokens"),
+            )
+            provider["usage_basis"] = provider["provenance"]["usage_basis"]
+            providers.append(provider)
+        providers = sorted(providers,
                            key=lambda value: (-value["cost"], -value["wait_s"], value["provider"]))
+        session_ids = row.pop("session_ids")
+        cost_ids = row.pop("cost_covered_ids")
+        token_ids = row.pop("token_covered_ids")
+        cache_ids = row.pop("cache_covered_ids")
+        estimated_ids = row.pop("estimated_ids")
+        total_sessions = len(session_ids)
+        cost_covered = len(cost_ids)
+        token_covered = len(token_ids)
+        cache_covered = len(cache_ids)
+        coverage = {
+            "cost": {"covered_sessions": cost_covered, "total_sessions": total_sessions,
+                     "complete": cost_covered == total_sessions},
+            "tokens": {"covered_sessions": token_covered, "total_sessions": total_sessions,
+                       "complete": token_covered == total_sessions},
+            "cache": {"covered_sessions": cache_covered, "total_sessions": total_sessions,
+                      "complete": cache_covered == total_sessions},
+        }
+        provenance = make_usage_provenance(
+            session_ids, estimated_ids, cost_ids | token_ids,
+            row.pop("estimated_cost"), row.pop("estimated_tokens"),
+        )
         result.append({
-            "day": day, "cost": row["cost"], "sessions": len(sessions),
+            "day": day, "cost": row["cost"], "tokens": row["tokens"],
+            "input_tokens": row["input_tokens"], "output_tokens": row["output_tokens"],
+            "sessions": len(sessions),
             "projects": len(row["projects"]), "providers": providers,
+            "coverage": coverage, "provenance": provenance,
+            "usage_basis": provenance["usage_basis"],
+            "availability": {
+                "cost": cost_covered > 0, "tokens": token_covered > 0,
+                "input_tokens": token_covered > 0, "output_tokens": token_covered > 0,
+                "cache": cache_covered > 0, "throughput": token_covered > 0,
+                "context": True, "timing": bool(row["wait_samples"]), "tool_results": True,
+            },
             "wait_time": {
                 "available": bool(row["wait_samples"]),
                 "total_s": row["wait_s"],
@@ -4475,6 +5867,9 @@ def aggregate_model_stats(session_rows):
             "workload_peak_inputs": [], "workload_outputs": [],
             "workload_tool_calls": [], "workload_model_calls": [],
             "workload_cache_ratios": [],
+            "_log_ids": set(), "_cost_covered_ids": set(), "_token_covered_ids": set(),
+            "_cache_covered_ids": set(), "_estimated_ids": set(),
+            "_estimated_cost": 0.0, "_estimated_tokens": 0,
         })
 
     def daily_row(parent, day):
@@ -4489,19 +5884,38 @@ def aggregate_model_stats(session_rows):
             "workload_peak_inputs": [], "workload_outputs": [],
             "workload_tool_calls": [], "workload_model_calls": [],
             "workload_cache_ratios": [],
+            "_log_ids": set(), "_cost_covered_ids": set(), "_token_covered_ids": set(),
+            "_cache_covered_ids": set(), "_estimated_ids": set(),
+            "_estimated_cost": 0.0, "_estimated_tokens": 0,
         })
+
+    def mark_model_coverage(target, session, session_id, availability=None):
+        availability = availability or session.get("availability") or {}
+        target["_log_ids"].add(session_id)
+        if availability.get("cost") is not False and metric_available(session, "cost"):
+            target["_cost_covered_ids"].add(session_id)
+        if availability.get("tokens") is not False and metric_available(session, "tokens"):
+            target["_token_covered_ids"].add(session_id)
+        if availability.get("cache") is not False and metric_available(session, "cache"):
+            target["_cache_covered_ids"].add(session_id)
+        if session.get("token_estimate"):
+            target["_estimated_ids"].add(session_id)
 
     for session in session_rows or []:
         provider = session.get("provider") or "unknown"
         runtime = session.get("runtime") or source_runtime_label(session)
+        session_id = session.get("id") or session.get("path") or f"session-{id(session)}"
         for stats in session.get("model_stats") or []:
             row = model_row(stats.get("model"), runtime)
             row["providers"].add(provider)
-            row["logs"] += 1
+            mark_model_coverage(row, session, session_id, stats.get("availability"))
             row["executions"] += int(stats.get("executions") or 0)
             row["input_tokens"] += int(stats.get("input_tokens") or 0)
             row["output_tokens"] += int(stats.get("output_tokens") or 0)
             row["cost"] += float(stats.get("cost") or 0)
+            if session.get("token_estimate"):
+                row["_estimated_cost"] += float(stats.get("cost") or 0)
+                row["_estimated_tokens"] += int(stats.get("tokens") or 0)
         for stats in session.get("_model_daily") or []:
             day = stats.get("day") or ""
             if not day:
@@ -4509,16 +5923,24 @@ def aggregate_model_stats(session_rows):
             row = model_row(stats.get("model"), runtime)
             row["providers"].add(provider)
             daily = daily_row(row, day)
+            mark_model_coverage(row, session, session_id, stats.get("availability"))
+            mark_model_coverage(daily, session, session_id, stats.get("availability"))
             for key in ("input_tokens", "output_tokens", "executions"):
                 daily[key] += int(stats.get(key) or 0)
             daily["cost"] += float(stats.get("cost") or 0)
+            if session.get("token_estimate"):
+                daily["_estimated_cost"] += float(stats.get("cost") or 0)
+                daily["_estimated_tokens"] += int(stats.get("input_tokens") or 0) + int(stats.get("output_tokens") or 0)
         for sample in session.get("_performance_samples") or []:
             row = model_row(sample.get("model"), runtime)
             row["providers"].add(provider)
+            mark_model_coverage(row, session, session_id)
             day = sample.get("day") or ""
             targets = [row]
             if day:
-                targets.append(daily_row(row, day))
+                daily_target = daily_row(row, day)
+                mark_model_coverage(daily_target, session, session_id)
+                targets.append(daily_target)
             output_tokens = int(sample.get("output_tokens") or 0)
             duration_s = float(sample.get("duration_s") or 0)
             generation_s = float(sample.get("generation_s") or duration_s)
@@ -4540,12 +5962,21 @@ def aggregate_model_stats(session_rows):
                 if ttft_s > 0:
                     target["ttft_total_s"] += ttft_s
                     target["ttft_samples"] += 1
+                context_tokens = int(sample.get("context_tokens") or 0)
+                if context_tokens > 0:
+                    target["workload_peak_inputs"].append(context_tokens)
+                    target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
+                    target["workload_model_calls"].append(
+                        max(1, int(sample.get("model_calls") or 1))
+                    )
                 target["workload_peak_inputs"].append(peak_input_tokens)
                 target["workload_outputs"].append(output_tokens)
                 target["workload_tool_calls"].append(tool_calls)
                 target["workload_model_calls"].append(model_calls)
-                target["workload_cache_ratios"].append(cache_ratio)
-            if duration_s > 0 and input_tokens > 0 and output_tokens > 0:
+                if metric_available(session, "cache"):
+                    target["workload_cache_ratios"].append(cache_ratio)
+            if (not session.get("token_estimate") and duration_s > 0
+                    and input_tokens > 0 and output_tokens > 0):
                 pace_groups[row["id"]].append({
                     "day": day, "ts": float(sample.get("ts") or 0),
                     "duration_s": duration_s, "input_tokens": input_tokens,
@@ -4560,10 +5991,13 @@ def aggregate_model_stats(session_rows):
                 continue
             row = model_row(model, runtime)
             row["providers"].add(provider)
+            mark_model_coverage(row, session, session_id)
             day = sample.get("day") or ""
             targets = [row]
             if day:
-                targets.append(daily_row(row, day))
+                daily_target = daily_row(row, day)
+                mark_model_coverage(daily_target, session, session_id)
+                targets.append(daily_target)
             duration_s = float(sample.get("duration_s") or 0)
             if duration_s <= 0:
                 continue
@@ -4573,17 +6007,70 @@ def aggregate_model_stats(session_rows):
                 target["max_wait_s"] = max(float(target.get("max_wait_s") or 0), duration_s)
                 target["wait_durations_s"].append(duration_s)
                 target["user_pause_seconds"] += float(sample.get("user_pause_s") or 0)
+                ttft_s = float(sample.get("ttft_s") or 0)
+                if ttft_s > 0:
+                    target["ttft_total_s"] += ttft_s
+                    target["ttft_samples"] += 1
+                context_tokens = int(sample.get("context_tokens") or 0)
+                if context_tokens > 0:
+                    target["workload_peak_inputs"].append(context_tokens)
+                    target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
+                    target["workload_model_calls"].append(
+                        max(1, int(sample.get("model_calls") or 1))
+                    )
+
+    def finalize_coverage(row):
+        log_ids = set(row.pop("_log_ids", set()))
+        total_logs = len(log_ids)
+        cost_ids = set(row.pop("_cost_covered_ids", set()))
+        token_ids = set(row.pop("_token_covered_ids", set()))
+        cache_ids = set(row.pop("_cache_covered_ids", set()))
+        estimated_ids = set(row.pop("_estimated_ids", set()))
+        covered_cost = len(cost_ids)
+        covered_tokens = len(token_ids)
+        covered_cache = len(cache_ids)
+        row["logs"] = total_logs
+        row["coverage"] = {
+            "cost": {"covered_sessions": covered_cost, "total_sessions": total_logs,
+                     "complete": covered_cost == total_logs},
+            "tokens": {"covered_sessions": covered_tokens, "total_sessions": total_logs,
+                       "complete": covered_tokens == total_logs},
+            "cache": {"covered_sessions": covered_cache, "total_sessions": total_logs,
+                      "complete": covered_cache == total_logs},
+        }
+        row["provenance"] = make_usage_provenance(
+            log_ids, estimated_ids, cost_ids | token_ids,
+            row.pop("_estimated_cost", 0), row.pop("_estimated_tokens", 0),
+        )
+        row["usage_basis"] = row["provenance"]["usage_basis"]
+        row["availability"] = {
+            "cost": covered_cost > 0,
+            "tokens": covered_tokens > 0,
+            "input_tokens": covered_tokens > 0,
+            "output_tokens": covered_tokens > 0,
+            "cache": covered_cache > 0,
+            "throughput": covered_tokens > 0 and int(row.get("throughput_samples") or 0) > 0,
+            "context": True,
+            "timing": int(row.get("wait_samples") or 0) > 0,
+            "tool_results": True,
+        }
+        return row
 
     result = []
     for row in models.values():
-        if not row.get("input_tokens") and not row.get("output_tokens"):
+        if (not row.get("input_tokens") and not row.get("output_tokens")
+                and (not row.get("executions") and not row.get("wait_samples")
+                     or len(row.get("_token_covered_ids") or ()) == len(row.get("_log_ids") or ()))):
             continue
-        daily = [_finalize_throughput_fields(item) for item in row.pop("daily").values()]
+        daily = [finalize_coverage(_finalize_throughput_fields(item))
+                 for item in row.pop("daily").values()]
         daily.sort(key=lambda item: item["day"])
         row["providers"] = sorted(row["providers"])
         row["daily"] = daily
-        result.append(_finalize_throughput_fields(row))
-    result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"], row["model"], row["runtime"]))
+        result.append(finalize_coverage(_finalize_throughput_fields(row)))
+    result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"],
+                                 -row["executions"], -row["wait_samples"],
+                                 row["model"], row["runtime"]))
     valid_ids = {row["id"] for row in result}
     return {
         "models": result,
@@ -4601,11 +6088,15 @@ def aggregate_frustration(session_rows, terms=None):
     """Aggregate lexical frustration evidence without retaining message content."""
     settings = frustration_settings()
     configured_terms = list(settings["terms"] if terms is None else terms)
-    events = [
-        event
-        for session in (session_rows or [])
-        for event in (session.get("_frustration_events") or [])
-    ]
+    events = []
+    for session in session_rows or []:
+        runtime = session.get("runtime") or source_runtime_label(session)
+        for source_event in session.get("_frustration_events") or []:
+            event = dict(source_event)
+            model = event.get("model") or "unknown"
+            event["runtime"] = runtime
+            event["model_id"] = f"{model}::{runtime}"
+            events.append(event)
     result = rollup_frustration_events(events)
     result.update({
         "configured_terms": configured_terms,
@@ -4624,6 +6115,16 @@ def aggregate_frustration(session_rows, terms=None):
     return result
 
 
+def metric_coverage(rows, metric):
+    rows = list(rows or [])
+    covered = sum(1 for row in rows if metric_available(row, metric))
+    return {
+        "covered_sessions": covered,
+        "total_sessions": len(rows),
+        "complete": covered == len(rows),
+    }
+
+
 def cross_session():
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
@@ -4631,9 +6132,11 @@ def cross_session():
 
     sessions = []
     internal_rows = []
-    model_cost, model_tok = defaultdict(float), defaultdict(int)
+    model_name_cost = defaultdict(float)
+    model_mix_rows = {}
     day_cost = defaultdict(float)
     provider_cost, provider_sessions = defaultdict(float), defaultdict(int)
+    provider_rows = defaultdict(list)
 
     for source in all_session_sources():
         row = session_summary(source)
@@ -4643,28 +6146,81 @@ def cross_session():
         sessions.append({key: value for key, value in row.items() if not key.startswith("_")})
         provider_cost[row["provider"]] += row["cost"]
         provider_sessions[row["provider"]] += 1
-        for model, val in row.get("_model_cost", {}).items():
-            model_cost[model] += val
-        for model, val in row.get("_model_tok", {}).items():
-            model_tok[model] += val
+        provider_rows[row["provider"]].append(row)
+        runtime = row.get("runtime") or source_runtime_label(row)
+        row_model_cost = row.get("_model_cost", {})
+        row_model_tokens = row.get("_model_tok", {})
+        for model in set(row_model_cost) | set(row_model_tokens):
+            key = f"{model}::{runtime}"
+            item = model_mix_rows.setdefault(key, {
+                "id": key, "model": model, "runtime": runtime,
+                "providers": set(), "cost": 0.0, "tokens": 0,
+                "session_ids": set(), "cost_ids": set(), "token_ids": set(),
+                "estimated_ids": set(), "estimated_cost": 0.0, "estimated_tokens": 0,
+            })
+            cost_value = float(row_model_cost.get(model) or 0)
+            token_value = int(row_model_tokens.get(model) or 0)
+            item["providers"].add(row.get("provider") or "unknown")
+            item["cost"] += cost_value
+            item["tokens"] += token_value
+            item["session_ids"].add(row["id"])
+            if metric_available(row, "cost"):
+                item["cost_ids"].add(row["id"])
+            if metric_available(row, "tokens"):
+                item["token_ids"].add(row["id"])
+            if row.get("token_estimate"):
+                item["estimated_ids"].add(row["id"])
+                item["estimated_cost"] += cost_value
+                item["estimated_tokens"] += token_value
+            model_name_cost[model] += cost_value
         for day, val in row.get("_day_cost", {}).items():
             day_cost[day] += val
 
     sessions.sort(key=lambda s: -s["mtime"])
-    mm = sorted([{"model": k, "tokens": model_tok[k], "cost": model_cost[k]} for k in model_cost],
-                key=lambda x: -x["cost"])
-    days = sorted(day_cost)
-    trend = [{"day": day, "cost": day_cost[day]} for day in days][-14:]
-    costs = [t["cost"] for t in trend]
-    med = sorted(costs)[len(costs) // 2] if costs else 0
-    for item in trend:
-        item["anomaly"] = bool(med and item["cost"] > 2.5 * med)
-
-    total = sum(model_cost.values())
-    premium = (model_cost.get("claude-opus-4-8", 0) + model_cost.get("claude-fable-5", 0)
-               + model_cost.get("gpt-5.5", 0))
-    tool_waste = global_tool_waste(internal_rows)
+    mm = []
+    for item in model_mix_rows.values():
+        provenance = make_usage_provenance(
+            item.pop("session_ids"), item.pop("estimated_ids"),
+            item.pop("cost_ids") | item.pop("token_ids"),
+            item.pop("estimated_cost"), item.pop("estimated_tokens"),
+        )
+        item["providers"] = sorted(item["providers"])
+        item["provenance"] = provenance
+        item["usage_basis"] = provenance["usage_basis"]
+        mm.append(item)
+    mm.sort(key=lambda item: (-item["cost"], -item["tokens"], item["id"]))
     daily = daily_summaries(internal_rows)
+    daily_by_day = {row["day"]: row for row in daily}
+    days = sorted(day_cost)
+    trend = []
+    for day in days[-14:]:
+        daily_row = daily_by_day.get(day) or {}
+        provenance = daily_row.get("provenance") or make_usage_provenance((), (), ())
+        estimated_cost = float(provenance.get("estimated_cost") or 0)
+        trend.append({
+            "day": day, "cost": day_cost[day],
+            "reported_cost": max(0.0, day_cost[day] - estimated_cost),
+            "estimated_cost": estimated_cost,
+            "provenance": provenance,
+            "usage_basis": provenance.get("usage_basis") or "unavailable",
+        })
+    alert_costs = [item["reported_cost"] for item in trend]
+    med = sorted(alert_costs)[len(alert_costs) // 2] if alert_costs else 0
+    for item in trend:
+        item["anomaly"] = bool(med and item["reported_cost"] > 2.5 * med)
+        item["anomaly_basis"] = "reported_only"
+
+    total = sum(item["cost"] for item in mm)
+    premium = (model_name_cost.get("claude-opus-4-8", 0)
+               + model_name_cost.get("claude-fable-5", 0)
+               + model_name_cost.get("gpt-5.5", 0))
+    tool_waste = global_tool_waste(internal_rows)
+    coverage = {
+        "cost": metric_coverage(internal_rows, "cost"),
+        "tokens": metric_coverage(internal_rows, "tokens"),
+        "cache": metric_coverage(internal_rows, "cache"),
+    }
+    provenance = usage_provenance(internal_rows)
     global_wait = wait_time_summary([
         sample
         for row in internal_rows
@@ -4676,14 +6232,39 @@ def cross_session():
         "model_mix": mm,
         "trend": trend,
         "total_cost": total,
+        "reported_cost": max(0.0, total - provenance["estimated_cost"]),
+        "estimated_cost": provenance["estimated_cost"],
         "total_sessions": len(sessions),
         "total_executions": sum(int(row.get("turns") or 0) for row in internal_rows),
         "total_tokens": sum(int(row.get("tokens") or 0) for row in internal_rows),
+        "coverage": coverage, "provenance": provenance,
+        "usage_basis": provenance["usage_basis"],
+        "availability": {
+            "cost": coverage["cost"]["covered_sessions"] > 0,
+            "tokens": coverage["tokens"]["covered_sessions"] > 0,
+            "input_tokens": coverage["tokens"]["covered_sessions"] > 0,
+            "output_tokens": coverage["tokens"]["covered_sessions"] > 0,
+            "cache": coverage["cache"]["covered_sessions"] > 0,
+            "throughput": coverage["tokens"]["covered_sessions"] > 0,
+            "context": True, "timing": bool(global_wait.get("available")), "tool_results": True,
+        },
         "wait_time": global_wait,
         "opus_share": (premium / total) if total else 0.0,
         "premium_share": (premium / total) if total else 0.0,
         "providers": sorted([
-            {"provider": k, "cost": provider_cost[k], "sessions": provider_sessions[k]}
+            {
+                "provider": k, "cost": provider_cost[k], "sessions": provider_sessions[k],
+                "coverage": {
+                    "cost": metric_coverage(provider_rows[k], "cost"),
+                    "tokens": metric_coverage(provider_rows[k], "tokens"),
+                },
+                "availability": {
+                    "cost": any(metric_available(row, "cost") for row in provider_rows[k]),
+                    "tokens": any(metric_available(row, "tokens") for row in provider_rows[k]),
+                },
+                "provenance": usage_provenance(provider_rows[k]),
+                "usage_basis": usage_provenance(provider_rows[k])["usage_basis"],
+            }
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
         "model_stats": aggregate_model_stats(internal_rows),
@@ -4733,7 +6314,8 @@ def publish(state):
 def source_mtime_signature(sources):
     """Track additions, removals, and updates across every discovered log."""
     return tuple(sorted(
-        (str(source.get("path") or ""), float(source.get("mtime") or 0))
+        (str(source.get("path") or ""),
+         float(source.get("signature_mtime") or source.get("mtime") or 0))
         for source in (sources or [])
         if source.get("path")
     ))
@@ -4763,7 +6345,7 @@ def publish_after_session_delete():
             return next_source.get("id")
     publish({
         "ok": False,
-        "message": "No Claude Code or Codex logs found yet.",
+        "message": "No Claude, Codex, or Cursor logs found yet.",
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -4782,7 +6364,7 @@ def current_state():
         return attach_cross_session(st)
     return {
         "ok": False,
-        "message": "No Claude Code or Codex logs found yet.",
+        "message": "No Claude, Codex, or Cursor logs found yet.",
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -4822,6 +6404,8 @@ def agent_provider(value):
         return "claude"
     if value.startswith("codex"):
         return "codex"
+    if value.startswith("cursor"):
+        return "cursor"
     return ""
 
 
@@ -4855,15 +6439,17 @@ def resolve_agent_source(session_id=None, caller=None, sources=None):
             nearest_length = max(len(candidate) for candidate, _ in ancestor_matches)
             matches = [row for candidate, row in ancestor_matches if len(candidate) == nearest_length]
         if not matches:
-            runtime = "Codex" if provider == "codex" else "Claude" if provider == "claude" else "agent"
+            runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
+                       else "Cursor" if provider == "cursor" else "agent")
             return None, f"No {runtime} run matched the caller's current project."
         candidates = matches
     if not candidates:
-        return None, "No matching Codex or Claude run was found."
+        return None, "No matching Claude, Codex, or Cursor run was found."
     selected = max(candidates, key=lambda row: float(row.get("mtime") or 0))
     mtime = float(selected.get("mtime") or 0)
     if not mtime or time.time() - mtime > AGENT_CURRENT_MAX_AGE_S:
-        runtime = "Codex" if provider == "codex" else "Claude" if provider == "claude" else "agent"
+        runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
+                   else "Cursor" if provider == "cursor" else "agent")
         return None, f"No recent {runtime} run matched the caller's current project."
     return selected, "matched"
 
@@ -4991,18 +6577,37 @@ def agent_check(focus="continue", execution=None, session_id=None, caller=None):
         last_execution = requested_execution
 
     total_cost = round(float(state.get("total_cost") or 0), 4)
+    availability = state.get("availability") or {}
+    cost_available = metric_available(state, "cost")
+    tokens_available = metric_available(state, "tokens")
+    tool_results_available = metric_available(state, "tool_results")
     context_pct = context.get("latest_pct")
     context_text = f"{context_pct * 100:.0f}%" if context_pct is not None else "not reported"
     tool_tokens = int(tools.get("total_output_tokens") or 0)
     flagged_tokens = int(tools.get("flagged_tokens") or 0)
     selected_tool_tokens = int((last_execution.get("tokens") or {}).get("retrieval") or 0)
     selected_execution_label = "Selected execution" if requested_execution is not None else "Latest execution"
+    cursor_estimate = source.get("provider") == "cursor"
     evidence_pool = {
-        "cost": {"label": "Estimated run cost", "value": total_cost, "unit": "USD"},
-        "last_cost": {"label": f"{selected_execution_label} cost", "value": round(float(last_execution.get("cost") or 0), 4), "unit": "USD"},
+        "cost": ({"label": "Local run cost estimate" if cursor_estimate else "Estimated run cost",
+                  "value": total_cost, "unit": "USD"}
+                 if cost_available else
+                 {"label": "Run cost", "value": "unavailable",
+                  "reason": "No supported rate or input-context evidence"}),
+        "last_cost": ({"label": f"{selected_execution_label} cost" +
+                                 (" estimate" if cursor_estimate else ""),
+                       "value": round(float(last_execution.get("cost") or 0), 4), "unit": "USD"}
+                      if cost_available else
+                      {"label": f"{selected_execution_label} cost", "value": "unavailable"}),
         "context": {"label": "Current context use", "value": context_text},
-        "latest_tools": {"label": f"{selected_execution_label} tool results", "value": selected_tool_tokens, "unit": "tokens"},
-        "run_tools": {"label": "Run-wide trace-observed tool results", "value": tool_tokens, "unit": "tokens", "flagged_tokens": flagged_tokens},
+        "latest_tools": ({"label": f"{selected_execution_label} tool results",
+                          "value": selected_tool_tokens, "unit": "estimated tokens"}
+                         if tool_results_available else
+                         {"label": f"{selected_execution_label} tool results", "value": "unavailable"}),
+        "run_tools": ({"label": "Run-wide trace-observed tool results", "value": tool_tokens,
+                       "unit": "estimated tokens", "flagged_tokens": flagged_tokens}
+                      if tool_results_available else
+                      {"label": "Run-wide tool results", "value": "unavailable"}),
         "turns": {"label": "Executions", "value": int(state.get("turns") or len(executions))},
     }
     order = {
@@ -5024,26 +6629,35 @@ def agent_check(focus="continue", execution=None, session_id=None, caller=None):
         "verdict": {key: verdict.get(key) for key in ("key", "label", "severity", "detail")},
         "evidence": evidence,
         "recommended_action": compact_text(action, 220),
-        "caveat": "Costs are estimates based on public API rates." if state.get("cost_approx") else "Tool-result volume is trace-observed and may not include content the client did not log.",
+        "caveat": ("Cursor input is a local one-context-snapshot-per-execution proxy; output uses trace-visible model text. Cost applies the persisted model variant's public rate. Cache, hidden reasoning, repeated internal model-call input, and authoritative dashboard billing are excluded."
+                   if cursor_estimate else
+                   "Costs are estimates based on public API rates." if state.get("cost_approx") else
+                   "Tool-result volume is trace-observed and may not include content the client did not log."),
         "dashboard_url": agent_dashboard_url(source.get("id"), recommendation.get("target") or "summary"),
         "as_of": agent_as_of(),
         "data_scope": "matched_current_run",
-        "approximate_fields": ["cost"] if state.get("cost_approx") else [],
+        "approximate_fields": (["cost"] if state.get("cost_approx") and cost_available else []) +
+                              (["input_tokens", "output_tokens", "output_pace"] if cursor_estimate and tokens_available else []) +
+                              (["tool_result_tokens"] if cursor_estimate and tool_results_available else []),
+        "availability": availability,
         "selected_session": selected,
         "selection": resolution,
     }
     if requested_execution is not None:
         result["execution"] = {
             "index": execution,
-            "cost": round(float(requested_execution.get("cost") or 0), 4),
-            "tokens": {
+            "cost": round(float(requested_execution.get("cost") or 0), 4) if cost_available else None,
+            "tokens": ({
                 "input": int((requested_execution.get("tokens") or {}).get("input") or 0),
                 "output": int((requested_execution.get("tokens") or {}).get("output") or 0),
                 "retrieval": int((requested_execution.get("tokens") or {}).get("retrieval") or 0),
-            },
+            } if tokens_available else {"available": False,
+                                        "retrieval_estimate": selected_tool_tokens if tool_results_available else None}),
             "context_pct": requested_execution.get("context_pct"),
             "activity": safe_execution_trace(state, execution),
         }
+        if cursor_estimate:
+            result["execution"]["estimated"] = True
     return bounded_agent_result(result)
 
 
@@ -5068,7 +6682,8 @@ def agent_usage(window="7d", focus="changes"):
     providers = defaultdict(float)
     for row in selected:
         for provider in row.get("providers") or []:
-            providers[provider.get("provider") or "unknown"] += float(provider.get("cost") or 0)
+            if metric_available(provider, "cost"):
+                providers[provider.get("provider") or "unknown"] += float(provider.get("cost") or 0)
     provider_rank = sorted(providers.items(), key=lambda item: (-item[1], item[0]))[:5]
     model_rank = [
         {"model": row.get("model"), "cost": round(float(row.get("cost") or 0), 4), "tokens": int(row.get("tokens") or 0)}
@@ -5086,8 +6701,11 @@ def agent_usage(window="7d", focus="changes"):
     newest_cost = float(newest.get("cost") or 0)
     previous_cost = float(previous.get("cost") or 0)
     delta = ((newest_cost - previous_cost) / previous_cost) if previous_cost else None
+    cost_complete = all(((row.get("coverage") or {}).get("cost") or {}).get("complete", True)
+                        for row in selected)
     evidence_pool = {
-        "spend": {"label": f"Estimated spend ({window})", "value": round(total_cost, 4), "unit": "USD"},
+        "spend": {"label": f"Estimated spend ({window})" + ("" if cost_complete else " · partial coverage"),
+                  "value": round(total_cost, 4), "unit": "USD", "complete": cost_complete},
         "sessions": {"label": "Daily run count summed", "value": sessions},
         "tools": {"label": "Trace-observed tool results", "value": tool_tokens, "unit": "tokens", "flagged_tokens": flagged_tokens},
         "change": {"label": "Latest day vs prior day", "value": f"{delta * 100:+.0f}%" if delta is not None else "No prior-day baseline"},
@@ -5102,7 +6720,7 @@ def agent_usage(window="7d", focus="changes"):
     }[focus]
     if not selected:
         answer = f"Token Meter has no aggregate usage for {window}."
-        action = "Run Codex or Claude, then ask again after Token Meter observes token usage."
+        action = "Run Claude, Codex, or Cursor, then ask again after Token Meter observes a local trace."
         assessment = "No data"
     elif delta is not None and delta >= 0.25:
         answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
@@ -5113,7 +6731,8 @@ def agent_usage(window="7d", focus="changes"):
         action = "Review the largest returned-token category and narrow repeated or oversized results."
         assessment = "Tool output needs review"
     else:
-        answer = f"Estimated spend is ${total_cost:.2f} across the selected {window} window, with no strong change signal."
+        answer = (f"Estimated spend among cost-covered logs is ${total_cost:.2f} across the selected {window} window"
+                  + ("; one or more traces lack pricing evidence." if not cost_complete else ", with no strong change signal."))
         action = "Keep the current approach and compare again after another recorded day."
         assessment = "Stable"
     approximate = any(bool(row.get("cost_approx")) for row in (cross.get("sessions") or []))
@@ -5123,7 +6742,12 @@ def agent_usage(window="7d", focus="changes"):
         "assessment": assessment,
         "evidence": [evidence_pool[key] for key in order],
         "recommended_action": action,
-        "caveat": "History is aggregate-only; run titles, project names, session ids, and paths are omitted.",
+        "caveat": ("History is aggregate-only; run titles, project names, session ids, and paths are omitted. "
+                   + ("Cursor values are local context-and-visible-output proxies, not dashboard billing. "
+                      if any(row.get("provider") == "cursor" for row in (cross.get("sessions") or [])) else "")
+                   + ("Spend is partial because one or more traces lack pricing evidence."
+                      if not cost_complete else "")),
+        "coverage": {"cost_complete": cost_complete},
         "dashboard_url": agent_dashboard_url(panel="daily"),
         "as_of": agent_as_of(),
         "data_scope": "anonymous_aggregate_history",
@@ -5316,7 +6940,9 @@ def menubar_recommendation(st):
     insights = st.get("insights") or []
     warn = next((i for i in insights if i.get("kind") == "warn"), None)
     last_cost = st.get("last_turn_cost") or 0
-    low_yield_actionable = low_yield_should_warn(st.get("executions") or [], pct)
+    cost_available = metric_available(st, "cost") and not st.get("token_estimate")
+    low_yield_actionable = (not st.get("token_estimate") and
+                            low_yield_should_warn(st.get("executions") or [], pct))
 
     if st.get("ended"):
         return {
@@ -5332,7 +6958,7 @@ def menubar_recommendation(st):
             "severity": "bad",
             "target": "activity",
         }
-    if last_cost >= MENUBAR_COST_SPIKE:
+    if cost_available and last_cost >= MENUBAR_COST_SPIKE:
         return {
             "label": "Review spike",
             "detail": f"Last execution cost ${last_cost:.2f}.",
@@ -5380,6 +7006,7 @@ def menubar_verdict(st, recommendation):
     reported_pct = context.get("latest_pct")
     pct = reported_pct or 0
     last_cost = st.get("last_turn_cost") or 0
+    cost_available = metric_available(st, "cost") and not st.get("token_estimate")
     insights = st.get("insights") or []
     operational_warn = next((i for i in insights if i.get("kind") == "warn" and is_operational_warning(i)), None)
 
@@ -5400,7 +7027,7 @@ def menubar_verdict(st, recommendation):
             "intervene",
             f"Context is {pct * 100:.0f}% of the model window; compact now.",
         )
-    if last_cost >= MENUBAR_COST_SPIKE:
+    if cost_available and last_cost >= MENUBAR_COST_SPIKE:
         return payload(
             "intervene",
             f"Last execution cost ${last_cost:.2f}; review the spike before continuing.",
@@ -5472,12 +7099,14 @@ def menubar_state(session_id=None):
     activity = menubar_activity(st)
     recommendation = menubar_recommendation(st)
     verdict = menubar_verdict(st, recommendation)
+    availability = st.get("availability") or metric_availability(st.get("provider"))
     selected_id = source.get("id")
     model = next((row.get("model") for row in reversed(st.get("executions") or [])
                   if row.get("model")), None) or source.get("model") or "unknown"
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
+        "availability": availability,
         "model": model,
         "source": {
             "label": source.get("label"),
@@ -5485,6 +7114,8 @@ def menubar_state(session_id=None):
             "project": source.get("project"),
             "pricing_note": source.get("pricing_note"),
             "approximate_cost": source.get("approximate_cost"),
+            "token_estimate": source.get("token_estimate"),
+            "availability": source.get("availability") or availability,
         },
         "session": st.get("session"),
         "project": st.get("project") or source.get("project"),
@@ -5500,6 +7131,7 @@ def menubar_state(session_id=None):
             "timing_coverage": throughput.get("timing_coverage", 0),
         },
         "cache": {
+            "available": bool(availability.get("cache", True)),
             "fresh": cache.get("fresh", 0),
             "read": cache.get("read", 0),
             "write": cache.get("write", 0),
@@ -5550,9 +7182,11 @@ def watcher():
             last_sources_sig = sources_sig
         if nf and (not cur or nf["path"] != cur["path"]):
             cur, last_sig = nf, None
+        elif nf and cur and nf["path"] == cur["path"]:
+            cur = nf
         updated_state = None
         if cur:
-            sig = safe_mtime(cur["path"])
+            sig = float(cur.get("signature_mtime") or cur.get("mtime") or safe_mtime(cur["path"]))
             if not sig:
                 cur = None
                 time.sleep(0.5)
@@ -5811,7 +7445,7 @@ if __name__ == "__main__":
     threading.Thread(target=watcher, daemon=True).start()
     srv = TokenMeterHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
-    print("Auto-following newest ~/.claude and ~/.codex log. Ctrl-C to stop.")
+    print("Auto-following newest ~/.claude, ~/.codex, and ~/.cursor log. Ctrl-C to stop.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

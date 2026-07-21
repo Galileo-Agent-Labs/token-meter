@@ -90,7 +90,11 @@ struct RecentSession {
     }
 
     var providerName: String {
-        provider.lowercased() == "codex" ? "Codex" : "Claude"
+        switch provider.lowercased() {
+        case "codex": return "Codex"
+        case "cursor": return "Cursor"
+        default: return "Claude"
+        }
     }
 
     var identifier: String {
@@ -111,7 +115,13 @@ struct RecentSession {
             .joined(separator: " · ")
     }
 
-    var symbolName: String { provider.lowercased() == "codex" ? "terminal" : "sparkles" }
+    var symbolName: String {
+        switch provider.lowercased() {
+        case "codex": return "terminal"
+        case "cursor": return "cursorarrow"
+        default: return "sparkles"
+        }
+    }
 }
 
 struct MeterSnapshot {
@@ -124,8 +134,13 @@ struct MeterSnapshot {
     var project: String
     var session: String
     var pricingNote: String
+    var costAvailable: Bool
+    var tokensAvailable: Bool
+    var cacheAvailable: Bool
+    var throughputAvailable: Bool
     var totalCost: Double
     var estimatedCost: Bool
+    var estimatedTokens: Bool
     var totalTokens: Int
     var turns: Int
     var outputTokensPerSecond: Double?
@@ -160,8 +175,13 @@ struct MeterSnapshot {
             project: "",
             session: "",
             pricingNote: "",
+            costAvailable: false,
+            tokensAvailable: false,
+            cacheAvailable: false,
+            throughputAvailable: false,
             totalCost: 0,
             estimatedCost: false,
+            estimatedTokens: false,
             totalTokens: 0,
             turns: 0,
             outputTokensPerSecond: nil,
@@ -191,6 +211,7 @@ struct MeterSnapshot {
         let source = dict["source"] as? [String: Any] ?? [:]
         let context = dict["context"] as? [String: Any] ?? [:]
         let cache = dict["cache"] as? [String: Any] ?? [:]
+        let availability = dict["availability"] as? [String: Any] ?? [:]
         let insights = dict["insights"] as? [[String: Any]] ?? []
 
         let provider = string(source["label"]) ?? string(dict["provider"]) ?? "Token Meter"
@@ -198,16 +219,25 @@ struct MeterSnapshot {
         let project = string(source["project"]) ?? string(dict["project"]) ?? ""
         let session = string(dict["session"]) ?? string(source["id"]) ?? ""
         let pricingNote = string(source["pricing_note"]) ?? ""
+        let costAvailable = metricAvailable(availability, "cost")
+        let tokensAvailable = metricAvailable(availability, "tokens")
+        let cacheAvailable = metricAvailable(availability, "cache")
+        let throughputAvailable = metricAvailable(availability, "throughput")
         let totalCost = double(dict["total_cost"])
         let estimatedCost = bool(dict["cost_approx"]) || bool(source["approximate_cost"])
+        let estimatedTokens = bool(source["token_estimate"])
         let totalTokens = int(dict["total_tokens"])
         let turns = int(dict["turns"])
         let throughput = dict["throughput"] as? [String: Any] ?? [:]
-        let outputTokensPerSecond = bool(throughput["available"]) ? optionalDouble(throughput["output_tps"]) : nil
+        let outputTokensPerSecond = throughputAvailable && bool(throughput["available"])
+            ? optionalDouble(throughput["output_tps"])
+            : nil
         let outputSpeedBasis = string(throughput["basis"]) ?? "unavailable"
         let outputSpeedSamples = int(throughput["sample_count"])
-        let outputSpeedCoverage = bool(throughput["available"]) ? optionalDouble(throughput["timing_coverage"]) : nil
-        let cacheInputShare = optionalDouble(cache["input_share"])
+        let outputSpeedCoverage = throughputAvailable && bool(throughput["available"])
+            ? optionalDouble(throughput["timing_coverage"])
+            : nil
+        let cacheInputShare = cacheAvailable ? optionalDouble(cache["input_share"]) : nil
         let cacheTotalTokens = int(cache["total"])
         let contextPct = optionalDouble(context["latest_pct"])
         let contextTokens = int(context["latest"])
@@ -239,7 +269,7 @@ struct MeterSnapshot {
             verdict = .idle
         } else if (contextPct ?? 0) >= 0.85 {
             verdict = .intervene
-        } else if lastTurnCost >= 0.50 {
+        } else if costAvailable && lastTurnCost >= 0.50 {
             verdict = .intervene
         } else if (contextPct ?? 0) >= 0.70 || recommendationSeverity == "warn" {
             verdict = .watch
@@ -251,14 +281,24 @@ struct MeterSnapshot {
             connected: true,
             error: "",
             verdict: verdict,
-            verdictDetail: serverVerdictDetail ?? MeterSnapshot.verdictFallbackDetail(verdict, contextPct: contextPct, lastTurnCost: lastTurnCost),
+            verdictDetail: serverVerdictDetail ?? MeterSnapshot.verdictFallbackDetail(
+                verdict,
+                contextPct: contextPct,
+                lastTurnCost: lastTurnCost,
+                costAvailable: costAvailable
+            ),
             provider: provider,
             model: model,
             project: project,
             session: session,
             pricingNote: pricingNote,
+            costAvailable: costAvailable,
+            tokensAvailable: tokensAvailable,
+            cacheAvailable: cacheAvailable,
+            throughputAvailable: throughputAvailable,
             totalCost: totalCost,
             estimatedCost: estimatedCost,
+            estimatedTokens: estimatedTokens,
             totalTokens: totalTokens,
             turns: turns,
             outputTokensPerSecond: outputTokensPerSecond,
@@ -284,7 +324,7 @@ struct MeterSnapshot {
         )
     }
 
-    static func verdictFallbackDetail(_ verdict: Verdict, contextPct: Double?, lastTurnCost: Double) -> String {
+    static func verdictFallbackDetail(_ verdict: Verdict, contextPct: Double?, lastTurnCost: Double, costAvailable: Bool) -> String {
         let pct = Int(((contextPct ?? 0) * 100).rounded())
         switch verdict {
         case .healthy:
@@ -295,7 +335,10 @@ struct MeterSnapshot {
             if (contextPct ?? 0) >= 0.85 {
                 return "Context is \(pct)% of the model window; compact now."
             }
-            return "Last execution cost \(formatMoney(lastTurnCost)); review the spike before continuing."
+            if costAvailable {
+                return "Last execution cost \(formatMoney(lastTurnCost)); review the spike before continuing."
+            }
+            return "An operational warning needs intervention."
         case .idle:
             return "This is a frozen log view; return to live to follow newest activity."
         case .disconnected:
@@ -316,8 +359,10 @@ struct MeterSnapshot {
 
     var statusTitle: String {
         if !connected { return verdict.prefix }
-        return "\(formatMoney(totalCost)) · \(contextLabel) · \(outputSpeedLabel) · \(model)"
+        return "\(costLabel) · \(contextLabel) · \(outputSpeedLabel) · \(model)"
     }
+
+    var costLabel: String { costAvailable ? "\(formatMoney(totalCost))\(estimatedCost ? " est" : "")" : "--" }
 
     var contextLabel: String {
         guard let pct = contextPct else { return "--% ctx" }
@@ -325,6 +370,7 @@ struct MeterSnapshot {
     }
 
     var cacheLabel: String {
+        guard cacheAvailable else { return "unavailable" }
         guard cacheTotalTokens > 0 else { return "no cache yet" }
         let share = Int(((cacheInputShare ?? 0) * 100).rounded())
         return "\(share)% input cached - \(formatCompactInt(cacheTotalTokens))"
@@ -332,10 +378,13 @@ struct MeterSnapshot {
 
     var outputSpeedLabel: String {
         guard let rate = outputTokensPerSecond, rate > 0 else { return "-- tok/s" }
-        return "\(formatTokenRate(rate)) tok/s"
+        return "\(formatTokenRate(rate)) tok/s\(estimatedTokens ? " est" : "")"
     }
 
     var outputSpeedTooltip: String {
+        guard throughputAvailable else {
+            return "Observed output throughput is unavailable because this trace does not expose output-token counts."
+        }
         guard outputTokensPerSecond != nil else {
             return "Observed output throughput is unavailable because this log has no completed timed samples."
         }
@@ -345,7 +394,8 @@ struct MeterSnapshot {
         let caveat = outputSpeedBasis == "tool_free"
             ? "Tool execution time is excluded."
             : "Tool execution time may be included."
-        return "Observed output throughput from \(outputSpeedSamples) timed \(sampleWord) using \(basis); \(coverage)% output coverage. \(caveat)"
+        let estimate = estimatedTokens ? " Cursor output uses trace-visible text estimated at four characters per token." : ""
+        return "Observed output throughput from \(outputSpeedSamples) timed \(sampleWord) using \(basis); \(coverage)% output coverage. \(caveat)\(estimate)"
     }
 
     var idleLabel: String {
@@ -356,7 +406,7 @@ struct MeterSnapshot {
 
     var statusTooltip: String {
         if !connected { return "Token Meter server is not reachable." }
-        return "Cost: \(formatMoney(totalCost))\nContext: \(contextLabel)\nOutput speed: \(outputSpeedLabel)\nModel: \(model)"
+        return "Cost: \(costLabel)\nContext: \(contextLabel)\nOutput speed: \(outputSpeedLabel)\nModel: \(model)"
     }
 }
 
@@ -481,14 +531,25 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if snapshot.connected {
             addMetricRow("Model", snapshot.model)
-            addMetricRow("Cost", "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")")
+            addMetricRow("Cost", snapshot.costAvailable
+                         ? "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")"
+                         : "--", toolTip: snapshot.estimatedTokens
+                            ? snapshot.pricingNote
+                            : (snapshot.costAvailable ? nil : "This trace does not expose enough local pricing evidence."))
             addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))",
                          toolTip: "Context watch starts at 70%; intervene starts at 85%.")
             addContextBar()
             addMetricRow("Output speed", snapshot.outputSpeedLabel, toolTip: snapshot.outputSpeedTooltip)
-            addMetricRow("Tokens", "\(formatCompactInt(snapshot.totalTokens)) - \(snapshot.turns) execs")
+            addMetricRow("Tokens", snapshot.tokensAvailable
+                         ? "\(formatCompactInt(snapshot.totalTokens))\(snapshot.estimatedTokens ? " est" : "") - \(snapshot.turns) execs"
+                         : "-- - \(snapshot.turns) execs",
+                         toolTip: snapshot.estimatedTokens
+                            ? "Cursor tokens are local context-and-visible-output proxies; cache and hidden model work are excluded."
+                            : (snapshot.tokensAvailable ? nil : "Input and output tokens are unavailable for this trace."))
             addMetricRow("Cache", snapshot.cacheLabel)
-            addMetricRow("Last execution", formatMoney(snapshot.lastTurnCost))
+            addMetricRow("Last execution", snapshot.costAvailable
+                         ? "\(formatMoney(snapshot.lastTurnCost))\(snapshot.estimatedCost ? " est" : "")"
+                         : "--")
         } else {
             addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
         }
@@ -705,6 +766,11 @@ private func bool(_ value: Any?) -> Bool {
     if let value = value as? Int { return value != 0 }
     if let value = value as? String { return ["1", "true", "yes"].contains(value.lowercased()) }
     return false
+}
+
+private func metricAvailable(_ availability: [String: Any], _ metric: String) -> Bool {
+    guard availability.keys.contains(metric) else { return true }
+    return bool(availability[metric])
 }
 
 private func formatMoney(_ value: Double) -> String {

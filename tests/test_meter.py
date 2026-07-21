@@ -1,10 +1,266 @@
 import unittest
 import json
+import os
+import sqlite3
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 import meter
+
+
+class CursorTraceTests(unittest.TestCase):
+    def source(self, path="/tmp/cursor-session.jsonl", session_id="cursor-session"):
+        return {
+            "provider": "cursor", "client": "cursor", "label": "Cursor",
+            "runtime": "Cursor", "id": session_id,
+            "session": Path(path).name, "path": path, "project": "/repo",
+            "mtime": 1, "title": "Cursor run", "model": "composer-2.5",
+        }
+
+    def snapshot(self):
+        base_ms = 1_784_548_800_000
+        return {
+            "available": True,
+            "header": {"name": "Cursor run"},
+            "composer": {
+                "modelConfig": {
+                    "modelName": "composer-2.5",
+                    "selectedModels": [{"modelId": "composer-2.5", "parameters": [
+                        {"id": "fast", "value": "true"},
+                    ]}],
+                },
+                "contextTokensUsed": 80448,
+                "contextTokenLimit": 200000,
+                "promptTokenBreakdown": {"categories": [
+                    {"id": "rules", "label": "Rules", "estimatedTokens": 1234},
+                ]},
+            },
+            "bubbles": [
+                {"type": 1, "bubbleId": "user-1", "createdAt": base_ms,
+                 "text": "inspect the repository", "requestId": "request-1",
+                 "modelInfo": {"modelName": "composer-2.5"},
+                 "contextWindowStatusAtCreation": {"tokensUsed": 78000, "tokenLimit": 200000}},
+                {"type": 2, "bubbleId": "assistant-1", "createdAt": base_ms + 46000,
+                 "thinking": "trace-visible", "thinkingDurationMs": 3200,
+                 "toolFormerData": {
+                     "name": "ripgrep_raw_search", "toolCallId": "tool-1",
+                     "params": {"query": "needle"}, "additionalData": {"lines": "x" * 80},
+                     "status": "error",
+                 },
+                 "text": "finished", "turnDurationMs": 46624},
+            ],
+        }
+
+    def spans(self):
+        base = 1_784_548_800.0
+        return [
+            {"name": "client.ttft", "start_ts": base, "end_ts": base + 4.118,
+             "duration_s": 4.118, "request_id": "request-1", "error": False},
+            {"name": "agent.request.attempt", "start_ts": base, "end_ts": base + 20,
+             "duration_s": 20, "request_id": "attempt-1", "error": True},
+            {"name": "agent.request.attempt", "start_ts": base + 21, "end_ts": base + 46,
+             "duration_s": 25, "request_id": "attempt-2", "error": False},
+            {"name": "ComposerChatService.submitChatMaybeAbortCurrent", "start_ts": base,
+             "end_ts": base + 46.624, "duration_s": 46.624,
+             "request_id": "request-1", "error": False},
+        ]
+
+    def test_cursor_discovery_uses_sqlite_metadata_and_keeps_activity_order_session_specific(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            projects = root / "projects"
+            db_path = root / "state.vscdb"
+            logs = root / "logs"
+            logs.mkdir()
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE composerHeaders (composerId TEXT, workspaceId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, isSubagent INTEGER, checkpointAt INTEGER, value TEXT)")
+            conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value TEXT)")
+            rows = [
+                ("older", 1_784_548_800_000, 0, "gpt-5.6-sol"),
+                ("newer", 1_784_548_900_000, 0, "composer-2.5"),
+                ("child", 1_784_549_000_000, 1, "composer-2.5"),
+            ]
+            for sid, updated, subagent, model in rows:
+                header = {"name": sid.title(), "workspaceIdentifier": {"uri": {"fsPath": "/repo"}}}
+                composer = {"modelConfig": {"modelName": model}}
+                conn.execute("INSERT INTO composerHeaders VALUES (?, ?, ?, ?, 0, ?, 0, ?)",
+                             (sid, "workspace", updated - 1000, updated, subagent, json.dumps(header)))
+                conn.execute("INSERT INTO cursorDiskKV VALUES (?, ?)",
+                             (f"composerData:{sid}", json.dumps(composer)))
+                trace_dir = projects / "Users-test-repo" / "agent-transcripts" / sid
+                trace_dir.mkdir(parents=True)
+                transcript = trace_dir / f"{sid}.jsonl"
+                transcript.write_text(json.dumps({"role": "user"}) + "\n")
+                os.utime(transcript, (updated / 1000, updated / 1000))
+            duplicate = projects / "empty-window" / "agent-transcripts" / "newer" / "newer.jsonl"
+            duplicate.parent.mkdir(parents=True)
+            duplicate.write_text(json.dumps({"role": "user", "replica": "newest"}) + "\n")
+            os.utime(duplicate, (1_784_551_000, 1_784_551_000))
+            conn.commit()
+            conn.close()
+            request_log = logs / "cursor.requestTraces.log"
+            request_log.write_text("shared enrichment\n")
+            os.utime(request_log, (1_784_550_000, 1_784_550_000))
+            with mock.patch.object(meter, "CURSOR_PROJECTS", str(projects)), \
+                    mock.patch.object(meter, "CURSOR_STATE_DB", str(db_path)), \
+                    mock.patch.object(meter, "CURSOR_REQUEST_LOGS", str(logs)), \
+                    mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
+                    mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
+                    mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
+                    mock.patch.object(meter, "claude_desktop_index", return_value={}):
+                sources = meter.all_session_sources()
+            self.assertEqual({row["id"] for row in sources}, {"older", "newer"})
+            self.assertEqual(len(sources), 2)
+            self.assertEqual(max(sources, key=lambda row: row["mtime"])["id"], "newer")
+            newer = next(row for row in sources if row["id"] == "newer")
+            self.assertEqual(newer["path"], str(duplicate))
+            self.assertEqual(newer["model"], "composer-2.5")
+            self.assertEqual(newer["project"], "/repo")
+            self.assertGreater(newer["signature_mtime"], newer["mtime"])
+
+    def test_cursor_recompute_exposes_context_tools_reasoning_wait_ttft_and_retries(self):
+        with mock.patch.object(meter, "cursor_snapshot", return_value=self.snapshot()), \
+                mock.patch.object(meter, "cursor_request_spans", return_value=self.spans()):
+            state = meter.recompute_cursor(self.source())
+        self.assertEqual(state["provider"], "cursor")
+        self.assertEqual(state["primary_model"], "composer-2.5")
+        self.assertEqual(state["context"]["latest"], 80448)
+        self.assertEqual(state["context"]["window"], 200000)
+        self.assertTrue(state["context"]["estimated"])
+        self.assertEqual(state["context"]["breakdown"][0]["estimated_tokens"], 1234)
+        self.assertTrue(state["availability"]["cost"])
+        self.assertTrue(state["availability"]["tokens"])
+        self.assertFalse(state["availability"]["cache"])
+        self.assertTrue(state["availability"]["throughput"])
+        self.assertTrue(state["availability"]["context"])
+        self.assertTrue(state["availability"]["timing"])
+        self.assertTrue(state["availability"]["tool_results"])
+        execution = state["executions"][0]
+        self.assertEqual(execution["tools"][0]["name"], "ripgrep_raw_search")
+        self.assertTrue(execution["tools"][0]["error"])
+        self.assertGreater(execution["tokens"]["retrieval"], 0)
+        self.assertAlmostEqual(execution["wait_duration_ms"], 46624, places=3)
+        self.assertAlmostEqual(execution["ttft_ms"], 4118, places=3)
+        self.assertEqual((execution["attempts"], execution["failed_attempts"], execution["retries"]),
+                         (2, 1, 1))
+        self.assertEqual(execution["reasoning_duration_ms"], 3200)
+        self.assertEqual(execution["reasoning_tokens"], 4)
+        self.assertEqual(execution["tokens"]["input"], 80448)
+        self.assertEqual(execution["tokens"]["output"], 6)
+        self.assertEqual(execution["pricing_variant"], "fast")
+        self.assertAlmostEqual(execution["cost"], 0.241434, places=6)
+        self.assertTrue(state["cost_approx"])
+        self.assertTrue(state["token_estimate"])
+
+    def test_cursor_transcript_fallback_survives_missing_database(self):
+        transcript = [
+            {"role": "user", "message": {"content": [{"type": "text", "text": "<user_query>hello</user_query>"}]}},
+            {"role": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "one", "name": "Read", "input": {"path": "README.md"}},
+                {"type": "text", "text": "done"},
+            ]}},
+            {"type": "turn_ended", "status": "success"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fallback.jsonl"
+            path.write_text("".join(json.dumps(row) + "\n" for row in transcript))
+            with mock.patch.object(meter, "cursor_snapshot", return_value={"available": False}), \
+                    mock.patch.object(meter, "cursor_request_spans") as spans:
+                state = meter.recompute_cursor(self.source(str(path), "fallback"))
+        spans.assert_not_called()
+        self.assertEqual(state["turns"], 1)
+        self.assertTrue(state["cursor_enrichment"]["transcript_fallback"])
+        self.assertEqual(state["executions"][0]["tools"][0]["name"], "read_file_v2")
+        self.assertFalse(state["availability"]["tool_results"])
+
+    def test_cursor_pricing_uses_persisted_composer_variant_and_fails_closed_without_it(self):
+        price, approximate = meter.price_for("composer-2.5", "cursor")
+        self.assertEqual(price, meter.ZERO_PRICE)
+        self.assertTrue(approximate)
+        fast, approximate = meter.price_for("composer-2.5", "cursor", "fast")
+        standard, _ = meter.price_for("composer-2.5", "cursor", "standard")
+        self.assertEqual((fast["input"], fast["output"]), (3.0, 15.0))
+        self.assertEqual((standard["input"], standard["output"]), (0.5, 2.5))
+        self.assertTrue(approximate)
+        self.assertEqual(meter.cursor_price_variant(self.snapshot()["composer"], "composer-2.5"),
+                         "fast")
+
+    def test_cursor_agent_check_reports_local_estimate_and_caveat(self):
+        with mock.patch.object(meter, "cursor_snapshot", return_value=self.snapshot()), \
+                mock.patch.object(meter, "cursor_request_spans", return_value=self.spans()):
+            state = meter.recompute_cursor(self.source())
+        with mock.patch.object(meter, "resolve_agent_source", return_value=(self.source(), "matched")), \
+                mock.patch.object(meter, "recompute", return_value=state):
+            result = meter.agent_check(focus="cost", caller={"runtime": "cursor", "project": "/repo"})
+        self.assertTrue(result["ok"])
+        self.assertAlmostEqual(result["evidence"][0]["value"], 0.2414, places=4)
+        self.assertTrue(result["availability"]["cost"])
+        self.assertIn("local", result["caveat"].lower())
+        self.assertIn("cost", result["approximate_fields"])
+
+    def test_cursor_summary_and_model_rollup_include_local_estimates(self):
+        with mock.patch.object(meter, "cursor_snapshot", return_value=self.snapshot()), \
+                mock.patch.object(meter, "cursor_request_spans", return_value=self.spans()):
+            state = meter.recompute_cursor(self.source())
+        with mock.patch.object(meter, "recompute_cursor", return_value=state):
+            row = meter.cursor_summary(self.source())
+        aggregate = meter.aggregate_model_stats([row])
+        model = aggregate["models"][0]
+        self.assertEqual(row["turns"], 1)
+        self.assertEqual(row["models"], ["composer-2.5"])
+        self.assertTrue(row["availability"]["cost"])
+        self.assertTrue(row["cost_approx"])
+        self.assertEqual(row["input_tokens"], 80448)
+        self.assertEqual(row["output_tokens"], 6)
+        self.assertEqual(row["usage_basis"], "local_estimate")
+        self.assertEqual(row["provenance"]["estimated_sessions"], 1)
+        self.assertEqual(model["model"], "composer-2.5")
+        self.assertEqual(model["runtime"], "Cursor")
+        self.assertEqual(model["usage_basis"], "local_estimate")
+        self.assertFalse(model["availability"]["cache"])
+        self.assertEqual(model["coverage"]["cache"]["covered_sessions"], 0)
+        self.assertEqual(model["executions"], 1)
+        self.assertEqual(model["median_peak_input_tokens"], 80448)
+        self.assertEqual(model["median_tool_calls"], 1)
+        self.assertAlmostEqual(model["median_wait_s"], 46.624, places=3)
+        self.assertAlmostEqual(model["avg_ttft_ms"], 4118, places=3)
+        self.assertTrue(model["availability"]["tokens"])
+        self.assertEqual(model["input_tokens"], 80448)
+        self.assertEqual(model["output_tokens"], 6)
+
+    def test_usage_provenance_distinguishes_reported_estimated_and_mixed(self):
+        reported = {"id": "reported", "provider": "codex", "cost": 1, "tokens": 10}
+        estimated = {
+            "id": "estimated", "provider": "cursor", "cost": 2, "tokens": 20,
+            "token_estimate": True,
+            "availability": meter.metric_availability("cursor", cost=True, tokens=True),
+        }
+        self.assertEqual(meter.usage_provenance([reported])["usage_basis"], "reported")
+        local = meter.usage_provenance([estimated])
+        self.assertEqual(local["usage_basis"], "local_estimate")
+        self.assertEqual(local["estimated_cost"], 2)
+        mixed = meter.usage_provenance([reported, estimated])
+        self.assertEqual(mixed["usage_basis"], "mixed")
+        self.assertEqual((mixed["reported_sessions"], mixed["estimated_sessions"]), (1, 1))
+
+    def test_cursor_sparse_context_is_interpolated_between_persisted_checkpoints(self):
+        groups = [
+            {"context": {}},
+            {"context": {"tokensUsed": 60000, "tokenLimit": 200000}},
+            {"context": {}},
+        ]
+        rows = meter.cursor_context_estimates(groups, 90000, 200000)
+        self.assertEqual([row["tokens"] for row in rows], [30000, 60000, 90000])
+        self.assertTrue(rows[0]["interpolated"])
+        self.assertFalse(rows[1]["interpolated"])
+
+    def test_mixed_runtime_coverage_is_explicitly_partial(self):
+        covered = {"availability": meter.metric_availability("codex")}
+        cursor = {"availability": meter.metric_availability("cursor")}
+        self.assertEqual(meter.metric_coverage([covered, cursor], "cost"), {
+            "covered_sessions": 1, "total_sessions": 2, "complete": False,
+        })
 
 
 class ExecutionTimingTests(unittest.TestCase):
@@ -333,6 +589,35 @@ class ModelPerformanceTests(unittest.TestCase):
             },
         )
 
+    def test_cursor_samples_are_excluded_from_matched_pace(self):
+        samples = [{
+            "model": "gpt-5.6", "day": "2026-07-20", "ts": index + 1,
+            "input_tokens": 100, "peak_input_tokens": 100, "output_tokens": 20,
+            "duration_s": 2, "generation_s": 2, "tool_calls": 0, "model_calls": 1,
+        } for index in range(25)]
+        cursor = {
+            "id": "cursor", "provider": "cursor", "runtime": "Cursor",
+            "token_estimate": True,
+            "availability": meter.metric_availability(
+                "cursor", cost=True, tokens=True, input_tokens=True,
+                output_tokens=True, throughput=True, timing=True,
+            ),
+            "model_stats": [{"model": "gpt-5.6", "cost": 1, "tokens": 120,
+                              "input_tokens": 100, "output_tokens": 20, "executions": 1}],
+            "_model_daily": [], "_performance_samples": samples, "_wait_samples": [],
+        }
+        codex = {
+            **cursor, "id": "codex", "provider": "codex", "runtime": "Codex",
+            "token_estimate": False, "availability": meter.metric_availability("codex"),
+        }
+        result = meter.aggregate_model_stats([cursor, codex])
+        self.assertEqual({row["id"] for row in result["models"]},
+                         {"gpt-5.6::Cursor", "gpt-5.6::Codex"})
+        self.assertFalse(any(
+            any("::Cursor" in value for value in (pair["a_id"], pair["b_id"]))
+            for pairs in result["matched_pace"]["windows"].values() for pair in pairs
+        ))
+
     def test_runtime_label_distinguishes_claude_desktop_roots(self):
         standard = {
             "provider": "claude", "client": "claude_desktop",
@@ -347,6 +632,7 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(meter.source_runtime_label({"provider": "claude", "client": "claude_code"}),
                          "Claude Code")
         self.assertEqual(meter.source_runtime_label({"provider": "codex"}), "Codex")
+        self.assertEqual(meter.source_runtime_label({"provider": "cursor"}), "Cursor")
 
     def test_matched_pace_reports_ratio_confidence_and_coverage(self):
         def sample(duration, ts):
@@ -466,6 +752,21 @@ class FrustrationSignalTests(unittest.TestCase):
         self.assertEqual(len(result["daily"]), 2)
         self.assertEqual(len(result["models"]), 2)
 
+    def test_aggregate_keeps_same_model_separate_by_runtime(self):
+        event = {"ts": 1, "day": "2026-07-20", "week": "2026-07-20",
+                 "model": "gpt-5.6", "utterance": True, "matches": 1,
+                 "term_counts": {"shit": 1}}
+        sessions = [
+            {"provider": "codex", "runtime": "Codex", "_frustration_events": [event],
+             "frustration": {"user_turns": 1, "utterances": 1}},
+            {"provider": "cursor", "runtime": "Cursor", "_frustration_events": [event],
+             "frustration": {"user_turns": 1, "utterances": 1}},
+        ]
+        result = meter.aggregate_frustration(sessions, ["shit"])
+        self.assertEqual({(row["id"], row["runtime"]) for row in result["models"]}, {
+            ("gpt-5.6::Codex", "Codex"), ("gpt-5.6::Cursor", "Cursor"),
+        })
+
     def test_persists_machine_wide_terms(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
@@ -568,6 +869,26 @@ class SessionDeleteTests(unittest.TestCase):
         self.assertEqual(meter.trash_session_log("alias.jsonl", sources=[source])["error_code"], "not_found")
         self.assertEqual(meter.trash_session_log("missing", sources=[source])["error_code"], "not_found")
 
+    def test_cursor_delete_moves_only_transcript_and_preserves_shared_database(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            transcript = root / "projects" / "repo" / "agent-transcripts" / "cursor-one" / "cursor-one.jsonl"
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text('{"role":"user"}\n')
+            database = root / "state.vscdb"
+            database.write_bytes(b"shared cursor database")
+            source = {
+                "id": "cursor-one", "session": transcript.name, "path": str(transcript),
+                "provider": "cursor", "project": "/repo", "title": "Cursor", "mtime": 1,
+            }
+            result = meter.trash_session_log(
+                "cursor-one", sources=[source], trash_dir=str(root / "Trash")
+            )
+            self.assertTrue(result["ok"])
+            self.assertFalse(transcript.exists())
+            self.assertTrue(database.exists())
+            self.assertEqual(database.read_bytes(), b"shared cursor database")
+
     def test_publish_after_delete_selects_newest_remaining_session(self):
         sources = [{"id": "older", "path": "/tmp/older.jsonl", "mtime": 1},
                    {"id": "newer", "path": "/tmp/newer.jsonl", "mtime": 2}]
@@ -616,6 +937,51 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
             meter._xsess.update(saved_cache)
         self.assertIs(result, fresh)
         self.assertEqual(published[0]["xsession"]["sessions"][0]["id"], "fresh")
+
+    def test_cross_session_separates_runtime_models_and_reported_alert_basis(self):
+        def row(source):
+            estimated = source["provider"] == "cursor"
+            cost = 2.0 if estimated else 1.0
+            tokens = 200 if estimated else 100
+            return {
+                **source, "turns": 1, "cost": cost, "tokens": tokens,
+                "input_tokens": tokens - 10, "output_tokens": 10,
+                "models": ["gpt-5.6"], "token_estimate": estimated,
+                "availability": meter.metric_availability(
+                    source["provider"], cost=True, tokens=True,
+                    input_tokens=True, output_tokens=True,
+                ),
+                "_model_cost": {"gpt-5.6": cost}, "_model_tok": {"gpt-5.6": tokens},
+                "_day_cost": {"2026-07-20": cost}, "model_stats": [],
+                "_model_daily": [], "_performance_samples": [], "_wait_samples": [],
+                "_tool_evidence": {}, "frustration": {}, "_frustration_events": [],
+            }
+
+        sources = [
+            {"id": "codex", "path": "/tmp/codex", "provider": "codex",
+             "runtime": "Codex", "label": "Codex", "project": "/repo", "mtime": 2},
+            {"id": "cursor", "path": "/tmp/cursor", "provider": "cursor",
+             "runtime": "Cursor", "label": "Cursor", "project": "/repo", "mtime": 1},
+        ]
+        rows = {source["id"]: row(source) for source in sources}
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["data"], meter._xsess["at"] = None, 0
+            with mock.patch.object(meter, "all_session_sources", return_value=sources), \
+                    mock.patch.object(meter, "session_summary",
+                                      side_effect=lambda source: rows[source["id"]]), \
+                    mock.patch.object(meter, "capability_inventory", return_value={}):
+                result = meter.cross_session()
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+        self.assertEqual({item["id"] for item in result["model_mix"]},
+                         {"gpt-5.6::Codex", "gpt-5.6::Cursor"})
+        self.assertEqual(result["usage_basis"], "mixed")
+        self.assertEqual(result["reported_cost"], 1.0)
+        self.assertEqual(result["estimated_cost"], 2.0)
+        self.assertEqual(result["trend"][0]["reported_cost"], 1.0)
+        self.assertEqual(result["trend"][0]["anomaly_basis"], "reported_only")
 
 
 class DashboardLayoutTests(unittest.TestCase):
@@ -862,6 +1228,16 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
         self.assertIn("el.onclick=()=>selectSession(el.dataset.id)", self.page)
 
+    def test_cursor_provenance_is_integrated_across_dashboard_views(self):
+        for marker in (
+            "const hasLocalEstimate", "const estimateSuffix", "reported-cost",
+            "local token proxies are not comparable", "stroke-dasharray",
+            "id=c-runtime-filter", "Cursor local estimate", "Input context proxy",
+            "Visible-output estimate", "id=cursor-source-status",
+            "function renderCursorSourceStatus", "m.runtime||'unknown'",
+        ):
+            self.assertIn(marker, self.page)
+
     def test_handler_swallows_browser_disconnects(self):
         source = Path(meter.__file__).read_text()
         self.assertIn("except (BrokenPipeError, ConnectionResetError):", source)
@@ -906,13 +1282,22 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
 
     def test_core_info_starts_with_amount_and_omits_operational_rows(self):
-        self.assertIn('return "\\(formatMoney(totalCost)) · \\(contextLabel) · \\(outputSpeedLabel) · \\(model)"', self.source)
+        self.assertIn('return "\\(costLabel) · \\(contextLabel) · \\(outputSpeedLabel) · \\(model)"', self.source)
         self.assertNotIn('return "\\(verdict.prefix) \\(formatMoney(totalCost))', self.source)
         self.assertNotIn('addActivityRow()', self.source)
         self.assertNotIn('addRecommendationRow()', self.source)
         self.assertNotIn('addMetricRow("Status"', self.source)
         self.assertNotIn('label("Now"', self.source)
         self.assertNotIn('label("Action"', self.source)
+
+    def test_cursor_uses_provider_identity_and_estimated_usage_labels(self):
+        self.assertIn('case "cursor": return "Cursor"', self.source)
+        self.assertIn('case "cursor": return "cursorarrow"', self.source)
+        self.assertIn('let costAvailable = metricAvailable(availability, "cost")', self.source)
+        self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
+        self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
+        self.assertIn('snapshot.estimatedTokens ? " est" : ""', self.source)
+        self.assertIn('Cursor tokens are local context-and-visible-output proxies', self.source)
 
     def test_live_polling_bypasses_cached_menubar_responses(self):
         self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
@@ -1141,6 +1526,20 @@ class ToolEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["definition_tokens"], 200)
         self.assertEqual(evidence["unused_eager_definition_tokens"], 120)
         self.assertEqual(evidence["skills"][0]["name"], "execution-plan")
+
+    def test_plain_tool_names_stay_separate_by_runtime(self):
+        call = {**meter.tool_identity("read_file"), "output_tokens": 10, "ts": 100,
+                "args_fingerprint": "x", "error": False}
+        rows = [
+            {"id": "codex", "provider": "codex", "runtime": "Codex", "project": "/repo",
+             "_tool_evidence": meter.summarize_tool_evidence([call])},
+            {"id": "cursor", "provider": "cursor", "runtime": "Cursor", "project": "/repo",
+             "_tool_evidence": meter.summarize_tool_evidence([call])},
+        ]
+        waste = meter.global_tool_waste(rows)
+        tools = [row for row in waste["inventory_tools"] if row["name"] == "read_file"]
+        self.assertEqual({row["id"] for row in tools}, {"codex::read_file", "cursor::read_file"})
+        self.assertEqual({row["runtime"] for row in tools}, {"Codex", "Cursor"})
 
     def test_skill_name_is_inferred_from_skill_descriptor_path(self):
         value = {"cmd": "sed -n '1,80p' /tmp/skills/execution-plan/SKILL.md"}
@@ -1594,9 +1993,12 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual(days[0]["projects"], 2)
         self.assertNotIn("tool_tokens", days[0])
         self.assertNotIn("flagged_tokens", days[0])
-        self.assertEqual(days[0]["providers"][0], {
-            "provider": "codex", "cost": 1.25, "wait_s": 60.0, "wait_samples": 2,
-        })
+        provider = days[0]["providers"][0]
+        self.assertEqual(provider["provider"], "codex")
+        self.assertEqual(provider["cost"], 1.25)
+        self.assertEqual(provider["wait_s"], 60.0)
+        self.assertEqual(provider["wait_samples"], 2)
+        self.assertEqual(provider["usage_basis"], "reported")
         self.assertEqual(days[0]["wait_time"]["total_s"], 90)
         self.assertEqual(days[0]["wait_time"]["avg_s"], 30)
         self.assertEqual(days[0]["wait_time"]["max_s"], 40)

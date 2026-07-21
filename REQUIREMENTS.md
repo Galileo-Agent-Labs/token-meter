@@ -1,6 +1,6 @@
 # Live Token Meter — Requirements & Research
 
-A taxi-meter for Claude Code and Codex sessions. Sits in your browser, tails
+A taxi-meter for Claude Code, Codex, and Cursor sessions. Sits in your browser, tails
 your active local agent session log, and shows in real time what the session is
 costing and doing — with notifications, trace events, and insights when
 something matters. Local, passive, always-on.
@@ -31,14 +31,14 @@ it's written, so it's ambient and always-on.
 ### 1.1 Hero use case: runaway-session guardrail
 
 The sharpest product wedge is not "token analytics" in the abstract. It is the
-developer who starts a long Claude Code or Codex run, switches context, and then
+  developer who starts a long Claude Code, Codex, or Cursor run, switches context, and then
 worries: **is the agent still making progress, or is it burning context, tool
 output, and money?**
 
 The hero scenario:
 
 1. A developer starts Token Meter once and leaves it open on localhost.
-2. They ask Claude Code or Codex to handle a large repo task: migration,
+2. They ask Claude Code, Codex, or Cursor to handle a large repo task: migration,
    refactor, test repair, incident investigation, dependency update, or research
    spike.
 3. Token Meter follows the newest session automatically and shows live cost,
@@ -309,6 +309,14 @@ moment is already on screen the instant you stop. No second tool.
                               (Claude Desktop attribution metadata)
 ~/Library/Application Support/Claude-3p/{claude-code-sessions,local-agent-mode-sessions}/**
                               (third-party-provider Desktop/Cowork metadata and traces)
+~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+                              (Codex CLI and desktop traces)
+~/.cursor/projects/*/agent-transcripts/<id>/<id>.jsonl
+                              (Cursor durable session anchors)
+~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
+                              (Cursor conversation/context enrichment, read-only)
+~/Library/Application Support/Cursor/logs/**/cursor.requestTraces.log
+                              (Cursor completed request timing enrichment)
         │  tail newest by mtime, reparse on change
         ▼
    watcher thread ──► recompute(state) ──► publish()
@@ -470,7 +478,7 @@ Codex tool calls are `response_item` payloads with `payload.type` equal to
 renders the following provider-independent fields:
 
 ```text
-provider       "claude" or "codex"
+provider       "claude", "codex", or "cursor"
 source         provider label, id, path, project, pricing note
 executions     per-execution tokens, cost, tools, model, timing
 trace          timestamped execution events
@@ -619,15 +627,18 @@ billing tokens to schemas.
 ### 13.1 Observable evidence
 
 Claude and Codex traces provide tool identity, call order, arguments, result
-payloads, timestamps, projects, and token-count events. Token Meter derives:
+payloads, timestamps, projects, and token-count events. Cursor provides the same
+tool/result structure plus context and timing enrichment, but no authoritative
+billing token counts. Token Meter derives:
 
 - Approximate returned text tokens using four characters per token.
 - Oversized calls with at least 8,000 returned text tokens.
 - Exact immediate repeats when consecutive calls to the same tool have the same
   hashed arguments within five minutes. Raw arguments are not stored in the
   Global aggregate.
-- Structured errors from Claude `is_error` and conservative Codex status,
-  success, exit-code, and error fields.
+- Structured errors from Claude `is_error`, conservative Codex status,
+  success, exit-code, and error fields, and Cursor tool status/error/result
+  markers.
 - Sessions used, projects used, last use, and runtime-reported catalog exposure.
 
 Embedded image data and long base64 fields are removed before text-token
@@ -871,3 +882,82 @@ workload matching cannot prove equal semantic difficulty and that sparse
 history yields no verdict. The searchable glossary now defines matched pace,
 match coverage, confidence interval, model runtime, observed output pace,
 typical workload, and typical wait.
+
+---
+
+## 21. v13 — Cursor Agent/Composer traces (2026-07-20)
+
+Cursor support uses a three-layer, read-only source model. A matching transcript
+at `~/.cursor/projects/*/agent-transcripts/<composer-id>/<composer-id>.jsonl` is
+the durable discovery anchor. Cursor's shared `state.vscdb` enriches that anchor
+with top-level composer metadata, ordered conversation bubbles, per-turn model,
+workspace, context-window estimates, reasoning duration, tool calls, tool
+results, and errors. Completed request spans from `cursor.requestTraces.log`
+enrich it with prompt-to-finish wait, active attempt duration, TTFT, failed
+attempts, and retries. Subagent composer headers are excluded from the top-level
+session inventory.
+
+The SQLite database is opened with `mode=ro`, `query_only`, WAL visibility, and
+a short busy timeout. No Cursor file is created, updated, checkpointed, or
+deleted. A missing, locked, corrupt, or drifted database returns transcript-only
+state. A missing request log removes only request timing. Session deletion may
+move the exact transcript JSONL to macOS Trash but must preserve the shared
+database, WAL, request logs, workspace, and all sibling sessions.
+
+Cursor does not persist authoritative billable input/output token usage or
+cache accounting in the verified local trace shapes. Token Meter therefore
+creates a separate, explicitly labeled local estimate. Input is one persisted
+context snapshot per execution; sparse intermediate checkpoints are
+interpolated between known context values. Output is deduplicated model-authored
+assistant/thinking text at four characters per token. Cost applies the public
+rate for the persisted model and speed variant. Composer 2.5 must read the
+persisted `fast` parameter and fail closed when the variant is absent; it must
+not silently assume Fast or Standard. Unknown models remain cost-unavailable.
+
+The local estimate excludes cache, hidden reasoning, and repeated internal
+model-call input. These exclusions and the non-authoritative billing boundary
+must remain visible in Current, Logs, Daily, Global, Models, MCP, and menu-bar
+surfaces. Tool-result volume remains a separate four-characters-per-token local
+estimate. Model identity, context pressure, turns, model-call count, tools,
+errors, reasoning duration, wait, active time, TTFT, attempts, and retries
+remain independently usable.
+
+Every normalized current, daily, model, global, log, MCP, and menu-bar payload
+carries metric availability plus Cursor estimate provenance. Aggregate spend
+and token totals include supported Cursor local estimates and are labeled
+partial only when a session lacks context/output or a supported rate. Cursor
+model rows show estimated I/O, cost, visible-output pace, execution, context,
+tool-shape, wait, TTFT, and model-call evidence. Cache claims remain suppressed.
+Budget/spike alerts and cost-driven intervention verdicts are suppressed for
+Cursor because the local proxy is not billing-authoritative. The menu bar marks
+Cursor tokens, cost, output pace, and last-execution cost `est`.
+
+Discovery deduplicates transcript replicas by Composer ID and keeps the newest
+replica so a conversation moved between Cursor windows cannot inflate totals.
+Shared Cursor enrichment timestamps invalidate parser caches but do not
+participate in newest-session ordering. Ordering uses transcript and
+composer-specific activity timestamps so one shared database write cannot make
+all Cursor sessions equally recent. Parsing is covered with synthetic SQLite,
+conversation, request-span, schema-fallback, partial-coverage, and deletion
+tests, then verified against GPT and Composer trace variants.
+
+## 22. v14 — Cursor dashboard integration (2026-07-21)
+
+Cross-session aggregates carry a `reported`, `local_estimate`, `mixed`, or
+`unavailable` usage basis plus reported/estimated session counts and estimated
+cost/token subtotals. Daily, Logs, Global, and Models render these fields rather
+than inferring estimate status from a provider name. Global model mix, filtered
+Logs model summaries, frustration models, and ordinary tool evidence use
+model-or-tool plus runtime identities so a Cursor observation cannot be pooled
+with Codex or Claude. MCP behavior remains unchanged.
+
+Global cost spikes use reported cost only; Cursor local cost estimates remain in
+the inclusive spend chart with an estimate treatment. Cursor samples do not
+enter matched-pace pairs, and the Models view withholds that verdict whenever a
+selected history uses local token proxies. Cursor cache coverage remains
+unavailable rather than appearing as a zero-percent cache ratio.
+
+Tools provides a runtime filter and represents Cursor tools as observed-only,
+read-only evidence. Settings shows a compact read-only Cursor source status,
+and Learn defines the input-context and visible-output proxies used by the local
+estimate.

@@ -17,9 +17,10 @@ When reporting, include:
 - Steps to reproduce.
 - Any relevant error messages.
 
-Do not attach Claude Code or Codex session logs unless you have reviewed and
-redacted them. Local session logs may contain prompts, responses, project paths,
-tool outputs, and other sensitive information.
+Do not attach Claude Code, Codex, or Cursor session data unless you have reviewed
+and redacted it. Local transcripts, Cursor's shared state database, and request
+logs may contain prompts, responses, project paths, tool outputs, and other
+sensitive information.
 
 ## Security Model
 
@@ -51,6 +52,14 @@ themselves cannot change configuration, budgets, sessions, or Token Meter state.
 Dashboard session deletion uses the same local-origin action token and accepts
 only a canonical ID from the currently discovered session inventory. It moves
 the exact discovered `.jsonl` file to macOS Trash with collision-safe naming;
-it does not delete provider metadata, project files, or configuration. The UI
+it does not delete provider metadata, project files, configuration, Cursor's
+shared `state.vscdb` database/WAL, or Cursor request logs. The UI
 requires an explicit confirmation and warns when the target appears to be the
 live session.
+
+Cursor enrichment is strictly read-only. Token Meter opens `state.vscdb` with
+SQLite `mode=ro` and `query_only`, retains WAL visibility for a live Cursor
+process, uses a short busy timeout, and falls back to the per-session transcript
+if the shared database is missing, locked, corrupt, or has an unsupported
+schema. Request-trace parsing accepts only a bounded allowlist of completed span
+names and derives timing fields; it does not expose raw request-log contents.

@@ -19,7 +19,7 @@ SUPPORTED_PROTOCOL_VERSIONS = {
     "2024-11-05",
 }
 SERVER_INSTRUCTIONS = (
-    "Token Meter is a local, read-only source of cost and efficiency evidence for Codex and Claude. "
+    "Token Meter is a local, read-only source of cost and efficiency evidence for Codex, Claude, and Cursor. "
     "Use check for a decision about the caller's current run, usage for aggregate historical change, "
     "and capabilities for optional skill-pack hygiene. Prefer calling check at meaningful phase "
     "boundaries or when the user asks about cost, context, tool output, or whether to continue. Never imply "

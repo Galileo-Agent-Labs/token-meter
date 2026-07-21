@@ -24,11 +24,12 @@ You can also check the local health endpoint:
 curl http://127.0.0.1:8722/health
 ```
 
-The dashboard works best when your machine already has Claude Code or Codex
-session logs under `~/.claude/projects` or `~/.codex/sessions`.
+The dashboard works best when your machine already has Claude Code, Codex, or
+Cursor session logs under `~/.claude/projects`, `~/.codex/sessions`, or
+`~/.cursor/projects/*/agent-transcripts`.
 
-If no logs exist yet, the app should still start. Run a Claude Code or Codex
-session and reload the dashboard to see live data.
+If no logs exist yet, the app should still start. Run a Claude Code, Codex, or
+Cursor Agent/Composer session and reload the dashboard to see live data.
 
 The menu bar companion requires the Swift toolchain. For dashboard-only
 development or non-macOS testing, run:
@@ -43,6 +44,15 @@ python3 meter.py
   standard library only. `token_meter_mcp.py` follows the same rule.
 - Keep the dashboard local-only. Do not add external telemetry, hosted assets,
   or network calls from `page.html`.
+- Keep Cursor access read-only. The shared `state.vscdb`, its WAL, and request
+  trace logs are enrichment inputs only; deletion may move the exact discovered
+  transcript JSONL but must never modify or remove shared Cursor state.
+- Keep Cursor usage provenance explicit. Input is a one-context-snapshot proxy,
+  output is trace-visible text estimated at four characters per token, and cost
+  uses only a persisted supported model/variant plus its configured public rate.
+  Keep every such value marked `est`; keep cache, hidden reasoning, repeated
+  internal model-call input, and authoritative billing unavailable. Do not let
+  Cursor proxy cost trigger budget/spike intervention alerts.
 - Avoid committing local session logs, generated logs, `.DS_Store`,
   `__pycache__/`, or `.build/`.
 - If you change screenshots, keep the README image paths under `images/` so

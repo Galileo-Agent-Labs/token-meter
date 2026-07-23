@@ -2,12 +2,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LABEL="com.token-meter.menubar"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+SERVER_LABEL="com.token-meter.server"
+MENUBAR_LABEL="com.token-meter.menubar"
+SERVER_PLIST="$HOME/Library/LaunchAgents/$SERVER_LABEL.plist"
+MENUBAR_PLIST="$HOME/Library/LaunchAgents/$MENUBAR_LABEL.plist"
 
-launchctl bootout "gui/$UID" "$PLIST" >/dev/null 2>&1 || true
-rm -f "$PLIST"
+launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+rm -f "$MENUBAR_PLIST" "$SERVER_PLIST"
 
-echo "Uninstalled $LABEL"
-echo "Removed: $PLIST"
+echo "Uninstalled $MENUBAR_LABEL"
+echo "Removed: $MENUBAR_PLIST"
+echo "Uninstalled $SERVER_LABEL"
+echo "Removed: $SERVER_PLIST"
 echo "Logs, if present, remain in: $ROOT"

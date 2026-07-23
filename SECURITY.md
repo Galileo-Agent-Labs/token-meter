@@ -29,6 +29,16 @@ It should not expose the dashboard to public networks. The project should not
 send logs, prompts, responses, project paths, token counts, or costs to external
 services.
 
+The menu-bar quota view is a bounded exception to otherwise local processing.
+It makes read-only account-usage requests to the provider matching the local
+credential: Codex through its local app-server or signed-in usage API, Claude
+through Anthropic's OAuth usage endpoint for first-party OAuth accounts, and
+Cursor through its account usage summary. It must never send a provider token
+to a different provider, persist copied credentials, expose credentials or raw
+response bodies through localhost, or include them in logs and errors. Provider
+requests use fixed HTTPS endpoints, hard timeouts, bounded response sizes, and
+sanitized failures. Third-party Claude auth must fail closed as unavailable.
+
 The optional `tokenmeter` MCP server is also local and read-only. It uses stdio,
 does not open another listening port, and returns bounded derived evidence. It
 must never return prompts, messages, reasoning text, tool arguments, tool
@@ -39,9 +49,11 @@ only when capability review is explicitly requested.
 
 When an MCP tool is called, the bounded derived result is handed to the
 connected Codex or Claude client. That client may send the result to its model
-provider under the client's own terms and configuration. “Local-only” means
-Token Meter itself makes no outbound request; it does not mean data returned to
-an explicitly connected AI client necessarily remains on the machine.
+provider under the client's own terms and configuration. “Local analysis” means
+Token Meter does not upload trace content or derived analytics; it does not mean
+data returned to an explicitly connected AI client necessarily remains on the
+machine. The separate quota requests above contain authentication and ordinary
+provider usage-request metadata, but no local transcript content.
 
 Dashboard connection actions are protected by the existing local-origin action
 token and fixed subprocess argument vectors. They may add or remove only the

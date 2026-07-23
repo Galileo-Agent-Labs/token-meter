@@ -12,8 +12,7 @@ companion:
 
 ```bash
 git clone https://github.com/Galileo-Agent-Labs/token-meter.git
-cd token-meter
-./scripts/start-token-meter
+./token-meter/scripts/install
 ```
 
 Open `http://localhost:8722`.
@@ -44,6 +43,12 @@ python3 meter.py
   standard library only. `token_meter_mcp.py` follows the same rule.
 - Keep the dashboard local-only. Do not add external telemetry, hosted assets,
   or network calls from `page.html`.
+- Keep provider quota reads narrow and read-only. Use only the matching
+  first-party usage endpoint or provider-owned local service, fixed HTTPS URLs,
+  hard timeouts, bounded responses, background refreshes, and sanitized errors.
+  Never log, persist, return, or cross-send access tokens, cookies, account IDs,
+  authorization headers, or raw provider response bodies. Do not fabricate a
+  session or weekly window when a provider reports a different cap.
 - Keep Cursor access read-only. The shared `state.vscdb`, its WAL, and request
   trace logs are enrichment inputs only; deletion may move the exact discovered
   transcript JSONL but must never modify or remove shared Cursor state.
@@ -65,7 +70,7 @@ Run the lightweight checks before opening a pull request:
 ```bash
 PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
 python3 -m unittest discover -s tests -v
-bash -n scripts/run-token-meter-mcp packaging/payload/bin/token-meter-mcp
+bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent
 swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"

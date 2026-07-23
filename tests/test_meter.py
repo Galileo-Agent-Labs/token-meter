@@ -305,6 +305,18 @@ class ExecutionTimingTests(unittest.TestCase):
         self.assertEqual(timing["observed_executions"], 1)
         self.assertEqual(timing["basis"], "reported + observed")
 
+    def test_codex_context_accepts_structured_approval_policy(self):
+        self.assertEqual(meter.codex_approval_policy_label("on_request"), "on request")
+        self.assertEqual(
+            meter.codex_approval_policy_label({
+                "granular": {
+                    "sandbox_approval": False,
+                    "request_permissions": True,
+                },
+            }),
+            "granular",
+        )
+
 
 class WaitTimeTests(unittest.TestCase):
     def test_claude_wait_is_prompt_to_completion_and_dedupes_split_messages(self):
@@ -1304,6 +1316,241 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Pragma")', self.source)
 
+    def test_provider_tabs_and_quota_cards_are_native_and_persisted(self):
+        self.assertIn('enum MenuTab: String, CaseIterable', self.source)
+        self.assertIn('case overview', self.source)
+        self.assertIn('case claude', self.source)
+        self.assertIn('case codex', self.source)
+        self.assertIn('case cursor', self.source)
+        self.assertIn('labels: tabs.map(\\.title)', self.source)
+        self.assertIn('private func addOverviewMenu()', self.source)
+        self.assertIn('private func addProviderMenu(_ providerID: String)', self.source)
+        self.assertIn('private func addQuotaWindowRow(_ window: QuotaWindow, stale: Bool)', self.source)
+        self.assertIn('tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)', self.source)
+        self.assertIn('coverageNote: string(dict["coverage_note"]) ?? ""', self.source)
+        self.assertIn('addSignalRow("Coverage", provider.coverageNote', self.source)
+        self.assertIn("Only provider-reported limits are shown", self.source)
+        self.assertIn('coverage=\\(coverage)', self.source)
+
+    def test_limits_title_and_quota_notifications_have_safe_defaults(self):
+        self.assertIn('enum StatusTitleMode: String', self.source)
+        self.assertIn('private func limitsStatusTitle() -> String?', self.source)
+        self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel) · \\(constrained.window.compactKind)"', self.source)
+        self.assertIn('if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }', self.source)
+        self.assertIn('let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()', self.source)
+        self.assertIn('guard var previous = quotaNotificationStates[key] else', self.source)
+        self.assertIn('quotaAlertsEnabled && quotaObservationEstablished', self.source)
+        self.assertIn('quotaObservationEstablished = true', self.source)
+        self.assertIn('process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")', self.source)
+        self.assertIn('"--", title, body', self.source)
+
+
+class ProviderQuotaTests(unittest.TestCase):
+    def tearDown(self):
+        meter.reset_provider_quota_cache()
+
+    def test_pace_forecast_distinguishes_runout_reserve_and_early_window(self):
+        now = 1_000_000.0
+        base = {"window_seconds": 1000, "reset_at": now + 500}
+
+        runout = meter.quota_pace({**base, "used_percent": 70}, now=now)
+        reserve = meter.quota_pace({**base, "used_percent": 30}, now=now)
+        on_pace = meter.quota_pace({**base, "used_percent": 50}, now=now)
+        early = meter.quota_pace({"window_seconds": 1000, "reset_at": now + 980,
+                                  "used_percent": 20}, now=now)
+
+        self.assertEqual(runout["state"], "deficit")
+        self.assertFalse(runout["will_last_to_reset"])
+        self.assertIn("runs out in", runout["summary"])
+        self.assertEqual(reserve["state"], "reserve")
+        self.assertTrue(reserve["will_last_to_reset"])
+        self.assertEqual(on_pace["state"], "on_pace")
+        self.assertIsNone(early)
+
+    def test_codex_parser_preserves_main_and_named_spark_windows(self):
+        now = 1_000_000.0
+        payload = {
+            "rateLimits": {
+                "planType": "business",
+                "primary": {"usedPercent": 12, "windowDurationMins": 300,
+                            "resetsAt": now + 1800},
+                "secondary": {"usedPercent": 34, "windowDurationMins": 10080,
+                              "resetsAt": now + 3600},
+            },
+            "rateLimitsByLimitId": {
+                "codex-spark": {
+                    "limitName": "GPT-5.3-Codex-Spark",
+                    "primary": {"usedPercent": 56, "windowDurationMins": 300,
+                                "resetsAt": now + 1800},
+                    "secondary": {"usedPercent": 78, "windowDurationMins": 10080,
+                                  "resetsAt": now + 3600},
+                },
+            },
+        }
+
+        result = meter.parse_codex_quota(payload, now=now)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["plan"], "business")
+        self.assertEqual(
+            [(row["label"], row["used_percent"]) for row in result["windows"]],
+            [("Session", 12.0), ("Weekly", 34.0),
+             ("Spark session", 56.0), ("Spark weekly", 78.0)],
+        )
+        self.assertEqual(result["coverage_note"], "")
+
+    def test_codex_parser_does_not_fabricate_absent_main_windows(self):
+        result = meter.parse_codex_quota({
+            "rate_limit": {"primary_window": None, "secondary_window": None},
+            "additional_rate_limits": [{
+                "metered_feature": "codex_spark",
+                "limit_name": "GPT-5.3-Codex-Spark",
+                "rate_limit": {
+                    "primary_window": {"used_percent": 4, "limit_window_seconds": 18000,
+                                       "reset_at": 1_001_000},
+                    "secondary_window": {"used_percent": 9, "limit_window_seconds": 604800,
+                                         "reset_at": 1_002_000},
+                },
+            }],
+        }, source="Codex OAuth API", now=1_000_000)
+
+        self.assertEqual([row["label"] for row in result["windows"]],
+                         ["Spark session", "Spark weekly"])
+        self.assertIn("Regular Session and Weekly limits were not reported by Codex",
+                      result["coverage_note"])
+        self.assertIn("missing does not mean 0%", result["coverage_note"])
+
+    def test_codex_app_server_uses_wrapper_safe_launchagent_environment(self):
+        process = mock.Mock()
+        process.stdin = mock.Mock()
+        process.stdout = mock.Mock()
+        process.poll.return_value = 0
+        selector = mock.Mock()
+        with mock.patch.object(meter, "provider_cli_path", return_value="/nvm/bin/codex"), \
+                mock.patch.object(meter, "agent_client_environment", return_value={"PATH": "/nvm/bin"}) as environment, \
+                mock.patch.object(meter.subprocess, "Popen", return_value=process) as popen, \
+                mock.patch.object(meter.selectors, "DefaultSelector", return_value=selector), \
+                mock.patch.object(meter, "_rpc_read_response", side_effect=[{}, {"rateLimits": {}}]):
+            result = meter.codex_app_server_rate_limits()
+
+        environment.assert_called_once_with("/nvm/bin/codex")
+        self.assertEqual(popen.call_args.kwargs["env"], {"PATH": "/nvm/bin"})
+        self.assertEqual(result, {"rateLimits": {}})
+
+    def test_claude_parser_maps_reported_and_scoped_windows(self):
+        now = 1_000_000.0
+        result = meter.parse_claude_quota({
+            "five_hour": {"utilization": 8, "resets_at": now + 3600},
+            "seven_day": {"utilization": 23, "resets_at": now + 7200},
+            "seven_day_opus": {"utilization": 41, "resets_at": now + 7200},
+            "limits": [{
+                "kind": "weekly_scoped", "is_active": True, "percent": 52,
+                "resets_at": now + 7200,
+                "scope": {"model": {"display_name": "Sonnet 4.5"}},
+            }],
+        }, credentials={"subscriptionType": "max"}, now=now)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["plan"], "max")
+        self.assertEqual([row["label"] for row in result["windows"]],
+                         ["Session", "Weekly", "Opus weekly", "Sonnet 4.5 weekly"])
+        self.assertEqual(result["coverage_note"], "")
+
+    def test_claude_scoped_weekly_does_not_hide_missing_regular_weekly_limit(self):
+        result = meter.parse_claude_quota({
+            "five_hour": {"utilization": 8, "resets_at": 1_001_000},
+            "limits": [{
+                "kind": "weekly_scoped", "percent": 52, "resets_at": 1_002_000,
+                "scope": {"model": {"display_name": "Sonnet"}},
+            }],
+        }, now=1_000_000)
+
+        self.assertEqual([row["label"] for row in result["windows"]],
+                         ["Session", "Sonnet weekly"])
+        self.assertIn("Weekly limit was not reported by Claude", result["coverage_note"])
+
+    def test_third_party_claude_auth_is_explicitly_unavailable(self):
+        with mock.patch.object(meter, "claude_auth_status", return_value={
+            "loggedIn": True, "authMethod": "third_party", "apiProvider": "bedrock",
+        }), mock.patch.object(meter, "claude_oauth_credentials") as credentials:
+            result = meter.load_claude_quota(now=1_000_000)
+
+        credentials.assert_not_called()
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["plan"], "Bedrock")
+        self.assertIn("not exposed", result["error"])
+        self.assertIn("Session and Weekly limits were not reported by Claude",
+                      result["coverage_note"])
+
+    def test_cursor_parser_labels_monthly_individual_cap(self):
+        now = 1_000_000.0
+        result = meter.parse_cursor_quota({
+            "membershipType": "enterprise",
+            "billingCycleStart": now - 1000,
+            "billingCycleEnd": now + 2000,
+            "individualUsage": {
+                "plan": {"used": 0, "limit": 0},
+                "overall": {"used": 987, "limit": 100000},
+            },
+        }, now=now)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["windows"][0]["kind"], "monthly")
+        self.assertEqual(result["windows"][0]["label"], "Plan")
+        self.assertAlmostEqual(result["windows"][0]["used_percent"], 0.99, places=2)
+        self.assertEqual(result["windows"][0]["window_seconds"], 3000)
+        self.assertIn("Session and Weekly limits were not reported by Cursor",
+                      result["coverage_note"])
+        self.assertIn("missing does not mean 0%", result["coverage_note"])
+
+    def test_cache_marks_old_provider_data_stale_and_recomputes_pace(self):
+        row = meter.quota_provider("codex", "Codex", "ok", "test", windows=[
+            meter.quota_window("codex", "codex-session", "session", "Session", 50,
+                               window_seconds=1000, reset_at=1_001_000, now=1_000_000),
+        ])
+        with meter._quota_lock:
+            meter._quota_cache["codex"] = {**row, "fetched_at": 1_000_000,
+                                            "attempted_at": 1_000_000}
+
+        result = meter.provider_quota_snapshots(
+            now=1_000_601, loaders={"codex": mock.Mock()}, start_refresh=False,
+        )[0]
+
+        self.assertEqual(result["status"], "stale")
+        self.assertTrue(result["stale"])
+        self.assertEqual(result["age_seconds"], 601)
+
+    def test_empty_cache_returns_loading_and_starts_only_one_worker(self):
+        loader = mock.Mock()
+        worker = mock.Mock()
+        with mock.patch.object(meter.threading, "Thread", return_value=worker) as thread:
+            first = meter.provider_quota_snapshots(now=1_000_000, loaders={"codex": loader})
+            second = meter.provider_quota_snapshots(now=1_000_001, loaders={"codex": loader})
+
+        self.assertEqual(first[0]["status"], "loading")
+        self.assertEqual(second[0]["status"], "loading")
+        thread.assert_called_once()
+        worker.start.assert_called_once()
+
+    def test_refresh_retains_last_good_windows_and_sanitizes_unexpected_errors(self):
+        good = meter.quota_provider("codex", "Codex", "ok", "test", windows=[
+            meter.quota_window("codex", "codex-session", "session", "Session", 44,
+                               window_seconds=1000, reset_at=1_001_000, now=1_000_000),
+        ])
+        meter.refresh_provider_quota("codex", lambda now: good, now=1_000_000)
+
+        def fail(now):
+            raise RuntimeError("secret bearer token")
+
+        result = meter.refresh_provider_quota("codex", fail, now=1_000_100)
+
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["windows"][0]["used_percent"], 44.0)
+        self.assertEqual(result["fetched_at"], 1_000_000)
+        self.assertEqual(result["attempted_at"], 1_000_100)
+        self.assertEqual(result["error"], "Provider quota refresh failed.")
+        self.assertNotIn("secret", result["error"])
+
 
 class MenubarSessionTests(unittest.TestCase):
     def test_recent_sessions_are_limited_and_keep_an_older_pin_visible(self):
@@ -1334,7 +1581,8 @@ class MenubarSessionTests(unittest.TestCase):
                            "sample_count": 2, "timing_coverage": 0.75},
         }
         with mock.patch.object(meter, "all_session_sources", return_value=sources), \
-                mock.patch.object(meter, "recompute", return_value=state):
+                mock.patch.object(meter, "recompute", return_value=state), \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
             payload = meter.menubar_state("pinned")
 
         self.assertTrue(payload["selection"]["pinned"])
@@ -1342,10 +1590,22 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertEqual(payload["selection"]["selected_id"], "pinned")
         self.assertEqual(payload["recent_sessions"][0]["name"], "Pinned task")
         self.assertEqual(payload["model"], "gpt-5.6-sol")
+        self.assertEqual(payload["provider_quotas"], [])
         self.assertEqual(payload["throughput"], {
             "available": True, "output_tps": 42.5, "basis": "end_to_end",
             "sample_count": 2, "timing_coverage": 0.75,
         })
+
+    def test_cold_start_does_not_rebuild_all_history_for_each_menu_poll(self):
+        with mock.patch.object(meter, "STATE", {}), \
+                mock.patch.object(meter, "all_session_sources", return_value=[]), \
+                mock.patch.object(meter, "current_state") as current, \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
+            payload = meter.menubar_state()
+
+        current.assert_not_called()
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["provider_quotas"], [])
 
 
 class DynamicCatalogTests(unittest.TestCase):
@@ -1704,14 +1964,38 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertLessEqual(len(result["evidence"]), 2)
 
 
-class PackagingTests(unittest.TestCase):
-    def test_postinstall_waits_for_initialized_dashboard_after_launch(self):
+class InstallationTests(unittest.TestCase):
+    def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "packaging" / "scripts" / "postinstall").read_text()
-        kickstart = script.rindex('launchctl kickstart -k "gui/$USER_UID/$LABEL"')
-        readiness_check = script.rindex("if ! wait_for_dashboard; then")
-        self.assertLess(kickstart, readiness_check)
-        self.assertIn("state_ready", script)
+        script = (root / "scripts" / "install").read_text()
+        self.assertIn('"$INSTALL_ROOT/scripts/install-launch-agent"', script)
+        self.assertIn('$HOME/Library/Application Support/Token Meter/runtime', script)
+        self.assertIn('"state_ready": true', script)
+        self.assertIn('launchctl print "gui/$UID/$SERVER_LABEL"', script)
+        self.assertIn('launchctl print "gui/$UID/$MENUBAR_LABEL"', script)
+        self.assertIn('"$INSTALL_ROOT/meter.py"', script)
+        self.assertIn('"$INSTALL_ROOT/scripts/run-menubar"', script)
+        self.assertIn("Token Meter installation complete.", script)
+        self.assertNotRegex(script, r"(?m)^exec ")
+
+    def test_launch_agents_supervise_server_and_menu_bar_independently(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "install-launch-agent").read_text()
+        self.assertIn('SERVER_LABEL="com.token-meter.server"', script)
+        self.assertIn('MENUBAR_LABEL="com.token-meter.menubar"', script)
+        self.assertIn("<string>$SERVER_PROGRAM</string>", script)
+        self.assertIn("<string>$MENUBAR_PROGRAM</string>", script)
+        self.assertEqual(script.count("<key>KeepAlive</key>"), 2)
+        self.assertNotIn("start-token-meter", script)
+        for label in ("SERVER_LABEL", "MENUBAR_LABEL"):
+            self.assertIn(f'launchctl bootout "gui/$UID/${label}"', script)
+
+    def test_uninstaller_removes_both_supervised_jobs(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "uninstall-launch-agent").read_text()
+        self.assertIn('launchctl bootout "gui/$UID/$SERVER_LABEL"', script)
+        self.assertIn('launchctl bootout "gui/$UID/$MENUBAR_LABEL"', script)
+        self.assertIn('rm -f "$MENUBAR_PLIST" "$SERVER_PLIST"', script)
 
 
 class AgentAccessTests(unittest.TestCase):

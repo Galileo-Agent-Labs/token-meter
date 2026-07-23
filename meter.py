@@ -3,8 +3,9 @@
 Token Meter - a live cost and efficiency instrument for Claude, Codex, and Cursor.
 
 Tails local agent logs, parses each execution as it lands, and serves a
-localhost dashboard over SSE with Current and Global views. Stdlib only; nothing
-leaves your machine.
+localhost dashboard with Current and Global views. Stdlib only. Trace analysis
+stays local; the optional menu-bar quota view makes read-only account-usage
+requests to the signed-in Claude, Codex, and Cursor provider services.
 
   python3 meter.py     ->  http://localhost:8722
 
@@ -14,6 +15,8 @@ block. Claude parsing dedupes by message.id so costs are not double-counted.
 Codex uses token_count events instead; those are already one usage slice.
 """
 import calendar
+import base64
+import copy
 import datetime
 import glob
 import hashlib
@@ -25,6 +28,7 @@ import queue
 import random
 import re
 import secrets
+import selectors
 import shlex
 import shutil
 import sqlite3
@@ -34,7 +38,9 @@ import time
 import threading
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import Request, urlopen
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
 CLAUDE_DESKTOP_DATA_ROOTS = [
@@ -49,6 +55,8 @@ CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
 CODEX_SESSIONS = os.path.expanduser("~/.codex/sessions")
 CODEX_INDEX = os.path.expanduser("~/.codex/session_index.jsonl")
 CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
+CODEX_AUTH = os.path.expanduser("~/.codex/auth.json")
+CLAUDE_CREDENTIALS = os.path.expanduser("~/.claude/.credentials.json")
 CURSOR_PROJECTS = os.path.expanduser("~/.cursor/projects")
 CURSOR_STATE_DB = os.path.expanduser(
     "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
@@ -105,6 +113,10 @@ MENUBAR_CONTEXT_SOFT_PCT = 0.65
 MENUBAR_CONTEXT_WATCH_PCT = 0.70
 MENUBAR_CONTEXT_INTERVENE_PCT = 0.85
 MENUBAR_COST_SPIKE = 0.50
+QUOTA_REFRESH_S = 60.0
+QUOTA_STALE_S = 10 * 60.0
+QUOTA_HTTP_TIMEOUT_S = 8.0
+QUOTA_PROCESS_TIMEOUT_S = 8.0
 LOW_YIELD_RATIO = 0.005
 LOW_YIELD_COST = 0.05
 LOW_YIELD_CONTEXT_PCT = 0.25
@@ -122,6 +134,9 @@ _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
 _cursor_request_cache = {}
+_quota_cache = {}
+_quota_inflight = set()
+_quota_lock = threading.Lock()
 _ACTION_TOKEN = secrets.token_urlsafe(24)
 AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
@@ -3311,6 +3326,13 @@ def new_codex_pending():
             "context_window": None, "user_inputs": []}
 
 
+def codex_approval_policy_label(value):
+    """Return a compact label for legacy strings and structured Codex policies."""
+    if isinstance(value, dict):
+        value = next(iter(value), "")
+    return str(value or "").replace("_", " ")
+
+
 def recompute_codex(source):
     path = source["path"]
     objs = load(path)
@@ -3360,7 +3382,7 @@ def recompute_codex(source):
             detail = " · ".join(x for x in [
                 model,
                 payload.get("effort"),
-                (payload.get("approval_policy") or "").replace("_", " "),
+                codex_approval_policy_label(payload.get("approval_policy")),
             ] if x)
             pending["trace"].append(trace_event(
                 ts, "context", "Run context", detail, severity="neutral",
@@ -7047,6 +7069,693 @@ def menubar_verdict(st, recommendation):
     return payload("healthy", detail)
 
 
+class QuotaUnavailable(Exception):
+    """A safe, user-facing reason that a provider quota cannot be read."""
+
+
+def quota_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def quota_timestamp(value):
+    number = quota_number(value)
+    if number is not None:
+        if number > 10_000_000_000:
+            number /= 1000.0
+        return number if number > 0 else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.timestamp()
+    except (ValueError, OverflowError):
+        return None
+
+
+def quota_compact_duration(seconds):
+    seconds = max(0, int(seconds or 0))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 48:
+        return f"{hours}h" + (f" {minutes}m" if minutes else "")
+    days, hours = divmod(hours, 24)
+    return f"{days}d" + (f" {hours}h" if hours else "")
+
+
+def quota_pace(window, now=None):
+    """Compare provider-reported use with even consumption across a real window."""
+    now = float(now if now is not None else time.time())
+    used = quota_number((window or {}).get("used_percent"))
+    duration = quota_number((window or {}).get("window_seconds"))
+    reset_at = quota_timestamp((window or {}).get("reset_at"))
+    if used is None or duration is None or duration <= 0 or reset_at is None:
+        return None
+    remaining_time = reset_at - now
+    if remaining_time <= 0 or remaining_time > duration:
+        return None
+    elapsed = duration - remaining_time
+    if elapsed <= 0 or elapsed / duration < 0.03:
+        return None
+
+    actual = max(0.0, min(100.0, used))
+    expected = max(0.0, min(100.0, elapsed / duration * 100.0))
+    delta = actual - expected
+    if delta > 4:
+        state = "deficit"
+        lead = f"{abs(delta):.0f}% in deficit"
+    elif delta < -4:
+        state = "reserve"
+        lead = f"{abs(delta):.0f}% in reserve"
+    else:
+        state = "on_pace"
+        lead = "on pace"
+
+    runs_out_at = None
+    will_last = False
+    if actual >= 100:
+        summary = "exhausted"
+        runs_out_at = now
+    elif actual <= 0:
+        will_last = True
+        summary = f"{lead} · lasts until reset"
+    else:
+        rate = actual / elapsed
+        run_out_in = (100.0 - actual) / rate if rate > 0 else None
+        if run_out_in is None or run_out_in >= remaining_time:
+            will_last = True
+            summary = f"{lead} · lasts until reset"
+        else:
+            runs_out_at = now + run_out_in
+            summary = f"{lead} · runs out in {quota_compact_duration(run_out_in)}"
+    return {
+        "state": state,
+        "expected_used_percent": round(expected, 1),
+        "delta_percent": round(delta, 1),
+        "will_last_to_reset": will_last,
+        "runs_out_at": round(runs_out_at, 3) if runs_out_at is not None else None,
+        "summary": summary,
+    }
+
+
+def quota_window(provider, window_id, kind, label, used_percent,
+                 window_seconds=None, reset_at=None, now=None):
+    used = quota_number(used_percent)
+    if used is None:
+        return None
+    duration = quota_number(window_seconds)
+    reset = quota_timestamp(reset_at)
+    row = {
+        "id": str(window_id or f"{provider}-{kind}"),
+        "kind": str(kind or "extra"),
+        "label": str(label or kind or "Quota"),
+        "used_percent": round(max(0.0, min(100.0, used)), 2),
+        "window_seconds": int(duration) if duration is not None and duration > 0 else None,
+        "reset_at": round(reset, 3) if reset is not None else None,
+    }
+    row["pace"] = quota_pace(row, now=now)
+    return row
+
+
+def quota_provider(provider, label, status, source, windows=None, plan="", error="",
+                   coverage_note=""):
+    return {
+        "id": provider,
+        "label": label,
+        "status": status,
+        "plan": str(plan or ""),
+        "source": source,
+        "provenance": "provider_reported" if windows else "unavailable",
+        "windows": [row for row in (windows or []) if row],
+        "error": compact_text(str(error or ""), 180),
+        "coverage_note": compact_text(str(coverage_note or ""), 180),
+    }
+
+
+def quota_coverage_note(provider, missing, qualifier=""):
+    missing = [str(value).strip() for value in (missing or []) if str(value).strip()]
+    if not missing:
+        return ""
+    names = missing[0] if len(missing) == 1 else " and ".join(missing)
+    subject = " ".join(value for value in (str(qualifier or "").strip(), names) if value)
+    subject = subject[:1].upper() + subject[1:]
+    noun = "limit" if len(missing) == 1 else "limits"
+    verb = "was" if len(missing) == 1 else "were"
+    return f"{subject} {noun} {verb} not reported by {provider}; missing does not mean 0%."
+
+
+def quota_slug(value):
+    slug = re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-")
+    return slug[:64] or "quota"
+
+
+def provider_cli_path(name):
+    resolved = shutil.which(name)
+    if resolved:
+        return resolved
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".local", "bin", name),
+        os.path.join(home, ".volta", "bin", name),
+        os.path.join(home, ".asdf", "shims", name),
+        f"/opt/homebrew/bin/{name}",
+        f"/usr/local/bin/{name}",
+    ]
+    candidates.extend(sorted(
+        glob.glob(os.path.join(home, ".nvm", "versions", "node", "*", "bin", name)),
+        key=safe_mtime, reverse=True,
+    ))
+    return next((path for path in candidates if os.path.isfile(path) and os.access(path, os.X_OK)), None)
+
+
+def quota_http_json(url, headers=None, timeout=QUOTA_HTTP_TIMEOUT_S, opener=None):
+    request = Request(url, headers=headers or {}, method="GET")
+    try:
+        response = (opener or urlopen)(request, timeout=timeout)
+        with response:
+            raw = response.read(2 * 1024 * 1024 + 1)
+        if len(raw) > 2 * 1024 * 1024:
+            raise QuotaUnavailable("Provider quota response was too large.")
+        value = json.loads(raw.decode("utf-8"))
+        if not isinstance(value, dict):
+            raise QuotaUnavailable("Provider returned an invalid quota response.")
+        return value
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise QuotaUnavailable("Provider authentication needs to be refreshed.") from None
+        if exc.code == 429:
+            raise QuotaUnavailable("Provider quota service is rate limited; Token Meter will retry.") from None
+        raise QuotaUnavailable(f"Provider quota request failed (HTTP {exc.code}).") from None
+    except (URLError, TimeoutError):
+        raise QuotaUnavailable("Provider quota request could not connect.") from None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise QuotaUnavailable("Provider returned an invalid quota response.") from None
+
+
+def _rpc_read_response(process, selector, request_id, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        events = selector.select(max(0.0, deadline - time.monotonic()))
+        if not events:
+            break
+        line = process.stdout.readline()
+        if not line:
+            break
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if message.get("id") != request_id:
+            continue
+        if message.get("error"):
+            raise QuotaUnavailable("Codex could not read account quotas.")
+        return message.get("result") or {}
+    raise QuotaUnavailable("Codex quota request timed out.")
+
+
+def codex_app_server_rate_limits(timeout=QUOTA_PROCESS_TIMEOUT_S):
+    executable = provider_cli_path("codex")
+    if not executable:
+        raise QuotaUnavailable("Codex CLI is not installed.")
+    try:
+        process = subprocess.Popen(
+            [executable, "-s", "read-only", "-a", "untrusted", "app-server"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, bufsize=1, env=agent_client_environment(executable),
+        )
+    except OSError:
+        raise QuotaUnavailable("Codex could not start its account quota service.") from None
+    selector = selectors.DefaultSelector()
+    try:
+        selector.register(process.stdout, selectors.EVENT_READ)
+
+        def send(message):
+            process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
+            process.stdin.flush()
+
+        send({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"clientInfo": {"name": "token-meter", "version": "0.1"}},
+        })
+        _rpc_read_response(process, selector, 1, timeout)
+        send({"jsonrpc": "2.0", "method": "initialized"})
+        send({"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read"})
+        return _rpc_read_response(process, selector, 2, timeout)
+    except (BrokenPipeError, OSError):
+        raise QuotaUnavailable("Codex could not start its account quota service.") from None
+    finally:
+        selector.close()
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=1)
+
+
+def _codex_limit_label(value):
+    text = str(value or "").strip()
+    if not text:
+        return "Additional"
+    if "spark" in text.lower():
+        return "Spark"
+    text = re.sub(r"(?i)^gpt[- ]?[\w.]+[- ]?codex[- ]?", "", text)
+    text = re.sub(r"(?i)[- ]preview$", "", text).replace("-", " ").strip()
+    return compact_text(text.title() or "Additional", 32)
+
+
+def _codex_window(provider_id, raw, kind, label, now=None):
+    if not isinstance(raw, dict):
+        return None
+    duration = quota_number(raw.get("limit_window_seconds"))
+    if duration is None:
+        minutes = quota_number(raw.get("windowDurationMins") or raw.get("window_duration_mins"))
+        duration = minutes * 60 if minutes is not None else None
+    return quota_window(
+        "codex", f"codex-{provider_id}-{kind}", kind, label,
+        raw.get("used_percent") if "used_percent" in raw else raw.get("usedPercent"),
+        window_seconds=duration,
+        reset_at=raw.get("reset_at") if "reset_at" in raw else raw.get("resetsAt"),
+        now=now,
+    )
+
+
+def parse_codex_quota(payload, source="Codex app-server", now=None):
+    root = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+    main = root.get("rateLimits") or root.get("rate_limit") or root.get("rateLimitsByLimitId", {}).get("codex") or {}
+    plan = main.get("planType") or main.get("plan_type") or root.get("plan_type") or ""
+    windows, seen = [], set()
+
+    def add(row):
+        if row and row["id"] not in seen:
+            seen.add(row["id"])
+            windows.append(row)
+
+    main_session = _codex_window(
+        "main", main.get("primary") or main.get("primary_window"), "session", "Session", now=now,
+    )
+    main_weekly = _codex_window(
+        "main", main.get("secondary") or main.get("secondary_window"), "weekly", "Weekly", now=now,
+    )
+    add(main_session)
+    add(main_weekly)
+    missing_main = [
+        label for label, window in (("Session", main_session), ("Weekly", main_weekly)) if not window
+    ]
+    coverage_note = quota_coverage_note("Codex", missing_main, qualifier="regular")
+
+    additional = []
+    by_id = root.get("rateLimitsByLimitId")
+    if isinstance(by_id, dict):
+        additional.extend((key, value) for key, value in by_id.items() if key != "codex" and isinstance(value, dict))
+    for idx, value in enumerate(root.get("additional_rate_limits") or []):
+        if isinstance(value, dict):
+            additional.append((value.get("metered_feature") or f"extra-{idx}", value))
+
+    for limit_id, value in additional:
+        nested = value.get("rate_limit") if isinstance(value.get("rate_limit"), dict) else value
+        prefix = _codex_limit_label(value.get("limitName") or value.get("limit_name") or limit_id)
+        stable = quota_slug(limit_id)
+        add(_codex_window(stable, nested.get("primary") or nested.get("primary_window"),
+                          "session", f"{prefix} session", now=now))
+        add(_codex_window(stable, nested.get("secondary") or nested.get("secondary_window"),
+                          "weekly", f"{prefix} weekly", now=now))
+
+    if not windows:
+        return quota_provider(
+            "codex", "Codex", "unavailable", source, plan=plan,
+            error="This Codex account does not report quota windows.",
+            coverage_note=coverage_note,
+        )
+    return quota_provider(
+        "codex", "Codex", "ok", source, windows=windows, plan=plan,
+        coverage_note=coverage_note,
+    )
+
+
+def codex_oauth_quota(now=None, opener=None):
+    try:
+        with open(CODEX_AUTH, encoding="utf-8") as fh:
+            auth = json.load(fh)
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        raise QuotaUnavailable("Codex is not signed in locally.") from None
+    tokens = auth.get("tokens") if isinstance(auth.get("tokens"), dict) else {}
+    access_token = tokens.get("access_token")
+    account_id = tokens.get("account_id")
+    if not access_token:
+        raise QuotaUnavailable("Codex is not signed in locally.")
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+        "User-Agent": "TokenMeter/0.1",
+    }
+    if account_id:
+        headers["ChatGPT-Account-Id"] = str(account_id)
+    payload = quota_http_json(
+        "https://chatgpt.com/backend-api/wham/usage", headers=headers, opener=opener,
+    )
+    return parse_codex_quota(payload, source="Codex OAuth API", now=now)
+
+
+def load_codex_quota(now=None):
+    try:
+        return parse_codex_quota(codex_app_server_rate_limits(), now=now)
+    except QuotaUnavailable:
+        return codex_oauth_quota(now=now)
+
+
+def claude_auth_status(timeout=3.0):
+    executable = provider_cli_path("claude")
+    if not executable:
+        return {}
+    try:
+        result = subprocess.run(
+            [executable, "auth", "status", "--json"], capture_output=True,
+            text=True, timeout=timeout, check=False,
+            env=agent_client_environment(executable),
+        )
+        value = json.loads(result.stdout or "{}")
+        return value if isinstance(value, dict) else {}
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
+        return {}
+
+
+def claude_oauth_credentials(auth_status=None, timeout=3.0):
+    data = None
+    try:
+        with open(CLAUDE_CREDENTIALS, "rb") as fh:
+            data = fh.read(1024 * 1024 + 1)
+    except (FileNotFoundError, OSError):
+        pass
+    if data is None:
+        status = auth_status or {}
+        if not status.get("loggedIn") or str(status.get("authMethod") or "").lower() == "third_party":
+            raise QuotaUnavailable("Claude OAuth credentials are not available.")
+        try:
+            result = subprocess.run(
+                ["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                capture_output=True, timeout=timeout, check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            raise QuotaUnavailable("Claude OAuth credentials are not available.") from None
+        if result.returncode != 0:
+            raise QuotaUnavailable("Claude OAuth credentials are not available.")
+        data = result.stdout
+    if len(data) > 1024 * 1024:
+        raise QuotaUnavailable("Claude OAuth credentials are invalid.")
+    try:
+        root = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise QuotaUnavailable("Claude OAuth credentials are invalid.") from None
+    oauth = root.get("claudeAiOauth") if isinstance(root, dict) else None
+    if not isinstance(oauth, dict) or not oauth.get("accessToken"):
+        raise QuotaUnavailable("Claude OAuth credentials are not available.")
+    expires_at = quota_timestamp(oauth.get("expiresAt"))
+    if expires_at is not None and expires_at <= time.time() + 60:
+        raise QuotaUnavailable("Claude OAuth credentials need to be refreshed.")
+    scopes = oauth.get("scopes") or []
+    if scopes and "user:profile" not in scopes:
+        raise QuotaUnavailable("Claude OAuth credentials do not include quota access.")
+    return oauth
+
+
+def _claude_window(field, raw, kind, label, duration, now=None):
+    if not isinstance(raw, dict):
+        return None
+    return quota_window(
+        "claude", f"claude-{field.replace('_', '-')}", kind, label,
+        raw.get("utilization"), window_seconds=duration,
+        reset_at=raw.get("resets_at"), now=now,
+    )
+
+
+def parse_claude_quota(payload, credentials=None, now=None):
+    windows, seen = [], set()
+
+    def add(row):
+        if row and row["id"] not in seen:
+            seen.add(row["id"])
+            windows.append(row)
+
+    main_session = _claude_window(
+        "five_hour", payload.get("five_hour"), "session", "Session", 5 * 60 * 60, now=now,
+    )
+    main_weekly = _claude_window(
+        "seven_day", payload.get("seven_day"), "weekly", "Weekly", 7 * 24 * 60 * 60, now=now,
+    )
+    add(main_session)
+    add(main_weekly)
+    missing_main = [
+        label for label, window in (("Session", main_session), ("Weekly", main_weekly)) if not window
+    ]
+    coverage_note = quota_coverage_note("Claude", missing_main)
+    named = [
+        ("seven_day_opus", "Opus weekly"),
+        ("seven_day_sonnet", "Sonnet weekly"),
+        ("seven_day_routines", "Routines weekly"),
+        ("seven_day_cowork", "Routines weekly"),
+    ]
+    for field, label in named:
+        add(_claude_window(field, payload.get(field), "weekly", label, 7 * 24 * 60 * 60, now=now))
+    for idx, limit in enumerate(payload.get("limits") or []):
+        if not isinstance(limit, dict) or limit.get("is_active") is False:
+            continue
+        if limit.get("kind") != "weekly_scoped" and limit.get("group") != "weekly":
+            continue
+        scope = limit.get("scope") if isinstance(limit.get("scope"), dict) else {}
+        model = scope.get("model") if isinstance(scope.get("model"), dict) else {}
+        name = model.get("display_name") or model.get("id") or f"Scoped {idx + 1}"
+        add(quota_window(
+            "claude", f"claude-weekly-{quota_slug(name)}", "weekly", f"{name} weekly",
+            limit.get("percent"), window_seconds=7 * 24 * 60 * 60,
+            reset_at=limit.get("resets_at"), now=now,
+        ))
+    meta = credentials or {}
+    plan = meta.get("subscriptionType") or meta.get("rateLimitTier") or ""
+    if not windows:
+        return quota_provider(
+            "claude", "Claude", "unavailable", "Claude OAuth API", plan=plan,
+            error="This Claude account does not report quota windows.",
+            coverage_note=coverage_note,
+        )
+    return quota_provider(
+        "claude", "Claude", "ok", "Claude OAuth API", windows=windows, plan=plan,
+        coverage_note=coverage_note,
+    )
+
+
+def load_claude_quota(now=None, opener=None):
+    status = claude_auth_status()
+    if str(status.get("authMethod") or "").lower() == "third_party":
+        provider = str(status.get("apiProvider") or "third-party")
+        return quota_provider(
+            "claude", "Claude", "unavailable", "Claude third-party authentication",
+            plan=provider.title(), error="Claude account quotas are not exposed for this provider.",
+            coverage_note=quota_coverage_note("Claude", ["Session", "Weekly"]),
+        )
+    credentials = claude_oauth_credentials(auth_status=status)
+    payload = quota_http_json(
+        "https://api.anthropic.com/api/oauth/usage",
+        headers={
+            "Authorization": f"Bearer {credentials['accessToken']}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent": "TokenMeter/0.1",
+        },
+        opener=opener,
+    )
+    return parse_claude_quota(payload, credentials=credentials, now=now)
+
+
+def cursor_auth_session(now=None, db_path=None):
+    try:
+        with _cursor_db_connection(db_path) as conn:
+            row = conn.execute(
+                "SELECT value FROM ItemTable WHERE key = ? LIMIT 1",
+                ("cursorAuth/accessToken",),
+            ).fetchone()
+    except (sqlite3.Error, OSError):
+        raise QuotaUnavailable("Cursor is not signed in locally.") from None
+    if not row:
+        raise QuotaUnavailable("Cursor is not signed in locally.")
+    access_token = row[0]
+    if isinstance(access_token, memoryview):
+        access_token = access_token.tobytes()
+    if isinstance(access_token, bytes):
+        access_token = access_token.decode("utf-8", "replace")
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise QuotaUnavailable("Cursor is not signed in locally.")
+    try:
+        parts = access_token.split(".")
+        encoded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(encoded.encode("ascii")))
+        user_id = str(payload.get("sub") or "").split("|")[-1]
+        expires_at = quota_timestamp(payload.get("exp"))
+    except (IndexError, ValueError, UnicodeError, json.JSONDecodeError):
+        raise QuotaUnavailable("Cursor local authentication is invalid.") from None
+    if not user_id or not re.fullmatch(r"[A-Za-z0-9._-]+", user_id):
+        raise QuotaUnavailable("Cursor local authentication is invalid.")
+    if expires_at is None or expires_at <= float(now if now is not None else time.time()) + 60:
+        raise QuotaUnavailable("Cursor authentication needs to be refreshed.")
+    return access_token, user_id
+
+
+def parse_cursor_quota(payload, now=None):
+    individual = payload.get("individualUsage") if isinstance(payload.get("individualUsage"), dict) else {}
+    team = payload.get("teamUsage") if isinstance(payload.get("teamUsage"), dict) else {}
+    candidates = [
+        (individual.get("plan"), "Plan"),
+        (individual.get("overall"), "Plan"),
+        (team.get("pooled"), "Team plan"),
+    ]
+    selected, label = None, "Plan"
+    for value, candidate_label in candidates:
+        if not isinstance(value, dict):
+            continue
+        used, limit = quota_number(value.get("used")), quota_number(value.get("limit"))
+        if used is not None and limit is not None and limit > 0:
+            selected, label = (used, limit), candidate_label
+            break
+    plan = str(payload.get("membershipType") or payload.get("limitType") or "")
+    coverage_note = quota_coverage_note("Cursor", ["Session", "Weekly"])
+    if not selected:
+        reason = ("Cursor reports an unlimited plan without a usage cap."
+                  if payload.get("isUnlimited") else
+                  "This Cursor account does not report a capped plan window.")
+        return quota_provider(
+            "cursor", "Cursor", "unavailable", "Cursor account API", plan=plan, error=reason,
+            coverage_note=coverage_note,
+        )
+    start = quota_timestamp(payload.get("billingCycleStart"))
+    end = quota_timestamp(payload.get("billingCycleEnd"))
+    duration = end - start if start is not None and end is not None and end > start else None
+    used, limit = selected
+    window = quota_window(
+        "cursor", "cursor-plan", "monthly", label, used / limit * 100.0,
+        window_seconds=duration, reset_at=end, now=now,
+    )
+    return quota_provider(
+        "cursor", "Cursor", "ok", "Cursor account API", windows=[window], plan=plan,
+        coverage_note=coverage_note,
+    )
+
+
+def load_cursor_quota(now=None, opener=None):
+    access_token, user_id = cursor_auth_session(now=now)
+    payload = quota_http_json(
+        "https://cursor.com/api/usage-summary",
+        headers={
+            "Accept": "application/json",
+            "Cookie": f"WorkosCursorSessionToken={user_id}%3A%3A{access_token}",
+            "User-Agent": "TokenMeter/0.1",
+        },
+        opener=opener,
+    )
+    return parse_cursor_quota(payload, now=now)
+
+
+def _quota_loading_row(provider):
+    labels = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
+    return quota_provider(
+        provider, labels[provider], "loading", "Provider account", error="Loading provider quotas.",
+    )
+
+
+def _quota_failure_row(provider, error, now):
+    safe_error = str(error) if isinstance(error, QuotaUnavailable) else "Provider quota refresh failed."
+    with _quota_lock:
+        previous = copy.deepcopy(_quota_cache.get(provider))
+    if previous and previous.get("windows"):
+        previous["status"] = "error"
+        previous["error"] = compact_text(safe_error, 180)
+        previous["attempted_at"] = now
+        return previous
+    labels = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
+    row = quota_provider(provider, labels[provider], "error", "Provider account", error=safe_error)
+    row["fetched_at"] = now
+    row["attempted_at"] = now
+    return row
+
+
+def refresh_provider_quota(provider, loader, now=None):
+    now = float(now if now is not None else time.time())
+    try:
+        row = loader(now=now)
+        if not isinstance(row, dict):
+            raise QuotaUnavailable("Provider returned an invalid quota response.")
+        row = copy.deepcopy(row)
+        row["fetched_at"] = now
+        row["attempted_at"] = now
+        row.setdefault("error", "")
+    except Exception as exc:
+        row = _quota_failure_row(provider, exc, now)
+    with _quota_lock:
+        _quota_cache[provider] = row
+        _quota_inflight.discard(provider)
+    return copy.deepcopy(row)
+
+
+def _quota_refresh_worker(provider, loader):
+    refresh_provider_quota(provider, loader)
+
+
+def provider_quota_snapshots(now=None, loaders=None, start_refresh=True):
+    now = float(now if now is not None else time.time())
+    loaders = loaders or {
+        "claude": load_claude_quota,
+        "codex": load_codex_quota,
+        "cursor": load_cursor_quota,
+    }
+    to_start = []
+    with _quota_lock:
+        for provider, loader in loaders.items():
+            cached = _quota_cache.get(provider)
+            last_attempt = (cached or {}).get("attempted_at") or (cached or {}).get("fetched_at") or 0
+            if start_refresh and provider not in _quota_inflight and now - last_attempt >= QUOTA_REFRESH_S:
+                _quota_inflight.add(provider)
+                to_start.append((provider, loader))
+        cached_rows = {provider: copy.deepcopy(_quota_cache.get(provider)) for provider in loaders}
+
+    for provider, loader in to_start:
+        threading.Thread(
+            target=_quota_refresh_worker, args=(provider, loader),
+            name=f"token-meter-quota-{provider}", daemon=True,
+        ).start()
+
+    out = []
+    for provider in ("claude", "codex", "cursor"):
+        if provider not in loaders:
+            continue
+        row = cached_rows.get(provider) or _quota_loading_row(provider)
+        fetched_at = quota_timestamp(row.get("fetched_at"))
+        age = max(0.0, now - fetched_at) if fetched_at is not None else None
+        row["age_seconds"] = int(age) if age is not None else None
+        row["stale"] = bool(age is not None and age >= QUOTA_STALE_S)
+        if row["stale"] and row.get("windows"):
+            row["status"] = "stale"
+        for window in row.get("windows") or []:
+            window["pace"] = quota_pace(window, now=now)
+        out.append(row)
+    return out
+
+
+def reset_provider_quota_cache():
+    with _quota_lock:
+        _quota_cache.clear()
+        _quota_inflight.clear()
+
+
 def menubar_session_name(source):
     title = compact_text(source.get("title") or "", 52).strip()
     if title and title.lower() not in ("untitled", "untitled session"):
@@ -7087,7 +7796,19 @@ def menubar_state(session_id=None):
     sources = all_session_sources()
     selected_source = find_session(requested_id, sources=sources) if requested_id else None
     missing = bool(requested_id and not selected_source)
-    st = recompute(selected_source) if selected_source else current_state()
+    # The watcher owns the first full recompute. Calling current_state() here
+    # before it publishes would make every two-second native poll independently
+    # rebuild all cross-session history and starve the cold-start worker.
+    st = recompute(selected_source) if selected_source else (STATE or {
+        "ok": False,
+        "message": "Token Meter is loading local session history.",
+        "source": {},
+        "context": {},
+        "cache": {},
+        "throughput": {},
+        "executions": [],
+        "insights": [],
+    })
     if selected_source and not st:
         missing = True
         selected_source = None
@@ -7164,6 +7885,7 @@ def menubar_state(session_id=None):
         "recent_sessions": menubar_recent_sessions(
             sources, selected_id=requested_id if selected_source else selected_id, limit=5
         ),
+        "provider_quotas": provider_quota_snapshots(),
         "ts": st.get("ts"),
     }
 

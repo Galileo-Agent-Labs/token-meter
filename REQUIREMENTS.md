@@ -135,7 +135,9 @@ all logs. The visual design was also rebuilt to a professional dashboard
 A small local process tails the active session log; on each new line it parses
 the usage block, updates running totals, and pushes the change to a localhost
 page over a live connection (SSE). Start once, leave the tab pinned, it moves
-while you work. Fully local — nothing leaves the machine.
+while you work. Trace processing is fully local. The native menu's account-quota
+surface makes bounded, read-only usage requests to the provider
+already signed in on the machine.
 
 ### Zone 1 — The Meter (gets you to look)
 One big number: **dollars this session**. Beside it, token total and live burn
@@ -269,10 +271,24 @@ moment is already on screen the instant you stop. No second tool.
   across Current, Logs, Global, Models, and Daily. Use median as the primary
   typical-wait comparison in Models. Provide request-level, model/day, and
   daily trend charts without conflating wait time with output-token throughput.
+- **FR27 Provider quotas in the macOS menu bar** — provide persisted
+  Run/All/Claude/Codex/Cursor tabs. Preserve the complete existing Run surface;
+  rank fresh provider-reported windows in All; show only real provider windows
+  with usage, reset, pace/runout, source, and freshness; support Run and Limits
+  status-title modes; and send transition-based warning, critical, exhaustion,
+  and reset notifications without notifying on the first observation. Quota
+  refresh must be asynchronous, bounded, cached, and honest when an account or
+  provider does not expose quota telemetry. Provider tabs must identify absent
+  common windows as not reported, never render missing data as 0%, and keep
+  named or monthly caps distinct from regular Session and Weekly limits.
 
 ## 5. Non-functional requirements
 
-- **NFR1 Local-only** — no network egress; nothing leaves the machine.
+- **NFR1 Private local analysis** — never upload logs, prompts, responses,
+  project paths, trace token counts, costs, or derived analytics. The only
+  product-initiated network egress is a bounded read-only quota request to the
+  matching signed-in provider. Never persist copied credentials or expose them,
+  cookies, authorization headers, account IDs, or raw provider bodies locally.
 - **NFR2 Zero-install** — Python stdlib only; one file; `python3 meter.py`.
 - **NFR3 Passive by default** — no command to run per session; it finds you.
   Configuration changes occur only after an explicit dashboard confirmation.
@@ -608,11 +624,14 @@ remains Python stdlib-only; the Swift toolchain is needed only for users who
 want the menu bar companion. `scripts/run-menubar` compiles the Swift file into
 `.build/token-meter-menubar` and executes it.
 
-`scripts/start-token-meter` is the login-item entrypoint. It starts
-`python3 meter.py` if `/health` is not ready, waits briefly for the local server,
-and then runs the menu bar companion. `scripts/install-launch-agent` writes a
-user LaunchAgent for that entrypoint, and `scripts/uninstall-launch-agent`
-removes it.
+`scripts/start-token-meter` remains the foreground development entrypoint: it
+starts `python3 meter.py` if `/health` is not ready, waits briefly for the local
+server, and then runs the menu bar companion. Persistent installs use two
+independent user LaunchAgents written by `scripts/install-launch-agent`:
+`com.token-meter.server` owns `python3 meter.py` in the foreground and
+`com.token-meter.menubar` owns the native companion. Both use `KeepAlive`, so
+launchd can restart the server even while the menu bar process is still alive.
+`scripts/uninstall-launch-agent` removes both jobs.
 
 ---
 

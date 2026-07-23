@@ -2,47 +2,127 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LABEL="com.token-meter.menubar"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-START="$ROOT/scripts/start-token-meter"
-OUT_LOG="$ROOT/menubar.log"
-ERR_LOG="$ROOT/menubar.err.log"
+SERVER_LABEL="com.token-meter.server"
+MENUBAR_LABEL="com.token-meter.menubar"
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+SERVER_PLIST="$LAUNCH_AGENTS_DIR/$SERVER_LABEL.plist"
+MENUBAR_PLIST="$LAUNCH_AGENTS_DIR/$MENUBAR_LABEL.plist"
+PYTHON_BIN="$(command -v python3 || true)"
+SERVER_PROGRAM="$ROOT/meter.py"
+MENUBAR_PROGRAM="$ROOT/scripts/run-menubar"
 
-if [[ ! -x "$START" ]]; then
-  echo "Missing executable starter: $START" >&2
-  echo "Run: chmod +x $START" >&2
+if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" ]]; then
+  echo "Missing executable: python3" >&2
+  exit 1
+fi
+if [[ ! -f "$SERVER_PROGRAM" ]]; then
+  echo "Missing server: $SERVER_PROGRAM" >&2
+  exit 1
+fi
+if [[ ! -x "$MENUBAR_PROGRAM" ]]; then
+  echo "Missing executable menu bar runner: $MENUBAR_PROGRAM" >&2
+  echo "Run: chmod +x $MENUBAR_PROGRAM" >&2
   exit 1
 fi
 
-mkdir -p "$(dirname "$PLIST")"
-cat > "$PLIST" <<PLIST
+if ! mkdir -p "$LAUNCH_AGENTS_DIR"; then
+  echo "Token Meter could not access $HOME/Library/LaunchAgents." >&2
+  echo "If a coding agent is running this installer, approve its request for that" >&2
+  echo "exact user directory, then retry." >&2
+  exit 1
+fi
+launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+
+if ! cat > "$SERVER_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>$LABEL</string>
+  <string>$SERVER_LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$START</string>
+    <string>$PYTHON_BIN</string>
+    <string>$SERVER_PROGRAM</string>
   </array>
   <key>WorkingDirectory</key>
   <string>$ROOT</string>
   <key>RunAtLoad</key>
   <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
   <key>StandardOutPath</key>
-  <string>$OUT_LOG</string>
+  <string>$ROOT/meter.log</string>
   <key>StandardErrorPath</key>
-  <string>$ERR_LOG</string>
+  <string>$ROOT/meter.err.log</string>
 </dict>
 </plist>
 PLIST
+then
+  echo "Token Meter could not write $SERVER_PLIST." >&2
+  echo "If a coding agent is running this installer, approve its request for that" >&2
+  echo "exact user LaunchAgent file, then retry." >&2
+  exit 1
+fi
 
-launchctl bootout "gui/$UID" "$PLIST" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$UID" "$PLIST"
-launchctl kickstart -k "gui/$UID/$LABEL" >/dev/null 2>&1 || true
+if ! cat > "$MENUBAR_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$MENUBAR_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$MENUBAR_PROGRAM</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$ROOT</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardOutPath</key>
+  <string>$ROOT/menubar.log</string>
+  <key>StandardErrorPath</key>
+  <string>$ROOT/menubar.err.log</string>
+</dict>
+</plist>
+PLIST
+then
+  echo "Token Meter could not write $MENUBAR_PLIST." >&2
+  echo "If a coding agent is running this installer, approve its request for that" >&2
+  echo "exact user LaunchAgent file, then retry." >&2
+  exit 1
+fi
 
-echo "Installed $LABEL"
-echo "LaunchAgent: $PLIST"
+if ! bootstrap_output="$(launchctl bootstrap "gui/$UID" "$SERVER_PLIST" 2>&1)"; then
+  echo "$bootstrap_output" >&2
+  echo "Token Meter could not register its local server." >&2
+  echo "If a coding agent is running this installer, approve its request to access" >&2
+  echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
+  exit 1
+fi
+if ! bootstrap_output="$(launchctl bootstrap "gui/$UID" "$MENUBAR_PLIST" 2>&1)"; then
+  echo "$bootstrap_output" >&2
+  launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+  echo "Token Meter could not register its menu bar companion." >&2
+  echo "If a coding agent is running this installer, approve its request to access" >&2
+  echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
+  exit 1
+fi
+launchctl kickstart -k "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+launchctl kickstart -k "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+
+echo "Installed $SERVER_LABEL"
+echo "LaunchAgent: $SERVER_PLIST"
+echo "Installed $MENUBAR_LABEL"
+echo "LaunchAgent: $MENUBAR_PLIST"
 echo "Uninstall: $ROOT/scripts/uninstall-launch-agent"

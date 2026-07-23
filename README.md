@@ -5,57 +5,66 @@ harder to understand what happened during the run, what it cost, and whether
 your usage is changing over time. Token Meter reads their local traces and
 turns them into one live dashboard.
 
-It helps answer questions such as:
+## What you can do
 
-- How is the context window growing during this session?
-- How much have I spent on this session?
-- How much have I spent on this project in the last week?
-- Is token output getting faster or slower over time, and how does that compare
-  across models?
-- How long am I waiting from prompt to completed response, and which models or
-  days make that wait worse?
-- Which loaded tools or skills am I not using, and which user-installed skill
-  packs should I review for disabling?
-- What do the cost, token, execution, and speed numbers look like for each
-  model?
-- What did I spend and work on each day?
-- Can I search or filter old logs by title, project, model, provider, or time,
-  then sort them by cost or tokens?
-- Which chats show signs of frustration? Token Meter can count configurable
-  terms such as `fuck`, `fck`, `shit`, `idiot`, and `bullshit` in human user
-  messages. This is a simple lexical signal, not sentiment analysis.
-- Can I ask Token Meter these questions directly from Claude or Codex through a
-  local, read-only MCP server?
-- When several sessions are running, can I pin one and follow it without Token
-  Meter switching to another run?
+| Area | What you get |
+| --- | --- |
+| **Follow a live run** | Count tokens, estimate cost, context usage, wait time, response speed, tool calls, and alerts update while an agent is working. Pin a session when you want to keep following it. |
+| **Understand past usage** | Search runs from Claude, Codex, and Cursor together. Filter by project or time, review daily trends, and see what is driving cost and delays. |
+| **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
+| **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
+| **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
+| **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
+| **Move around quickly** | Open common views with the command palette and keyboard shortcuts, or use the searchable glossary when a metric is unfamiliar. |
+| **Keep data private** | Run analysis stays on your Mac and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
 
 Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, the
 Codex desktop app, and Cursor Agent/Composer. It follows local agent logs as they are written and
 combines live runs with cross-app history, so the answer is available while you
-are working and after the session ends. Claude and Codex costs are estimates
-based on the model rates configured in Token Meter. Cursor's local traces do not
-persist authoritative billing usage, so Token Meter shows a clearly labeled
-local estimate: one context snapshot per execution plus model-authored text
-persisted in conversation bubbles. It applies the persisted model variant's
-public rate, including Composer 2.5 Fast versus Standard. Cache, hidden
-reasoning, repeated internal model-call input, and dashboard billing remain
-excluded and are never presented as zero.
+are working and after the session ends.
 
 Local-only. Python standard library only. No API keys. No telemetry leaves your
 machine.
 
 ## Quick Start
 
-### Download And Install On macOS
+### Install From Terminal
 
-For most users, open the repository's [`dist/`](dist/) folder, download the
-latest `TokenMeter-*.pkg`, then double-click the downloaded package and follow
-the installer. It may ask for an administrator password. The package is currently 
-unsigned, so macOS may show a security warning. To update, download and double-click 
-the newer package the same way.
+On macOS, clone the repository and run its installer:
 
-Token Meter starts its local server and menu bar widget automatically. Open the
-dashboard at:
+```bash
+git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+./token-meter/scripts/install
+```
+
+The installer checks the required tools, installs the server and menu bar login
+items,
+waits for the local server, verifies both endpoints, prints
+`Token Meter installation complete`, and returns control to your terminal.
+It copies the runtime into `~/Library/Application Support/Token Meter/runtime`,
+so the cloned folder is not used for automatic startup.
+
+### Install With A Coding Agent
+
+Paste this prompt into a coding agent that can run commands on your Mac:
+
+```text
+Install Token Meter from https://github.com/Galileo-Agent-Labs/token-meter.git.
+Clone it and run scripts/install. Let the script install its stable runtime in
+~/Library/Application Support/Token Meter/runtime.
+Complete the installation yourself. If your sandbox blocks access to my user
+Application Support runtime, LaunchAgents directory, or launchctl, request
+narrowly scoped permission through your approval interface and continue after
+I approve it. Do not ask me to copy commands into Terminal, do not use sudo,
+and do not disable macOS security features. Verify that
+com.token-meter.server and com.token-meter.menubar are running from the
+installed runtime,
+that /health and /menubar return valid responses, and report the installed
+commit, dashboard URL, automatic-start status, and uninstall command.
+```
+
+Token Meter starts its local server and menu bar widget automatically after
+installation and after future logins. Open the dashboard at:
 
 ```text
 http://localhost:8722
@@ -63,23 +72,16 @@ http://localhost:8722
 
 Start a Claude, Codex, or Cursor run and Token Meter will follow its local log.
 
-### Run From Source
+### Run Without Installing
 
-Use this path for development, local changes, or non-package installs:
+For temporary development use, start Token Meter directly from a clone:
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
 cd token-meter
 ./scripts/start-token-meter
 ```
 
-The menu bar item starts automatically. Open the dashboard at:
-
-```text
-http://localhost:8722
-```
-
-For source installs that should start automatically, see [Launch At Login](#launch-at-login).
+This foreground workflow is separate from the persistent installer above.
 
 ## Visual Tour
 
@@ -161,13 +163,23 @@ connecting.
 
 ### 7. Keep The Live Signal In The Menu Bar
 
-The macOS companion shows the current run, estimated cost, token and execution
-count, cache reuse, context pressure, observed output speed, active model, and
-last-execution cost. The visible status-bar title starts with cost and keeps
-context use, tok/s, and model together. Its shortcuts open the
-Dashboard, Daily Brief, Trace, or Tools directly. When several Claude
-or Codex runs are active, select a recent session to pin it or choose **Follow
-Latest** to resume automatic switching.
+The macOS companion has five native tabs: **Run**, **All**, **Claude**,
+**Codex**, and **Cursor**. Run keeps the current task's estimated cost, tokens,
+context pressure, output speed, model, shortcuts, and recent-session picker.
+All ranks fresh provider-reported limits and marks the most constrained one.
+Each provider tab shows only the windows that provider actually reports, with
+usage bars, reset countdowns, pace/runout guidance, freshness, and source.
+When a common Session or Weekly window is absent, the tab says so explicitly;
+missing means unreported or unavailable, never 0%. Named limits such as Codex
+Spark remain separate from regular limits, and Cursor's monthly Plan cap is not
+renamed as a session or weekly allowance.
+
+The status-bar title defaults to the existing amount-first Run summary. Under
+**Settings → Menu bar title**, switch to **Limits** to show the most constrained
+fresh provider window instead. Quota notifications are on by default for new
+installs, warn at 80% by default, always treat 95% and exhaustion as critical,
+and report resets after a previously warned window rolls over. The first quota
+observation establishes a baseline and never sends a catch-up notification.
 
 <p align="center">
   <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar showing dashboard shortcuts, recent Claude, Codex, and Cursor sessions, model, available metrics, and context pressure" width="420">
@@ -182,104 +194,6 @@ Latest** to resume automatic switching.
    inside the agent.
 5. After a few runs, use **Global** and **Daily** to compare apps and explain
    spend, then open **Logs** or **Tools** for the underlying evidence.
-
-## Features
-
-- **Unified cross-app view**: combines supported Claude, Codex, and Cursor
-  agent logs into one local view of covered tokens and estimated spend plus
-  models, runtimes, projects, context, wait, and trends. Coverage labels make
-  mixed-runtime billing totals explicitly partial.
-- **Keyboard navigation**: opens a searchable command palette with Command/Ctrl+K,
-  arrow-key selection, and direct Option/Alt+1–9 shortcuts for the primary
-  workflow.
-- **Live log cost**: shows the running log/thread cost as entries are written,
-  with a hover breakdown for uncached input, cached input, cache writes, and
-  output tokens.
-- **Token split**: separates input, output, thinking, and tool-result tokens so
-  you can tell whether cost is coming from model output, cached context, or
-  tool payloads.
-- **Observed output pace**: shows weighted output tokens per second on Current
-  and completed Logs. It prefers tool-free work with reported timing, falls
-  back to labeled end-to-end timing when tools are involved, and never turns
-  missing timing into a zero-speed claim. It includes trace-reported reasoning
-  and thinking output, while excluding input, cache, and external tool results.
-  This remains a diagnostic because Claude and Codex expose different
-  time-to-first-token evidence.
-- **Wait time**: measures wall-clock time from a user prompt until the completed
-  response. It includes reasoning and tool use because the user is still
-  waiting, but observed timing removes trace-visible pauses where the agent
-  explicitly waits for human input. Current shows per-request history, Logs and
-  Global show cumulative wait, and Models uses median wait for typical
-  comparisons while retaining average, p95, and longest-wait evidence.
-- **Models view**: keeps model/runtime identities separate, so Claude Code,
-  Claude Desktop, Claude-3P, Codex, and Cursor timing are never silently pooled. It
-  compares exactly two selected runtimes with matched completed turns that have
-  similar peak context, cumulative input, output, cache-read share, model calls,
-  tool shape, and recency. A verdict requires at least 20 matched pairs and 30%
-  coverage of the smaller history and includes a bootstrap 95% confidence
-  interval. Cursor histories remain visible but are withheld from matched pace
-  because their context/input and visible-output values are local proxies rather
-  than provider-reported tokens. The view also retains typical wait, typical workload, observed
-  output pace, timing coverage, and 7-, 30-, 90-day or all-history trends.
-- **Frustration signals**: counts user turns containing configurable whole
-  terms, reports matched utterances and their share of human user turns, and
-  compares sessions and models across daily, weekly, 7-, 30-, 90-day, or
-  all-history windows. It is explicitly a lexical signal rather than sentiment
-  analysis; aggregate counts are retained, not message text.
-- **Auto-following**: tracks the newest Claude Code CLI, Claude Desktop
-  Agent/Cowork, Codex CLI, Codex desktop app, or Cursor Agent/Composer log across local projects
-  without requiring a command per run.
-- **Execution trace**: normalizes messages, reasoning, tool calls, tool results,
-  usage events, coordination events, and completion events into one timeline.
-- **Tool and MCP usage**: groups tools by namespace, call count, returned-token
-  volume, and execution so large tool outputs are easy to spot.
-- **Efficiency signals**: highlights reasoning share, tool/retrieval bloat,
-  coordination tax, cost per task, context pressure, and spend anomalies.
-- **Global view**: summarizes local spend and cumulative completed-request wait
-  across logs, model mix, provider mix, trend, anomalies, review priorities,
-  expensive logs, and trace-backed tool waste across sessions.
-- **Logs view**: provides a dedicated searchable and sortable list of every
-  discovered Claude, Codex, and Cursor log, with Projects folder and time-range filters
-  plus filter-responsive cost, input/output, execution, wait, and model
-  statistics and durable links to frozen run views. Confirmed session deletion
-  moves only the underlying JSONL log to macOS Trash.
-- **Daily summary**: attributes spend and completed-request wait to recorded
-  local days, with active logs, projects, runtime mix, highest-cost logs, and a
-  Spend/Wait trend switch.
-- **Learn view**: provides a practical Token Meter review workflow, a plain-
-  language guide to matched model-speed comparisons, direct links to each
-  view, and a searchable glossary of dashboard terms.
-- **Ask from Codex or Claude**: connects a local, read-only MCP server so an
-  agent can answer whether to continue, explain aggregate usage change, or
-  review optional capabilities with bounded evidence and a dashboard link.
-- **Global tool-waste evidence**: ranks tools and MCP namespaces by returned
-  tokens, flags oversized results, exact immediate repeats, and structured
-  errors, and shows a 14-day result-token trend.
-- **Tools view**: inventories trace-observed tools, discovered MCP
-  servers, and installed Codex/Claude skills with runtime, source, state, use,
-  returned tokens, and last-use evidence. Ordinary tools are kept separate by
-  runtime and the inventory can be filtered to Cursor, Codex, or Claude.
-- **Actionable capability optimization**: measures configured user-installed
-  skill packs, groups child skills under their real native control, and excludes
-  MCP servers, default tools, and other read-only capabilities from removal
-  recommendations.
-- **Capability controls**: plugin-managed skill rows can enable or disable their
-  containing skill pack through native Codex or Claude settings. A confirmed
-  bulk action can disable the exact current unused review candidates while
-  rejecting built-in, runtime, used, or stale controls. MCP servers remain
-  read-only evidence. Changes apply to future sessions after the IDE or agent
-  restarts.
-- **Alerts and notifications**: can notify on budget crossings, execution cost
-  spikes, and notable log insights.
-- **macOS menu bar companion**: shows a compact live status item backed by the
-  same local dashboard endpoint, with actions to open the full dashboard and a
-  five-session chooser that can pin one Claude, Codex, or Cursor run instead of flipping
-  between concurrently active traces. Its Output speed row uses the same
-  trace-backed tok/s, timing basis, sample count, and coverage semantics as Current.
-- **Local-only operation**: reads local JSONL logs, Cursor's shared local
-  SQLite/request-trace enrichment, and local capability configuration and sends
-  no telemetry. Cursor enrichment is strictly read-only. Configuration changes
-  happen only from an explicit dashboard action.
 
 ## Requirements
 
@@ -325,7 +239,9 @@ described as the caller's latest execution.
 
 When a tool is called, its derived result enters the connected agent's context
 and may be processed by that client's model provider under the client's own
-terms. Token Meter itself makes no outbound network request.
+terms. Token Meter does not send trace content or derived analytics itself;
+menu-bar quota sync separately makes read-only usage requests to the provider
+accounts already signed in on this Mac.
 
 For source installs, the equivalent manual commands are:
 
@@ -345,41 +261,14 @@ Connecting does not create background monitoring or interruptions. The tools
 run only when the user or agent calls them; Token Meter's browser and menu-bar
 alerts remain the proactive channels.
 
-## Build The macOS Installer Package
+## Automatic Startup And Uninstall
 
-Maintainers can build a local installer package:
-
-```bash
-./packaging/build-pkg
-```
-
-The package is written to `dist/TokenMeter-0.1.0.pkg` by default. For the
-repeatable build checklist and verification commands, see
-[`packaging/BUILD_RECIPE.md`](packaging/BUILD_RECIPE.md).
-
-For a signed package, set the signing identities while building:
+The installer creates separate user LaunchAgents for the local server and menu
+bar companion. Both start after login and use `KeepAlive`, so macOS restarts
+either process independently if it exits. Remove both login items with:
 
 ```bash
-TOKEN_METER_CODESIGN_IDENTITY="Developer ID Application: Your Name" \
-TOKEN_METER_INSTALLER_SIGN_IDENTITY="Developer ID Installer: Your Name" \
-./packaging/build-pkg
-```
-
-Public distribution should also be notarized with Apple.
-
-## Launch At Login
-
-For source installs, install a macOS login item that starts both the local
-server and the menu bar companion:
-
-```bash
-./scripts/install-launch-agent
-```
-
-Remove it:
-
-```bash
-./scripts/uninstall-launch-agent
+"$HOME/Library/Application Support/Token Meter/runtime/scripts/uninstall-launch-agent"
 ```
 
 ## Dashboard-Only Mode
@@ -391,11 +280,12 @@ dashboard:
 python3 meter.py
 ```
 
-The menu bar companion polls the local `/menubar` endpoint and shows compact
-status for the active log. Its Recent sessions section labels each entry as
-Claude, Codex, or Cursor, uses the session title or project as an identifier, and keeps a
-selected pin in macOS preferences. Choose `Follow Latest` to resume automatic
-tracking. It does not parse logs directly.
+The menu bar companion polls the local `/menubar` endpoint. Run shows compact
+status for the active log; All and the provider tabs show cached account quota
+snapshots. The Recent sessions section labels each entry as Claude, Codex, or
+Cursor, uses the session title or project as an identifier, and keeps a selected
+pin in macOS preferences. Choose `Follow Latest` to resume automatic tracking.
+The companion does not parse logs or read provider credentials directly.
 
 ## How It Finds Logs
 
@@ -590,6 +480,17 @@ Token Meter binds to `127.0.0.1` and serves only a local browser dashboard. It
 does not send logs, prompts, responses, project paths, token counts, or
 costs to any external service.
 
+The menu-bar quota view makes read-only account-usage requests using credentials
+already stored by Claude, Codex, or Cursor. Codex uses its local app-server when
+available and otherwise its signed-in usage API; Claude uses Anthropic's OAuth
+usage API only for first-party OAuth accounts; Cursor uses its account usage
+summary. Third-party Claude authentication such as Bedrock is shown as
+unavailable. Authentication tokens and cookies are never returned through
+`/menubar`, written to Token Meter storage, included in errors, or sent to
+another provider. Quota
+responses are cached in memory and only normalized percentages, reset times,
+plan labels, source labels, and freshness are exposed locally.
+
 The dashboard can display local project paths, tool names, and trace metadata.
 Do not expose the localhost page publicly unless you are comfortable sharing
 that information.
@@ -654,8 +555,7 @@ from the clone:
 
 ```bash
 git clone https://github.com/Galileo-Agent-Labs/token-meter.git
-cd token-meter
-./scripts/start-token-meter
+./token-meter/scripts/install
 ```
 
 If you copied `meter.py` somewhere else, copy `page.html` into that same folder
@@ -720,15 +620,12 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |   `-- menu-bar-widget.png          # README menu bar screenshot
 |-- menubar/
 |   `-- TokenMeterMenuBar.swift      # native macOS menu bar companion
-|-- packaging/
-|   |-- build-pkg                    # builds a macOS installer package
-|   |-- payload/bin/                 # scripts installed by the package
-|   `-- scripts/postinstall          # package install hook
 |-- scripts/
+|   |-- install                      # complete human or agent-driven install
 |   |-- run-menubar                  # build and run the menu bar companion
 |   |-- start-token-meter            # start server if needed, then menu bar
-|   |-- install-launch-agent         # install macOS login item
-|   `-- uninstall-launch-agent       # remove macOS login item
+|   |-- install-launch-agent         # install server and menu login items
+|   `-- uninstall-launch-agent       # remove both macOS login items
 |-- REQUIREMENTS.md                  # product rationale and historical notes
 |-- CONTRIBUTING.md
 |-- SECURITY.md
@@ -738,8 +635,7 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 
 ## Before Publishing On GitHub
 
-Commit the app source, scripts, images, public docs, and the distributable
-installer package:
+Commit the app source, scripts, images, and public docs:
 
 ```text
 README.md
@@ -754,18 +650,15 @@ images/mcp.png
 images/tool-analytics.png
 images/menu-bar-widget.png
 menubar/TokenMeterMenuBar.swift
-packaging/
 scripts/
 REQUIREMENTS.md
 CONTRIBUTING.md
 SECURITY.md
-dist/TokenMeter-*.pkg
 .gitignore
 ```
 
 Do not commit local runtime artifacts such as `.DS_Store`, `*.log`,
 `__pycache__/`, or `.build/`. The included `.gitignore` covers those files.
-Keep `dist/` limited to package files that users should download.
 
 ## License
 

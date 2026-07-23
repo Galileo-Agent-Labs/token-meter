@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INSTALL_ROOT="${TOKEN_METER_INSTALL_ROOT:-$HOME/Library/Application Support/Token Meter/runtime}"
+SERVER_LABEL="com.token-meter.server"
+MENUBAR_LABEL="com.token-meter.menubar"
+HEALTH_URL="http://127.0.0.1:8722/health"
+MENUBAR_URL="http://127.0.0.1:8722/menubar"
+DASHBOARD_URL="http://127.0.0.1:8722"
+
+fail() {
+  echo "Token Meter installation failed: $*" >&2
+  exit 1
+}
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  fail "the menu bar installer requires macOS."
+fi
+
+for command_name in git python3 swiftc curl launchctl ditto; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    if [[ "$command_name" == "swiftc" ]]; then
+      fail "swiftc is missing. Install the Xcode Command Line Tools, then run this script again."
+    fi
+    fail "$command_name is required but was not found."
+  fi
+done
+
+for required_path in \
+  "$SOURCE_ROOT/meter.py" \
+  "$SOURCE_ROOT/page.html" \
+  "$SOURCE_ROOT/token_meter_mcp.py" \
+  "$SOURCE_ROOT/menubar/TokenMeterMenuBar.swift" \
+  "$SOURCE_ROOT/scripts/install-launch-agent" \
+  "$SOURCE_ROOT/scripts/run-menubar" \
+  "$SOURCE_ROOT/scripts/start-token-meter"; do
+  [[ -e "$required_path" ]] || fail "the repository checkout is incomplete: $required_path is missing."
+done
+
+echo "Installing Token Meter from:"
+echo "  $SOURCE_ROOT"
+echo "Runtime:"
+echo "  $INSTALL_ROOT"
+
+mkdir -p "$INSTALL_ROOT/menubar" "$INSTALL_ROOT/scripts"
+for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
+  if [[ -f "$SOURCE_ROOT/$runtime_file" ]]; then
+    ditto "$SOURCE_ROOT/$runtime_file" "$INSTALL_ROOT/$runtime_file"
+  fi
+done
+ditto "$SOURCE_ROOT/menubar" "$INSTALL_ROOT/menubar"
+ditto "$SOURCE_ROOT/scripts" "$INSTALL_ROOT/scripts"
+chmod 755 "$INSTALL_ROOT"/scripts/*
+
+commit="$(git -C "$SOURCE_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+if [[ -n "$commit" ]]; then
+  if [[ -n "$(git -C "$SOURCE_ROOT" status --short 2>/dev/null || true)" ]]; then
+    commit="$commit+local"
+  fi
+  printf '%s\n' "$commit" > "$INSTALL_ROOT/INSTALLED_REVISION"
+fi
+
+"$INSTALL_ROOT/scripts/install-launch-agent"
+
+health_json=""
+for _ in $(seq 1 80); do
+  health_json="$(curl -fsS --max-time 1 "$HEALTH_URL" 2>/dev/null || true)"
+  if [[ "$health_json" == *'"ok": true'* && "$health_json" == *'"state_ready": true'* ]]; then
+    break
+  fi
+  sleep 0.25
+done
+
+if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": true'* ]]; then
+  if [[ -f "$INSTALL_ROOT/menubar.err.log" ]]; then
+    tail -n 30 "$INSTALL_ROOT/menubar.err.log" >&2 || true
+  fi
+  if [[ -f "$INSTALL_ROOT/meter.err.log" ]]; then
+    tail -n 30 "$INSTALL_ROOT/meter.err.log" >&2 || true
+  fi
+  if [[ -f "$INSTALL_ROOT/meter.log" ]]; then
+    tail -n 30 "$INSTALL_ROOT/meter.log" >&2 || true
+  fi
+  fail "the local server did not become ready at $HEALTH_URL."
+fi
+
+if ! server_launch_state="$(launchctl print "gui/$UID/$SERVER_LABEL" 2>&1)"; then
+  fail "the local server LaunchAgent was not registered."
+fi
+[[ "$server_launch_state" == *"$INSTALL_ROOT/meter.py"* ]] \
+  || fail "a different Token Meter installation owns the local server LaunchAgent."
+if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
+  fail "the menu bar LaunchAgent was not registered."
+fi
+[[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
+  || fail "a different Token Meter installation owns the menu bar LaunchAgent."
+
+printf '%s' "$health_json" | python3 -c '
+import json
+import os
+import sys
+
+root = os.path.realpath(sys.argv[1])
+payload = json.load(sys.stdin)
+raw_page = payload.get("page_path")
+page = os.path.realpath(raw_page) if raw_page else ""
+try:
+    matches = bool(page) and os.path.commonpath([root, page]) == root
+except ValueError:
+    matches = False
+if not matches:
+    shown_page = page or "unknown"
+    raise SystemExit(
+        "Token Meter installation failed: a different server owns port 8722 "
+        f"(page_path={shown_page})."
+    )
+' "$INSTALL_ROOT"
+
+curl -fsS --max-time 5 "$MENUBAR_URL" \
+  | python3 -c 'import json, sys; json.load(sys.stdin)' \
+  || fail "the menu bar endpoint did not return valid JSON."
+
+echo
+echo "Token Meter installation complete."
+echo "Dashboard: $DASHBOARD_URL"
+echo "Starts automatically after you log in."
+echo "Runtime: $INSTALL_ROOT"
+if [[ -n "$commit" ]]; then
+  echo "Installed commit: $commit"
+fi
+echo "Uninstall: $INSTALL_ROOT/scripts/uninstall-launch-agent"

@@ -4,6 +4,11 @@ import Foundation
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
 private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#summary")!
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
+private let selectedTabDefaultsKey = "TokenMeterSelectedTab"
+private let titleModeDefaultsKey = "TokenMeterTitleMode"
+private let quotaAlertsEnabledDefaultsKey = "TokenMeterQuotaAlertsEnabled"
+private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
+private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
 private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
 
 // Token Meter accent blue (#00BCEB)
@@ -69,6 +74,138 @@ enum Verdict {
         default: return nil
         }
     }
+}
+
+enum MenuTab: String, CaseIterable {
+    case run
+    case overview
+    case claude
+    case codex
+    case cursor
+
+    var title: String {
+        switch self {
+        case .run: return "Run"
+        case .overview: return "All"
+        case .claude: return "Claude"
+        case .codex: return "Codex"
+        case .cursor: return "Cursor"
+        }
+    }
+}
+
+enum StatusTitleMode: String {
+    case run
+    case limits
+
+    var title: String { self == .run ? "Run" : "Limits" }
+}
+
+struct QuotaPace {
+    var state: String
+    var summary: String
+
+    static func fromJSON(_ dict: [String: Any]?) -> QuotaPace? {
+        guard let dict = dict, let summary = string(dict["summary"]), !summary.isEmpty else { return nil }
+        return QuotaPace(state: string(dict["state"]) ?? "on_pace", summary: summary)
+    }
+}
+
+struct QuotaWindow {
+    var id: String
+    var kind: String
+    var label: String
+    var usedPercent: Double
+    var windowSeconds: Int?
+    var resetAt: Date?
+    var pace: QuotaPace?
+
+    static func fromJSON(_ dict: [String: Any]) -> QuotaWindow? {
+        guard let id = string(dict["id"]), !id.isEmpty,
+              let usedPercent = optionalDouble(dict["used_percent"])
+        else { return nil }
+        let duration = optionalDouble(dict["window_seconds"]).map(Int.init)
+        let resetAt = optionalDouble(dict["reset_at"]).map(Date.init(timeIntervalSince1970:))
+        return QuotaWindow(
+            id: id,
+            kind: string(dict["kind"]) ?? "extra",
+            label: string(dict["label"]) ?? "Quota",
+            usedPercent: max(0, min(100, usedPercent)),
+            windowSeconds: duration,
+            resetAt: resetAt,
+            pace: QuotaPace.fromJSON(dict["pace"] as? [String: Any])
+        )
+    }
+
+    var compactKind: String {
+        switch kind {
+        case "session": return "session"
+        case "weekly": return "weekly"
+        case "monthly": return "monthly"
+        default: return label.lowercased()
+        }
+    }
+
+    var percentLabel: String { "\(Int(usedPercent.rounded()))%" }
+
+    var resetLabel: String {
+        guard let resetAt = resetAt else { return "reset time unavailable" }
+        let remaining = resetAt.timeIntervalSinceNow
+        if remaining <= 0 { return "reset pending" }
+        return "resets in \(formatCompactDuration(remaining))"
+    }
+}
+
+struct ProviderQuota {
+    var id: String
+    var label: String
+    var status: String
+    var plan: String
+    var source: String
+    var provenance: String
+    var ageSeconds: Int?
+    var stale: Bool
+    var error: String
+    var coverageNote: String
+    var windows: [QuotaWindow]
+
+    static func fromJSON(_ dict: [String: Any]) -> ProviderQuota? {
+        guard let id = string(dict["id"]), !id.isEmpty else { return nil }
+        return ProviderQuota(
+            id: id,
+            label: string(dict["label"]) ?? id.capitalized,
+            status: string(dict["status"]) ?? "unavailable",
+            plan: string(dict["plan"]) ?? "",
+            source: string(dict["source"]) ?? "Provider account",
+            provenance: string(dict["provenance"]) ?? "unavailable",
+            ageSeconds: optionalDouble(dict["age_seconds"]).map(Int.init),
+            stale: bool(dict["stale"]),
+            error: string(dict["error"]) ?? "",
+            coverageNote: string(dict["coverage_note"]) ?? "",
+            windows: (dict["windows"] as? [[String: Any]] ?? []).compactMap(QuotaWindow.fromJSON)
+        )
+    }
+
+    var fresh: Bool { status == "ok" && !stale }
+
+    var highestWindow: QuotaWindow? {
+        windows.max { $0.usedPercent < $1.usedPercent }
+    }
+
+    var freshnessLabel: String {
+        if stale {
+            return ageSeconds.map { "Stale · \(formatCompactDuration(Double($0))) old" } ?? "Stale"
+        }
+        guard let ageSeconds = ageSeconds else { return status == "loading" ? "Loading" : "Not refreshed" }
+        if ageSeconds < 10 { return "Updated now" }
+        return "Updated \(formatCompactDuration(Double(ageSeconds))) ago"
+    }
+}
+
+struct QuotaNotificationState: Codable {
+    var lastUsedPercent: Double
+    var resetAt: TimeInterval?
+    var firedThresholds: Set<Int>
 }
 
 struct RecentSession {
@@ -414,11 +551,33 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let stateURL = tokenMeterMenubarURL
     private let dashboardURL = tokenMeterDashboardURL
     private let menu = NSMenu()
-    private let menuWidth: CGFloat = 340
+    private let menuWidth: CGFloat = 420
     private var statusItem: NSStatusItem!
     private var timer: Timer?
     private var pinnedSessionID = tokenMeterDefaults.string(forKey: pinnedSessionDefaultsKey)
     private var recentSessions: [RecentSession] = []
+    private var providerQuotas: [ProviderQuota] = []
+    private var selectedTab = MenuTab(
+        rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? ""
+    ) ?? .run
+    private var titleMode = StatusTitleMode(
+        rawValue: tokenMeterDefaults.string(forKey: titleModeDefaultsKey) ?? ""
+    ) ?? .run
+    private var quotaAlertsEnabled: Bool = {
+        if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }
+        return tokenMeterDefaults.bool(forKey: quotaAlertsEnabledDefaultsKey)
+    }()
+    private var quotaAlertThreshold: Int = {
+        let saved = tokenMeterDefaults.integer(forKey: quotaAlertThresholdDefaultsKey)
+        return [80, 90, 95].contains(saved) ? saved : 80
+    }()
+    private var quotaNotificationStates: [String: QuotaNotificationState] = {
+        guard let data = tokenMeterDefaults.data(forKey: quotaNotificationStatesDefaultsKey),
+              let states = try? JSONDecoder().decode([String: QuotaNotificationState].self, from: data)
+        else { return [:] }
+        return states
+    }()
+    private var quotaObservationEstablished = false
     private var menuIsOpen = false
     private var menuRefreshPending = false
     private var snapshot = MeterSnapshot.disconnected("Waiting for http://127.0.0.1:8722/menubar")
@@ -490,7 +649,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 self.recentSessions = (dict["recent_sessions"] as? [[String: Any]] ?? [])
                     .compactMap(RecentSession.fromJSON)
+                self.providerQuotas = (dict["provider_quotas"] as? [[String: Any]] ?? [])
+                    .compactMap(ProviderQuota.fromJSON)
                 self.snapshot = MeterSnapshot.fromJSON(dict)
+                self.evaluateQuotaNotifications()
                 self.refreshMenu()
             }
         }.resume()
@@ -517,6 +679,24 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateStatusTitle()
         menu.removeAllItems()
 
+        addTabPicker()
+        menu.addItem(.separator())
+
+        switch selectedTab {
+        case .run:
+            addRunMenu()
+        case .overview:
+            addOverviewMenu()
+        case .claude, .codex, .cursor:
+            addProviderMenu(selectedTab.rawValue)
+        }
+
+        menu.addItem(.separator())
+        addSettingsMenu()
+        addAction("Quit Token Meter Menubar", #selector(quit))
+    }
+
+    private func addRunMenu() {
         addHeader()
         menu.addItem(.separator())
 
@@ -553,18 +733,213 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
         }
-
-        menu.addItem(.separator())
-        addAction("Quit Token Meter Menubar", #selector(quit))
     }
 
     private func updateStatusTitle() {
+        let title = titleMode == .limits ? (limitsStatusTitle() ?? snapshot.statusTitle) : snapshot.statusTitle
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.labelColor,
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         ]
-        statusItem.button?.attributedTitle = NSAttributedString(string: snapshot.statusTitle, attributes: attrs)
-        statusItem.button?.toolTip = snapshot.statusTooltip
+        statusItem.button?.attributedTitle = NSAttributedString(string: title, attributes: attrs)
+        statusItem.button?.toolTip = titleMode == .limits
+            ? limitsStatusTooltip() ?? snapshot.statusTooltip
+            : snapshot.statusTooltip
+    }
+
+    private func limitsStatusTitle() -> String? {
+        guard let constrained = mostConstrainedQuota() else { return nil }
+        return "\(constrained.provider.label) \(constrained.window.percentLabel) · \(constrained.window.compactKind)"
+    }
+
+    private func limitsStatusTooltip() -> String? {
+        guard let constrained = mostConstrainedQuota() else { return nil }
+        return "\(constrained.provider.label) \(constrained.window.label): \(constrained.window.percentLabel) used; \(constrained.window.resetLabel)."
+    }
+
+    private func mostConstrainedQuota() -> (provider: ProviderQuota, window: QuotaWindow)? {
+        providerQuotas
+            .filter(\.fresh)
+            .flatMap { provider in provider.windows.map { (provider: provider, window: $0) } }
+            .max { $0.window.usedPercent < $1.window.usedPercent }
+    }
+
+    private func addTabPicker() {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 42))
+        let tabs = MenuTab.allCases
+        let control = NSSegmentedControl(
+            labels: tabs.map(\.title),
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(selectTab(_:))
+        )
+        control.frame = NSRect(x: 12, y: 7, width: menuWidth - 24, height: 28)
+        control.segmentStyle = .rounded
+        control.controlSize = .small
+        control.selectedSegment = tabs.firstIndex(of: selectedTab) ?? 0
+        for index in tabs.indices {
+            control.setWidth((menuWidth - 24) / CGFloat(tabs.count), forSegment: index)
+        }
+        view.addSubview(control)
+        addViewItem(view)
+    }
+
+    private func addOverviewMenu() {
+        let ranked = providerQuotas.sorted { lhs, rhs in
+            let left = lhs.fresh ? lhs.highestWindow?.usedPercent ?? -1 : -1
+            let right = rhs.fresh ? rhs.highestWindow?.usedPercent ?? -1 : -1
+            if left == right { return lhs.label < rhs.label }
+            return left > right
+        }
+        if let constrained = mostConstrainedQuota() {
+            addSignalRow(
+                "Most constrained",
+                "\(constrained.provider.label) · \(constrained.window.label) · \(constrained.window.percentLabel) used",
+                color: .labelColor
+            )
+            menu.addItem(.separator())
+        } else if providerQuotas.allSatisfy({ $0.status != "loading" }) {
+            addSignalRow("Provider limits", "No fresh provider-reported quota is available.", color: .secondaryLabelColor)
+            menu.addItem(.separator())
+        }
+
+        for provider in ranked {
+            if let window = provider.highestWindow {
+                let suffix: String
+                if provider.stale { suffix = " · stale" }
+                else if provider.status == "error" { suffix = " · last good" }
+                else { suffix = "" }
+                addMetricRow(provider.label, "\(window.percentLabel) · \(window.label)\(suffix)")
+            } else {
+                let value = provider.status == "loading" ? "loading…" : "unavailable"
+                addMetricRow(provider.label, value, valueColor: .secondaryLabelColor)
+            }
+        }
+        if providerQuotas.isEmpty {
+            addSignalRow("Provider limits", "Loading provider quotas.", color: .secondaryLabelColor)
+        }
+        addFooterRow("Only provider-reported limits are shown · refreshes every minute")
+    }
+
+    private func addProviderMenu(_ providerID: String) {
+        guard let provider = providerQuotas.first(where: { $0.id == providerID }) else {
+            addSignalRow(providerID.capitalized, "Loading provider quotas.", color: .secondaryLabelColor)
+            return
+        }
+        let plan = provider.plan.trimmingCharacters(in: .whitespacesAndNewlines)
+        addProviderHeader(
+            provider.label,
+            subtitle: [plan.isEmpty ? nil : plan, provider.freshnessLabel].compactMap { $0 }.joined(separator: " · ")
+        )
+
+        if provider.windows.isEmpty {
+            let message = provider.error.isEmpty ? "No provider-reported quota window is available." : provider.error
+            addSignalRow("Quota unavailable", message, color: .secondaryLabelColor)
+        } else {
+            for window in provider.windows {
+                addQuotaWindowRow(window, stale: provider.stale || provider.status == "error")
+            }
+            if provider.status == "error", !provider.error.isEmpty {
+                addFooterRow("Last refresh failed · showing last good values")
+            }
+        }
+        if !provider.coverageNote.isEmpty {
+            addSignalRow("Coverage", provider.coverageNote, color: .secondaryLabelColor)
+        }
+
+        let provenance = provider.provenance == "provider_reported" ? "Provider-reported" : "Unavailable"
+        addFooterRow("\(provenance) · \(provider.source) · \(provider.freshnessLabel)")
+    }
+
+    private func addProviderHeader(_ title: String, subtitle: String) {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 48))
+        let titleLabel = label(title, frame: NSRect(x: 14, y: 24, width: menuWidth - 28, height: 18),
+                               font: .systemFont(ofSize: 14, weight: .semibold), color: .labelColor)
+        let subtitleLabel = label(subtitle, frame: NSRect(x: 14, y: 6, width: menuWidth - 28, height: 16),
+                                  font: .systemFont(ofSize: 11.5, weight: .regular), color: .secondaryLabelColor)
+        view.addSubview(titleLabel)
+        view.addSubview(subtitleLabel)
+        addViewItem(view)
+    }
+
+    private func addQuotaWindowRow(_ window: QuotaWindow, stale: Bool) {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 76))
+        let title = label(window.label, frame: NSRect(x: 14, y: 55, width: menuWidth - 105, height: 16),
+                          font: .systemFont(ofSize: 12.5, weight: .semibold), color: .labelColor)
+        let percent = label(window.percentLabel, frame: NSRect(x: menuWidth - 90, y: 54, width: 76, height: 18),
+                            font: .monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
+                            color: stale ? .secondaryLabelColor : .labelColor)
+        percent.alignment = .right
+
+        let track = NSView(frame: NSRect(x: 14, y: 42, width: menuWidth - 28, height: 6))
+        track.wantsLayer = true
+        track.layer?.cornerRadius = 3
+        track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
+        let fill = NSView(frame: NSRect(
+            x: 0, y: 0,
+            width: (menuWidth - 28) * CGFloat(window.usedPercent / 100), height: 6
+        ))
+        fill.wantsLayer = true
+        fill.layer?.cornerRadius = 3
+        fill.layer?.backgroundColor = NSColor.tokenMeterBlue.withAlphaComponent(stale ? 0.45 : 1).cgColor
+        track.addSubview(fill)
+
+        let reset = label(window.resetLabel, frame: NSRect(x: 14, y: 22, width: menuWidth - 28, height: 15),
+                          font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
+        let paceText = window.pace?.summary ?? "Pace forecast unavailable"
+        let pace = label(paceText, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 15),
+                         font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
+        view.addSubview(title)
+        view.addSubview(percent)
+        view.addSubview(track)
+        view.addSubview(reset)
+        view.addSubview(pace)
+        addViewItem(view)
+    }
+
+    private func addFooterRow(_ text: String) {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 27))
+        let footer = label(text, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 16),
+                           font: .systemFont(ofSize: 10.5), color: .tertiaryLabelColor)
+        view.addSubview(footer)
+        addViewItem(view)
+    }
+
+    private func addSettingsMenu() {
+        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        let settingsMenu = NSMenu(title: "Settings")
+
+        let titleItem = NSMenuItem(title: "Menu bar title", action: nil, keyEquivalent: "")
+        let titleMenu = NSMenu(title: "Menu bar title")
+        for mode in [StatusTitleMode.run, .limits] {
+            let item = NSMenuItem(title: mode.title, action: #selector(setTitleMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = titleMode == mode ? .on : .off
+            titleMenu.addItem(item)
+        }
+        titleItem.submenu = titleMenu
+        settingsMenu.addItem(titleItem)
+
+        let alerts = NSMenuItem(title: "Quota notifications", action: #selector(toggleQuotaAlerts(_:)), keyEquivalent: "")
+        alerts.target = self
+        alerts.state = quotaAlertsEnabled ? .on : .off
+        settingsMenu.addItem(alerts)
+
+        let thresholdItem = NSMenuItem(title: "Warn at", action: nil, keyEquivalent: "")
+        let thresholdMenu = NSMenu(title: "Warn at")
+        for threshold in [80, 90, 95] {
+            let item = NSMenuItem(title: "\(threshold)%", action: #selector(setQuotaThreshold(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = threshold
+            item.state = quotaAlertThreshold == threshold ? .on : .off
+            thresholdMenu.addItem(item)
+        }
+        thresholdItem.submenu = thresholdMenu
+        settingsMenu.addItem(thresholdItem)
+
+        settingsItem.submenu = settingsMenu
+        menu.addItem(settingsItem)
     }
 
     private func addHeader() {
@@ -695,6 +1070,115 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    @objc private func selectTab(_ sender: NSSegmentedControl) {
+        let tabs = MenuTab.allCases
+        guard tabs.indices.contains(sender.selectedSegment) else { return }
+        selectedTab = tabs[sender.selectedSegment]
+        tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)
+        DispatchQueue.main.async { [weak self] in self?.rebuildMenu() }
+    }
+
+    @objc private func setTitleMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = StatusTitleMode(rawValue: raw)
+        else { return }
+        titleMode = mode
+        tokenMeterDefaults.set(mode.rawValue, forKey: titleModeDefaultsKey)
+        refreshMenu()
+    }
+
+    @objc private func toggleQuotaAlerts(_ sender: NSMenuItem) {
+        quotaAlertsEnabled.toggle()
+        tokenMeterDefaults.set(quotaAlertsEnabled, forKey: quotaAlertsEnabledDefaultsKey)
+        refreshMenu()
+    }
+
+    @objc private func setQuotaThreshold(_ sender: NSMenuItem) {
+        guard [80, 90, 95].contains(sender.tag) else { return }
+        quotaAlertThreshold = sender.tag
+        tokenMeterDefaults.set(sender.tag, forKey: quotaAlertThresholdDefaultsKey)
+        refreshMenu()
+    }
+
+    private func evaluateQuotaNotifications() {
+        var changed = false
+        var observedFreshQuota = false
+        for provider in providerQuotas where provider.fresh {
+            observedFreshQuota = true
+            for window in provider.windows {
+                let key = "\(provider.id):\(window.id)"
+                let resetAt = window.resetAt?.timeIntervalSince1970
+                guard var previous = quotaNotificationStates[key] else {
+                    quotaNotificationStates[key] = QuotaNotificationState(
+                        lastUsedPercent: window.usedPercent,
+                        resetAt: resetAt,
+                        firedThresholds: []
+                    )
+                    changed = true
+                    continue
+                }
+
+                let resetAdvanced: Bool
+                if let oldReset = previous.resetAt, let newReset = resetAt {
+                    resetAdvanced = newReset > oldReset + 60
+                } else {
+                    resetAdvanced = false
+                }
+
+                if resetAdvanced {
+                    if quotaAlertsEnabled, quotaObservationEstablished,
+                       previous.lastUsedPercent >= Double(quotaAlertThreshold),
+                       window.usedPercent < Double(quotaAlertThreshold) {
+                        deliverQuotaNotification(
+                            title: "\(provider.label) quota reset",
+                            body: "\(window.label) is back to \(window.percentLabel) used."
+                        )
+                    }
+                    previous.firedThresholds.removeAll()
+                } else if quotaAlertsEnabled && quotaObservationEstablished {
+                    let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()
+                    let crossed = thresholds.filter { threshold in
+                        previous.lastUsedPercent < Double(threshold)
+                            && window.usedPercent >= Double(threshold)
+                            && !previous.firedThresholds.contains(threshold)
+                    }
+                    if let threshold = crossed.max() {
+                        let severity = threshold >= 100 ? "exhausted" : (threshold >= 95 ? "critical" : "warning")
+                        deliverQuotaNotification(
+                            title: "\(provider.label) quota \(severity)",
+                            body: "\(window.label) reached \(window.percentLabel) used; \(window.resetLabel)."
+                        )
+                        previous.firedThresholds.formUnion(crossed)
+                    }
+                }
+
+                previous.lastUsedPercent = window.usedPercent
+                previous.resetAt = resetAt
+                quotaNotificationStates[key] = previous
+                changed = true
+            }
+        }
+        if changed, let data = try? JSONEncoder().encode(quotaNotificationStates) {
+            tokenMeterDefaults.set(data, forKey: quotaNotificationStatesDefaultsKey)
+        }
+        if observedFreshQuota {
+            quotaObservationEstablished = true
+        }
+    }
+
+    private func deliverQuotaNotification(title: String, body: String) {
+        if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [
+            "-e", "on run argv",
+            "-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+            "-e", "end run",
+            "--", title, body,
+        ]
+        try? process.run()
+    }
+
     @objc private func followLatest() {
         persistPinnedSession(nil)
         refreshMenu()
@@ -807,6 +1291,19 @@ private func formatTokenRate(_ value: Double) -> String {
     return String(format: "%.2f", value)
 }
 
+private func formatCompactDuration(_ value: TimeInterval) -> String {
+    let seconds = max(0, Int(value))
+    if seconds < 60 { return "\(seconds)s" }
+    let minutes = seconds / 60
+    if minutes < 60 { return "\(minutes)m" }
+    let hours = minutes / 60
+    let remainingMinutes = minutes % 60
+    if hours < 48 { return "\(hours)h" + (remainingMinutes > 0 ? " \(remainingMinutes)m" : "") }
+    let days = hours / 24
+    let remainingHours = hours % 24
+    return "\(days)d" + (remainingHours > 0 ? " \(remainingHours)h" : "")
+}
+
 private func compactScaled(_ value: Double, suffix: String) -> String {
     let pattern: String
     if value >= 100 {
@@ -840,8 +1337,30 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             throw NSError(domain: "TokenMeterMenuBar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Response was not a JSON object."])
         }
         let snapshot = MeterSnapshot.fromJSON(dict)
+        let quotas = (dict["provider_quotas"] as? [[String: Any]] ?? []).compactMap(ProviderQuota.fromJSON)
+        let savedTab = MenuTab(rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? "") ?? .run
+        let savedMode = StatusTitleMode(rawValue: tokenMeterDefaults.string(forKey: titleModeDefaultsKey) ?? "") ?? .run
+        let alertsEnabled = tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil
+            ? true : tokenMeterDefaults.bool(forKey: quotaAlertsEnabledDefaultsKey)
+        let savedThreshold = tokenMeterDefaults.integer(forKey: quotaAlertThresholdDefaultsKey)
+        let alertThreshold = [80, 90, 95].contains(savedThreshold) ? savedThreshold : 80
+        let constrained = quotas
+            .filter(\.fresh)
+            .flatMap { provider in provider.windows.map { (provider: provider, window: $0) } }
+            .max { $0.window.usedPercent < $1.window.usedPercent }
+        let activeTitle = savedMode == .limits && constrained != nil
+            ? "\(constrained!.provider.label) \(constrained!.window.percentLabel) · \(constrained!.window.compactKind)"
+            : snapshot.statusTitle
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)
+        print("active-title=\(activeTitle)")
+        print("tab=\(savedTab.title) title-mode=\(savedMode.title)")
+        print("quota-alerts=\(alertsEnabled ? "on" : "off") warn-at=\(alertThreshold)%")
+        for provider in quotas {
+            let windows = provider.windows.map { "\($0.label)=\($0.percentLabel)" }.joined(separator: ",")
+            let coverage = provider.coverageNote.isEmpty ? "complete" : provider.coverageNote
+            print("quota=\(provider.label) status=\(provider.status) windows=\(windows.isEmpty ? "none" : windows) coverage=\(coverage)")
+        }
         exit(0)
     } catch {
         fputs("Token Meter menubar smoke failed: \(error.localizedDescription)\n", stderr)

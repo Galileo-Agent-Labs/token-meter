@@ -158,7 +158,10 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .frustrationBreakdown{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(250px,.7fr) minmax(390px,1.25fr);gap:12px;margin-top:12px;align-items:start}.signalPanel{padding:15px 16px;min-width:0}.signalPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.signalPanelHead h2{font-size:14px;margin:0}.signalPanelHead p{font-size:11px;color:var(--faint);margin:2px 0 0}.signalPanel .seg{flex:0 0 auto}.signalRankList{display:grid;gap:4px;margin-top:10px}.signalRank{appearance:none;width:100%;display:grid;gap:6px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;text-align:left;padding:9px 0 7px;min-width:0}.signalRank:first-child{border-top:0}.signalRank[data-frustration-model]{cursor:pointer;border-radius:6px;padding-left:7px;padding-right:7px}.signalRank[data-frustration-model]:hover,.signalRank[data-frustration-model].selected{background:rgba(255,255,255,.035)}.signalRank[data-frustration-model].selected{box-shadow:inset 2px 0 var(--warn)}.signalRankHead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:baseline}.signalRankName{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankValue{font-size:12px;font-weight:820;color:var(--fg)}.signalRankMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankTrack{height:6px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.04);overflow:hidden}.signalRankTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad));min-width:0}.termPanel .signalRankTrack i{background:linear-gradient(90deg,#c7a7ff,var(--warn))}.signalQuiet{font-size:11px;color:var(--faint);margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
 .chatSignalList{display:grid;gap:7px;margin-top:10px;max-height:378px;overflow:auto;padding-right:3px;scrollbar-color:var(--line2) transparent}.chatSignal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.018));padding:9px 10px;min-width:0}.chatSignal:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.024))}.chatSignal.quiet{opacity:.64}.chatSignalMain{min-width:0}.chatSignalTitle{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chatSignalMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}.chatSignalStats{display:flex;align-items:center;gap:7px;margin-top:7px}.chatSignalTrack{height:5px;flex:1;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden}.chatSignalTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad))}.chatSignalCount{font-size:10.5px;color:var(--dim);white-space:nowrap}.chatSignalSide{display:grid;justify-items:end;align-content:space-between;gap:7px}.signalRateBadge{display:inline-flex;border:1px solid rgba(255,180,87,.34);border-radius:999px;background:rgba(255,180,87,.08);color:var(--warn);padding:3px 7px;font:760 10.5px ui-monospace,"SF Mono",Menlo,monospace}.chatSignal.quiet .signalRateBadge{border-color:var(--line);background:rgba(255,255,255,.03);color:var(--faint)}.chatSignal .tbtn{padding:4px 8px;font-size:10.5px}.signalEmpty{display:grid;place-items:center;min-height:112px;text-align:center;color:var(--faint);font-size:12px;padding:18px}
 .settingsLexicon{box-shadow:var(--shadow-soft)}.settingsLexiconHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.settingsLexicon h2{font-size:16px;line-height:1.25;margin:4px 0}.settingsLexicon p{color:var(--dim);font-size:11.5px;line-height:1.45;margin:0;max-width:420px}.settingsField{display:grid;gap:6px;margin-top:12px}.settingsField span{font-size:10px;text-transform:uppercase;color:var(--faint);font-weight:780}.settingsField textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 10px;font:12px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:var(--inset)}.settingsField textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.settingsActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.settingsActions .tbtn{padding:6px 9px;font-size:11px}.settingsActions .clearFilters{height:auto}.settingsStatus{width:100%;font-size:11px;color:var(--faint)}.settingsStatus.good{color:var(--good)}.settingsStatus.warn{color:var(--warn)}
-.spark .b.estimated,.dailyBarFill.estimated{background:repeating-linear-gradient(135deg,var(--accent) 0 5px,rgba(0,188,235,.28) 5px 10px)}.capFilters{grid-template-columns:minmax(220px,1fr) auto auto minmax(130px,auto)}.capFilters select{border:1px solid var(--line2);background:var(--panel);color:var(--fg);border-radius:7px;padding:7px 9px;font:inherit}.cursorSourceStats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.cursorSourceStat{border:1px solid var(--line);border-radius:8px;padding:9px;background:rgba(255,255,255,.025)}.cursorSourceStat b{display:block;font-size:18px}.cursorSourceStat span{font-size:10.5px;color:var(--faint)}
+.settingsPricing{grid-column:1/-1}.modelPriceTableWrap{overflow:auto;margin-top:13px;border:1px solid var(--line);border-radius:8px}.modelPriceTable{min-width:940px}.modelPriceTable th{white-space:nowrap}.modelPriceTable td{vertical-align:middle}.modelPriceModel{display:grid;gap:3px;min-width:190px}.modelPriceModel code{font-size:11.5px;color:var(--fg)}.modelPriceSource{font-size:10px;color:var(--faint);text-transform:capitalize}.modelPriceInput{width:90px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:6px 7px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceInput:focus,.modelPriceAdd input:focus,.modelPriceAdd select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.modelPriceActions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}.modelPriceActions .tbtn{padding:5px 7px;font-size:10.5px}.modelPriceAdd{display:grid;grid-template-columns:150px minmax(180px,1.4fr) repeat(4,minmax(105px,.65fr)) auto;gap:8px;align-items:end;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}.modelPriceAdd label{display:grid;gap:5px;min-width:0}.modelPriceAdd label span{font-size:9.5px;text-transform:uppercase;color:var(--faint);font-weight:780}.modelPriceAdd input,.modelPriceAdd select{width:100%;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:7px 8px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceAdd select{font-family:inherit}.modelPriceAdd .tbtn{height:31px;white-space:nowrap}.modelPricingEmpty{padding:18px;text-align:center;color:var(--faint)}
+@media(max-width:900px){.modelPriceAdd{grid-template-columns:repeat(2,minmax(0,1fr))}.modelPriceAdd .tbtn{justify-self:start}}
+@media(max-width:520px){.modelPriceAdd{grid-template-columns:1fr}}
+.spark .b.estimated,.dailyBarFill.estimated{background:repeating-linear-gradient(135deg,var(--accent) 0 5px,rgba(0,188,235,.28) 5px 10px)}.capFilters{grid-template-columns:minmax(220px,1fr) auto auto minmax(130px,auto)}.capFilters select{border:1px solid var(--line2);background:var(--panel);color:var(--fg);border-radius:7px;padding:7px 9px;font:inherit}
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1120px) and (min-width:901px){.frustrationBreakdown{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.frustrationBreakdown .chatPanel{grid-column:1/-1}}
@@ -589,10 +592,19 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
     <label class=settingsField><span>Terms</span><textarea id=frustration-terms spellcheck=false placeholder="fuck&#10;fck&#10;shit&#10;idiot&#10;bullshit"></textarea></label>
     <div class=settingsActions><button class=tbtn id=frustration-save type=button>Save and recalculate</button><button class="tbtn clearFilters" id=frustration-reset type=button>Restore defaults</button><span class=settingsStatus id=frustration-settings-status>Machine-wide · saved outside the browser</span></div>
    </section>
-   <section class="card pad settingsLexicon" id=cursor-source-status>
-    <div class=settingsLexiconHead><div><div class=label>Local trace source</div><h2>Cursor</h2><p>Read-only Composer traces discovered from Cursor's local storage. Usage and cost are explicit local estimates, never billing records.</p></div><span class=agentAccessBadge id=cursor-source-badge>Scanning</span></div>
-    <div class=cursorSourceStats id=cursor-source-stats></div>
-    <div class=settingsStatus id=cursor-source-note>Waiting for dashboard data.</div>
+   <section class="card pad settingsLexicon settingsPricing" id=model-pricing-settings>
+    <div class=settingsLexiconHead><div><div class=label>Cost estimates</div><h2>Model pricing</h2><p>Edit prices in USD per 1 million tokens. Changes are machine-wide and recalculate current and historical cost estimates.</p></div><span class=agentAccessBadge id=model-pricing-badge>Loading prices</span></div>
+    <div class=modelPriceTableWrap><table class="tbl modelPriceTable"><thead><tr><th>Provider</th><th>Model id</th><th class=num>Input</th><th class=num>Output</th><th class=num>Cache write</th><th class=num>Cached input</th><th class=num>Actions</th></tr></thead><tbody id=model-pricing-rows><tr><td colspan=7 class=modelPricingEmpty>Waiting for dashboard data.</td></tr></tbody></table></div>
+    <form class=modelPriceAdd id=model-price-add-form>
+     <label><span>Provider</span><select id=model-price-provider><option value=claude>Claude</option><option value=codex>Codex / OpenAI</option><option value=cursor>Cursor</option></select></label>
+     <label><span>New model id</span><input id=model-price-model autocomplete=off spellcheck=false required maxlength=160 placeholder="model-name-version"></label>
+     <label><span>Input</span><input id=model-price-input type=number min=0 max=1000000 step=any required placeholder=0></label>
+     <label><span>Output</span><input id=model-price-output type=number min=0 max=1000000 step=any required placeholder=0></label>
+     <label><span>Cache write</span><input id=model-price-cache-write type=number min=0 max=1000000 step=any required value=0></label>
+     <label><span>Cached input</span><input id=model-price-cache-read type=number min=0 max=1000000 step=any required value=0></label>
+     <button class=tbtn id=model-price-add type=submit>Add model</button>
+    </form>
+    <div class=settingsStatus id=model-pricing-status>Machine-wide · saved outside the browser</div>
    </section>
   </div>
 	  <div class=foot>MCP changes apply to new agent sessions · capability controls remain in Tools · budgets and notifications remain in Current → Alerts</div>
@@ -926,9 +938,10 @@ function applyHashRoute(){
   showTab('learn');
   return;
  }
- if(h==='settings'){
+ if(h==='settings'||h==='model-pricing'){
   showTab('settings');
-  if(LATEST){renderFrustrationSettings(LATEST.xsession?.frustration);renderCursorSourceStatus(LATEST.xsession);}
+  if(LATEST){renderFrustrationSettings(LATEST.xsession?.frustration);renderModelPricing(LATEST.xsession?.model_pricing);}
+  if(h==='model-pricing')requestAnimationFrame(()=>$('model-pricing-settings').scrollIntoView({block:'start'}));
   loadAgentAccess();
   return;
  }
@@ -992,6 +1005,103 @@ function showAppToast(entry){
  while(box.children.length>4) box.firstElementChild.remove();
 }
 function agentActionToken(){return LATEST?.xsession?.capabilities?.actions?.token||'';}
+const MODEL_PRICE_FIELDS=['input','output','cache_write','cache_read'];
+let modelPricingState=null,modelPricingDirty=new Set();
+function modelPriceKey(provider,model){return `${provider}:${model}`;}
+function modelPriceNumber(value){
+ const number=Number(value);
+ return Number.isFinite(number)?String(number):'0';
+}
+function modelPriceValues(root){
+ const prices={};
+ for(const field of MODEL_PRICE_FIELDS){
+  const input=root.querySelector(`[data-price-field="${field}"]`);
+  const value=Number(input?.value);
+  if(!input||input.value.trim()===''||!Number.isFinite(value)||value<0)throw new Error('Enter a non-negative number for every price.');
+  prices[field]=value;
+ }
+ return prices;
+}
+function renderModelPricing(pricing,force=false){
+ if(!pricing)return;
+ modelPricingState=pricing;
+ const custom=Number(pricing.custom_models||0),overrides=Number(pricing.overrides||0);
+ $('model-pricing-badge').textContent=custom||overrides?`${f(custom)} custom · ${f(overrides)} ${countWord(overrides,'override')}`:'Built-in defaults';
+ if(modelPricingDirty.size&&!force)return;
+ const drafts=new Map();
+ if(force)for(const root of $('model-pricing-rows').querySelectorAll('[data-model-price-key]')){
+  if(modelPricingDirty.has(root.dataset.modelPriceKey)){
+   try{drafts.set(root.dataset.modelPriceKey,modelPriceValues(root));}catch(error){}
+  }
+ }
+ const rows=pricing.models||[];
+ $('model-pricing-rows').innerHTML=rows.length?rows.map(row=>{
+  const prices=row.prices||{},key=modelPriceKey(row.provider,row.model);
+  const secondary=row.custom?'Remove':'Use default';
+  return `<tr data-model-price-key="${esc(key)}"><td><span class="badge ${esc(row.provider)}">${esc(row.provider_label||row.provider)}</span></td><td><div class=modelPriceModel><code>${esc(row.model)}</code><span class=modelPriceSource>${esc(row.source||'built-in')}</span></div></td>${MODEL_PRICE_FIELDS.map(field=>`<td class=num><input class=modelPriceInput data-price-field="${field}" type=number min=0 max=1000000 step=any value="${esc(modelPriceNumber(prices[field]))}" aria-label="${esc(`${row.model} ${field.replace('_',' ')} price`)}"></td>`).join('')}<td><div class=modelPriceActions><button class=tbtn data-model-price-save type=button>Save</button><button class="tbtn clearFilters" data-model-price-remove type=button>${secondary}</button></div></td></tr>`;
+ }).join(''):'<tr><td colspan=7 class=modelPricingEmpty>No model prices configured.</td></tr>';
+ for(const root of $('model-pricing-rows').querySelectorAll('[data-model-price-key]')){
+  const draft=drafts.get(root.dataset.modelPriceKey);
+  if(draft)for(const field of MODEL_PRICE_FIELDS)root.querySelector(`[data-price-field="${field}"]`).value=modelPriceNumber(draft[field]);
+ }
+ $('model-pricing-rows').querySelectorAll('.modelPriceInput').forEach(input=>input.addEventListener('input',()=>{
+  modelPricingDirty.add(input.closest('[data-model-price-key]').dataset.modelPriceKey);$('model-pricing-status').className='settingsStatus warn';$('model-pricing-status').textContent='Unsaved price changes';
+ }));
+ $('model-pricing-rows').querySelectorAll('[data-model-price-save]').forEach(button=>button.onclick=()=>saveModelPriceRow(button));
+ $('model-pricing-rows').querySelectorAll('[data-model-price-remove]').forEach(button=>button.onclick=()=>removeModelPriceRow(button));
+}
+async function postModelPrice(payload,button,busyLabel){
+ const token=agentActionToken();
+ if(!token)throw new Error('Settings are not ready yet. Wait for live state and try again.');
+ const original=button.textContent;
+ button.disabled=true;button.textContent=busyLabel;
+ try{
+  const response=await fetch('/settings/model-pricing',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify(payload)});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw new Error(result.error||'Could not save model pricing.');
+  if(LATEST?.xsession)LATEST.xsession.model_pricing=result.model_pricing;
+  modelPricingDirty.delete(modelPriceKey(result.provider,result.model));
+  renderModelPricing(result.model_pricing,true);
+  $('model-pricing-status').className=`settingsStatus ${modelPricingDirty.size?'warn':'good'}`;$('model-pricing-status').textContent=modelPricingDirty.size?'Saved · other price changes remain unsaved':'Saved and recalculated';
+  await refreshLiveState();
+  return result;
+ }finally{button.disabled=false;button.textContent=original;}
+}
+function modelPriceRowFor(button){
+ const key=button.closest('[data-model-price-key]')?.dataset.modelPriceKey||'';
+ return (modelPricingState?.models||[]).find(row=>modelPriceKey(row.provider,row.model)===key);
+}
+async function saveModelPriceRow(button){
+ const row=modelPriceRowFor(button),root=button.closest('[data-model-price-key]');
+ if(!row||!root)return;
+ try{
+  await postModelPrice({provider:row.provider,model:row.model,prices:modelPriceValues(root)},button,'Saving…');
+  showAppToast({title:'Model price updated',body:`${row.model} now uses your machine-wide prices.`,kind:'good'});
+ }catch(error){$('model-pricing-status').className='settingsStatus warn';$('model-pricing-status').textContent=error.message||String(error);showAppToast({title:'Model pricing could not be saved',body:error.message||String(error),kind:'warn',sticky:true});}
+}
+async function removeModelPriceRow(button){
+ const row=modelPriceRowFor(button);
+ if(!row)return;
+ if(row.custom&&!confirm(`Remove ${row.model} from model pricing?`))return;
+ try{
+  await postModelPrice({provider:row.provider,model:row.model,remove:true},button,row.custom?'Removing…':'Restoring…');
+  showAppToast({title:row.custom?'Model removed':'Default price restored',body:row.custom?`${row.model} was removed from custom pricing.`:`${row.model} now uses Token Meter’s built-in price.`,kind:'good'});
+ }catch(error){$('model-pricing-status').className='settingsStatus warn';$('model-pricing-status').textContent=error.message||String(error);showAppToast({title:'Model pricing could not be changed',body:error.message||String(error),kind:'warn',sticky:true});}
+}
+$('model-price-add-form').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const button=$('model-price-add'),model=$('model-price-model').value.trim();
+ try{
+  const root=event.currentTarget,prices={
+   input:Number($('model-price-input').value),output:Number($('model-price-output').value),
+   cache_write:Number($('model-price-cache-write').value),cache_read:Number($('model-price-cache-read').value),
+  };
+  for(const [field,value] of Object.entries(prices))if(root.querySelector(`#model-price-${field.replaceAll('_','-')}`)?.value.trim()===''||!Number.isFinite(value)||value<0)throw new Error('Enter a non-negative number for every price.');
+  await postModelPrice({provider:$('model-price-provider').value,model,prices},button,'Adding…');
+  $('model-price-model').value='';$('model-price-input').value='';$('model-price-output').value='';$('model-price-cache-write').value='0';$('model-price-cache-read').value='0';
+  showAppToast({title:'Model price added',body:`${model} is now available to Token Meter cost calculations.`,kind:'good'});
+ }catch(error){$('model-pricing-status').className='settingsStatus warn';$('model-pricing-status').textContent=error.message||String(error);showAppToast({title:'Model could not be added',body:error.message||String(error),kind:'warn',sticky:true});}
+});
 let frustrationSettingsDirty=false;
 function parsedFrustrationTerms(){
  const seen=new Set(),terms=[];
@@ -1008,15 +1118,6 @@ function renderFrustrationSettings(signal){
  if(!frustrationSettingsDirty)$('frustration-terms').value=(signal.configured_terms||[]).join('\n');
  paintFrustrationTermCount();
  if(!frustrationSettingsDirty){$('frustration-settings-status').className='settingsStatus';$('frustration-settings-status').textContent=`Machine-wide · up to ${f(signal.max_terms||64)} terms`;}
-}
-function renderCursorSourceStatus(xs){
- const rows=(xs?.sessions||[]).filter(row=>row.provider==='cursor');
- const priced=rows.filter(row=>metricAvailable(row,'cost')).length;
- const context=rows.filter(row=>metricAvailable(row,'context')).length;
- const timing=rows.filter(row=>metricAvailable(row,'timing')).length;
- $('cursor-source-badge').textContent=rows.length?`${f(rows.length)} ${countWord(rows.length,'trace')}`:'No traces';
- $('cursor-source-stats').innerHTML=[['Traces',rows.length],['Priced estimates',priced],['Context evidence',context],['Timed traces',timing]].map(([label,value])=>`<div class=cursorSourceStat><b class=mono>${f(value)}</b><span>${esc(label)}</span></div>`).join('');
- $('cursor-source-note').textContent=rows.length?'Local read-only evidence · costs and tokens remain labeled estimates.':'No local Cursor Composer traces were discovered.';
 }
 $('frustration-terms').addEventListener('input',()=>{frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Unsaved changes';});
 $('frustration-reset').onclick=()=>{
@@ -2816,7 +2917,7 @@ function applyLiveState(state){
 	 if($('view-models').classList.contains('on')){renderModelStats(LATEST.xsession?.model_stats);renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}
 	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
-	 if($('view-settings').classList.contains('on')){renderFrustrationSettings(LATEST.xsession?.frustration);renderCursorSourceStatus(LATEST.xsession);}
+	 if($('view-settings').classList.contains('on')){renderFrustrationSettings(LATEST.xsession?.frustration);renderModelPricing(LATEST.xsession?.model_pricing);}
 }
 async function refreshLiveState(){
  if(statePollBusy)return;

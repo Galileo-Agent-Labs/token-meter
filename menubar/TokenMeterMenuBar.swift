@@ -909,6 +909,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
         let settingsMenu = NSMenu(title: "Settings")
 
+        let modelPrices = NSMenuItem(title: "Model Prices", action: #selector(openModelPrices), keyEquivalent: "")
+        modelPrices.target = self
+        settingsMenu.addItem(modelPrices)
+        settingsMenu.addItem(.separator())
+
         let titleItem = NSMenuItem(title: "Menu bar title", action: nil, keyEquivalent: "")
         let titleMenu = NSMenu(title: "Menu bar title")
         for mode in [StatusTitleMode.run, .limits] {
@@ -1206,6 +1211,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openToolsAndSkills() {
         openDashboardPanel("capabilities", includePinnedSession: false)
+    }
+
+    @objc private func openModelPrices() {
+        openDashboardPanel("model-pricing", includePinnedSession: false)
     }
 
     private func openDashboardPanel(_ panel: String, includePinnedSession: Bool = true) {

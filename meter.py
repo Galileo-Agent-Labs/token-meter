@@ -73,6 +73,11 @@ DEFAULT_FRUSTRATION_TERMS = [
 ]
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
+MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
+MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
+MAX_CUSTOM_MODEL_PRICES = 100
+MAX_MODEL_PRICE = 1_000_000.0
+MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
 
 CLAUDE_PRICE = {
     "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
@@ -133,6 +138,9 @@ _xsess = {"data": None, "at": 0.0}
 _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
+_model_pricing_cache = {
+    "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
+}
 _cursor_request_cache = {}
 _quota_cache = {}
 _quota_inflight = set()
@@ -432,6 +440,207 @@ def set_frustration_terms(values, path=None):
         "terms": terms,
         "defaults": list(DEFAULT_FRUSTRATION_TERMS),
         "max_terms": MAX_FRUSTRATION_TERMS,
+    }
+
+
+def normalize_model_price_provider(provider):
+    provider = str(provider or "").strip().lower()
+    if provider == "openai":
+        provider = "codex"
+    if provider not in MODEL_PRICE_PROVIDERS:
+        raise ValueError("Provider must be Claude, Codex / OpenAI, or Cursor.")
+    return provider
+
+
+def normalize_model_price_id(model):
+    model = str(model or "").strip().lower()
+    if not MODEL_PRICE_ID_RE.fullmatch(model):
+        raise ValueError(
+            "Model id must be 1–160 characters using letters, numbers, dots, dashes, "
+            "underscores, colons, @, +, or /."
+        )
+    return model
+
+
+def normalize_model_price(prices):
+    if not isinstance(prices, dict):
+        raise ValueError("Model prices must be an object.")
+    normalized = {}
+    for field in MODEL_PRICE_FIELDS:
+        value = prices.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{field.replace('_', ' ').title()} price must be a number.")
+        value = float(value)
+        if not math.isfinite(value) or value < 0 or value > MAX_MODEL_PRICE:
+            raise ValueError(
+                f"{field.replace('_', ' ').title()} price must be between 0 and "
+                f"{MAX_MODEL_PRICE:,.0f}."
+            )
+        normalized[field] = value
+    return normalized
+
+
+def builtin_model_price_tables():
+    return {
+        "claude": CLAUDE_PRICE,
+        "codex": OPENAI_PRICE,
+        "cursor": CURSOR_PRICE,
+    }
+
+
+def _model_pricing_mtime_ns(path):
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+
+
+def _load_model_price_overrides(path=None):
+    """Load validated user pricing with an mtime cache for hot cost paths."""
+    path = path or TOKEN_METER_SETTINGS
+    mtime_ns = _model_pricing_mtime_ns(path)
+    if (_model_pricing_cache["path"] == path
+            and _model_pricing_cache["mtime_ns"] == mtime_ns):
+        return _model_pricing_cache["overrides"]
+
+    settings = load_json(path, {})
+    raw = settings.get("model_pricing") if isinstance(settings, dict) else {}
+    overrides = {provider: {} for provider in MODEL_PRICE_PROVIDERS}
+    if isinstance(raw, dict):
+        for raw_provider, rows in raw.items():
+            try:
+                provider = normalize_model_price_provider(raw_provider)
+            except ValueError:
+                continue
+            if not isinstance(rows, dict):
+                continue
+            for raw_model, prices in rows.items():
+                try:
+                    model = normalize_model_price_id(raw_model)
+                    overrides[provider][model] = normalize_model_price(prices)
+                except ValueError:
+                    continue
+    _model_pricing_cache.update({
+        "path": path,
+        "mtime_ns": mtime_ns,
+        "overrides": overrides,
+        "effective": {},
+    })
+    return overrides
+
+
+def effective_model_price_table(provider, path=None):
+    provider = normalize_model_price_provider(provider)
+    _load_model_price_overrides(path)
+    cached = _model_pricing_cache["effective"].get(provider)
+    if cached is not None:
+        return cached
+    table = {
+        model: dict(prices)
+        for model, prices in builtin_model_price_tables()[provider].items()
+    }
+    table.update(_load_model_price_overrides(path).get(provider) or {})
+    _model_pricing_cache["effective"][provider] = table
+    return table
+
+
+def model_pricing_settings(path=None):
+    """Return built-in prices plus durable user overrides for the Settings UI."""
+    path = path or TOKEN_METER_SETTINGS
+    overrides = _load_model_price_overrides(path)
+    rows = []
+    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor"}
+    for provider in MODEL_PRICE_PROVIDERS:
+        builtins = builtin_model_price_tables()[provider]
+        for model in sorted(set(builtins) | set(overrides[provider])):
+            builtin = model in builtins
+            overridden = model in overrides[provider]
+            prices = (overrides[provider].get(model) or builtins[model])
+            rows.append({
+                "provider": provider,
+                "provider_label": labels[provider],
+                "model": model,
+                "prices": dict(prices),
+                "builtin": builtin,
+                "overridden": overridden,
+                "custom": not builtin,
+                "source": "custom" if not builtin else ("override" if overridden else "built-in"),
+            })
+    return {
+        "models": rows,
+        "currency": "USD",
+        "unit": "per 1M tokens",
+        "overrides": sum(
+            1 for row in rows if row["builtin"] and row["overridden"]
+        ),
+        "custom_models": sum(1 for row in rows if row["custom"]),
+        "max_custom_models": MAX_CUSTOM_MODEL_PRICES,
+    }
+
+
+def set_model_price(provider, model, prices=None, remove=False, path=None):
+    """Persist one model price, or restore/remove it when ``remove`` is true."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        provider = normalize_model_price_provider(provider)
+        model = normalize_model_price_id(model)
+        normalized = None if remove else normalize_model_price(prices)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+
+    overrides = copy.deepcopy(_load_model_price_overrides(path))
+    custom_count = sum(
+        1
+        for item_provider, rows in overrides.items()
+        for item_model in rows
+        if item_model not in builtin_model_price_tables()[item_provider]
+    )
+    builtin = builtin_model_price_tables()[provider].get(model)
+    changed = False
+    if remove:
+        changed = overrides[provider].pop(model, None) is not None
+    elif builtin == normalized:
+        changed = overrides[provider].pop(model, None) is not None
+    else:
+        is_new_custom = builtin is None and model not in overrides[provider]
+        if is_new_custom and custom_count >= MAX_CUSTOM_MODEL_PRICES:
+            return {
+                "ok": False,
+                "error": f"Use at most {MAX_CUSTOM_MODEL_PRICES} custom model prices.",
+            }
+        changed = overrides[provider].get(model) != normalized
+        overrides[provider][model] = normalized
+
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    stored = {
+        item_provider: {
+            item_model: rows[item_model]
+            for item_model in sorted(rows)
+        }
+        for item_provider, rows in overrides.items()
+        if rows
+    }
+    if stored:
+        settings["model_pricing"] = stored
+    else:
+        settings.pop("model_pricing", None)
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+
+    _model_pricing_cache.update({
+        "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
+    })
+    return {
+        "ok": True,
+        "changed": changed,
+        "provider": provider,
+        "model": model,
+        "removed": bool(remove),
+        "model_pricing": model_pricing_settings(path),
     }
 
 
@@ -1255,9 +1464,9 @@ def _matching_price(model, table):
     if model in table:
         return table[model]
     compact = str(model or "").replace(" ", "-").lower()
-    for key, price in table.items():
-        if compact.startswith(key):
-            return price
+    for key in sorted(table, key=len, reverse=True):
+        if compact.startswith(str(key).replace(" ", "-").lower()):
+            return table[key]
     return None
 
 
@@ -1294,15 +1503,20 @@ def cursor_price_variant(composer, model):
 def price_for(model, provider="claude", variant=None):
     if provider == "cursor":
         compact = str(model or "").replace(" ", "-").lower()
+        cursor_table = effective_model_price_table("cursor")
         if compact.startswith("composer-2.5"):
-            price = CURSOR_PRICE.get(f"composer-2.5-{variant or ''}")
+            price = _matching_price(f"composer-2.5-{variant or ''}", cursor_table)
             return (price or dict(ZERO_PRICE)), True
-        price = _matching_price(model, OPENAI_PRICE) or _matching_price(model, CLAUDE_PRICE)
+        price = (
+            _matching_price(model, cursor_table)
+            or _matching_price(model, effective_model_price_table("codex"))
+            or _matching_price(model, effective_model_price_table("claude"))
+        )
         return (price or dict(ZERO_PRICE)), True
     if provider not in ("claude", "codex"):
         return dict(ZERO_PRICE), True
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
-    table = OPENAI_PRICE if provider == "codex" else CLAUDE_PRICE
+    table = effective_model_price_table(provider)
     default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL
     price = _matching_price(model, table)
     if price:
@@ -6291,6 +6505,7 @@ def cross_session():
         ], key=lambda r: -r["cost"]),
         "model_stats": aggregate_model_stats(internal_rows),
         "frustration": aggregate_frustration(internal_rows),
+        "model_pricing": model_pricing_settings(),
         "tool_waste": tool_waste,
         "daily": daily,
         "capabilities": capability_inventory(tool_waste),
@@ -8025,7 +8240,7 @@ class H(BaseHTTPRequestHandler):
         req_path = urlparse(self.path).path
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete",
-                            "/settings/frustration"):
+                            "/settings/frustration", "/settings/model-pricing"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -8063,6 +8278,24 @@ class H(BaseHTTPRequestHandler):
                 _summary_cache.clear()
                 cross = refresh_cross_session_state()
                 result["frustration"] = cross.get("frustration") or {}
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/settings/model-pricing":
+            result = set_model_price(
+                payload.get("provider"),
+                payload.get("model"),
+                payload.get("prices"),
+                remove=payload.get("remove") is True,
+            )
+            if result.get("ok"):
+                _summary_cache.clear()
+                _xsess["data"], _xsess["at"] = None, 0.0
+                current_id = ((STATE.get("source") or {}).get("id") if STATE else "")
+                source = find_session(current_id) if current_id else newest_source()
+                updated = recompute(source) if source else None
+                cross = refresh_cross_session_state(updated or STATE)
+                result["model_pricing"] = cross.get("model_pricing") or result["model_pricing"]
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return

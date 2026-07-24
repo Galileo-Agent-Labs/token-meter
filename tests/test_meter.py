@@ -799,6 +799,86 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(price, {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.5})
         self.assertFalse(approximate)
 
+    def test_custom_model_price_persists_and_drives_cost_calculation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                result = meter.set_model_price(
+                    "openai", "gpt-custom-1",
+                    {"input": 1.25, "output": 6.5, "cache_write": 0, "cache_read": 0.2},
+                )
+                price, approximate = meter.price_for("gpt-custom-1", "codex")
+                cost = meter.cost_of({
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 1_000_000,
+                    "cache_creation_input_tokens": 1_000_000,
+                    "cache_read_input_tokens": 1_000_000,
+                }, "gpt-custom-1", "codex")
+                saved = json.loads(path.read_text())
+        self.assertTrue(result["ok"])
+        self.assertEqual(price, {
+            "input": 1.25, "output": 6.5, "cache_write": 0.0, "cache_read": 0.2,
+        })
+        self.assertFalse(approximate)
+        self.assertEqual(cost, {
+            "input": 1.25, "output": 6.5, "cache_write": 0.0, "cache_read": 0.2,
+        })
+        self.assertIn("gpt-custom-1", saved["model_pricing"]["codex"])
+
+    def test_builtin_override_can_be_restored_without_losing_other_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"frustration_terms": ["damn"]}))
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                changed = meter.set_model_price(
+                    "claude", "claude-sonnet-5",
+                    {"input": 4, "output": 20, "cache_write": 5, "cache_read": 0.4},
+                )
+                price, approximate = meter.price_for("claude-sonnet-5", "claude")
+                pricing = meter.model_pricing_settings()
+                restored = meter.set_model_price(
+                    "claude", "claude-sonnet-5", remove=True,
+                )
+                default_price, default_approximate = meter.price_for(
+                    "claude-sonnet-5", "claude",
+                )
+                saved = json.loads(path.read_text())
+        row = next(
+            item for item in pricing["models"]
+            if item["provider"] == "claude" and item["model"] == "claude-sonnet-5"
+        )
+        self.assertTrue(changed["ok"])
+        self.assertEqual(price["input"], 4.0)
+        self.assertFalse(approximate)
+        self.assertEqual(row["source"], "override")
+        self.assertTrue(restored["ok"])
+        self.assertEqual(default_price, meter.CLAUDE_PRICE["claude-sonnet-5"])
+        self.assertFalse(default_approximate)
+        self.assertEqual(saved["frustration_terms"], ["damn"])
+        self.assertNotIn("model_pricing", saved)
+
+    def test_invalid_custom_model_prices_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            bad_model = meter.set_model_price(
+                "codex", "model with spaces",
+                {"input": 1, "output": 2, "cache_write": 0, "cache_read": 0},
+                path=str(path),
+            )
+            bad_price = meter.set_model_price(
+                "codex", "gpt-custom",
+                {"input": -1, "output": 2, "cache_write": 0, "cache_read": 0},
+                path=str(path),
+            )
+        self.assertFalse(bad_model["ok"])
+        self.assertFalse(bad_price["ok"])
+        self.assertFalse(path.exists())
+
+    def test_longest_model_prefix_wins(self):
+        price, approximate = meter.price_for("gpt-5.4-mini-2026-07-01", "codex")
+        self.assertEqual(price, meter.OPENAI_PRICE["gpt-5.4-mini"])
+        self.assertFalse(approximate)
+
 
 class SessionSummaryStatsTests(unittest.TestCase):
     def source(self, provider, model=None):
@@ -1087,6 +1167,30 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=f-model-table", self.page)
         self.assertNotIn("id=f-session-table", self.page)
 
+    def test_model_pricing_is_editable_and_supports_new_models_in_settings(self):
+        for marker in (
+            "id=model-pricing-settings", "id=model-pricing-rows",
+            "id=model-price-add-form", "id=model-price-provider",
+            "id=model-price-model", "id=model-price-input",
+            "id=model-price-output", "id=model-price-cache-write",
+            "id=model-price-cache-read", "data-model-price-save",
+            "data-model-price-remove", "function renderModelPricing",
+            "function postModelPrice", "/settings/model-pricing",
+            "Save", "Use default", "Add model",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("USD per 1 million tokens", self.page)
+        self.assertIn("recalculate current and historical cost estimates", self.page)
+        self.assertLess(
+            self.page.index("id=frustration-settings"),
+            self.page.index("id=model-pricing-settings"),
+        )
+        self.assertNotIn("id=cursor-source-status", self.page)
+        self.assertNotIn("Local trace source", self.page)
+        self.assertNotIn("function renderCursorSourceStatus", self.page)
+        self.assertIn("if(h==='settings'||h==='model-pricing')", self.page)
+        self.assertIn("$('model-pricing-settings').scrollIntoView", self.page)
+
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
             self.assertIn(marker, self.page)
@@ -1131,7 +1235,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("id=learn-glossary", self.page)
         self.assertIn("if(h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
-        self.assertIn("if(h==='settings')", self.page)
+        self.assertIn("if(h==='settings'||h==='model-pricing')", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
 
     def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
@@ -1245,8 +1349,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "const hasLocalEstimate", "const estimateSuffix", "reported-cost",
             "local token proxies are not comparable", "stroke-dasharray",
             "id=c-runtime-filter", "Cursor local estimate", "Input context proxy",
-            "Visible-output estimate", "id=cursor-source-status",
-            "function renderCursorSourceStatus", "m.runtime||'unknown'",
+            "Visible-output estimate", "m.runtime||'unknown'",
         ):
             self.assertIn(marker, self.page)
 
@@ -1284,6 +1387,11 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('addAction("Open Daily Brief", #selector(openDailyBrief))', self.source)
         self.assertIn('@objc private func openDailyBrief()', self.source)
         self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
+
+    def test_model_prices_setting_opens_dashboard_pricing_editor(self):
+        self.assertIn('NSMenuItem(title: "Model Prices", action: #selector(openModelPrices)', self.source)
+        self.assertIn('@objc private func openModelPrices()', self.source)
+        self.assertIn('openDashboardPanel("model-pricing", includePinnedSession: false)', self.source)
 
     def test_output_speed_is_a_dedicated_honest_metric_row(self):
         self.assertIn('addMetricRow("Output speed", snapshot.outputSpeedLabel', self.source)

@@ -174,6 +174,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}.learnModelGuide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:13px}.learnModelCard{padding:14px;border:1px solid var(--line);border-radius:9px;background:linear-gradient(160deg,rgba(255,255,255,.045),rgba(255,255,255,.018));min-width:0}.learnModelCard .num{color:var(--accent);font:800 10px/1 ui-monospace,"SF Mono",Menlo,monospace;text-transform:uppercase}.learnModelCard h3{font-size:13px;margin:7px 0 0}.learnModelCard p{font-size:12px;line-height:1.45;color:var(--dim);margin:4px 0 0}.learnModelNote{margin-top:10px;padding:10px 12px;border:1px solid rgba(0,188,235,.22);border-left:3px solid var(--accent);border-radius:8px;background:rgba(0,188,235,.055);color:var(--dim);font-size:12px;line-height:1.45}.learnModelNote b{color:var(--fg)}
 @media(max-width:900px){.learnModelGuide{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.learnSectionHead{display:block}.learnSectionHead .tbtn{margin-top:10px}.learnModelGuide{grid-template-columns:1fr}}
+.globalControls.logsToolbar{grid-template-columns:minmax(260px,1.25fr) repeat(3,minmax(145px,.62fr)) minmax(160px,.55fr);padding:14px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,rgba(20,28,37,.8),rgba(13,18,24,.78));box-shadow:var(--shadow-soft)}
+.logsToolbar .filterSort{grid-column:1/5}.logsToolbar .filterClear{grid-column:5;grid-row:2;align-self:end;min-width:0}.logsToolbar .filterCount{min-height:18px;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.3}.logsToolbar .searchbox,.logsToolbar .filterSelect{height:40px;background:rgba(7,9,12,.58)}.logsSummary .logStat .v{font-size:clamp(18px,1.6vw,23px)}.activeFilters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-3px 0 12px;padding:0 2px;color:var(--faint);font-size:11px}.activeFilters[hidden]{display:none}.activeFilters>span{font-weight:760;text-transform:uppercase}.activeFilters button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(0,188,235,.26);border-radius:999px;background:rgba(0,188,235,.08);color:var(--dim);padding:4px 8px;font:inherit;cursor:pointer}.activeFilters button:hover,.activeFilters button:focus-visible{border-color:rgba(0,188,235,.55);color:var(--fg);outline:none}.activeFilters button b{color:var(--orange3);font-size:14px;line-height:1}.srow:focus-visible{outline:0;border-color:rgba(0,188,235,.7);box-shadow:0 0 0 3px rgba(0,188,235,.13),var(--shadow-soft)}.badge.app{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.badge.app:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.badge.chatgpt{color:#d5dce5;border-color:rgba(213,220,229,.3);background:rgba(213,220,229,.08)}
+@media(max-width:1120px) and (min-width:901px){.globalControls.logsToolbar{grid-template-columns:minmax(240px,1fr) repeat(2,minmax(150px,.7fr));}.logsToolbar .logSearchControl{grid-column:1/3}.logsToolbar .filterSort{grid-column:1/3}.logsToolbar .filterClear{grid-column:3;grid-row:3}}
+@media(max-width:900px){.globalControls.logsToolbar{grid-template-columns:1fr 1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1/-1}.logsToolbar .filterClear{grid-column:1/-1;grid-row:auto}.logsToolbar .filterCount{text-align:left}}
+@media(max-width:520px){.globalControls.logsToolbar{grid-template-columns:1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1}.srow{padding:11px 10px;gap:9px}.badge.app{font-size:10px}}
 </style></head><body>
 <div class=wrap>
  <div class=top>
@@ -379,7 +384,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
 	  <div class="global-panel on" id=global-panel-overview>
 	   <div class=overviewKpis>
-	    <div class="card pad"><div class=label>Discovered logs</div><div class="v mono" id=g-logs-total>0</div><div class=subline>local Claude, Codex, and Cursor history</div></div>
+	    <div class="card pad"><div class=label>Discovered logs</div><div class="v mono" id=g-logs-total>0</div><div class=subline>supported local app history</div></div>
 	    <div class="card pad"><div class=label>Executions</div><div class="v mono" id=g-executions-total>0</div><div class=subline>across all discovered logs</div></div>
 	    <div class="card pad"><div class=label>Tokens</div><div class="v mono" id=g-tokens-total>0</div><div class=subline>reported or clearly marked local estimates</div></div>
 	    <div class="card pad"><div class=label>Review candidates</div><div class="v mono" id=g-review-total>0</div><div class=subline>unused removable groups</div></div>
@@ -418,11 +423,12 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-logs>
-  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local Claude/Codex log files discovered on this machine. Each log can contain many executions." data-tip="Local Claude/Codex log files discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
-  <div class=globalControls>
-   <label class=filterControl><span>Search</span><input class=searchbox id=g-search type=search placeholder="Title, project, model, provider"></label>
-   <label class=filterControl><span>Projects</span><select class=filterSelect id=g-project aria-label="Projects filter"><option value="">All projects</option></select></label>
-   <label class=filterControl><span>Time range</span><select class=filterSelect id=g-time aria-label="Time range filter"><option value=all>Any time</option><option value=24h>Last 24 hours</option><option value=7d>Last 7 days</option><option value=30d>Last 30 days</option><option value=90d>Last 90 days</option></select></label>
+	  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local AI app logs discovered on this machine. Each log can contain many executions." data-tip="Local AI app logs discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
+	  <div class="globalControls logsToolbar">
+	   <label class="filterControl logSearchControl"><span>Search</span><input class=searchbox id=g-search type=search placeholder="Title, project, or model"></label>
+	   <label class=filterControl><span>App</span><select class=filterSelect id=g-app aria-label="App filter"><option value="">All apps</option></select></label>
+	   <label class=filterControl><span>Projects</span><select class=filterSelect id=g-project aria-label="Projects filter"><option value="">All projects</option></select></label>
+	   <label class=filterControl><span>Time range</span><select class=filterSelect id=g-time aria-label="Time range filter"><option value=all>Any time</option><option value=24h>Last 24 hours</option><option value=7d>Last 7 days</option><option value=30d>Last 30 days</option><option value=90d>Last 90 days</option></select></label>
    <div class="filterControl filterSort"><span>Sort</span><div class="seg sortseg" id=g-sort>
      <button data-gsort=recent title="Newest activity first.">Recent</button>
      <button data-gsort=cost title="Highest cost first.">Cost</button>
@@ -430,9 +436,10 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	    <button data-gsort=executions title="Most executions first.">Execs</button>
 	    <button data-gsort=wait title="Most cumulative prompt-to-response wait first.">Wait</button>
     </div></div>
-   <div class=filterClear><button class="tbtn clearFilters" id=g-clear type=button title="Clear search, project, and time filters.">Clear filters</button><div class="globalMeta filterCount" id=g-count></div></div>
-  </div>
-  <div class=logsSummary id=logs-summary>
+	   <div class=filterClear><button class="tbtn clearFilters" id=g-clear type=button title="Clear search, app, project, and time filters.">Clear filters</button><div class="globalMeta filterCount" id=g-count></div></div>
+	  </div>
+	  <div class=activeFilters id=g-active-filters hidden aria-live=polite></div>
+	  <div class=logsSummary id=logs-summary>
    <div class=logKpis>
     <div class="card logStat"><div class=label>Filtered cost</div><div class="v mono" id=lf-cost>$0</div><div class=subline id=lf-cost-note></div></div>
     <div class="card logStat"><div class=label>Input tokens</div><div class="v mono" id=lf-input>0</div><div class=subline>fresh + cached input</div></div>
@@ -681,7 +688,15 @@ const usageProvenance=row=>row?.provenance||{};
 const usageBasis=row=>usageProvenance(row).usage_basis||row?.usage_basis||(row?.token_estimate?'local_estimate':'reported');
 const hasLocalEstimate=row=>['local_estimate','mixed'].includes(usageBasis(row))||row?.provider==='cursor';
 const estimateSuffix=row=>usageBasis(row)==='local_estimate'?' est':usageBasis(row)==='mixed'?' incl. est':'';
-const providerBadgeClass=provider=>provider==='codex'?'codex':provider==='cursor'?'cursor':'claude';
+const appBadgeClass=session=>{
+ const client=session?.client||session?.provider||'';
+ return client==='codex'?'codex':client==='cursor'?'cursor':client==='chatgpt_classic'?'chatgpt':'claude';
+};
+const appFilterGroup=session=>{
+ const client=session?.client||session?.provider||'unknown';
+ return ['claude','claude_code','claude_desktop'].includes(client)?'claude':client;
+};
+const appFilterLabel=session=>appFilterGroup(session)==='claude'?'Claude':session?.label||session?.runtime||session?.provider||'Unknown app';
 const countWord=(n,one,many=one+'s')=>Number(n)===1?one:many;
 const speedFmt=n=>{n=Number(n)||0;if(n<=0)return'--';if(n>=100)return n.toFixed(0);if(n>=10)return n.toFixed(1);return n.toFixed(2);};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -861,6 +876,7 @@ function showTab(t){
  $('view-capabilities').classList.toggle('on',t==='capabilities');
  $('view-learn').classList.toggle('on',t==='learn');
  $('view-settings').classList.toggle('on',t==='settings');
+ if(t==='logs')setTimeout(loadLogSessions,0);
  const activeTop=$(`tab-${t}`);
  if(activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'nearest'}));
 }
@@ -1403,8 +1419,27 @@ paintExecSort();
 
 let globalSearch=localStorage.getItem('tm_global_search')||'';
 let globalSort=localStorage.getItem('tm_global_sort')||'recent';
+let globalApp=localStorage.getItem('tm_global_app')||'';
+if(['claude_code','claude_desktop'].includes(globalApp)){
+ globalApp='claude';
+ localStorage.setItem('tm_global_app',globalApp);
+}
 let globalProject=localStorage.getItem('tm_global_project')||'';
 let globalTime=localStorage.getItem('tm_global_time')||'all';
+let logSessionInventory=null,logSessionInventoryAt=0,logSessionsRequest=null;
+async function loadLogSessions(){
+ if(logSessionsRequest)return logSessionsRequest;
+ logSessionsRequest=fetch('/logs',{cache:'no-store'}).then(response=>{
+  if(!response.ok)throw new Error(`Logs request failed (${response.status}).`);
+  return response.json();
+ }).then(payload=>{
+  logSessionInventory=payload.sessions||[];
+  logSessionInventoryAt=Number(payload.generated_at||0);
+  if(LATEST&&$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+  return logSessionInventory;
+ }).catch(()=>logSessionInventory||[]).finally(()=>{logSessionsRequest=null;});
+ return logSessionsRequest;
+}
 function loadModelFilters(){
  const stored=localStorage.getItem('tm_model_filters');
  if(stored!==null){try{const parsed=JSON.parse(stored);if(Array.isArray(parsed))return [...new Set(parsed.filter(value=>typeof value==='string'&&value))];}catch(error){}}
@@ -1452,15 +1487,26 @@ function paintGlobalSort(){
 $('g-search').value=globalSearch;
 $('g-time').value=globalTime;
 function paintGlobalFilters(){
- $('g-clear').disabled=!(globalSearch.trim()||globalProject||globalTime!=='all');
+ $('g-clear').disabled=!(globalSearch.trim()||globalApp||globalProject||globalTime!=='all');
 }
 $('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-app').addEventListener('change',e=>{ globalApp=e.target.value; localStorage.setItem('tm_global_app',globalApp); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
 $('g-project').addEventListener('change',e=>{ globalProject=e.target.value; localStorage.setItem('tm_global_project',globalProject); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
 $('g-time').addEventListener('change',e=>{ globalTime=e.target.value; localStorage.setItem('tm_global_time',globalTime); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
 $('g-clear').onclick=()=>{
- globalSearch='';globalProject='';globalTime='all';
- $('g-search').value='';$('g-project').value='';$('g-time').value='all';
- ['tm_global_search','tm_global_project','tm_global_time'].forEach(key=>localStorage.removeItem(key));
+ globalSearch='';globalApp='';globalProject='';globalTime='all';
+ $('g-search').value='';$('g-app').value='';$('g-project').value='';$('g-time').value='all';
+ ['tm_global_search','tm_global_app','tm_global_project','tm_global_time'].forEach(key=>localStorage.removeItem(key));
+ paintGlobalFilters();
+ if(LATEST)renderGlobal(LATEST.xsession);
+};
+$('g-active-filters').onclick=event=>{
+ const key=event.target.closest('button[data-clear-log-filter]')?.dataset.clearLogFilter;
+ if(!key)return;
+ if(key==='search'){globalSearch='';$('g-search').value='';localStorage.removeItem('tm_global_search');}
+ if(key==='app'){globalApp='';$('g-app').value='';localStorage.removeItem('tm_global_app');}
+ if(key==='project'){globalProject='';$('g-project').value='';localStorage.removeItem('tm_global_project');}
+ if(key==='time'){globalTime='all';$('g-time').value='all';localStorage.removeItem('tm_global_time');}
  paintGlobalFilters();
  if(LATEST)renderGlobal(LATEST.xsession);
 };
@@ -1987,7 +2033,7 @@ function renderSession(s){
  loadBudgetForSession(s);
  const frozen=!!s.ended, source=s.source||{};
  $('s-provider').textContent=source.label||s.provider||'source';
- $('s-provider').className='badge '+providerBadgeClass(s.provider);
+ $('s-provider').className='badge app '+appBadgeClass(s);
  $('s-repo').textContent=s.project||source.project||'';
  $('s-id').textContent=s.session||source.id||'';
  $('s-pricing').textContent=source.pricing_note||'';
@@ -2794,7 +2840,17 @@ function renderGlobal(xs){
  const costly=(xs.sessions||[]).slice().sort((a,b)=>(b.cost||0)-(a.cost||0)).slice(0,5);
  $('g-overview-sessions').innerHTML=costly.length?costly.map(row=>`<div class=overviewRow><div><div class=name>${esc(row.title)}</div><div class=meta>${esc(row.project)} · ${esc(row.label||row.provider)}${hasLocalEstimate(row)?' · local est':''}</div></div><div class=value><div class=mono>${metricAvailable(row,'cost')?money(row.cost)+estimateSuffix(row):'--'}</div><button class=tbtn data-global-session="${esc(row.id)}" type=button>Open</button></div></div>`).join(''):'<div class=subline>no logs yet</div>';
  [...$('g-overview-sessions').querySelectorAll('[data-global-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.globalSession));
- const all=xs.sessions||[];
+ const all=$('view-logs').classList.contains('on')&&logSessionInventory?logSessionInventory:(xs.sessions||[]);
+ const apps=[...new Map(all.map(session=>[
+  appFilterGroup(session),
+  appFilterLabel(session),
+ ])).entries()].map(([id,label])=>({id,label})).sort((a,b)=>a.label.localeCompare(b.label,undefined,{sensitivity:'base'}));
+ if(globalApp&&!apps.some(app=>app.id===globalApp)){
+  globalApp='';
+  localStorage.removeItem('tm_global_app');
+ }
+ $('g-app').innerHTML='<option value="">All apps</option>'+apps.map(app=>`<option value="${esc(app.id)}">${esc(app.label)}</option>`).join('');
+ $('g-app').value=globalApp;
  const projects=[...new Set(all.map(s=>s.project||'No project'))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
  if(globalProject&&!projects.includes(globalProject)){
   globalProject='';
@@ -2803,10 +2859,23 @@ function renderGlobal(xs){
  $('g-project').innerHTML='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
  $('g-project').value=globalProject;
  paintGlobalFilters();
+ const timeLabels={'24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days','90d':'Last 90 days'};
+ const appLabel=apps.find(app=>app.id===globalApp)?.label||globalApp;
+ const activeFilters=[
+  globalSearch.trim()&&['search',`Search: “${globalSearch.trim()}”`],
+  globalApp&&['app',`App: ${appLabel}`],
+  globalProject&&['project',`Project: ${globalProject}`],
+  globalTime!=='all'&&['time',timeLabels[globalTime]||globalTime],
+ ].filter(Boolean);
+ $('g-active-filters').hidden=!activeFilters.length;
+ $('g-active-filters').innerHTML=activeFilters.length
+  ? `<span>Filtered by</span>${activeFilters.map(([key,label])=>`<button type=button data-clear-log-filter="${key}" title="Remove ${esc(label)} filter">${esc(label)}<b aria-hidden=true>×</b></button>`).join('')}`
+  : '';
  const q=globalSearch.trim().toLowerCase();
  const rangeSeconds={all:0,'24h':86400,'7d':604800,'30d':2592000,'90d':7776000}[globalTime]||0;
  const rangeStart=rangeSeconds?Date.now()/1000-rangeSeconds:0;
  let sessions=all.filter(s=>{
+  if(globalApp&&appFilterGroup(s)!==globalApp)return false;
   if(globalProject&&(s.project||'No project')!==globalProject)return false;
   if(rangeStart&&(s.mtime||0)<rangeStart)return false;
   return !q||[s.title,s.project,s.provider,s.label,(s.models||[]).join(' ')].join(' ').toLowerCase().includes(q);
@@ -2829,14 +2898,19 @@ function renderGlobal(xs){
 	  const wait=s.wait_time||{},waitText=wait.available?`${waitFmt(wait.total_s)} wait · ${waitFmt(wait.avg_s)} avg`:'wait unavailable';
   const modelText=(s.models||[]).join(', ')||'--';
 	  const throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
-	  return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}">
-	   <div><span class="badge ${providerBadgeClass(s.provider)}">${esc(s.label||s.provider)}</span></div>
+	  return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}" role=button tabindex=0 aria-label="Open ${esc(s.title)}">
+	   <div><span class="badge app ${appBadgeClass(s)}">${esc(s.label||s.provider)}</span></div>
 	   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i style="width:${rowCost?Math.max(2,100*(s.cost||0)/maxCost):0}%"></i></div></div>
    <div class="badge models">${esc(modelText)}</div>
    <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
    <div class=smetrics><div class="c mono">${rowCost?money(s.cost)+(s.cost_approx?' est':''):'--'}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div><button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button></div></div>`;
  }).join(''):'<div class="ins empty">No logs match the selected filters</div>';
  [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onclick=()=>selectSession(el.dataset.id));
+ [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onkeydown=event=>{
+  if(!['Enter',' '].includes(event.key)||event.target.closest('button'))return;
+  event.preventDefault();
+  selectSession(el.dataset.id);
+ });
  [...$('slist').querySelectorAll('[data-delete-session]')].forEach(button=>button.onclick=event=>{
   event.stopPropagation();
   const row=all.find(item=>String(item.id)===button.dataset.deleteSession);
@@ -2851,7 +2925,8 @@ function renderLogStats(sessions){
 	 },{cost:0,input:0,output:0,executions:0,wait:0,waitSamples:0,costCovered:0,tokenCovered:0});
  const costPartial=totals.costCovered<sessions.length,tokenPartial=totals.tokenCovered<sessions.length;
  const filteredEstimateSuffix=localEstimates?(localEstimates===totals.costCovered?' est':' incl. est'):'';
- $('lf-cost').textContent=totals.costCovered?money(totals.cost)+(costPartial?' partial':'')+filteredEstimateSuffix:'--';
+ const filteredCostEstimateSuffix=localEstimates===totals.costCovered&&totals.costCovered?' est':'';
+ $('lf-cost').textContent=totals.costCovered?money(totals.cost)+(costPartial?' partial':'')+filteredCostEstimateSuffix:'--';
  $('lf-cost-note').textContent=sessions.length?(totals.costCovered?`${f(totals.costCovered)} of ${f(sessions.length)} cost-covered logs · ${money(totals.cost/totals.costCovered)}/covered log${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`:'cost unavailable for matching logs'):'no matching logs';
  $('lf-input').textContent=totals.tokenCovered?compactNumber(totals.input)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--';$('lf-input').title=totals.tokenCovered?f(totals.input)+' reported or locally estimated input/context tokens':'input evidence unavailable';
  $('lf-output').textContent=totals.tokenCovered?compactNumber(totals.output)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--';$('lf-output').title=totals.tokenCovered?f(totals.output)+' reported or locally estimated output tokens':'output evidence unavailable';
@@ -2914,6 +2989,7 @@ function applyLiveState(state){
  if(!pinned&&$('view-session').classList.contains('on'))renderSession(LATEST);
  else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='live';
 	 if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+	 if($('view-logs').classList.contains('on')&&(!logSessionInventory||logSessionInventoryAt!==Number(LATEST.xsession?.generated_at||0)))loadLogSessions();
 	 if($('view-models').classList.contains('on')){renderModelStats(LATEST.xsession?.model_stats);renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}
 	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);

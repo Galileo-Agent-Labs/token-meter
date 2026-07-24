@@ -134,7 +134,7 @@ BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512
 
 subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
-_xsess = {"data": None, "at": 0.0}
+_xsess = {"data": None, "at": 0.0, "sessions": []}
 _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
 _summary_cache = {}
@@ -6413,6 +6413,7 @@ def cross_session():
             day_cost[day] += val
 
     sessions.sort(key=lambda s: -s["mtime"])
+    _xsess["sessions"] = sessions
     mm = []
     for item in model_mix_rows.values():
         provenance = make_usage_provenance(
@@ -6513,6 +6514,17 @@ def cross_session():
     }
     _xsess["data"], _xsess["at"] = data, now
     return data
+
+
+def log_sessions_state():
+    """Return the complete lightweight log inventory outside the polled state payload."""
+    cross = cross_session()
+    sessions = list(_xsess.get("sessions") or cross.get("sessions") or [])
+    return {
+        "generated_at": cross.get("generated_at"),
+        "sessions": sessions,
+        "total_sessions": int(cross.get("total_sessions") or len(sessions)),
+    }
 
 
 def enqueue_latest(q_, data):
@@ -8355,6 +8367,8 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(st or {}), "application/json")
         elif req_path == "/state":
             self._send(json.dumps(current_state()), "application/json")
+        elif req_path == "/logs":
+            self._send(json.dumps(log_sessions_state()), "application/json")
         elif req_path == "/agent-access/status":
             self._send(json.dumps(agent_access_status()), "application/json")
         elif req_path == "/menubar":

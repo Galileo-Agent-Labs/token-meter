@@ -1030,6 +1030,24 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
         self.assertIs(result, fresh)
         self.assertEqual(published[0]["xsession"]["sessions"][0]["id"], "fresh")
 
+    def test_logs_inventory_keeps_full_rows_beyond_state_preview(self):
+        saved_cache = dict(meter._xsess)
+        preview = [{"id": "recent"}]
+        full = [{"id": "recent"}, {"id": "older-claude", "client": "claude_code"}]
+        try:
+            meter._xsess.update({
+                "data": {"generated_at": 123, "sessions": preview, "total_sessions": 2},
+                "at": meter.time.time(),
+                "sessions": full,
+            })
+            result = meter.log_sessions_state()
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+        self.assertEqual(result["sessions"], full)
+        self.assertEqual(result["total_sessions"], 2)
+        self.assertEqual(result["generated_at"], 123)
+
     def test_cross_session_separates_runtime_models_and_reported_alert_basis(self):
         def row(source):
             estimated = source["provider"] == "cursor"
@@ -1258,20 +1276,34 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
 
-    def test_logs_support_project_and_time_range_filters(self):
-        for marker in ("id=g-project", "id=g-time", "Projects filter", "Time range filter",
+    def test_logs_support_app_project_and_time_range_filters(self):
+        for marker in ("id=g-app", "id=g-project", "id=g-time", "App filter",
+                       "Projects filter", "Time range filter", "id=g-active-filters",
                        "id=g-clear", "id=lf-cost", "id=lf-input", "id=lf-output", "id=lf-models"):
             self.assertIn(marker, self.page)
         for value in ("value=24h", "value=7d", "value=30d", "value=90d"):
             self.assertIn(value, self.page)
+        self.assertIn("globalApp&&appFilterGroup(s)!==globalApp", self.page)
+        self.assertIn("['claude','claude_code','claude_desktop'].includes(client)?'claude':client", self.page)
+        self.assertIn("appFilterGroup(session)==='claude'?'Claude'", self.page)
+        self.assertIn("['claude_code','claude_desktop'].includes(globalApp)", self.page)
         self.assertIn("globalProject&&(s.project||'No project')!==globalProject", self.page)
         self.assertIn("Date.now()/1000-rangeSeconds", self.page)
+        self.assertIn("tm_global_app", self.page)
         self.assertIn("tm_global_project", self.page)
         self.assertIn("tm_global_time", self.page)
         self.assertIn("renderLogStats(sessions)", self.page)
         self.assertIn("session.model_stats", self.page)
-        self.assertIn("globalSearch='';globalProject='';globalTime='all'", self.page)
-        self.assertIn("['tm_global_search','tm_global_project','tm_global_time']", self.page)
+        self.assertIn("globalSearch='';globalApp='';globalProject='';globalTime='all'", self.page)
+        self.assertIn("['tm_global_search','tm_global_app','tm_global_project','tm_global_time']", self.page)
+        self.assertIn("fetch('/logs',{cache:'no-store'})", self.page)
+        self.assertIn("logSessionInventory?logSessionInventory:(xs.sessions||[])", self.page)
+
+    def test_current_and_logs_share_the_defined_app_badge_helper(self):
+        self.assertIn("const appBadgeClass=session=>", self.page)
+        self.assertIn("'badge app '+appBadgeClass(s)", self.page)
+        self.assertIn("${appBadgeClass(s)}", self.page)
+        self.assertNotIn("providerBadgeClass", self.page)
 
     def test_session_delete_actions_require_confirmation_and_use_trash_endpoint(self):
         for marker in ("id=session-delete", "data-delete-session", "id=session-delete-dialog",

@@ -2,96 +2,154 @@
 
 Thanks for helping improve Token Meter.
 
-## Local Setup
+## Before you start
 
-Token Meter has no Python package install step. The dashboard server uses only
-the Python standard library.
+- **New feature:** [Open a GitHub issue](https://github.com/Galileo-Agent-Labs/token-meter/issues/new)
+  before writing code or creating a pull request. Describe the problem,
+  proposed behavior, expected UI impact, and any privacy or local-only
+  considerations. Wait until the scope is agreed before implementing it.
+- **Bug fix or documentation improvement:** You may open a pull request
+  directly. A separate issue is optional.
+- **Security issue:** Do not open a public issue or pull request containing
+  exploit details or sensitive data. Follow [SECURITY.md](SECURITY.md).
 
-The normal local setup runs both the dashboard server and the macOS menu bar
-companion:
+## The easiest contribution path
+
+1. Fork the repository, or clone it directly if you have write access.
+2. Create a focused branch for one change.
+3. Reproduce the problem before editing when fixing a bug.
+4. Make the smallest change that solves the problem and add or update tests.
+5. Run the relevant checks below, then open a pull request.
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
-./token-meter/scripts/install
+git clone <your-fork-url>
+cd token-meter
+git switch -c fix/short-description
 ```
 
-Open `http://localhost:8722`.
+## Use a coding agent
 
-You can also check the local health endpoint:
+A coding agent can inspect the repository, implement the change, run tests, and
+prepare the pull request. Start it in the repository and give it a narrow task.
+You can adapt this prompt:
+
+```text
+Help me contribute to Token Meter.
+
+Task: <describe the bug or approved feature>
+Issue: <link the feature issue, or write "bug fix">
+
+Read CONTRIBUTING.md, README.md, and SECURITY.md before editing. Inspect the
+existing implementation and tests, reproduce the bug when possible, and
+preserve unrelated local changes.
+
+If this is a feature and I have not provided an approved issue, stop and ask me
+to open one before editing.
+
+Implement the smallest complete fix. Keep Token Meter local-only,
+dependency-free on the Python server, and read-only toward provider credentials
+and local agent data. Never include prompts, responses, credentials, account
+details, or local session logs in code, tests, commits, or tool output.
+
+Add or update tests and run the relevant validation commands from
+CONTRIBUTING.md. Show me the final diff, test results, and anything you could
+not verify. Do not push or open a pull request until I review the change.
+```
+
+For a feature, give the agent the approved issue and ask it to stay within that
+scope. For a bug, include reproduction steps, expected behavior, and actual
+behavior when you have them.
+
+## Local setup
+
+Token Meter has no Python package installation step. Its Python server uses only
+the standard library.
+
+For the full macOS experience, run the installer from your checkout:
+
+```bash
+./scripts/install
+```
+
+This starts the local server and menu bar companion. Open
+[http://localhost:8722](http://localhost:8722) and check its health with:
 
 ```bash
 curl http://127.0.0.1:8722/health
 ```
 
-The dashboard works best when your machine already has Claude Code, Codex, or
-Cursor session logs under `~/.claude/projects`, `~/.codex/sessions`, or
-`~/.cursor/projects/*/agent-transcripts`.
-
-If no logs exist yet, the app should still start. Run a Claude Code, Codex, or
-Cursor Agent/Composer session and reload the dashboard to see live data.
-
-The menu bar companion requires the Swift toolchain. For dashboard-only
-development or non-macOS testing, run:
+Rerun `./scripts/install` after source changes when you want to test the staged
+runtime. For dashboard-only development, when port 8722 is free, run:
 
 ```bash
 python3 meter.py
 ```
 
-## Development Notes
+The menu bar companion requires the Swift toolchain. Token Meter works best
+when the machine already has Claude, Codex, or Cursor session logs. If it does
+not, the app should still start; create a normal agent session and reload the
+dashboard to see live data.
 
-- Keep the server dependency-free. `meter.py` should continue to use the Python
-  standard library only. `token_meter_mcp.py` follows the same rule.
-- Keep the dashboard local-only. Do not add external telemetry, hosted assets,
-  or network calls from `page.html`.
-- Keep provider quota reads narrow and read-only. Use only the matching
-  first-party usage endpoint or provider-owned local service, fixed HTTPS URLs,
-  hard timeouts, bounded responses, background refreshes, and sanitized errors.
-  Never log, persist, return, or cross-send access tokens, cookies, account IDs,
-  authorization headers, or raw provider response bodies. Do not fabricate a
-  session or weekly window when a provider reports a different cap.
-- Keep Cursor access read-only. The shared `state.vscdb`, its WAL, and request
-  trace logs are enrichment inputs only; deletion may move the exact discovered
-  transcript JSONL but must never modify or remove shared Cursor state.
-- Keep Cursor usage provenance explicit. Input is a one-context-snapshot proxy,
-  output is trace-visible text estimated at four characters per token, and cost
-  uses only a persisted supported model/variant plus its configured public rate.
-  Keep every such value marked `est`; keep cache, hidden reasoning, repeated
-  internal model-call input, and authoritative billing unavailable. Do not let
-  Cursor proxy cost trigger budget/spike intervention alerts.
-- Avoid committing local session logs, generated logs, `.DS_Store`,
-  `__pycache__/`, or `.build/`.
-- If you change screenshots, keep the README image paths under `images/` so
-  GitHub renders them correctly.
+## Where to make changes
+
+| Path | Purpose |
+| --- | --- |
+| `meter.py` | Local server, trace parsing, usage calculations, and HTTP API |
+| `page.html` | Browser dashboard |
+| `menubar/TokenMeterMenuBar.swift` | Native macOS menu bar companion |
+| `token_meter_mcp.py` | Read-only local MCP integration |
+| `tests/` | Python tests |
+| `scripts/` | Installation and runtime helpers |
+
+## Project guardrails
+
+- Keep `meter.py` and `token_meter_mcp.py` dependency-free and on the Python
+  standard library.
+- Keep the dashboard local-only. Do not add external telemetry or hosted assets.
+- Keep provider usage requests narrow, bounded, sanitized, and read-only. Never
+  log, persist, expose, or send credentials or raw provider responses elsewhere.
+- Keep access to Cursor transcripts, shared state, and request traces read-only.
+  Preserve the existing `est` labels and unavailable states for values that are
+  not authoritative.
+- Do not commit local traces, prompts, responses, customer information,
+  credentials, generated logs, `.DS_Store`, `__pycache__/`, or `.build/`.
+- Preserve existing behavior outside the approved issue or reported bug.
+
+See [SECURITY.md](SECURITY.md) for the full security and privacy model.
 
 ## Validation
 
-Run the lightweight checks before opening a pull request:
+Run these checks from the repository root before opening a pull request:
 
 ```bash
 PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
 python3 -m unittest discover -s tests -v
 bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent
-swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
-TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
+git diff --check
 ```
 
-If you do not have the Swift toolchain installed, mention that in the pull
-request and run the Python and JavaScript checks.
+For menu bar changes, also run:
 
-## Pull Requests
+```bash
+swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
+TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
+```
 
-For new features, please open a feature request first before sending a pull
-request. Include the problem, proposed behavior, expected UI impact, and any
-privacy or local-only considerations. This keeps the project from accumulating
-half-finished dashboard surfaces or overlapping feature ideas.
+For visible dashboard or menu bar changes, test the behavior in the running app
+and include a screenshot. If you cannot run a check—for example, because the
+Swift toolchain is unavailable—say so in the pull request.
 
-Small bug fixes, documentation fixes, validation updates, and screenshot
-refreshes can go straight to a pull request.
+## Pull request checklist
 
-Please include:
+Keep the pull request focused and include:
 
+- The problem and why the change is needed.
 - What changed.
-- Why it changed.
-- How you validated it.
+- The feature-issue link, when applicable.
+- The validation commands run and their results.
 - Screenshots for visible dashboard or menu bar changes.
+- Any limitations, skipped checks, or follow-up work.
+
+Before submitting, review the diff for sensitive local data and unrelated
+changes.

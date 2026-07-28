@@ -13,10 +13,10 @@ turns them into one live dashboard.
 | **Understand past usage** | Search runs from Claude, Codex, and Cursor together. Filter by project or time, review daily trends, and see what is driving cost and delays. |
 | **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
-| **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
+| **Check provider limits** | Use the desktop companion—tabs on macOS and provider submenus on Linux—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts, or use the searchable glossary when a metric is unfamiliar. |
-| **Keep data private** | Run analysis stays on your Mac and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
+| **Keep data private** | Run analysis stays on your computer and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
 
 Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, the
 Codex desktop app, and Cursor Agent/Composer. It follows local agent logs as they are written and
@@ -30,23 +30,24 @@ machine.
 
 ### Install From Terminal
 
-On macOS, clone the repository and run its installer:
+On macOS or Linux, clone the repository and run its installer:
 
 ```bash
 git clone https://github.com/Galileo-Agent-Labs/token-meter.git
 ./token-meter/scripts/install
 ```
 
-The installer checks the required tools, installs the server and menu bar login
-items,
-waits for the local server, verifies both endpoints, prints
+The installer checks the required tools, installs the server and desktop tray
+startup items, waits for the local server, verifies both endpoints, prints
 `Token Meter installation complete`, and returns control to your terminal.
-It copies the runtime into `~/Library/Application Support/Token Meter/runtime`,
-so the cloned folder is not used for automatic startup.
+It copies a stable runtime outside the clone: the macOS default is
+`~/Library/Application Support/Token Meter/runtime`; the Linux default is
+`~/.local/share/token-meter/runtime`. The clone is not used for automatic startup.
 
 ### Install With A Coding Agent
 
-Paste this prompt into a coding agent that can run commands on your Mac:
+On macOS, you can paste this prompt into a coding agent that can run commands
+on your Mac:
 
 ```text
 Install Token Meter from https://github.com/Galileo-Agent-Labs/token-meter.git.
@@ -197,18 +198,18 @@ observation establishes a baseline and never sends a catch-up notification.
 
 ## Requirements
 
-- Python 3.8 or newer. The macOS package first tries `/usr/bin/python3`, then
-  Homebrew and user `python3` installs.
+- Python 3.8 or newer.
 - Claude Code CLI, Codex CLI, Claude Desktop Agent/Cowork, and/or the Codex
   desktop app if you want live log data.
-- macOS with the Swift toolchain, usually from Xcode Command Line Tools, when
-  running from source. The macOS package includes a prebuilt menu bar binary.
+- macOS: the Swift toolchain, usually from Xcode Command Line Tools.
+- Linux: systemd user services, GTK 3, PyGObject, and Ayatana AppIndicator. KDE exposes AppIndicator items
+  natively; GNOME requires an AppIndicator/KStatusNotifierItem shell extension (Ubuntu enables one by default).
 - `curl`, used by the helper scripts.
 
 The web dashboard has no third-party Python packages. `meter.py` uses only the
-Python standard library. Dashboard-only mode is available for development,
-troubleshooting, and non-macOS use, but the normal experience includes the menu
-bar companion.
+Python standard library. Dashboard-only mode is available for development and
+troubleshooting, but the normal experience includes the macOS menu bar or Linux
+desktop tray companion.
 
 ## Ask From Codex Or Claude
 
@@ -241,7 +242,7 @@ When a tool is called, its derived result enters the connected agent's context
 and may be processed by that client's model provider under the client's own
 terms. Token Meter does not send trace content or derived analytics itself;
 menu-bar quota sync separately makes read-only usage requests to the provider
-accounts already signed in on this Mac.
+accounts already signed in on this computer.
 
 For source installs, the equivalent manual commands are:
 
@@ -263,28 +264,41 @@ alerts remain the proactive channels.
 
 ## Automatic Startup And Uninstall
 
-The installer creates separate user LaunchAgents for the local server and menu
-bar companion. Both start after login and use `KeepAlive`, so macOS restarts
-either process independently if it exits. Remove both login items with:
+On macOS, the installer creates separate user LaunchAgents for the local server
+and menu bar companion. Both start after login and use `KeepAlive`. Remove them with:
 
 ```bash
 "$HOME/Library/Application Support/Token Meter/runtime/scripts/uninstall-launch-agent"
 ```
 
+On Linux, separate `token-meter-server.service` and `token-meter-tray.service`
+user units provide the same supervision. Remove them with:
+
+```bash
+"${XDG_DATA_HOME:-$HOME/.local/share}/token-meter/runtime/scripts/uninstall-systemd-user"
+```
+
+Inspect either service with:
+
+```bash
+systemctl --user status token-meter-server token-meter-tray
+```
+
 ## Dashboard-Only Mode
 
-For development, troubleshooting, or non-macOS use, run only the local web
+For development, troubleshooting, or headless use, run only the local web
 dashboard:
 
 ```bash
 python3 meter.py
 ```
 
-The menu bar companion polls the local `/menubar` endpoint. Run shows compact
-status for the active log; All and the provider tabs show cached account quota
-snapshots. The Recent sessions section labels each entry as Claude, Codex, or
-Cursor, uses the session title or project as an identifier, and keeps a selected
-pin in macOS preferences. Choose `Follow Latest` to resume automatic tracking.
+The desktop companion polls the local `/menubar` endpoint. It shows compact status
+for the active log and cached account quota snapshots. macOS presents tabs; Linux
+presents equivalent provider submenus. Recent sessions show the provider plus the
+session title or project, and the selected pin is kept in platform user
+preferences. Choose `Follow Latest` to resume automatic
+tracking.
 The companion does not parse logs or read provider credentials directly.
 
 ## How It Finds Logs
@@ -293,12 +307,15 @@ Token Meter reads local log stores:
 
 ```text
 Claude Code CLI:          ~/.claude/projects/*/*.jsonl
-Claude Desktop metadata:  ~/Library/Application Support/{Claude,Claude-3p}/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
-Claude Desktop Agent:     ~/Library/Application Support/{Claude,Claude-3p}/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
+Claude Desktop metadata (macOS):  ~/Library/Application Support/{Claude,Claude-3p}/{claude-code-sessions,local-agent-mode-sessions}/**/local_*.json
+Claude Desktop Agent (macOS):     ~/Library/Application Support/{Claude,Claude-3p}/local-agent-mode-sessions/**/.claude/projects/*/*.jsonl
 Codex CLI + desktop app:   ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
 Cursor transcript anchor:  ~/.cursor/projects/*/agent-transcripts/<composer-id>/<composer-id>.jsonl
-Cursor conversation data:  ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
-Cursor request timing:      ~/Library/Application Support/Cursor/logs/**/cursor.requestTraces.log
+Cursor conversation data (macOS):  ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb
+Cursor request timing (macOS):      ~/Library/Application Support/Cursor/logs/**/cursor.requestTraces.log
+Claude Desktop data (Linux):        ~/.config/{Claude,Claude-3p}/...
+Cursor conversation data (Linux):     ~/.config/Cursor/User/globalStorage/state.vscdb
+Cursor request timing (Linux):         ~/.config/Cursor/logs/**/cursor.requestTraces.log
 ```
 
 Claude Desktop metadata contains the Desktop title, project directory, model,
@@ -404,7 +421,7 @@ The summary above the matching logs recalculates filtered cost, total input
 (fresh plus cached), output tokens, executions, cumulative wait, and per-model
 cost and token mix whenever any filter changes.
 Each row has a Delete action. Deletion requires an explicit confirmation and
-moves the exact discovered JSONL file to macOS Trash so it remains recoverable.
+moves the exact discovered JSONL file to the system Trash so it remains recoverable.
 Provider metadata, project files, and configuration are not changed.
 Its live snapshot watches every discovered log, so a background Claude update
 appears without waiting for a newer Codex session (or vice versa). If a browser
@@ -576,9 +593,9 @@ Use the notification toggle in the top-right of the dashboard. If notifications
 were previously blocked for `localhost`, clear the block in browser site
 settings and toggle notifications again.
 
-### The menu bar companion will not build
+### The desktop companion will not start
 
-Check that `swiftc` is available:
+On macOS, check that `swiftc` is available:
 
 ```bash
 swiftc --version
@@ -590,12 +607,32 @@ On macOS, install the Xcode Command Line Tools if needed:
 xcode-select --install
 ```
 
+On Linux, install the tray dependencies for your distribution:
+
+```bash
+# Debian / Ubuntu
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
+
+# Fedora
+sudo dnf install python3-gobject libayatana-appindicator-gtk3
+
+# Arch Linux
+sudo pacman -S python-gobject libayatana-appindicator
+```
+
+KDE Plasma displays the tray item through StatusNotifier. On GNOME, enable an
+AppIndicator/KStatusNotifierItem shell extension if the item does not appear.
+Check service logs with `journalctl --user -u token-meter-tray.service -n 50`.
+
 ## Validate
 
 Run these checks from the repository root:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py
+PYTHONPYCACHEPREFIX=/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py menubar/token_meter_tray.py
+bash -n scripts/*
+
+# macOS companion
 swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
@@ -619,13 +656,16 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |   |-- tool-analytics.png           # README tools and skills screenshot
 |   `-- menu-bar-widget.png          # README menu bar screenshot
 |-- menubar/
-|   `-- TokenMeterMenuBar.swift      # native macOS menu bar companion
+|   |-- TokenMeterMenuBar.swift      # native macOS menu bar companion
+|   `-- token_meter_tray.py          # Linux KDE/GNOME AppIndicator tray
 |-- scripts/
 |   |-- install                      # complete human or agent-driven install
 |   |-- run-menubar                  # build and run the menu bar companion
 |   |-- start-token-meter            # start server if needed, then menu bar
-|   |-- install-launch-agent         # install server and menu login items
-|   `-- uninstall-launch-agent       # remove both macOS login items
+|   |-- install-launch-agent         # install macOS login items
+|   |-- uninstall-launch-agent       # remove macOS login items
+|   |-- install-systemd-user         # install Linux user services
+|   `-- uninstall-systemd-user       # remove Linux user services
 |-- REQUIREMENTS.md                  # product rationale and historical notes
 |-- CONTRIBUTING.md
 |-- SECURITY.md

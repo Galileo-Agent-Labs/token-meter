@@ -2137,6 +2137,31 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('launchctl bootout "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('rm -f "$MENUBAR_PLIST" "$SERVER_PLIST"', script)
 
+    def test_linux_installer_uses_xdg_runtime_systemd_and_appindicator_tray(self):
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "scripts" / "install").read_text()
+        systemd = (root / "scripts" / "install-systemd-user").read_text()
+        runner = (root / "scripts" / "run-menubar").read_text()
+        tray = (root / "menubar" / "token_meter_tray.py").read_text()
+        self.assertIn("XDG_DATA_HOME", installer)
+        self.assertIn("install-systemd-user", installer)
+        self.assertIn("systemctl --user is-active", installer)
+        self.assertIn("token-meter-server.service", systemd)
+        self.assertIn("token-meter-tray.service", systemd)
+        self.assertEqual(systemd.count("Restart=on-failure"), 2)
+        self.assertIn("Linux)", runner)
+        self.assertIn("AyatanaAppIndicator3", tray)
+        self.assertIn("AppIndicator3", tray)
+        self.assertIn("XDG_CONFIG_HOME", tray)
+
+    def test_linux_runtime_uses_xdg_desktop_and_trash_paths(self):
+        if not meter.IS_LINUX:
+            self.skipTest("Linux-specific default paths")
+        self.assertTrue(meter.CURSOR_STATE_DB.startswith(meter.XDG_CONFIG_HOME))
+        self.assertTrue(all(path.startswith(meter.XDG_CONFIG_HOME)
+                            for path in meter.CLAUDE_DESKTOP_DATA_ROOTS))
+        self.assertEqual(meter.session_action_capability()["destination"], "Trash")
+
 
 class AgentAccessTests(unittest.TestCase):
     def test_client_environment_prepends_wrapper_runtime_directory(self):

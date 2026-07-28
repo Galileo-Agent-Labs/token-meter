@@ -2,7 +2,16 @@
 set -euo pipefail
 
 SOURCE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-INSTALL_ROOT="${TOKEN_METER_INSTALL_ROOT:-$HOME/Library/Application Support/Token Meter/runtime}"
+PLATFORM="$(uname -s)"
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  DEFAULT_INSTALL_ROOT="$HOME/Library/Application Support/Token Meter/runtime"
+elif [[ "$PLATFORM" == "Linux" ]]; then
+  DEFAULT_INSTALL_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/token-meter/runtime"
+else
+  echo "Token Meter installation failed: supported platforms are macOS and Linux." >&2
+  exit 1
+fi
+INSTALL_ROOT="${TOKEN_METER_INSTALL_ROOT:-$DEFAULT_INSTALL_ROOT}"
 SERVER_LABEL="com.token-meter.server"
 MENUBAR_LABEL="com.token-meter.menubar"
 HEALTH_URL="http://127.0.0.1:8722/health"
@@ -14,11 +23,13 @@ fail() {
   exit 1
 }
 
-if [[ "$(uname -s)" != "Darwin" ]]; then
-  fail "the menu bar installer requires macOS."
+required_commands=(git python3 curl)
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  required_commands+=(swiftc launchctl ditto)
+else
+  required_commands+=(systemctl cp)
 fi
-
-for command_name in git python3 swiftc curl launchctl ditto; do
+for command_name in "${required_commands[@]}"; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     if [[ "$command_name" == "swiftc" ]]; then
       fail "swiftc is missing. Install the Xcode Command Line Tools, then run this script again."
@@ -27,16 +38,24 @@ for command_name in git python3 swiftc curl launchctl ditto; do
   fi
 done
 
-for required_path in \
-  "$SOURCE_ROOT/meter.py" \
-  "$SOURCE_ROOT/page.html" \
-  "$SOURCE_ROOT/token_meter_mcp.py" \
-  "$SOURCE_ROOT/menubar/TokenMeterMenuBar.swift" \
-  "$SOURCE_ROOT/scripts/install-launch-agent" \
-  "$SOURCE_ROOT/scripts/run-menubar" \
-  "$SOURCE_ROOT/scripts/start-token-meter"; do
-  [[ -e "$required_path" ]] || fail "the repository checkout is incomplete: $required_path is missing."
+required_paths=(
+  meter.py page.html token_meter_mcp.py menubar/TokenMeterMenuBar.swift
+  scripts/install-launch-agent scripts/run-menubar scripts/start-token-meter
+)
+if [[ "$PLATFORM" == "Linux" ]]; then
+  required_paths+=(menubar/token_meter_tray.py scripts/install-systemd-user scripts/uninstall-systemd-user)
+fi
+for relative_path in "${required_paths[@]}"; do
+  [[ -e "$SOURCE_ROOT/$relative_path" ]] \
+    || fail "the repository checkout is incomplete: $SOURCE_ROOT/$relative_path is missing."
 done
+
+if [[ "$PLATFORM" == "Linux" ]] && ! "$SOURCE_ROOT/scripts/run-menubar" --check; then
+  fail "the Linux tray dependencies are missing. Install the GTK/AppIndicator packages shown above, then retry."
+fi
+if [[ "$PLATFORM" == "Linux" ]] && ! systemctl --user show-environment >/dev/null 2>&1; then
+  fail "the systemd user manager is unavailable. Log into a systemd-based KDE or GNOME desktop session, then retry."
+fi
 
 echo "Installing Token Meter from:"
 echo "  $SOURCE_ROOT"
@@ -45,13 +64,21 @@ echo "  $INSTALL_ROOT"
 
 mkdir -p "$INSTALL_ROOT/menubar" "$INSTALL_ROOT/scripts"
 for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
-  if [[ -f "$SOURCE_ROOT/$runtime_file" ]]; then
+  [[ -f "$SOURCE_ROOT/$runtime_file" ]] || continue
+  if [[ "$PLATFORM" == "Darwin" ]]; then
     ditto "$SOURCE_ROOT/$runtime_file" "$INSTALL_ROOT/$runtime_file"
+  else
+    cp -p "$SOURCE_ROOT/$runtime_file" "$INSTALL_ROOT/$runtime_file"
   fi
 done
-ditto "$SOURCE_ROOT/menubar" "$INSTALL_ROOT/menubar"
-ditto "$SOURCE_ROOT/scripts" "$INSTALL_ROOT/scripts"
-chmod 755 "$INSTALL_ROOT"/scripts/*
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  ditto "$SOURCE_ROOT/menubar" "$INSTALL_ROOT/menubar"
+  ditto "$SOURCE_ROOT/scripts" "$INSTALL_ROOT/scripts"
+else
+  cp -Rp "$SOURCE_ROOT/menubar/." "$INSTALL_ROOT/menubar/"
+  cp -Rp "$SOURCE_ROOT/scripts/." "$INSTALL_ROOT/scripts/"
+fi
+chmod 755 "$INSTALL_ROOT"/scripts/* "$INSTALL_ROOT/menubar/token_meter_tray.py"
 
 commit="$(git -C "$SOURCE_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 if [[ -n "$commit" ]]; then
@@ -61,7 +88,11 @@ if [[ -n "$commit" ]]; then
   printf '%s\n' "$commit" > "$INSTALL_ROOT/INSTALLED_REVISION"
 fi
 
-"$INSTALL_ROOT/scripts/install-launch-agent"
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  "$INSTALL_ROOT/scripts/install-launch-agent"
+else
+  "$INSTALL_ROOT/scripts/install-systemd-user"
+fi
 
 health_json=""
 for _ in $(seq 1 80); do
@@ -73,34 +104,42 @@ for _ in $(seq 1 80); do
 done
 
 if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": true'* ]]; then
-  if [[ -f "$INSTALL_ROOT/menubar.err.log" ]]; then
-    tail -n 30 "$INSTALL_ROOT/menubar.err.log" >&2 || true
-  fi
-  if [[ -f "$INSTALL_ROOT/meter.err.log" ]]; then
-    tail -n 30 "$INSTALL_ROOT/meter.err.log" >&2 || true
-  fi
-  if [[ -f "$INSTALL_ROOT/meter.log" ]]; then
-    tail -n 30 "$INSTALL_ROOT/meter.log" >&2 || true
+  if [[ "$PLATFORM" == "Darwin" ]]; then
+    for log in menubar.err.log meter.err.log meter.log; do
+      [[ -f "$INSTALL_ROOT/$log" ]] && tail -n 30 "$INSTALL_ROOT/$log" >&2 || true
+    done
+  else
+    journalctl --user -u token-meter-server.service -n 30 --no-pager >&2 || true
   fi
   fail "the local server did not become ready at $HEALTH_URL."
 fi
 
-if ! server_launch_state="$(launchctl print "gui/$UID/$SERVER_LABEL" 2>&1)"; then
-  fail "the local server LaunchAgent was not registered."
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  if ! server_launch_state="$(launchctl print "gui/$UID/$SERVER_LABEL" 2>&1)"; then
+    fail "the local server LaunchAgent was not registered."
+  fi
+  [[ "$server_launch_state" == *"$INSTALL_ROOT/meter.py"* ]] \
+    || fail "a different Token Meter installation owns the local server LaunchAgent."
+  if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
+    fail "the menu bar LaunchAgent was not registered."
+  fi
+  [[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
+    || fail "a different Token Meter installation owns the menu bar LaunchAgent."
+else
+  systemctl --user is-active --quiet token-meter-server.service \
+    || fail "token-meter-server.service is not running."
+  systemctl --user is-active --quiet token-meter-tray.service \
+    || { journalctl --user -u token-meter-tray.service -n 30 --no-pager >&2 || true; fail "token-meter-tray.service is not running."; }
+  server_fragment="$(systemctl --user show token-meter-server.service -p FragmentPath --value)"
+  tray_fragment="$(systemctl --user show token-meter-tray.service -p FragmentPath --value)"
+  [[ "$server_fragment" == "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/token-meter-server.service" ]] \
+    || fail "a different unit owns token-meter-server.service."
+  [[ "$tray_fragment" == "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/token-meter-tray.service" ]] \
+    || fail "a different unit owns token-meter-tray.service."
 fi
-[[ "$server_launch_state" == *"$INSTALL_ROOT/meter.py"* ]] \
-  || fail "a different Token Meter installation owns the local server LaunchAgent."
-if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
-  fail "the menu bar LaunchAgent was not registered."
-fi
-[[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
-  || fail "a different Token Meter installation owns the menu bar LaunchAgent."
 
 printf '%s' "$health_json" | python3 -c '
-import json
-import os
-import sys
-
+import json, os, sys
 root = os.path.realpath(sys.argv[1])
 payload = json.load(sys.stdin)
 raw_page = payload.get("page_path")
@@ -110,23 +149,21 @@ try:
 except ValueError:
     matches = False
 if not matches:
-    shown_page = page or "unknown"
-    raise SystemExit(
-        "Token Meter installation failed: a different server owns port 8722 "
-        f"(page_path={shown_page})."
-    )
+    raise SystemExit("Token Meter installation failed: a different server owns port 8722 "
+                     f"(page_path={page or 'unknown'}).")
 ' "$INSTALL_ROOT"
 
-curl -fsS --max-time 5 "$MENUBAR_URL" \
-  | python3 -c 'import json, sys; json.load(sys.stdin)' \
-  || fail "the menu bar endpoint did not return valid JSON."
+curl -fsS --max-time 5 "$MENUBAR_URL" | python3 -c 'import json, sys; json.load(sys.stdin)' \
+  || fail "the menu endpoint did not return valid JSON."
 
 echo
 echo "Token Meter installation complete."
 echo "Dashboard: $DASHBOARD_URL"
 echo "Starts automatically after you log in."
 echo "Runtime: $INSTALL_ROOT"
-if [[ -n "$commit" ]]; then
-  echo "Installed commit: $commit"
+[[ -n "$commit" ]] && echo "Installed commit: $commit"
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  echo "Uninstall: $INSTALL_ROOT/scripts/uninstall-launch-agent"
+else
+  echo "Uninstall: $INSTALL_ROOT/scripts/uninstall-systemd-user"
 fi
-echo "Uninstall: $INSTALL_ROOT/scripts/uninstall-launch-agent"

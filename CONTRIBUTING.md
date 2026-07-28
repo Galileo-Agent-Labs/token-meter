@@ -65,7 +65,8 @@ behavior when you have them.
 Token Meter has no Python package installation step. Its Python server uses only
 the standard library.
 
-For the full macOS experience, run the installer from your checkout:
+For the full macOS or Linux desktop experience, run the installer from your
+checkout:
 
 ```bash
 ./scripts/install
@@ -85,7 +86,8 @@ runtime. For dashboard-only development, when port 8722 is free, run:
 python3 meter.py
 ```
 
-The menu bar companion requires the Swift toolchain. Token Meter works best
+The macOS menu bar companion requires the Swift toolchain. The Linux tray requires
+GTK 3, PyGObject, and Ayatana AppIndicator. Token Meter works best
 when the machine already has Claude, Codex, or Cursor session logs. If it does
 not, the app should still start; create a normal agent session and reload the
 dashboard to see live data.
@@ -122,9 +124,9 @@ See [SECURITY.md](SECURITY.md) for the full security and privacy model.
 Run these checks from the repository root before opening a pull request:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
+PYTHONPYCACHEPREFIX=/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py menubar/token_meter_tray.py
 python3 -m unittest discover -s tests -v
-bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent
+bash -n scripts/*
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
 git diff --check
 ```

@@ -55,10 +55,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .notify.on .sw{background:var(--good)} .notify.on .sw:after{left:16px}
 .notify.hasnew{border-color:rgba(0,188,235,.52);box-shadow:0 0 0 1px rgba(0,188,235,.12),var(--inset)}
 .view{display:none}.view.on{display:block}
-.session-tabs,.global-tabs{margin:14px 0 16px;max-width:100%;overflow-x:auto;scrollbar-color:var(--line2) transparent}
-.session-tabs button,.global-tabs button{white-space:nowrap}
+.session-tabs{margin:14px 0 16px;max-width:100%;overflow-x:auto;scrollbar-color:var(--line2) transparent}
+.session-tabs button{white-space:nowrap}
 .session-panel{display:none}.session-panel.on{display:block}
-.global-panel{display:none}.global-panel.on{display:block}
 .card{background:linear-gradient(180deg,rgba(20,28,37,.95),rgba(13,18,24,.96));border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);position:relative;min-width:0}
 .card:hover{border-color:rgba(255,255,255,.12)}
 .pad{padding:18px}
@@ -99,6 +98,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .subline{margin-top:10px;color:var(--dim);font-size:13px}.subline b{color:var(--fg)}
 .frozen{display:none;margin-top:10px;font-size:12px;color:var(--warn);font-weight:760}.frozen.on{display:block}
 .statgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.hero>.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.usageDetails{margin-top:12px;border:1px solid var(--line2);border-radius:10px;background:rgba(255,255,255,.018);box-shadow:var(--shadow-soft);overflow:hidden}.usageDetails>summary{display:flex;align-items:baseline;gap:10px;padding:13px 15px;cursor:pointer;font-weight:820;list-style-position:inside}.usageDetails>summary:hover{background:rgba(255,255,255,.025)}.usageDetails>summary small{font-size:11px;color:var(--faint);font-weight:620}.usageDetailsBody{padding:0 14px 16px;border-top:1px solid var(--line)}.usageSplit{margin-top:14px}.usageSplit .splithead{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}.usageSplit .bar{height:26px}.usageSplit .legend{gap:10px;margin-top:8px}.usageDetailGrid{margin-top:10px}
 .stat{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));border:1px solid var(--line);border-radius:8px;padding:12px 14px;box-shadow:var(--shadow-soft);min-width:0}
 .stat .v{font-size:23px;font-weight:800;margin-top:4px;overflow:hidden;text-overflow:ellipsis}.stat .sm{font-size:11.5px;color:var(--faint)}
 .overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;position:relative;z-index:2}.ov{padding:14px 15px;overflow:visible;min-height:92px;min-width:0}.ov:hover,.ov:focus-within{z-index:24}.ov:before{content:"";position:absolute;left:14px;right:14px;top:0;height:2px;background:linear-gradient(90deg,var(--orange),transparent);opacity:.78}.ov .v{font-size:22px;font-weight:800;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ov.time .v{font-size:13px;line-height:1.35;letter-spacing:0;white-space:normal}.ov .sm{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -133,6 +134,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .toolhead{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;margin-bottom:12px}.toolhead>div:first-child{min-width:0}.toolhead .seg{flex-wrap:wrap;justify-content:flex-end}.sortseg{max-width:100%;overflow-x:auto;scrollbar-color:var(--line2) transparent}.sortseg button{white-space:nowrap}.toolnote{font-size:11.5px;color:var(--faint);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.execTools{display:flex;flex:1 1 auto;min-height:0;flex-direction:column;gap:8px;overflow:auto;scrollbar-color:var(--line2) transparent}.execRow{border:1px solid var(--line);border-radius:8px;padding:10px 11px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));box-shadow:var(--inset);min-width:0}.execRow:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025))}.execRow .head{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:baseline;gap:10px;font-size:12px;color:var(--dim);margin-bottom:7px;min-width:0}.execTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.execMeta{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:11px;border:1px solid var(--line);background:rgba(255,255,255,.045);border-radius:999px;padding:3px 7px;color:var(--dim);box-shadow:var(--inset)}.chip.mcp{color:#d4c0ff;border-color:rgba(183,140,255,.42);background:rgba(183,140,255,.12)}
 .insights{display:grid;gap:12px}.insightBoard{display:grid;grid-template-columns:minmax(340px,.92fr) minmax(420px,1.08fr);gap:12px;align-items:start}.insightLead{min-width:0;min-height:196px;border:1px solid rgba(255,255,255,.13);border-radius:8px;background:linear-gradient(180deg,rgba(25,36,46,.96),rgba(12,17,23,.98));box-shadow:var(--shadow);padding:16px;overflow:hidden;position:relative}.insightLead:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--warn),var(--orange),transparent)}.insightLead.good:before{background:linear-gradient(90deg,var(--good),var(--orange),transparent)}.insightLead.neutral:before{background:linear-gradient(90deg,var(--accent),rgba(127,219,242,.52),transparent)}.insightLead .topline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.insightLead .kind{font-size:11px;text-transform:uppercase;letter-spacing:0;color:var(--faint);font-weight:820}.insightLead .badge2{font-size:11px;border:1px solid var(--line2);border-radius:999px;padding:3px 8px;color:var(--dim);background:rgba(255,255,255,.045);box-shadow:var(--inset);white-space:nowrap}.insightLead .title{font-size:24px;line-height:1.12;font-weight:830;margin-bottom:9px;letter-spacing:0}.insightLead .body{font-size:13.5px;color:var(--dim);max-width:62ch}.insightLead .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.insightLead .meta span{border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:8px;padding:5px 8px;color:var(--dim);font-size:12px}.insightSide{display:grid;gap:10px;min-width:0}.insightCounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.insightCount{border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));padding:10px 11px;box-shadow:var(--inset);min-width:0}.insightCount .n{font-size:22px;font-weight:830;line-height:1}.insightCount .l{font-size:11px;text-transform:uppercase;color:var(--faint);font-weight:780;margin-top:5px}.insightCount.warn .n{color:var(--warn)}.insightCount.good .n{color:var(--good)}.insightCount.neutral .n{color:var(--orange3)}.insightList{display:grid;gap:8px}.ins{min-width:0;background:linear-gradient(180deg,rgba(255,255,255,.052),rgba(255,255,255,.022));border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:10px 11px;font-size:13px;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:9px;align-items:center;box-shadow:var(--inset);transition:border-color .16s,background .16s,transform .16s}.ins:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.028));transform:translateY(-1px)}.ins.good{border-left-color:var(--good)}.ins.warn{border-left-color:var(--warn)}.ins.neutral{border-left-color:var(--accent)}.ins .glyph{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-weight:860;background:rgba(255,255,255,.05);border:1px solid var(--line);box-shadow:var(--inset)}.ins.good .glyph{color:var(--good);border-color:rgba(102,217,144,.32);background:rgba(102,217,144,.08)}.ins.warn .glyph{color:var(--warn);border-color:rgba(255,180,87,.36);background:rgba(255,180,87,.08)}.ins.neutral .glyph{color:var(--orange3);border-color:rgba(0,188,235,.32);background:rgba(0,188,235,.08)}.ins .copy{min-width:0}.ins .title{font-size:12px;font-weight:820;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ins .text{font-size:12.5px;color:var(--dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ins .meta{font-size:11px;color:var(--faint);border:1px solid var(--line);border-radius:999px;padding:3px 7px;background:rgba(255,255,255,.03);white-space:nowrap}.ins.empty{grid-template-columns:minmax(0,1fr);padding:18px;color:var(--dim);border-left-color:var(--accent)}
 .insightLead .body{white-space:normal}.insightLead .detail,.insightLead .action{font-size:12.5px;line-height:1.38;margin-top:9px;color:var(--dim)}.insightLead .action{color:var(--fg);border-left:3px solid var(--orange);padding-left:9px}.insightBoard.flat{grid-template-columns:1fr}.insightBoard.flat .insightSide{gap:12px}.insightGroups{display:grid;gap:12px}.insGroup{display:grid;gap:8px;min-width:0}.insGroupHead{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--faint);font-size:11px;text-transform:uppercase;font-weight:820;padding:0 2px}.insGroupHead b{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 7px;background:rgba(255,255,255,.035)}.insightList{gap:8px}.ins{align-items:start}.ins .text{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ins .detail{font-size:11.7px;color:var(--faint);margin-top:5px;line-height:1.35}.ins .action{font-size:11.8px;color:var(--fg);margin-top:6px;line-height:1.35;border-left:3px solid rgba(0,188,235,.62);padding-left:8px}.ins .meta{align-self:start}.cfg{margin-top:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--dim);background:rgba(17,24,32,.84);border:1px solid var(--line);border-radius:8px;padding:13px 15px;box-shadow:var(--shadow-soft)}.notifygrid>.cfg{margin-top:0;align-self:stretch}.cfg label{display:flex;align-items:center;gap:7px}.cfg input{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--fg);border-radius:8px;padding:7px 9px;width:82px;font:inherit}.cfg input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.tbtn{border:1px solid var(--line2);background:linear-gradient(180deg,rgba(0,188,235,.18),rgba(0,188,235,.08));color:var(--fg);border-radius:8px;padding:7px 10px;font:inherit;font-size:12px;font-weight:720;cursor:pointer}.tbtn:hover{border-color:rgba(0,188,235,.56);background:linear-gradient(180deg,rgba(0,188,235,.24),rgba(0,188,235,.1))}.cfgnote{font-size:12px;color:var(--faint);min-width:190px}
+.sessionBudget{margin-top:12px;padding:12px 14px;display:grid;gap:9px;overflow:visible}.sessionBudgetHead,.sessionBudgetMeta{display:flex;align-items:center;justify-content:space-between;gap:14px}.sessionBudgetHead>div:first-child{min-width:0}.sessionBudgetExact{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:12px;white-space:nowrap}.sessionBudgetExact input{width:86px;background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:8px;color:var(--fg);padding:7px 9px;font:750 13px ui-monospace,"SF Mono",Menlo,monospace}.sessionBudgetExact input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.sessionBudgetTrack{display:grid;grid-template-columns:52px minmax(120px,1fr) 60px;align-items:center;gap:10px}.sessionBudgetTrack>span{font-size:10.5px;color:var(--faint)}.sessionBudgetTrack>span:last-child{text-align:right}.sessionBudgetTrack input[type=range]{--budget-fill:0%;appearance:none;-webkit-appearance:none;width:100%;height:22px;margin:0;background:transparent;cursor:pointer}.sessionBudgetTrack input[type=range]::-webkit-slider-runnable-track{height:7px;border:1px solid var(--line2);border-radius:999px;background:linear-gradient(90deg,var(--accent) 0 var(--budget-fill),rgba(255,255,255,.075) var(--budget-fill) 100%);box-shadow:var(--inset)}.sessionBudgetTrack input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;border:2px solid #dff8ff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,188,235,.15),0 3px 10px rgba(0,0,0,.45)}.sessionBudgetTrack input[type=range]:focus-visible{outline:none}.sessionBudgetTrack input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 5px rgba(0,188,235,.28),0 3px 10px rgba(0,0,0,.45)}.sessionBudgetTrack input[type=range]::-moz-range-track{height:7px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.075)}.sessionBudgetTrack input[type=range]::-moz-range-progress{height:7px;border-radius:999px;background:var(--accent)}.sessionBudgetTrack input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid #dff8ff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,188,235,.15)}.sessionBudgetMeta{font-size:11.5px;color:var(--faint)}.sessionBudgetMeta span:first-child{color:var(--dim);font-weight:680}
 .notifygrid{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(320px,1.15fr);gap:14px;margin-top:14px}.notifylog{max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:8px;scrollbar-color:var(--line2) transparent}.logrow{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:rgba(255,255,255,.035);box-shadow:var(--inset)}.logrow .h{display:flex;justify-content:space-between;gap:10px;font-size:12px;font-weight:760}.logrow .b{font-size:12px;color:var(--dim);margin-top:2px}.logrow.warn{border-color:rgba(255,180,87,.38)}.logrow.bad{border-color:rgba(255,111,111,.38)}
 .toastbox{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:9px;width:min(360px,calc(100vw - 28px));pointer-events:none}.toast{pointer-events:auto;border:1px solid rgba(0,188,235,.38);border-left:4px solid var(--orange);border-radius:8px;background:linear-gradient(180deg,rgba(24,34,44,.98),rgba(13,18,24,.98));box-shadow:0 16px 42px rgba(0,0,0,.42);padding:10px 12px;animation:enter .18s ease}.toast.warn{border-left-color:var(--warn);border-color:rgba(255,180,87,.42)}.toast.bad{border-left-color:var(--bad);border-color:rgba(255,111,111,.42)}.toast .th{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;font-size:13px;font-weight:780}.toast .tb{font-size:12px;color:var(--dim);margin-top:2px}.toast button{border:0;background:transparent;color:var(--faint);font:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0}.toast button:hover{color:var(--fg)}
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
@@ -157,18 +159,29 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .frustrationTrendCard{margin-top:12px;padding:16px 17px 13px}.frustrationTrendCard .modelTrendHead{align-items:center}.frustrationChart{height:286px}.frustrationLegend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:var(--dim);font-size:11px}.frustrationLegend span{white-space:nowrap}.frustrationLegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}.frustrationLegend .rateDot{border-radius:50%;background:var(--warn)}
 .frustrationBreakdown{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(250px,.7fr) minmax(390px,1.25fr);gap:12px;margin-top:12px;align-items:start}.signalPanel{padding:15px 16px;min-width:0}.signalPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.signalPanelHead h2{font-size:14px;margin:0}.signalPanelHead p{font-size:11px;color:var(--faint);margin:2px 0 0}.signalPanel .seg{flex:0 0 auto}.signalRankList{display:grid;gap:4px;margin-top:10px}.signalRank{appearance:none;width:100%;display:grid;gap:6px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;text-align:left;padding:9px 0 7px;min-width:0}.signalRank:first-child{border-top:0}.signalRank[data-frustration-model]{cursor:pointer;border-radius:6px;padding-left:7px;padding-right:7px}.signalRank[data-frustration-model]:hover,.signalRank[data-frustration-model].selected{background:rgba(255,255,255,.035)}.signalRank[data-frustration-model].selected{box-shadow:inset 2px 0 var(--warn)}.signalRankHead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:baseline}.signalRankName{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankValue{font-size:12px;font-weight:820;color:var(--fg)}.signalRankMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signalRankTrack{height:6px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.04);overflow:hidden}.signalRankTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad));min-width:0}.termPanel .signalRankTrack i{background:linear-gradient(90deg,#c7a7ff,var(--warn))}.signalQuiet{font-size:11px;color:var(--faint);margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
 .chatSignalList{display:grid;gap:7px;margin-top:10px;max-height:378px;overflow:auto;padding-right:3px;scrollbar-color:var(--line2) transparent}.chatSignal{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.018));padding:9px 10px;min-width:0}.chatSignal:hover{border-color:var(--line2);background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.024))}.chatSignal.quiet{opacity:.64}.chatSignalMain{min-width:0}.chatSignalTitle{font-size:12px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chatSignalMeta{font-size:10.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}.chatSignalStats{display:flex;align-items:center;gap:7px;margin-top:7px}.chatSignalTrack{height:5px;flex:1;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden}.chatSignalTrack i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--warn),var(--bad))}.chatSignalCount{font-size:10.5px;color:var(--dim);white-space:nowrap}.chatSignalSide{display:grid;justify-items:end;align-content:space-between;gap:7px}.signalRateBadge{display:inline-flex;border:1px solid rgba(255,180,87,.34);border-radius:999px;background:rgba(255,180,87,.08);color:var(--warn);padding:3px 7px;font:760 10.5px ui-monospace,"SF Mono",Menlo,monospace}.chatSignal.quiet .signalRateBadge{border-color:var(--line);background:rgba(255,255,255,.03);color:var(--faint)}.chatSignal .tbtn{padding:4px 8px;font-size:10.5px}.signalEmpty{display:grid;place-items:center;min-height:112px;text-align:center;color:var(--faint);font-size:12px;padding:18px}
+.frustrationSection.positive .frustrationNotice{border-color:rgba(102,217,144,.24);border-left-color:var(--good);background:linear-gradient(90deg,rgba(102,217,144,.07),rgba(102,217,144,.018))}.frustrationSection.positive .frustrationHero .modelKpi:before{background:linear-gradient(90deg,var(--good),var(--accent),transparent 78%)}.frustrationSection.positive .signalRankTrack i,.frustrationSection.positive .chatSignalTrack i{background:linear-gradient(90deg,var(--good),var(--accent))}.frustrationSection.positive .signalRateBadge{border-color:rgba(102,217,144,.34);background:rgba(102,217,144,.08);color:var(--good)}
 .settingsLexicon{box-shadow:var(--shadow-soft)}.settingsLexiconHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.settingsLexicon h2{font-size:16px;line-height:1.25;margin:4px 0}.settingsLexicon p{color:var(--dim);font-size:11.5px;line-height:1.45;margin:0;max-width:420px}.settingsField{display:grid;gap:6px;margin-top:12px}.settingsField span{font-size:10px;text-transform:uppercase;color:var(--faint);font-weight:780}.settingsField textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 10px;font:12px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:var(--inset)}.settingsField textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.settingsActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.settingsActions .tbtn{padding:6px 9px;font-size:11px}.settingsActions .clearFilters{height:auto}.settingsStatus{width:100%;font-size:11px;color:var(--faint)}.settingsStatus.good{color:var(--good)}.settingsStatus.warn{color:var(--warn)}
+.previewHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:3px 0 14px}.previewHeadCopy{max-width:760px}.previewEyebrow{display:flex;align-items:center;gap:8px;color:var(--orange3);font-size:10.5px;font-weight:820;text-transform:uppercase;letter-spacing:.08em}.previewEyebrow span{border:1px solid rgba(0,188,235,.3);border-radius:999px;background:rgba(0,188,235,.08);padding:3px 7px}.previewHead h1{font-size:28px;line-height:1.08;margin:7px 0 0}.previewHead p{color:var(--dim);font-size:13px;margin:6px 0 0}.previewSwitch{flex:0 0 auto}.previewPanel{display:none}.previewPanel.on{display:block}.previewRunMeta{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}.previewRunMeta .repo{max-width:460px}.previewRunGrid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(300px,.65fr);gap:12px;align-items:start}.previewChartSlot,.previewDecision{min-width:0}.previewChartSlot .section-h{margin:0 0 10px}.previewChartSlot #session-chart-module>.card{min-height:350px}.previewChartSlot .chart{height:286px}.previewDecision{display:grid;gap:12px}.previewStatus{overflow:hidden;padding:17px;background:linear-gradient(155deg,rgba(23,37,48,.98),rgba(12,17,23,.98))}.previewStatus:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--good),var(--accent),transparent)}.previewStatus.warn:before{background:linear-gradient(90deg,var(--bad),var(--warn),transparent)}.previewStatusTop{display:flex;align-items:center;justify-content:space-between;gap:12px}.previewState{display:inline-flex;align-items:center;gap:7px;color:var(--good);font-size:11px;font-weight:820;text-transform:uppercase;letter-spacing:.05em}.previewState:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.previewStatus.warn .previewState{color:var(--bad)}.previewIdle{color:var(--faint);font-size:11px}.previewCost{font-size:clamp(32px,3.4vw,44px);font-weight:850;line-height:1.02;margin-top:12px;white-space:nowrap}.previewCostNote{color:var(--dim);font-size:12px;margin-top:6px}.previewPressure{margin-top:16px;padding-top:13px;border-top:1px solid var(--line)}.previewPressureHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;color:var(--dim);font-size:11.5px}.previewPressureHead b{color:var(--fg)}.previewPressureBar{height:7px;margin-top:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}.previewPressureBar i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--orange3));transition:width .2s}.previewRunBudgetSlot .sessionBudget{margin:0;box-shadow:var(--shadow-soft)}.previewRunBudgetSlot .sessionBudgetHead{align-items:flex-start;flex-direction:column;gap:9px}.previewRunBudgetSlot .sessionBudgetExact{width:100%;justify-content:space-between}.previewKpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:12px}.previewKpi{padding:12px 13px;min-height:92px}.previewKpi .v{font-size:20px;font-weight:820;margin-top:5px;overflow-wrap:anywhere}.previewKpi .sm{color:var(--faint);font-size:10.5px;margin-top:3px}.previewBrief{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:12px;margin-top:12px}.previewBrief .card{padding:16px}.previewStartText{font-size:14px;font-weight:720;line-height:1.45;margin-top:7px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.previewActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:13px}.previewInsightList{display:grid;gap:7px;margin-top:9px}.previewInsight{display:grid;grid-template-columns:8px minmax(0,1fr);gap:8px;align-items:start;color:var(--dim);font-size:12px}.previewInsight i{width:7px;height:7px;border-radius:50%;margin-top:5px;background:var(--accent)}.previewInsight.warn i{background:var(--warn)}.previewInsight.good i{background:var(--good)}.previewSettingsLayout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:12px;align-items:start}.previewSettingsNav{position:sticky;top:88px;padding:14px}.previewSettingsNav h2{font-size:15px;margin:0}.previewSettingsNav p{color:var(--dim);font-size:11.5px;margin:5px 0 12px}.previewSettingsNav button{width:100%;display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:center;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;color:var(--dim);padding:10px 2px;font:inherit;font-size:12px;font-weight:730;cursor:pointer}.previewSettingsNav button:hover{color:var(--fg)}.previewSettingsNav button span:first-child{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--line2);border-radius:6px;color:var(--orange3);font-size:10px}.previewSettingsContent{display:grid;gap:12px;min-width:0}.previewSettingsSlot{scroll-margin-top:100px;min-width:0}.previewSettingsSlot>.card{width:100%}.previewSettingsSlot .settingsLexicon p{max-width:700px}.settingsHome{display:contents}.sessionChartModule{min-width:0}
+.previewTimes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}.previewTimes div{min-width:0}.previewTimes span{display:block;color:var(--faint);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em}.previewTimes b{display:block;margin-top:4px;color:var(--dim);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.previewKpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.previewKpi{min-height:96px}.previewKpi .v{font-size:clamp(17px,1.55vw,21px)}.settingsPageLayout{display:grid;gap:10px}.settingsMap{display:grid;grid-template-columns:minmax(150px,.68fr) repeat(4,minmax(145px,1fr));align-items:stretch;padding:9px 11px;overflow:hidden}.settingsMap:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent)}.settingsMapIntro{display:grid;align-content:center;padding:3px 10px 3px 2px}.settingsMap h2{font-size:14px;margin:0}.settingsMapIntro p{color:var(--faint);font-size:10.5px;margin:3px 0 0}.settingsMap button{width:100%;display:grid;grid-template-columns:25px minmax(0,1fr);gap:8px;align-items:center;text-align:left;border:0;border-left:1px solid var(--line);background:transparent;color:var(--dim);padding:7px 11px;font:inherit;cursor:pointer;border-radius:0}.settingsMap button:hover,.settingsMap button:focus-visible{color:var(--fg);background:rgba(255,255,255,.03)}.settingsMap button>span:first-child{display:grid;place-items:center;width:23px;height:23px;border:1px solid var(--line2);border-radius:6px;color:var(--orange3);font:800 9.5px/1 ui-monospace,"SF Mono",Menlo,monospace}.settingsMap button b,.settingsMap button small{display:block}.settingsMap button b{font-size:11.5px}.settingsMap button small{color:var(--faint);font-size:9.5px;font-weight:500;margin-top:1px}.settingsPageContent{display:grid;gap:10px;min-width:0}.settingsPageContent>.card{scroll-margin-top:100px;width:100%;padding:14px 16px}.settingsBudgetSection{display:grid;gap:10px;scroll-margin-top:100px}.settingsBudgetSection .learnHead{margin-bottom:0}.settingsPageContent .settingsLexicon p{max-width:760px}.settingsPageContent .agentClients{margin-top:12px}.settingsPageContent .agentPromise{margin-top:9px}.settingsSignalGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.settingsSignalGrid .settingsField{margin-top:12px}.sessionChartModule{min-width:0}
+.previewTabs{flex:0 0 auto}.previewSurface{display:none}.previewSurface.on{display:block}.previewSharedSlot{min-width:0}.previewSharedSlot>.session-panel{display:block}.previewStartStrip{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:12px;margin-bottom:12px;padding:11px 14px;min-width:0;border-left:3px solid var(--accent)}.previewStartLabel{color:var(--orange3);font-size:10px;font-weight:820;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.previewStartStrip .previewStartText{display:block;min-width:0;margin:0;color:var(--fg);font-size:12.5px;font-weight:700;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.previewStartStrip .previewStartText:after{bottom:auto;top:calc(100% + 8px);z-index:60}.previewTokenSlot{margin-top:12px;min-width:0}.previewTokenSlot>.usageSplit{width:100%;margin:0}.previewTokenSlot .bar{height:26px}.previewKpi.fieldtip{display:block;overflow:visible}.previewKpi.fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:45}.previewKpi:hover,.previewKpi:focus{z-index:50;border-color:rgba(0,188,235,.34)}.previewSpeed .v{color:var(--accent);text-shadow:0 0 18px rgba(0,188,235,.18)}.previewAttention{grid-template-columns:1fr}.previewAttentionHead{display:flex;align-items:center;justify-content:space-between;gap:12px}.previewAttention .previewActions{margin-top:0}.sessionChartModule{min-width:0}
+.budgetDashboard{display:block}.budgetLead{overflow:hidden;background:linear-gradient(145deg,rgba(22,35,46,.98),rgba(12,17,23,.98))}.budgetLead:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 78%)}.budgetLead h2,.budgetConfig h2{font-size:17px;margin:4px 0 0}.budgetLeadBody{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(500px,.92fr);gap:24px;align-items:stretch;margin-top:18px}.budgetSpend{margin:0;display:flex;flex-direction:column;justify-content:center}.budgetSpendValue{font-size:clamp(42px,5vw,58px);font-weight:860;line-height:1;letter-spacing:-1.5px;margin-top:6px}.budgetState{display:inline-flex;align-items:center;gap:7px}.budgetState:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.budgetState.on_track{color:var(--good);border-color:rgba(102,217,144,.32);background:rgba(102,217,144,.07)}.budgetState.warning{color:var(--warn);border-color:rgba(255,180,87,.34);background:rgba(255,180,87,.07)}.budgetState.over{color:var(--bad);border-color:rgba(255,111,111,.36);background:rgba(255,111,111,.08)}.budgetProgress{position:relative;height:12px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.035);overflow:hidden;margin-top:16px}.budgetProgress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--orange));border-radius:999px;transition:width .2s}.budgetProgress.warn>i{background:linear-gradient(90deg,var(--warn),var(--bad))}.budgetProgressMarkers{position:absolute;inset:0;pointer-events:none}.budgetProgressMarkers span{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.58);box-shadow:0 0 0 1px rgba(0,0,0,.18);transform:translateX(-1px)}.budgetReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0;padding:0}.budgetReadouts>div{min-width:0;padding:14px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);box-shadow:var(--inset)}.budgetReadouts .v{font-size:20px;font-weight:830;margin-top:4px;overflow-wrap:anywhere}.budgetReadouts .v.warn{color:var(--warn)}.budgetDetailGrid{display:grid;grid-template-columns:minmax(0,1.28fr) minmax(340px,.72fr);gap:12px;margin-top:12px;align-items:stretch}.budgetHistory,.budgetRuntimeCard{min-width:0;overflow:hidden}.budgetRuntimeList{display:grid;margin-top:11px}.budgetRuntime{--provider-color:var(--accent);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;padding:11px 0;border-top:1px solid var(--line)}.budgetRuntime:first-child{border-top:0;padding-top:3px}.budgetRuntimeName{display:flex;align-items:center;gap:8px;font-weight:790}.budgetRuntimeName:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--provider-color);box-shadow:0 0 9px var(--provider-color)}.budgetRuntimeValue{font-weight:820}.budgetRuntimeTrack{grid-column:1/-1;height:6px;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden}.budgetRuntimeTrack i{display:block;height:100%;border-radius:inherit;background:var(--provider-color)}.budgetRuntimeMeta{grid-column:1/-1;color:var(--faint);font-size:11px}.budgetConfig{min-width:0;margin-top:12px}.budgetConfigHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.budgetConfigHead .subline{margin-top:4px}.budgetConfigBadge{color:var(--dim);font-size:11px;white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:4px 8px;background:rgba(255,255,255,.03)}.budgetForm{display:grid;grid-template-columns:minmax(320px,.72fr) minmax(0,1.28fr);gap:18px;margin-top:16px}.budgetFormGroup{min-width:0;margin:0;padding:0;border:0}.budgetFormGroup legend{width:100%;padding:0 0 9px;border-bottom:1px solid var(--line);color:var(--dim);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}.budgetCoreFields,.budgetAllocationFields{display:grid;gap:9px;margin-top:11px}.budgetCoreFields{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetAllocationFields{grid-template-columns:repeat(3,minmax(0,1fr))}.budgetForm label{display:grid;gap:5px}.budgetForm label span{font-size:10px;text-transform:uppercase;color:var(--faint);font-weight:780}.budgetForm input[type=number],.budgetForm input[type=text]{width:100%;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:8px 9px;font:12px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.budgetForm input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.budgetNotify{grid-column:1/-1;display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;gap:8px;color:var(--dim);font-size:12px}.budgetNotify span{font-size:12px!important;text-transform:none!important;font-weight:650!important}.budgetActions{grid-column:1/-1;display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--line)}.budgetBars{margin-top:12px;overflow-x:auto;padding-bottom:3px;scrollbar-color:var(--line2) transparent}.budgetChartInner{min-width:max(520px,100%)}.budgetPlot{position:relative;display:grid;grid-template-columns:repeat(var(--months),minmax(48px,1fr));gap:10px;height:184px;padding:26px 8px 0;border-bottom:1px solid var(--line2)}.budgetTarget{position:absolute;left:8px;right:8px;bottom:var(--target-height);z-index:2;border-top:1px dashed rgba(255,180,87,.62);pointer-events:none}.budgetTarget span{position:absolute;right:0;bottom:4px;padding:2px 5px;border-radius:4px;background:rgba(12,17,23,.88);color:var(--warn);font-size:9.5px;white-space:nowrap}.budgetBar{--bar-height:2%;position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;min-width:0}.budgetBar i{display:block;width:min(44px,70%);height:var(--bar-height);min-height:2px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--orange),var(--accent));border:1px solid rgba(0,188,235,.35);box-shadow:0 -7px 18px rgba(0,188,235,.08)}.budgetBar.current i{background:linear-gradient(180deg,#dff8ff,var(--accent));border-color:rgba(223,248,255,.72);box-shadow:0 -8px 20px rgba(0,188,235,.2)}.budgetBar b{position:absolute;bottom:min(calc(var(--bar-height) + 5px),calc(100% - 15px));font-size:10px;color:var(--dim);white-space:nowrap}.budgetAxis{display:grid;grid-template-columns:repeat(var(--months),minmax(48px,1fr));gap:10px;padding:7px 8px 0}.budgetAxis span{text-align:center;font-size:10px;color:var(--faint);white-space:nowrap}.budgetAxis span.current{color:var(--fg);font-weight:790}.budgetCoverage{margin-top:8px;color:var(--dim);font-size:11.5px}.budgetCoverage.warn{color:var(--warn)}
 .settingsPricing{grid-column:1/-1}.modelPriceTableWrap{overflow:auto;margin-top:13px;border:1px solid var(--line);border-radius:8px}.modelPriceTable{min-width:940px}.modelPriceTable th{white-space:nowrap}.modelPriceTable td{vertical-align:middle}.modelPriceModel{display:grid;gap:3px;min-width:190px}.modelPriceModel code{font-size:11.5px;color:var(--fg)}.modelPriceSource{font-size:10px;color:var(--faint);text-transform:capitalize}.modelPriceInput{width:90px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:6px 7px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceInput:focus,.modelPriceAdd input:focus,.modelPriceAdd select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.modelPriceActions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}.modelPriceActions .tbtn{padding:5px 7px;font-size:10.5px}.modelPriceAdd{display:grid;grid-template-columns:150px minmax(180px,1.4fr) repeat(4,minmax(105px,.65fr)) auto;gap:8px;align-items:end;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}.modelPriceAdd label{display:grid;gap:5px;min-width:0}.modelPriceAdd label span{font-size:9.5px;text-transform:uppercase;color:var(--faint);font-weight:780}.modelPriceAdd input,.modelPriceAdd select{width:100%;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:7px 8px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceAdd select{font-family:inherit}.modelPriceAdd .tbtn{height:31px;white-space:nowrap}.modelPricingEmpty{padding:18px;text-align:center;color:var(--faint)}
 @media(max-width:900px){.modelPriceAdd{grid-template-columns:repeat(2,minmax(0,1fr))}.modelPriceAdd .tbtn{justify-self:start}}
 @media(max-width:520px){.modelPriceAdd{grid-template-columns:1fr}}
 .spark .b.estimated,.dailyBarFill.estimated{background:repeating-linear-gradient(135deg,var(--accent) 0 5px,rgba(0,188,235,.28) 5px 10px)}.capFilters{grid-template-columns:minmax(220px,1fr) auto auto minmax(130px,auto)}.capFilters select{border:1px solid var(--line2);background:var(--panel);color:var(--fg);border-radius:7px;padding:7px 9px;font:inherit}
 @media(max-width:900px){.capSource{margin-left:0;white-space:normal}.section-h{flex-wrap:wrap}}
 @media(max-width:1120px){.hero{grid-template-columns:1fr}.costcard{min-height:0}.overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1120px){.budgetLeadBody{grid-template-columns:1fr}.budgetReadouts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1120px){.previewRunGrid{grid-template-columns:minmax(0,1.5fr) minmax(280px,.7fr)}.previewKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:1120px) and (min-width:901px){.frustrationBreakdown{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.frustrationBreakdown .chatPanel{grid-column:1/-1}}
 @media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
 @media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.promptCards,.frustrationBreakdown{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.glossaryList{grid-template-columns:1fr}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
+@media(max-width:900px){.budgetForm{grid-template-columns:1fr}.budgetAllocationFields{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.promptCards,.frustrationBreakdown,.budgetDashboard,.budgetDetailGrid{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
+@media(max-width:900px){.previewHead{align-items:flex-start;flex-direction:column}.previewRunGrid,.previewBrief{grid-template-columns:1fr}.settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}.settingsMapIntro{grid-column:1/-1;padding:2px 2px 7px}.settingsMap button{border:1px solid var(--line);border-radius:7px;padding:8px}.previewChartSlot .chart{height:250px}.previewKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
+@media(max-width:520px){.previewHead h1{font-size:24px}.previewRunMeta{flex-wrap:wrap}.previewRunMeta .repo{max-width:100%;width:100%}.previewChartSlot #session-chart-module>.card{min-height:0}.previewChartSlot .chart{height:226px}.previewChartSlot .chartbar{align-items:flex-start}.previewChartSlot .chartbar .label{width:100%;margin:0}.previewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.previewKpi{min-height:82px;padding:10px}.previewKpi .v{font-size:17px}.previewCost{font-size:34px}.budgetReadouts,.budgetForm,.budgetCoreFields,.budgetAllocationFields,.settingsMap,.settingsSignalGrid{grid-template-columns:1fr}.budgetReadouts>div{padding:12px}.budgetConfigHead{display:block}.budgetConfigBadge{display:inline-block;margin-top:9px}.budgetChartInner{min-width:440px}.settingsMap button{width:100%;margin:0}.settingsPageContent>.card{padding:13px}.settingsPageContent .modelPriceTableWrap{margin-left:-5px;margin-right:-5px}}
+@media(max-width:520px){.previewTabs{width:100%;overflow-x:auto}.previewStartStrip{grid-template-columns:1fr;gap:4px}.previewAttentionHead{align-items:flex-start;flex-direction:column}.previewAttention .previewActions{margin-top:7px}.previewTokenSlot .legend{gap:8px}}
 .workloadCell strong{display:block;color:var(--fg);font-size:13px}.workloadCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px;white-space:nowrap}
 .modelKpi:hover,.modelKpi:focus-within{z-index:50}.modelKpi:nth-child(n+4) .fieldtip:after{left:auto;right:0}.modelHelp:before{content:"i";display:inline-grid;place-items:center;width:13px;height:13px;margin-right:5px;border:1px solid currentColor;border-radius:50%;font:800 9px/1 ui-monospace,"SF Mono",Menlo,monospace;opacity:.72}.modelCoverage.fieldtip{display:block}.modelCoverage.fieldtip:after{bottom:auto;top:calc(100% + 7px)}
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}.learnModelGuide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:13px}.learnModelCard{padding:14px;border:1px solid var(--line);border-radius:9px;background:linear-gradient(160deg,rgba(255,255,255,.045),rgba(255,255,255,.018));min-width:0}.learnModelCard .num{color:var(--accent);font:800 10px/1 ui-monospace,"SF Mono",Menlo,monospace;text-transform:uppercase}.learnModelCard h3{font-size:13px;margin:7px 0 0}.learnModelCard p{font-size:12px;line-height:1.45;color:var(--dim);margin:4px 0 0}.learnModelNote{margin-top:10px;padding:10px 12px;border:1px solid rgba(0,188,235,.22);border-left:3px solid var(--accent);border-radius:8px;background:rgba(0,188,235,.055);color:var(--dim);font-size:12px;line-height:1.45}.learnModelNote b{color:var(--fg)}
@@ -179,19 +192,19 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:1120px) and (min-width:901px){.globalControls.logsToolbar{grid-template-columns:minmax(240px,1fr) repeat(2,minmax(150px,.7fr));}.logsToolbar .logSearchControl{grid-column:1/3}.logsToolbar .filterSort{grid-column:1/3}.logsToolbar .filterClear{grid-column:3;grid-row:3}}
 @media(max-width:900px){.globalControls.logsToolbar{grid-template-columns:1fr 1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1/-1}.logsToolbar .filterClear{grid-column:1/-1;grid-row:auto}.logsToolbar .filterCount{text-align:left}}
 @media(max-width:520px){.globalControls.logsToolbar{grid-template-columns:1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1}.srow{padding:11px 10px;gap:9px}.badge.app{font-size:10px}}
+@media(max-width:520px){.sessionBudgetHead,.sessionBudgetMeta{align-items:flex-start;flex-direction:column}.sessionBudgetHead{gap:9px}.sessionBudgetExact{width:100%;justify-content:space-between}.sessionBudgetExact input{width:96px}.sessionBudgetTrack{grid-template-columns:44px minmax(0,1fr) 54px;gap:7px}.sessionBudgetMeta{gap:3px}}
 </style></head><body>
 <div class=wrap>
  <div class=top>
   <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div> Token Meter</div>
 	  <div class=tabs>
 	   <button class="tab on" id=tab-session aria-keyshortcuts="Alt+1" title="Shortcut: Option+1">Current</button>
-	   <button class=tab id=tab-daily aria-keyshortcuts="Alt+2" title="Shortcut: Option+2">Daily</button>
-	   <button class=tab id=tab-logs aria-keyshortcuts="Alt+3" title="Shortcut: Option+3">Logs</button>
-	   <button class=tab id=tab-global aria-keyshortcuts="Alt+4" title="Shortcut: Option+4">Global</button>
-	   <button class=tab id=tab-models aria-keyshortcuts="Alt+5" title="Shortcut: Option+5">Models</button>
-	   <button class=tab id=tab-capabilities aria-keyshortcuts="Alt+6" title="Shortcut: Option+6">Tools</button>
-	   <button class=tab id=tab-learn aria-keyshortcuts="Alt+7" title="Shortcut: Option+7">Learn</button>
-	   <button class=tab id=tab-settings aria-keyshortcuts="Alt+8" title="Shortcut: Option+8">Settings</button>
+	   <button class=tab id=tab-logs aria-keyshortcuts="Alt+2" title="Shortcut: Option+2">Logs</button>
+	   <button class=tab id=tab-daily aria-keyshortcuts="Alt+3" title="Shortcut: Option+3">Daily</button>
+	   <button class=tab id=tab-models aria-keyshortcuts="Alt+4" title="Shortcut: Option+4">Models</button>
+	   <button class=tab id=tab-capabilities aria-keyshortcuts="Alt+5" title="Shortcut: Option+5">Tools</button>
+	   <button class=tab id=tab-learn aria-keyshortcuts="Alt+6" title="Shortcut: Option+6">Learn</button>
+	   <button class=tab id=tab-settings aria-keyshortcuts="Alt+7" title="Shortcut: Option+7">Settings</button>
 	  </div>
   <div class=spacer></div>
   <button class=commandTrigger id=command-trigger type=button aria-label="Open command palette" aria-haspopup=dialog aria-controls=command-palette aria-keyshortcuts="Meta+K Control+K" title="Open command palette"><svg viewBox="0 0 24 24" fill=none stroke-width=2 stroke-linecap=round aria-hidden=true><circle cx=11 cy=11 r=7></circle><path d="m20 20-4-4"></path></svg><kbd id=command-key>&#8984;K</kbd></button>
@@ -199,22 +212,13 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   <div class=notify id=notify><span class=sw></span><span id=notifytxt>Notify</span></div>
  </div>
 
- <div class="view on" id=view-session>
-  <div class=banner id=banner>
-   <span class=msg id=banner-msg></span>
-   <span class=budgetadd id=budget-add-row>
-    <label>Add $<input id=budget-add type=number min=0.5 step=0.5 value=5></label>
-    <button class=tbtn id=budget-add-btn type=button>Add budget</button>
-   </span>
-  </div>
+ <div id=session-depot hidden>
   <div class=sessionhead>
    <span class=badge id=s-provider>source</span>
    <span class=repo id=s-repo>--</span>
    <span class="sessid mono" id=s-id></span>
    <span class=pill id=s-pricing></span>
    <span class=spacer></span>
-   <button class=unpin id=unpin>Back to live</button>
-   <button class=sessionDelete id=session-delete type=button hidden>Delete session</button>
   </div>
   <div class=sessionStart id=session-start hidden><span>Started with</span><strong id=session-start-text></strong></div>
 
@@ -244,35 +248,58 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
      <div><div class="label fieldtip" tabindex=0 title="Local timestamp for the first observed event in this log/thread." data-tip="Local timestamp for the first observed event in this log/thread.">Started</div><div class="v mono" id=cost-start>--</div><div class=sm>local time</div></div>
      <div><div class="label fieldtip" tabindex=0 id=cost-end-label title="Local timestamp for the newest observed event in this log/thread." data-tip="Local timestamp for the newest observed event in this log/thread.">Last activity</div><div class="v mono" id=cost-end>--</div><div class=sm>local time</div></div>
     </div>
-    <div class=costsplit>
-     <div class=splithead><div class="label fieldtip" tabindex=0 title="Semantic split of where the current log's tokens went." data-tip="Semantic split of where the current log's tokens went.">Where tokens go</div><span class=hint>semantic split</span></div>
-     <div class=bar id=sembar></div>
-     <div class=legend>
-      <span class=fieldtip tabindex=0 title="Tokens associated with model reasoning or thinking output." data-tip="Tokens associated with model reasoning or thinking output."><i class=dot style=background:var(--reason)></i>reasoning</span>
-      <span class=fieldtip tabindex=0 title="Regular assistant output tokens." data-tip="Regular assistant output tokens."><i class=dot style=background:var(--output)></i>output</span>
-      <span class=fieldtip tabindex=0 title="Approximate tokens returned by tool results." data-tip="Approximate tokens returned by tool results."><i class=dot style=background:var(--retrieval)></i>retrieval</span>
-      <span class=fieldtip tabindex=0 title="Tokens and cost attributed to subagent or coordination executions." data-tip="Tokens and cost attributed to subagent or coordination executions."><i class=dot style=background:var(--coord)></i>coordination</span>
-     </div>
-    </div>
     <div class=frozen id=frozen>pinned log - frozen view</div>
    </div>
    <div class=statgrid>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Total model input tokens, including uncached input, cache reads, and cache writes." data-tip="Total model input tokens, including uncached input, cache reads, and cache writes.">Input</div><div class="v mono" id=input-tok>0</div><div class=sm id=input-toksm></div></div>
 	    <div class=stat><div class="label fieldtip" tabindex=0 title="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred." data-tip="Includes trace-reported reasoning and thinking output. Excludes input, cache, and external tool-result tokens. Speed is weighted output divided by measured seconds; tool-free samples are preferred.">Output</div><div class=outputPair><div class="v mono" id=output-tok>0</div><div class=outputRate><strong class=mono id=output-tps>--</strong><span>tok/s</span></div></div><div class=sm id=output-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool results</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>active execution time</div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated average cost per completed task or turn completion." data-tip="Estimated average cost per completed task or turn completion.">Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Cache rate</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cache tokens</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
-    <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated savings from cache reads versus charging those tokens at the normal input rate." data-tip="Estimated savings from cache reads versus charging those tokens at the normal input rate.">Cache saved</div><div class="v mono" id=cache-saved>$0</div><div class=sm id=cache-savedsm></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not." data-tip="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not.">Wait time</div><div class="v mono" id=ov-duration>--</div><div class=sm id=ov-idle></div></div>
+    <div class=stat><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
    </div>
+  </div>
+
+  <div id=session-budget-home>
+  <div class="card sessionBudget" id=session-budget-control>
+   <div class=sessionBudgetHead>
+    <div><div class="label fieldtip" tabindex=0 title="Browser-local cost cap for this session. Token Meter alerts when the live session crosses it." data-tip="Browser-local cost cap for this session. Token Meter alerts when the live session crosses it.">Session budget</div><div class=subline>Set a live-run cap without changing the machine-wide monthly budget.</div></div>
+    <label class=sessionBudgetExact><span>Cap $</span><input id=budget type=number min=0.5 step=0.5 value=10 aria-label="Exact session budget in USD"></label>
+   </div>
+   <div class=sessionBudgetTrack>
+    <span class=mono id=budget-slider-min>$0.50</span>
+    <input id=budget-slider type=range min=0.5 max=100 step=0.5 value=10 aria-label="Session budget slider">
+    <span class=mono id=budget-slider-max>$100.00</span>
+   </div>
+   <div class=sessionBudgetMeta><span id=session-budget-spend>Current spend $0.00</span><span>Saved for this session in this browser</span></div>
+  </div>
+  </div>
+
+  <details class=usageDetails id=usage-details>
+  <summary><span>Usage details</span><small>cache, tools, efficiency, and execution profile</small></summary>
+  <div class=usageDetailsBody>
+  <div id=session-token-split-home>
+  <div class="card pad usageSplit" id=session-token-split-module>
+   <div class=splithead><div class="label fieldtip" tabindex=0 title="Semantic split of where the current log's tokens went." data-tip="Semantic split of where the current log's tokens went.">Where tokens go</div><span class=hint>semantic split</span></div>
+   <div class=bar id=sembar></div>
+   <div class=legend>
+    <span class=fieldtip tabindex=0 title="Tokens associated with model reasoning or thinking output." data-tip="Tokens associated with model reasoning or thinking output."><i class=dot style=background:var(--reason)></i>reasoning</span>
+    <span class=fieldtip tabindex=0 title="Regular assistant output tokens." data-tip="Regular assistant output tokens."><i class=dot style=background:var(--output)></i>output</span>
+    <span class=fieldtip tabindex=0 title="Approximate tokens returned by tool results." data-tip="Approximate tokens returned by tool results."><i class=dot style=background:var(--retrieval)></i>retrieval</span>
+    <span class=fieldtip tabindex=0 title="Tokens and cost attributed to subagent or coordination executions." data-tip="Tokens and cost attributed to subagent or coordination executions."><i class=dot style=background:var(--coord)></i>coordination</span>
+   </div>
+  </div>
+  </div>
+  <div class="statgrid usageDetailGrid">
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Output tokens attributed to reasoning or thinking events when the provider reports them." data-tip="Output tokens attributed to reasoning or thinking events when the provider reports them.">Thinking</div><div class="v mono" id=think-tok>0</div><div class=sm id=think-toksm></div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Approximate tokens returned from tool results, based on captured output size." data-tip="Approximate tokens returned from tool results, based on captured output size.">Tool results</div><div class="v mono" id=toolcall-tok>0</div><div class=sm id=toolcall-toksm></div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once.">Burn / min</div><div class="v mono" id=burn>$0</div><div class=sm id=burnsm>active execution time</div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated average cost per completed task or turn completion." data-tip="Estimated average cost per completed task or turn completion.">Cost / task</div><div class="v mono" id=cpt>$0</div><div class=sm id=cptsm></div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Share of input tokens that were cached or cache-related instead of uncached input." data-tip="Share of input tokens that were cached or cache-related instead of uncached input.">Cache rate</div><div class="v mono" id=cache-hit>0%</div><div class=sm id=cache-hitsm></div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Total input tokens served from or written to the provider prompt cache." data-tip="Total input tokens served from or written to the provider prompt cache.">Cache tokens</div><div class="v mono" id=cache-tok>0</div><div class=sm id=cache-toksm></div></div>
+   <div class=stat><div class="label fieldtip" tabindex=0 title="Estimated savings from cache reads versus charging those tokens at the normal input rate." data-tip="Estimated savings from cache reads versus charging those tokens at the normal input rate.">Cache saved</div><div class="v mono" id=cache-saved>$0</div><div class=sm id=cache-savedsm></div></div>
   </div>
 
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="High-level metrics for the current log/thread. Executions are individual model turns." data-tip="High-level metrics for the current log/thread. Executions are individual model turns.">Execution Overview</span></h2><span class=hint id=exec-hint></span></div>
   <div class=overview>
-   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not." data-tip="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not.">Wait time</div><div class="v mono" id=ov-duration>--</div><div class=sm id=ov-idle></div></div>
-   <div class="card ov"><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
    <div class="card ov"><div class="label fieldtip" id=ov-loaded-label tabindex=0 title="Runtime-advertised catalog entries when available; otherwise observed tool types. Catalog entries may be default/read-only and are not an optimization denominator." data-tip="Runtime-advertised catalog entries when available; otherwise observed tool types. Catalog entries may be default/read-only and are not an optimization denominator.">Catalog advertised</div><div class="v mono" id=ov-loaded>0</div><div class=sm id=ov-loadedsm></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Number of priced model executions observed in this log/thread." data-tip="Number of priced model executions observed in this log/thread.">Executions</div><div class="v mono" id=ov-exec>0</div><div class=sm id=ov-model></div></div>
    <div class="card ov"><div class="label fieldtip" tabindex=0 title="Estimated log/thread cost divided by execution count." data-tip="Estimated log/thread cost divided by execution count.">Avg cost</div><div class="v mono" id=ov-avg>$0</div><div class=sm>per execution</div></div>
@@ -286,6 +313,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled user-installed skill packs with no observed activation in this session. MCP servers and read-only capabilities are excluded." data-tip="Enabled user-installed skill packs with no observed activation in this session. MCP servers and read-only capabilities are excluded.">Unused skill packs</div><div class="meter mono" id=ov-unused-packs>0</div><div class=subline id=ov-unused-packs-note></div></div>
   </div>
 
+  <div id=session-chart-home>
+  <section class=sessionChartModule id=session-chart-module>
   <div class=section-h><h2>Execution Profile</h2><span class=hint id=exec-profile-hint>per execution or request</span></div>
   <div class="card pad">
    <div class=chartbar>
@@ -310,15 +339,22 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    </div>
    <div class=legend id=chart-legend></div>
   </div>
+  </section>
+  </div>
+  </div>
+  </details>
   </div>
 
+  <div id=session-activity-home>
   <div class=session-panel id=panel-activity>
   <div class=section-h><h2>Trace</h2><span class=hint>latest events</span></div>
   <div class="card pad">
    <div class=tracebox id=trace></div>
   </div>
   </div>
+  </div>
 
+  <div id=session-tools-home>
   <div class=session-panel id=panel-tools>
   <div class=section-h><h2><span class=fieldtip tabindex=0 title="Trace-observed activity for this selected log. Counts here include default and read-only tools because this view explains what happened, not what can be removed." data-tip="Trace-observed activity for this selected log. Counts here include default and read-only tools because this view explains what happened, not what can be removed.">Tool activity</span></h2><span class=hint>by namespace and execution</span></div>
   <div class=toolsgrid>
@@ -344,20 +380,23 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    </div>
   </div>
   </div>
+  </div>
 
+  <div id=session-insights-home>
   <div class=session-panel id=panel-insights>
   <div class=section-h><h2>Insights</h2><span class=hint>log signals</span></div>
   <div class=insights id=insights></div>
   </div>
+  </div>
 
+  <div id=session-alerts-home>
   <div class=session-panel id=panel-alerts>
   <div class=section-h><h2>Alerts</h2><span class=hint>browser notifications and history</span></div>
   <div class=notifygrid>
   <div class=cfg>
-   <label><span class=fieldtip tabindex=0 title="Notify when total current-log cost passes this dollar amount." data-tip="Notify when total current-log cost passes this dollar amount.">Budget $</span><input id=budget type=number min=0 step=0.5 value=10></label>
    <label><span class=fieldtip tabindex=0 title="Notify when a single execution costs more than this dollar amount." data-tip="Notify when a single execution costs more than this dollar amount.">Spike if execution &gt; $</span><input id=spike type=number min=0 step=0.1 value=0.50></label>
    <button class="tbtn fieldtip" id=notify-test title="Send a browser notification test using the current permission state." data-tip="Send a browser notification test using the current permission state.">Test notification</button>
-   <span class=cfgnote id=notify-state></span>
+   <span class=cfgnote id=notify-state>Session budget is set in Summary.</span>
    <span class=spacer></span>
   </div>
   <div class="card pad">
@@ -366,61 +405,93 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   </div>
   </div>
   </div>
+  </div>
 	  <div class=foot>Local-only · reads <span class=mono>~/.claude</span>, <span class=mono>~/.codex</span>, and <span class=mono>~/.cursor</span> traces · run preferences stay in this browser</div>
  </div>
 
-	 <div class=view id=view-global>
-	  <div class=glob-hero>
-	  <div class="card pad"><div class="label fieldtip" tabindex=0 title="Estimated spend across local traces. Cursor uses a clearly labeled context-and-visible-output proxy because its local trace does not persist authoritative billing usage." data-tip="Estimated spend across local traces. Cursor uses a clearly labeled context-and-visible-output proxy because its local trace does not persist authoritative billing usage.">Estimated spend</div><div class="meter mono" id=g-cost style=font-size:44px>$0</div><div class=subline id=g-sub></div></div>
-	   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Estimated spend recorded today in the local timezone." data-tip="Estimated spend recorded today in the local timezone.">Today</div><div class="meter mono" id=g-today-cost style=font-size:44px>$0</div><div class=subline id=g-today-note></div></div>
-	   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Cumulative prompt-to-completed-response wall-clock time across timed requests. Parallel waits can overlap, so this is agent wait accumulated, not a unique-human-time clock." data-tip="Cumulative prompt-to-completed-response wall-clock time across timed requests. Parallel waits can overlap, so this is agent wait accumulated, not a unique-human-time clock.">Wait time</div><div class="meter mono" id=g-wait style=font-size:44px>--</div><div class=subline id=g-wait-note></div></div>
-	   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Daily estimated spend over the most recent logged days." data-tip="Daily estimated spend over the most recent logged days.">Spend trend · 14d</div><div class=spark id=g-spark></div><div class=subline id=g-trend style=margin-top:8px></div></div>
-	  </div>
-	  <div class="seg global-tabs" id=global-tabs>
-	   <button data-global-panel=overview>Overview</button>
-	   <button data-global-panel=insights>Global insights</button>
-	   <button data-global-panel=evidence>Capability evidence</button>
-	  </div>
-
-	  <div class="global-panel on" id=global-panel-overview>
-	   <div class=overviewKpis>
-	    <div class="card pad"><div class=label>Discovered logs</div><div class="v mono" id=g-logs-total>0</div><div class=subline>supported local app history</div></div>
-	    <div class="card pad"><div class=label>Executions</div><div class="v mono" id=g-executions-total>0</div><div class=subline>across all discovered logs</div></div>
-	    <div class="card pad"><div class=label>Tokens</div><div class="v mono" id=g-tokens-total>0</div><div class=subline>reported or clearly marked local estimates</div></div>
-	    <div class="card pad"><div class=label>Review candidates</div><div class="v mono" id=g-review-total>0</div><div class=subline>unused removable groups</div></div>
-	   </div>
-	   <div class=globalOverviewGrid>
-	    <div class="card pad"><div class=label>Spend by runtime</div><div class=overviewRows id=g-provider-overview></div></div>
-	    <div class="card pad"><div class=label>Model mix</div><div id=g-mm style=margin-top:12px></div></div>
-	   </div>
-	   <div class=globalOverviewGrid style=margin-top:12px>
-	    <div class="card pad"><div class=label>What to inspect next</div><div class=priorityRows id=g-global-priorities></div></div>
-	    <div class="card pad"><div class=label>Highest-cost logs</div><div class=overviewRows id=g-overview-sessions></div></div>
-	   </div>
-	  </div>
-
-  <div class=global-panel id=global-panel-insights>
-  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule." data-tip="Trace-observed tool and MCP result volume across local sessions. Flagged tokens matched at least one oversized, repeated, or error rule.">Global tool waste</span></h2><span class=hint>trace-backed · categories can overlap</span></div>
-  <div class=wasteHero>
-   <div class="card pad"><div class=label>Returned tokens</div><div class="meter mono" id=g-tool-tokens>0</div><div class=subline id=g-tool-token-note></div></div>
-   <div class="card pad"><div class=label>Flagged tokens</div><div class="meter mono" id=g-flagged-tokens>0</div><div class=subline id=g-flagged-note></div></div>
-   <div class="card pad"><div class=label>Oversized calls</div><div class="meter mono" id=g-oversized>0</div><div class=subline>at least 8k returned tokens</div></div>
-   <div class="card pad"><div class=label>Errors &amp; exact repeats</div><div class="meter mono" id=g-errors-repeats>0</div><div class=subline id=g-errors-repeat-note></div></div>
+ <div class="view on" id=view-session>
+  <div class=banner id=banner>
+   <span class=msg id=banner-msg></span>
+   <span class=budgetadd id=budget-add-row>
+    <label>Add $<input id=budget-add type=number min=0.5 step=0.5 value=5></label>
+    <button class=tbtn id=budget-add-btn type=button>Add budget</button>
+   </span>
   </div>
-  <div class=globalWasteGrid>
-   <div class="card pad"><div class=label>Returned tokens by capability</div><div class=subline>largest trace-observed result streams</div><div class=wasteBars id=g-tool-bars></div></div>
-   <div class="card pad"><div class=label>Tool-result trend · 14d</div><div class=subline>blue total · amber flagged by at least one rule</div><div class=wasteTrend id=g-tool-waste-trend></div></div>
-  </div>
-  <div class="card pad" style="margin-top:12px"><div class=label>Global insights</div><div class=globalInsightList id=g-waste-insights></div></div>
+  <div class=previewHead>
+   <div class=previewHeadCopy>
+    <div class=previewEyebrow><span>Live</span> Current session</div>
+    <h1>Current</h1>
+    <p>Follow cost, context, tokens, activity, tools, insights, and alerts as the session runs.</p>
+   </div>
+   <div class="seg previewTabs" id=current-tabs aria-label="Current views">
+    <button data-current-panel=run>Run</button>
+    <button data-current-panel=activity>Activity</button>
+    <button data-current-panel=tools>Tools</button>
+    <button data-current-panel=insights>Insights</button>
+    <button data-current-panel=alerts>Alerts</button>
+   </div>
   </div>
 
-  <div class=global-panel id=global-panel-evidence>
-  <div class=section-h><h2>Capability evidence</h2><span class=hint>usage, payloads, failures, and recommendations</span></div>
-  <div class="card pad wasteTableWrap">
-   <table class=tbl id=g-tool-table><thead><tr><th>Tool / MCP</th><th>Namespace</th><th class=num>Sessions</th><th class=num>Calls</th><th class=num>Returned</th><th class=num>Flagged</th><th class=num>Errors</th><th>Last used</th><th>Recommendation</th></tr></thead><tbody></tbody></table>
+  <div class=previewRunMeta>
+   <span class="badge app" id=preview-provider>source</span>
+   <span class=repo id=preview-project>--</span>
+   <span class=pill id=preview-model>--</span>
+   <span class=spacer></span>
+   <button class=unpin id=unpin>Back to live</button>
+   <button class=sessionDelete id=session-delete type=button hidden>Delete session</button>
   </div>
-	  </div>
-	 </div>
+  <section class="card previewStartStrip">
+   <div class=previewStartLabel>Started with</div>
+   <div class="previewStartText fieldtip" id=preview-start tabindex=0 data-tip="No user message captured.">No user message captured.</div>
+  </section>
+  <div class="previewSurface on" id=preview-surface-run>
+  <div class=previewRunGrid>
+   <div class=previewChartSlot id=preview-run-chart-slot></div>
+   <aside class=previewDecision>
+    <section class="card previewStatus" id=preview-status-card>
+     <div class=previewStatusTop><span class=previewState id=preview-state>Live</span><span class="previewIdle mono" id=preview-idle>--</span></div>
+     <div class="previewCost mono" id=preview-cost>$0.00</div>
+     <div class=previewCostNote id=preview-cost-note>Waiting for live cost evidence.</div>
+     <div class=previewPressure>
+      <div class=previewPressureHead><span>Context pressure</span><b class=mono id=preview-context-pct>--</b></div>
+      <div class=previewPressureBar role=progressbar aria-label="Current context pressure" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0 id=preview-context-bar><i></i></div>
+     </div>
+     <div class=previewTimes>
+      <div><span>Started</span><b class=mono id=preview-started-at>--</b></div>
+      <div><span id=preview-last-label>Last activity</span><b class=mono id=preview-last-at>--</b></div>
+     </div>
+    </section>
+    <div class=previewRunBudgetSlot id=preview-run-budget-slot></div>
+   </aside>
+  </div>
+  <div class=previewTokenSlot id=preview-token-split-slot></div>
+  <div class=previewKpis aria-label="Live run metrics">
+   <div class="card previewKpi fieldtip previewSpeed" tabindex=0 title="Observed model output divided by attributable generation time. Tool-free timing is preferred; coverage explains how much output has usable timing." data-tip="Observed model output divided by attributable generation time. Tool-free timing is preferred; coverage explains how much output has usable timing."><div class=label>Output speed</div><div class="v mono" id=preview-speed>--</div><div class=sm id=preview-speed-note>timing evidence</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Cumulative wall-clock time from prompts to completed responses. Reasoning and tool use count; gaps waiting for the next user prompt do not." data-tip="Cumulative wall-clock time from prompts to completed responses. Reasoning and tool use count; gaps waiting for the next user prompt do not."><div class=label>Wait time</div><div class="v mono" id=preview-wait>--</div><div class=sm id=preview-wait-note>prompt to completion</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Input or context tokens in the latest execution, shown against the model's known context window." data-tip="Input or context tokens in the latest execution, shown against the model's known context window."><div class=label>Context</div><div class="v mono" id=preview-context>--</div><div class=sm id=preview-context-note>latest execution</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Trace-observed model response cycles in this run. One user request can contain several executions." data-tip="Trace-observed model response cycles in this run. One user request can contain several executions."><div class=label>Executions</div><div class="v mono" id=preview-executions>0</div><div class=sm id=preview-executions-note>model turns</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Tool invocations observed in this run, including built-in and MCP tools." data-tip="Tool invocations observed in this run, including built-in and MCP tools."><div class=label>Tool calls</div><div class="v mono" id=preview-tools>0</div><div class=sm id=preview-tools-note>observed activity</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Approximate tokens returned by tool results, estimated from captured result size rather than provider billing usage." data-tip="Approximate tokens returned by tool results, estimated from captured result size rather than provider billing usage."><div class=label>Tool-result tokens</div><div class="v mono" id=preview-tool-results>--</div><div class=sm id=preview-tool-results-note>estimated returned text</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Share of input tokens served from or written to provider prompt cache instead of sent as fresh input." data-tip="Share of input tokens served from or written to provider prompt cache instead of sent as fresh input."><div class=label>Cache rate</div><div class="v mono" id=preview-cache-rate>--</div><div class=sm id=preview-cache-rate-note>input served from cache</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated spend avoided by cache reads compared with charging the same tokens at the normal input rate." data-tip="Estimated spend avoided by cache reads compared with charging the same tokens at the normal input rate."><div class=label>Cache saved</div><div class="v mono" id=preview-cache-saved>--</div><div class=sm id=preview-cache-saved-note>estimated avoided spend</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once."><div class=label>Burn / minute</div><div class="v mono" id=preview-burn>--</div><div class=sm id=preview-burn-note>while the run is active</div></div>
+   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated run cost divided by trace-observed completed tasks. It is unavailable when billing or completion evidence is missing." data-tip="Estimated run cost divided by trace-observed completed tasks. It is unavailable when billing or completion evidence is missing."><div class=label>Cost / task</div><div class="v mono" id=preview-cost-task>--</div><div class=sm id=preview-cost-task-note>accepted-task estimate</div></div>
+  </div>
+  <div class=foot>Live session evidence · local-only · run preferences stay in this browser</div>
+  </div>
+  <div class=previewSurface id=preview-surface-activity>
+   <div class=previewSharedSlot id=preview-activity-slot></div>
+  </div>
+  <div class=previewSurface id=preview-surface-tools>
+   <div class=previewSharedSlot id=preview-tools-slot></div>
+  </div>
+  <div class=previewSurface id=preview-surface-insights>
+   <div class=previewSharedSlot id=preview-insights-slot></div>
+  </div>
+  <div class=previewSurface id=preview-surface-alerts>
+   <div class=previewSharedSlot id=preview-alerts-slot></div>
+  </div>
+ </div>
 
 	 <div class=view id=view-logs>
 	  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local AI app logs discovered on this machine. Each log can contain many executions." data-tip="Local AI app logs discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
@@ -479,29 +550,30 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 
 	 <section class=frustrationSection id=model-frustration>
 	  <div class=modelHead>
-	   <div><h2>Frustration signals</h2><p>Track configured frustration terms in human user messages across chats, models, days, and weeks.</p></div>
+	   <div><h2>User language signals <span class=agentAccessBadge>Experimental</span></h2><p>Track configured positive and friction phrases in human user messages across chats, models, days, and weeks.</p></div>
 	   <div class=modelControls>
-	    <label class=filterControl><span>Model</span><select class=filterSelect id=f-model aria-label="Frustration model filter"><option value="">All models</option></select></label>
-	    <label class=filterControl><span>History</span><select class=filterSelect id=f-range aria-label="Frustration history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
+	    <div class=filterControl><span>Signal</span><div class=seg id=f-signal-group><button data-fsignal=positive>Positive</button><button data-fsignal=friction>Friction</button></div></div>
+	    <label class=filterControl><span>Model</span><select class=filterSelect id=f-model aria-label="Language signal model filter"><option value="">All models</option></select></label>
+	    <label class=filterControl><span>History</span><select class=filterSelect id=f-range aria-label="Language signal history range"><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
 	   </div>
 	  </div>
-	  <div class=frustrationNotice><b>Lexical signal, not sentiment analysis.</b> A user turn counts once when it contains any configured whole term. Quoted or discussed terms can also match.</div>
+	  <div class=frustrationNotice><b>Lexical signals, not sentiment analysis.</b> A user turn counts once per group when it contains a configured whole phrase. Quoted or discussed phrases can also match.</div>
 	  <div class="modelHero frustrationHero">
 	   <div class="card modelKpi"><div class=label>Matched utterances</div><div class="v mono" id=f-utterances>0</div><div class=subline id=f-utterances-note>user turns with a configured term</div></div>
 	   <div class="card modelKpi"><div class=label>Share of user turns</div><div class="v mono" id=f-rate>0%</div><div class=subline id=f-rate-note>0 of 0 user turns</div></div>
-	   <div class="card modelKpi"><div class=label>Affected chats</div><div class="v mono" id=f-sessions>0</div><div class=subline id=f-sessions-note>among visible discovered logs</div></div>
+	   <div class="card modelKpi"><div class=label>Matched chats</div><div class="v mono" id=f-sessions>0</div><div class=subline id=f-sessions-note>among visible discovered logs</div></div>
 	   <div class="card modelKpi"><div class=label>Term hits</div><div class="v mono" id=f-matches>0</div><div class=subline>repeated terms count separately</div></div>
 	  </div>
 	  <div class="card frustrationTrendCard">
 	   <div class=modelTrendHead><div><h2>Signal over time</h2><p id=f-trend-note>user-turn volume, matched utterances, and rate</p></div><div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end"><div class=frustrationLegend><span><i style="background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)"></i>user turns</span><span><i style="background:var(--warn)"></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
-	   <div class=modelChartWrap><svg class="modelChart frustrationChart" id=f-chart viewBox="0 0 1040 286" preserveAspectRatio=none role=img aria-label="Frustration rate and matched user utterances over time"></svg><div class=modelChartTip id=f-chart-tip></div></div>
+	   <div class=modelChartWrap><svg class="modelChart frustrationChart" id=f-chart viewBox="0 0 1040 286" preserveAspectRatio=none role=img aria-label="Language-signal rate and matched user utterances over time"></svg><div class=modelChartTip id=f-chart-tip></div></div>
 	  </div>
 	  <div class=frustrationBreakdown>
 	   <section class="card signalPanel modelPanel"><div class=signalPanelHead><div><h2>Models</h2><p>rate and matched user turns</p></div></div><div class=signalRankList id=f-models></div></section>
 	   <section class="card signalPanel termPanel"><div class=signalPanelHead><div><h2>Terms</h2><p>observed hits in this window</p></div><button class=tbtn id=f-add-terms type=button>Add more terms</button></div><div class=signalRankList id=f-terms></div></section>
-	   <section class="card signalPanel chatPanel"><div class=signalPanelHead><div><h2>Chats</h2><p id=f-chat-summary>sessions ranked by frustration rate</p></div><div class=seg id=f-chat-mode><button data-fchat=affected>Affected</button><button data-fchat=all>All</button></div></div><div class=chatSignalList id=f-chats></div></section>
+	   <section class="card signalPanel chatPanel"><div class=signalPanelHead><div><h2>Chats</h2><p id=f-chat-summary>sessions ranked by match rate</p></div><div class=seg id=f-chat-mode><button data-fchat=affected>Matched</button><button data-fchat=all>All</button></div></div><div class=chatSignalList id=f-chats></div></section>
 	  </div>
-	  <div class=foot>Only aggregate counts leave the parser · raw message text is not retained in frustration analytics · edit the lexicon in Settings</div>
+	  <div class=foot>Only aggregate counts leave the parser · raw message text is not retained in language-signal analytics · edit both phrase groups in Settings</div>
 	 </section>
 	 </div>
 
@@ -544,9 +616,10 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	  <section class=learnSection><h2>Recommended workflow</h2><div class=learnSteps>
 	   <div class=learnStep><div class=num>1</div><div><h3>Start with the current summary</h3><p>Check estimated spend, wait time, context use, cache behavior, and the latest execution before deciding whether the session needs intervention.</p></div><button class=tbtn data-learn-route=summary>Open Current</button></div>
 	   <div class=learnStep><div class=num>2</div><div><h3>Inspect execution spikes</h3><p>Use Activity to find the execution where tokens, cost, context, or tool calls changed sharply, then inspect the prompt and result around that point.</p></div><button class=tbtn data-learn-route=activity>Open Activity</button></div>
-	   <div class=learnStep><div class=num>3</div><div><h3>Act on evidence, not one-off noise</h3><p>Use Insights for immediate issues, then Global and Daily to confirm whether the pattern repeats across logs or days.</p></div><button class=tbtn data-learn-route=global-overview>Open Global</button></div>
+	   <div class=learnStep><div class=num>3</div><div><h3>Act on evidence, not one-off noise</h3><p>Use Insights for immediate issues, then Logs and Daily to confirm whether the pattern repeats across runs or days.</p></div><button class=tbtn data-learn-route=logs>Open Logs</button></div>
 	   <div class=learnStep><div class=num>4</div><div><h3>Review capability loading</h3><p>Open Tools, review MCP usage as read-only evidence, and disable only user-installed skill packs that remain unused across scanned logs.</p></div><button class=tbtn data-learn-route=capabilities>Review tools</button></div>
 	   <div class=learnStep><div class=num>5</div><div><h3>Close with the daily summary</h3><p>Compare today with recent days, note the dominant runtime and highest-cost logs, and capture any follow-up for the next run.</p></div><button class=tbtn data-learn-route=daily>Open Daily</button></div>
+	   <div class=learnStep><div class=num>6</div><div><h3>Check the monthly envelope</h3><p>Use Settings → Monthly budget to compare recorded month-to-date spend with the overall limit, runtime allocations, and projected pace. Treat partial coverage as a lower bound.</p></div><button class=tbtn data-learn-route=settings-budgets>Open budget settings</button></div>
 	  </div></section>
 	  <section class=learnSection id=learn-model-guide><div class=learnSectionHead><div><h2>Compare model speed without fooling yourself</h2><div class=subline>Context size, output length, tools, cache behavior, and runtime all affect how long a turn takes. Use the Models view in this order.</div></div><button class=tbtn data-learn-route=models type=button>Open Models</button></div><div class=learnModelGuide>
 	   <article class=learnModelCard><div class=num>Step 1</div><h3>Select two model runtimes</h3><p>Compare exact histories such as Opus · Claude-3P and GPT · Codex. Do not pool the same model across different runtimes.</p></article>
@@ -559,7 +632,6 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	   <div class=promptCard><code>Why was the last phase expensive?</code>Drills into a retained execution without returning prompts, arguments, or result content.</div>
 	   <div class=promptCard><code>What should I change before the next phase?</code>Combines current-run evidence with one practical recommendation.</div>
 	  </div><div class=learnActions><button class=tbtn data-learn-route=settings type=button>Open Settings</button></div></section>
-	  <section class=learnSection><h2>Glossary</h2><div class=glossaryToolbar><input class=searchbox id=learn-search type=search placeholder="Search terms"><span class=globalMeta id=learn-count></span></div><dl class=glossaryList id=learn-glossary></dl></section>
 	 </div>
 
 	 <div class=view id=view-capabilities>
@@ -582,22 +654,78 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
   </div>
   <div class="card pad capTableWrap"><table class=tbl id=c-table><thead><tr><th class=sortable data-csort=name tabindex=0 aria-sort=none>Capability</th><th class=sortable data-csort=type tabindex=0 aria-sort=none>Type</th><th class=sortable data-csort=runtime tabindex=0 aria-sort=none>Runtime / source</th><th class=sortable data-csort=state tabindex=0 aria-sort=none>State</th><th class="num sortable" data-csort=use tabindex=0 aria-sort=none>Use</th><th class="num sortable" data-csort=returned tabindex=0 aria-sort=none>Returned</th><th class=sortable data-csort=last tabindex=0 aria-sort=none>Last used</th><th class=sortable data-csort=control tabindex=0 aria-sort=none>Control</th></tr></thead><tbody></tbody></table></div>
   <div class=foot>Eager = schema loaded up front · Deferred = schema loaded on demand · changes require restarting the IDE or agent</div>
- </div>
+	 </div>
 
 	 <div class=view id=view-settings>
-	  <div class="learnHead settingsPageHead"><h1>Settings</h1><p>Connect Token Meter to your agents, then tune machine-wide analytics.</p></div>
-  <div class=settingsGrid>
+	  <div class="learnHead settingsPageHead"><h1>Settings</h1><p>Machine-wide controls, grouped by what they change. Session-specific budgets and alerts remain in Current.</p></div>
+  <div class=settingsPageLayout>
+   <nav class="card settingsMap" aria-label="Settings sections">
+    <div class=settingsMapIntro><h2>Settings map</h2><p>Machine-wide controls</p></div>
+    <button type=button data-settings-target=budget-settings><span>01</span><span><b>Monthly budget</b><small>Plan, history, and alerts</small></span></button>
+    <button type=button data-settings-target=agent-access><span>02</span><span><b>Agent connection</b><small>Read-only MCP access</small></span></button>
+    <button type=button data-settings-target=model-pricing-settings><span>03</span><span><b>Model pricing</b><small>Cost estimates and custom rates</small></span></button>
+    <button type=button data-settings-target=frustration-settings><span>04</span><span><b>Language signals</b><small>Positive and friction phrases</small></span></button>
+   </nav>
+   <div class=settingsPageContent>
+   <section class=settingsBudgetSection id=budget-settings>
+	  <div class=learnHead><h2>Monthly budget</h2><p>Set one machine-wide limit, distribute it across runtimes, and see whether the current calendar month is on track.</p></div>
+	  <div class=budgetDashboard>
+	   <section class="card pad budgetLead">
+	    <div class=learnSectionHead><div><div class=label>Current month</div><h2>Budget status</h2><div class=subline id=budget-current-note>Waiting for spend data.</div></div><span class=agentAccessBadge id=budget-state>Not configured</span></div>
+	    <div class=budgetLeadBody>
+	     <div class=budgetSpend>
+	      <div><div class="label fieldtip" tabindex=0 title="Observed or locally estimated cost in the current local calendar month." data-tip="Observed or locally estimated cost in the current local calendar month.">Spent this month</div><div class="budgetSpendValue mono" id=budget-spend>$0.00</div><div class=subline id=budget-spend-note></div></div>
+	      <div class=budgetProgress id=budget-progress role=progressbar aria-label="Monthly budget used" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i><span class=budgetProgressMarkers id=budget-progress-markers aria-hidden=true></span></div>
+	      <div class=budgetCoverage id=budget-coverage></div>
+	     </div>
+	     <div class=budgetReadouts>
+	      <div><div class="label fieldtip" tabindex=0 title="The machine-wide monthly budget saved in Token Meter settings." data-tip="The machine-wide monthly budget saved in Token Meter settings.">Monthly budget</div><div class="v mono" id=budget-total>Not set</div><div class=subline id=budget-total-note></div></div>
+	      <div><div class="label fieldtip" tabindex=0 title="Budget minus observed spend. Partial coverage means this is not a guaranteed safe remainder." data-tip="Budget minus observed spend. Partial coverage means this is not a guaranteed safe remainder.">Remaining</div><div class="v mono" id=budget-remaining>--</div><div class=subline id=budget-remaining-note></div></div>
+	      <div><div class="label fieldtip" tabindex=0 title="Straight-line projection based on elapsed calendar days, shown after at least three active spend days." data-tip="Straight-line projection based on elapsed calendar days, shown after at least three active spend days.">Projected month</div><div class="v mono" id=budget-projected>--</div><div class=subline id=budget-projected-note></div></div>
+	     </div>
+	    </div>
+	   </section>
+	  </div>
+	  <div class=budgetDetailGrid>
+	   <section class="card pad budgetHistory">
+	    <div class=learnSectionHead><div><h2>Monthly spend</h2><div class=subline>Up to 12 local calendar months, including labeled local estimates.</div></div><span class=globalMeta id=budget-history-note></span></div>
+	    <div class=budgetBars id=budget-bars></div>
+	   </section>
+	    <section class="card pad budgetRuntimeCard">
+	     <div class=learnSectionHead><div><h2>Runtime spend</h2><div class=subline id=budget-allocation-note>Share of this month’s recorded spend.</div></div></div>
+	     <div class=budgetRuntimeList id=budget-runtimes></div>
+	    </section>
+	  </div>
+	  <section class="card pad budgetConfig" id=budget-config>
+	   <div class=budgetConfigHead><div><div class=label>Plan controls</div><h2>Monthly budget plan</h2><div class=subline>Set the machine-wide guardrail, optional runtime allocations, and alert thresholds.</div></div><span class="budgetConfigBadge mono" id=budget-config-summary>Not configured</span></div>
+	   <form class=budgetForm id=budget-form>
+	    <fieldset class=budgetFormGroup>
+	     <legend>Guardrail and alerts</legend>
+	     <div class=budgetCoreFields>
+	      <label><span>Total USD / month</span><input id=budget-input-total type=number min=0 max=100000000 step=any required></label>
+	      <label><span>Alert thresholds (%)</span><input id=budget-input-thresholds type=text value="80, 90, 100" required></label>
+	      <label class=budgetNotify><input id=budget-input-notifications type=checkbox checked><span>Alert when a threshold is crossed</span></label>
+	     </div>
+	    </fieldset>
+	    <fieldset class=budgetFormGroup>
+	     <legend>Optional runtime allocations</legend>
+	     <div class=budgetAllocationFields>
+	      <label><span>Claude</span><input id=budget-input-claude type=number min=0 max=100000000 step=any></label>
+	      <label><span>Codex</span><input id=budget-input-codex type=number min=0 max=100000000 step=any></label>
+	      <label><span>Cursor</span><input id=budget-input-cursor type=number min=0 max=100000000 step=any></label>
+	     </div>
+	    </fieldset>
+	    <div class=budgetActions><button class=tbtn id=budget-save type=submit>Save budget</button><span class=settingsStatus id=budget-settings-status>Machine-wide · saved outside the browser</span></div>
+	   </form>
+	  </section>
+	  <div class=foot>Monthly budgets do not replace per-run caps in Current → Run · partial coverage is shown as “at least” spend</div>
+   </section>
    <section class="card pad agentAccess" id=agent-access>
     <div class=agentAccessHead><div><div class=label>MCP connection</div><h2>Token Meter MCP</h2><p>Give Codex and Claude read-only, on-demand access to cost, context, tool usage, and efficiency evidence.</p></div><span class=agentAccessBadge id=agent-access-badge>Checking clients</span></div>
     <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status <span class=mcpMark>MCP</span></div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
     <div class=agentPromise><b>Private by default</b><span>Local stdio connection. Prompts, messages, reasoning, tool content, credentials, and config values are never returned.</span></div>
     <div class=agentTools><span>Read-only tools</span><code>mcp__tokenmeter__check</code><code>mcp__tokenmeter__usage</code><code>mcp__tokenmeter__capabilities</code></div>
     <details class=agentPrivacy><summary>What the MCP can access</summary><div class=agentDisclosure><div><b>Current run:</b> detailed numeric evidence for the matched runtime and project.</div><div><b>History:</b> aggregate-only, with no run titles, project names, IDs, or paths.</div><div><b>Capability review:</b> named user-installed skill packs only when requested.</div><div><b>Agent processing:</b> returned metrics enter the agent context and may be processed by its model provider.</div></div></details>
-   </section>
-   <section class="card pad settingsLexicon" id=frustration-settings>
-    <div class=settingsLexiconHead><div><div class=label>Analytics</div><h2>Frustration terms</h2><p>One term or phrase per line. Matching is case-insensitive and re-applied to every discovered session.</p></div><span class=agentAccessBadge id=frustration-term-count>0 terms</span></div>
-    <label class=settingsField><span>Terms</span><textarea id=frustration-terms spellcheck=false placeholder="fuck&#10;fck&#10;shit&#10;idiot&#10;bullshit"></textarea></label>
-    <div class=settingsActions><button class=tbtn id=frustration-save type=button>Save and recalculate</button><button class="tbtn clearFilters" id=frustration-reset type=button>Restore defaults</button><span class=settingsStatus id=frustration-settings-status>Machine-wide · saved outside the browser</span></div>
    </section>
    <section class="card pad settingsLexicon settingsPricing" id=model-pricing-settings>
     <div class=settingsLexiconHead><div><div class=label>Cost estimates</div><h2>Model pricing</h2><p>Edit prices in USD per 1 million tokens. Changes are machine-wide and recalculate current and historical cost estimates.</p></div><span class=agentAccessBadge id=model-pricing-badge>Loading prices</span></div>
@@ -613,8 +741,17 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
     </form>
     <div class=settingsStatus id=model-pricing-status>Machine-wide · saved outside the browser</div>
    </section>
+   <section class="card pad settingsLexicon" id=frustration-settings>
+    <div class=settingsLexiconHead><div><div class=label>Experimental analytics</div><h2>User language signals</h2><p>One whole phrase per line. Matching is case-insensitive, can include quoted text, and is re-applied to every discovered session.</p></div><span class=agentAccessBadge id=frustration-term-count>0 phrases</span></div>
+    <div class=settingsSignalGrid>
+     <label class=settingsField><span>Positive phrases</span><textarea id=positive-terms spellcheck=false placeholder="thank you&#10;perfect&#10;works now"></textarea></label>
+     <label class=settingsField><span>Friction phrases</span><textarea id=frustration-terms spellcheck=false placeholder="fuck&#10;fck&#10;shit&#10;idiot&#10;bullshit"></textarea></label>
+    </div>
+    <div class=settingsActions><button class=tbtn id=frustration-save type=button>Save and recalculate</button><button class="tbtn clearFilters" id=frustration-reset type=button>Restore defaults</button><span class=settingsStatus id=frustration-settings-status>Machine-wide · saved outside the browser</span></div>
+   </section>
+   </div>
   </div>
-	  <div class=foot>MCP changes apply to new agent sessions · capability controls remain in Tools · budgets and notifications remain in Current → Alerts</div>
+	  <div class=foot>MCP changes apply to new agent sessions · capability controls remain in Tools · session budgets remain in Current → Summary · notifications remain in Current → Alerts</div>
 	 </div>
 </div>
 <dialog class=commandPalette id=command-palette aria-labelledby=command-title>
@@ -758,6 +895,9 @@ function costTipHtml(s,tok){
 }
 let LATEST=null, CURRENT=null, pinned=null, sessionRequest=0;
 let AGENT_ACCESS=null, pendingAgentAccess=null, agentAccessLoading=false;
+const usageDetails=$('usage-details');
+usageDetails.open=localStorage.getItem('tm_usage_details_open')==='1';
+usageDetails.addEventListener('toggle',()=>localStorage.setItem('tm_usage_details_open',usageDetails.open?'1':'0'));
 
 function routedSessionId(){
  const match=(location.pathname||'').match(/^\/sessions\/([^/]+)\/?$/);
@@ -776,19 +916,17 @@ function setHashRoute(route,{replace=false,apply=true}={}){
 
 const NAV_COMMANDS=[
  {id:'current',label:'Current',description:'Return to the live summary for the newest run',section:'Navigate',latest:true,directKey:'Digit1',glyph:'1'},
- {id:'daily',label:'Daily',description:"Review one day's spend and cost drivers",section:'Navigate',route:'daily',directKey:'Digit2',glyph:'2'},
- {id:'logs',label:'Logs',description:'Search, filter, and open recorded runs',section:'Navigate',route:'logs',directKey:'Digit3',glyph:'3'},
- {id:'global',label:'Global',description:'See cross-app spend, insights, and evidence',section:'Navigate',route:'global-overview',directKey:'Digit4',glyph:'4'},
- {id:'models',label:'Models',description:'Compare model performance and review frustration signals',section:'Navigate',route:'models',directKey:'Digit5',glyph:'5'},
- {id:'capabilities',label:'Tools',description:'Inspect tools, MCPs, and optional skill packs',section:'Navigate',route:'capabilities',directKey:'Digit6',glyph:'6'},
- {id:'learn',label:'Learn',description:'Open the review workflow and glossary',section:'Navigate',route:'learn',directKey:'Digit7',glyph:'7'},
- {id:'settings',label:'Settings',description:'Configure analytics and agent connections',section:'Navigate',route:'settings',directKey:'Digit8',glyph:'8'},
+ {id:'logs',label:'Logs',description:'Search, filter, and open recorded runs',section:'Navigate',route:'logs',directKey:'Digit2',glyph:'2'},
+ {id:'daily',label:'Daily',description:"Review one day's spend and cost drivers",section:'Navigate',route:'daily',directKey:'Digit3',glyph:'3'},
+ {id:'models',label:'Models',description:'Compare model performance and review user language signals',section:'Navigate',route:'models',directKey:'Digit4',glyph:'4'},
+ {id:'capabilities',label:'Tools',description:'Inspect tools, MCPs, and optional skill packs',section:'Navigate',route:'capabilities',directKey:'Digit5',glyph:'5'},
+ {id:'learn',label:'Learn',description:'Open the recommended review workflow',section:'Navigate',route:'learn',directKey:'Digit6',glyph:'6'},
+ {id:'settings',label:'Settings',description:'Configure budgets, pricing, analytics, and agent connections',section:'Navigate',route:'settings',directKey:'Digit7',glyph:'7'},
+ {id:'settings-budgets',label:'Settings · Monthly budget',description:'Set and track the machine-wide monthly budget',section:'Settings',route:'settings-budgets',glyph:'$'},
  {id:'current-activity',label:'Current · Activity',description:'Inspect execution-by-execution token flow',section:'Current session',route:'activity',glyph:'A'},
  {id:'current-tools',label:'Current · Tools',description:'Inspect tool calls in the selected run',section:'Current session',route:'tools',glyph:'T'},
  {id:'current-insights',label:'Current · Insights',description:'Review trace-backed issues and actions',section:'Current session',route:'insights',glyph:'I'},
  {id:'current-alerts',label:'Current · Alerts',description:'Set the run budget and notification rules',section:'Current session',route:'alerts',glyph:'!'},
- {id:'global-insights',label:'Global · Insights',description:'Review patterns across discovered runs',section:'Global',route:'global-insights',glyph:'I'},
- {id:'global-evidence',label:'Global · Capability evidence',description:'Inspect cross-run tool and capability evidence',section:'Global',route:'global-evidence',glyph:'E'},
 ];
 let visibleCommands=[],commandIndex=0,commandReturnFocus=null;
 function setCommandIndex(index,{scroll=true}={}){
@@ -859,9 +997,53 @@ document.addEventListener('keydown',event=>{
  }
 });
 
+const PANEL_KEYS=['summary','activity','tools','insights','alerts'];
+const PANEL_ALIAS={overview:'summary',flow:'activity',efficiency:'summary',analysis:'summary',settings:'alerts'};
+const CURRENT_PANEL_KEYS=['run','activity','tools','insights','alerts'];
+const CURRENT_PANEL_ROUTES={run:'summary',activity:'activity',tools:'tools',insights:'insights',alerts:'alerts'};
+const storedSessionPanel=PANEL_ALIAS[localStorage.getItem('tm_session_panel')]||localStorage.getItem('tm_session_panel')||'summary';
+let sessionPanel=PANEL_KEYS.includes(storedSessionPanel)?storedSessionPanel:'summary';
+let currentPanel=sessionPanel==='summary'?'run':sessionPanel;
+function restoreCurrentModules(){
+ const homes=[
+  ['session-chart-home','session-chart-module'],
+  ['session-budget-home','session-budget-control'],
+  ['session-token-split-home','session-token-split-module'],
+  ['session-activity-home','panel-activity'],
+  ['session-tools-home','panel-tools'],
+  ['session-insights-home','panel-insights'],
+  ['session-alerts-home','panel-alerts'],
+ ];
+ homes.forEach(([homeId,moduleId])=>{const home=$(homeId),module=$(moduleId);if(home&&module&&module.parentElement!==home)home.appendChild(module);});
+}
+function mountCurrentModule(slotId,moduleId){
+ const slot=$(slotId),module=$(moduleId);
+ if(slot&&module&&module.parentElement!==slot)slot.appendChild(module);
+}
+function showCurrentPanel(panel){
+ panel=PANEL_ALIAS[panel]||panel;
+ if(panel==='summary')panel='run';
+ if(!CURRENT_PANEL_KEYS.includes(panel))panel='run';
+ currentPanel=panel;
+ sessionPanel=CURRENT_PANEL_ROUTES[panel];
+ localStorage.setItem('tm_session_panel',sessionPanel);
+ [...$('current-tabs').querySelectorAll('button')].forEach(button=>button.classList.toggle('on',button.dataset.currentPanel===panel));
+ CURRENT_PANEL_KEYS.forEach(key=>$(`preview-surface-${key}`).classList.toggle('on',key===panel));
+ restoreCurrentModules();
+ if(panel==='run'){
+  mountCurrentModule('preview-run-chart-slot','session-chart-module');
+  mountCurrentModule('preview-run-budget-slot','session-budget-control');
+  mountCurrentModule('preview-token-split-slot','session-token-split-module');
+  if(CURRENT)requestAnimationFrame(()=>drawIO(CURRENT.series||[]));
+ }else{
+  mountCurrentModule(`preview-${panel}-slot`,`panel-${panel}`);
+ }
+ if(panel==='alerts')$('notify').classList.remove('hasnew');
+}
+
 function showTab(t){
+ if(t!=='session')restoreCurrentModules();
  $('tab-session').classList.toggle('on',t==='session');
-	 $('tab-global').classList.toggle('on',t==='global');
 	 $('tab-logs').classList.toggle('on',t==='logs');
 	 $('tab-models').classList.toggle('on',t==='models');
 	 $('tab-daily').classList.toggle('on',t==='daily');
@@ -869,7 +1051,6 @@ function showTab(t){
  $('tab-learn').classList.toggle('on',t==='learn');
  $('tab-settings').classList.toggle('on',t==='settings');
  $('view-session').classList.toggle('on',t==='session');
-	 $('view-global').classList.toggle('on',t==='global');
 	 $('view-logs').classList.toggle('on',t==='logs');
 	 $('view-models').classList.toggle('on',t==='models');
 	 $('view-daily').classList.toggle('on',t==='daily');
@@ -881,56 +1062,30 @@ function showTab(t){
  if(activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'nearest'}));
 }
 $('tab-session').onclick=()=>goToLatestSession();
-$('tab-global').onclick=()=>setHashRoute('global-overview');
 $('tab-logs').onclick=()=>setHashRoute('logs');
 $('tab-models').onclick=()=>setHashRoute('models');
 $('tab-daily').onclick=()=>setHashRoute('daily');
 $('tab-capabilities').onclick=()=>setHashRoute('capabilities');
 $('tab-learn').onclick=()=>setHashRoute('learn');
 $('tab-settings').onclick=()=>setHashRoute('settings');
+$('current-tabs').onclick=event=>{if(event.target.dataset.currentPanel)setHashRoute(CURRENT_PANEL_ROUTES[event.target.dataset.currentPanel]);};
+$('view-settings').onclick=event=>{
+ const targetButton=event.target.closest('[data-settings-target]');
+ if(!targetButton)return;
+ if(targetButton.dataset.settingsTarget==='budget-settings'){setHashRoute('settings-budgets');return;}
+ $(targetButton.dataset.settingsTarget)?.scrollIntoView({behavior:'smooth',block:'start'});
+};
 
-const PANEL_KEYS=['summary','activity','tools','insights','alerts'];
-const PANEL_ALIAS={overview:'summary',flow:'activity',efficiency:'summary',analysis:'summary',settings:'alerts'};
-let sessionPanel=PANEL_ALIAS[localStorage.getItem('tm_session_panel')]||localStorage.getItem('tm_session_panel')||'summary';
-function showSessionPanel(p){
- p=PANEL_ALIAS[p]||p;
- if(!PANEL_KEYS.includes(p)) p='summary';
- sessionPanel=p;
- localStorage.setItem('tm_session_panel',p);
- [...$('session-tabs').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.panel===p));
- PANEL_KEYS.forEach(k=>$('panel-'+k).classList.toggle('on',k===p));
- if(p==='alerts') $('notify').classList.remove('hasnew');
-}
-$('session-tabs').onclick=e=>{ if(e.target.dataset.panel) setHashRoute(e.target.dataset.panel); };
-showSessionPanel(sessionPanel);
-
-const GLOBAL_PANEL_KEYS=['overview','insights','evidence'];
-let globalPanel=localStorage.getItem('tm_global_panel')||'overview';
-function showGlobalPanel(p){
- if(!GLOBAL_PANEL_KEYS.includes(p))p='overview';
- globalPanel=p;
- localStorage.setItem('tm_global_panel',p);
- [...$('global-tabs').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.globalPanel===p));
- GLOBAL_PANEL_KEYS.forEach(k=>$('global-panel-'+k).classList.toggle('on',k===p));
-}
-$('global-tabs').onclick=e=>{if(e.target.dataset.globalPanel)setHashRoute(`global-${e.target.dataset.globalPanel}`);};
-showGlobalPanel(globalPanel);
+showCurrentPanel(currentPanel);
 
 function applyHashRoute(){
  const h=(location.hash||'').replace(/^#/,'');
  const panel=PANEL_ALIAS[h]||h;
- if(h==='logs'||h==='global-logs'){
+ const legacyGlobal=h==='global'||h==='global-logs'||/^global-(overview|insights|evidence)$/.test(h);
+ if(h==='logs'||legacyGlobal){
   showTab('logs');
-  if(h==='global-logs')setHashRoute('logs',{replace:true,apply:false});
-  if(LATEST)renderGlobal(LATEST.xsession);
-  return;
- }
- const globalMatch=h.match(/^global-(overview|insights|evidence)$/);
- if(h==='global'||globalMatch){
-  showTab('global');
-  showGlobalPanel(globalMatch?globalMatch[1]:'overview');
-  if(h==='global')setHashRoute('global-overview',{replace:true,apply:false});
-  if(LATEST)renderGlobal(LATEST.xsession);
+  if(legacyGlobal)setHashRoute('logs',{replace:true,apply:false});
+  if(LATEST)renderLogs(LATEST.xsession);
   return;
  }
 	 if(h==='daily'){
@@ -938,10 +1093,25 @@ function applyHashRoute(){
   if(LATEST)renderDaily(LATEST.xsession);
 	  return;
 	 }
+ if(h==='preview-settings'){
+  setHashRoute('settings',{replace:true,apply:false});
+  showTab('settings');
+  if(LATEST)renderSettings(LATEST.xsession);
+  loadAgentAccess();
+  return;
+ }
+ const legacyCurrentRoutes={preview:'summary','preview-run':'summary','preview-activity':'activity','preview-tools':'tools'};
+ if(legacyCurrentRoutes[h]){
+  const canonical=legacyCurrentRoutes[h];
+  setHashRoute(canonical,{replace:true,apply:false});
+  showTab('session');
+  showCurrentPanel(canonical);
+  return;
+ }
 	 if(h==='models'||h==='frustration'){
 	  showTab('models');
 	  if(LATEST)renderModelStats(LATEST.xsession?.model_stats);
-	  if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);
+	  if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);
 	  if(h==='frustration')requestAnimationFrame(()=>$('model-frustration').scrollIntoView({block:'start'}));
 	  return;
 	 }
@@ -954,27 +1124,30 @@ function applyHashRoute(){
   showTab('learn');
   return;
  }
- if(h==='settings'||h==='model-pricing'){
+ if(h==='settings'||h==='model-pricing'||h==='settings-budgets'||h==='budgets'){
+  const budgetRoute=h==='settings-budgets'||h==='budgets';
+  if(h==='budgets')setHashRoute('settings-budgets',{replace:true,apply:false});
   showTab('settings');
-  if(LATEST){renderFrustrationSettings(LATEST.xsession?.frustration);renderModelPricing(LATEST.xsession?.model_pricing);}
+  if(LATEST)renderSettings(LATEST.xsession);
   if(h==='model-pricing')requestAnimationFrame(()=>$('model-pricing-settings').scrollIntoView({block:'start'}));
+  if(budgetRoute)requestAnimationFrame(()=>$('budget-settings').scrollIntoView({block:'start'}));
   loadAgentAccess();
   return;
  }
  if(!h||h==='session'){
   showTab('session');
-  showSessionPanel('summary');
+  showCurrentPanel('summary');
   setHashRoute('summary',{replace:true,apply:false});
   return;
  }
  if(PANEL_KEYS.includes(panel)){
   showTab('session');
-  showSessionPanel(panel);
+  showCurrentPanel(panel);
   if(h!==panel)setHashRoute(panel,{replace:true,apply:false});
  }
  else{
   showTab('session');
-  showSessionPanel('summary');
+  showCurrentPanel('summary');
   setHashRoute('summary',{replace:true,apply:false});
  }
 }
@@ -1119,43 +1292,148 @@ $('model-price-add-form').addEventListener('submit',async event=>{
  }catch(error){$('model-pricing-status').className='settingsStatus warn';$('model-pricing-status').textContent=error.message||String(error);showAppToast({title:'Model could not be added',body:error.message||String(error),kind:'warn',sticky:true});}
 });
 let frustrationSettingsDirty=false;
-function parsedFrustrationTerms(){
+function parsedSignalTerms(id){
  const seen=new Set(),terms=[];
- $('frustration-terms').value.split(/[,\n]/).forEach(value=>{const term=value.trim().toLowerCase().replace(/\s+/g,' ');if(term&&!seen.has(term)){seen.add(term);terms.push(term);}});
+ $(id).value.split(/[,\n]/).forEach(value=>{const term=value.trim().toLowerCase().replace(/\s+/g,' ');if(term&&!seen.has(term)){seen.add(term);terms.push(term);}});
  return terms;
 }
 function paintFrustrationTermCount(){
- const terms=parsedFrustrationTerms();
- $('frustration-term-count').textContent=`${f(terms.length)} ${countWord(terms.length,'term')}`;
- return terms;
+ const positive=parsedSignalTerms('positive-terms'),friction=parsedSignalTerms('frustration-terms'),total=positive.length+friction.length;
+ $('frustration-term-count').textContent=`${f(total)} ${countWord(total,'phrase')}`;
+ return {positive,friction};
 }
 function renderFrustrationSettings(signal){
  signal=signal||{};
- if(!frustrationSettingsDirty)$('frustration-terms').value=(signal.configured_terms||[]).join('\n');
+ if(!frustrationSettingsDirty){
+  $('positive-terms').value=(signal.configured_terms?.positive||signal.positive?.configured_terms||[]).join('\n');
+  $('frustration-terms').value=(signal.configured_terms?.friction||signal.friction?.configured_terms||[]).join('\n');
+ }
  paintFrustrationTermCount();
- if(!frustrationSettingsDirty){$('frustration-settings-status').className='settingsStatus';$('frustration-settings-status').textContent=`Machine-wide · up to ${f(signal.max_terms||64)} terms`;}
+ if(!frustrationSettingsDirty){$('frustration-settings-status').className='settingsStatus';$('frustration-settings-status').textContent=`Machine-wide · up to ${f(signal.max_terms||64)} phrases per group`;}
 }
-$('frustration-terms').addEventListener('input',()=>{frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Unsaved changes';});
+['positive-terms','frustration-terms'].forEach(id=>$(id).addEventListener('input',()=>{frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Unsaved changes';}));
 $('frustration-reset').onclick=()=>{
- $('frustration-terms').value=(LATEST?.xsession?.frustration?.default_terms||[]).join('\n');
+ const defaults=LATEST?.xsession?.language_signals?.default_terms||{};
+ $('positive-terms').value=(defaults.positive||[]).join('\n');
+ $('frustration-terms').value=(defaults.friction||[]).join('\n');
  frustrationSettingsDirty=true;paintFrustrationTermCount();$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent='Defaults loaded · save to apply';
 };
 $('frustration-save').onclick=async()=>{
- const token=agentActionToken(),button=$('frustration-save'),terms=parsedFrustrationTerms();
+ const token=agentActionToken(),button=$('frustration-save'),terms=paintFrustrationTermCount();
  if(!token){showAppToast({title:'Settings not ready',body:'Wait for Token Meter’s live state, then try again.',kind:'warn'});return;}
  button.disabled=true;button.textContent='Recalculating…';
  try{
-  const response=await fetch('/settings/frustration',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify({terms})});
+  const response=await fetch('/settings/language-signals',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify({terms})});
   const result=await response.json();
-  if(!response.ok||!result.ok)throw new Error(result.error||'Could not save frustration terms.');
+  if(!response.ok||!result.ok)throw new Error(result.error||'Could not save language signal phrases.');
   frustrationSettingsDirty=false;
-  if(LATEST?.xsession)LATEST.xsession.frustration=result.frustration||LATEST.xsession.frustration;
-  renderFrustrationSettings(result.frustration||{configured_terms:result.terms,default_terms:result.defaults,max_terms:result.max_terms});
-  if($('view-models').classList.contains('on'))renderFrustration(LATEST?.xsession?.frustration,LATEST?.xsession?.sessions);
+  if(LATEST?.xsession){LATEST.xsession.language_signals=result.language_signals||LATEST.xsession.language_signals;LATEST.xsession.frustration=result.frustration||LATEST.xsession.frustration;}
+  renderFrustrationSettings(result.language_signals||{configured_terms:terms,default_terms:result.defaults,max_terms:result.max_terms});
+  if($('view-models').classList.contains('on'))renderFrustration(LATEST?.xsession?.language_signals,LATEST?.xsession?.sessions);
   $('frustration-settings-status').className='settingsStatus good';$('frustration-settings-status').textContent='Saved and recalculated';
-  showAppToast({title:'Frustration terms updated',body:terms.length?`${f(terms.length)} ${countWord(terms.length,'term')} applied to all discovered sessions.`:'Matching is disabled until terms are added.',kind:'good'});
+  const total=terms.positive.length+terms.friction.length;
+  showAppToast({title:'Language signal phrases updated',body:total?`${f(total)} ${countWord(total,'phrase')} applied across both groups.`:'Matching is disabled until phrases are added.',kind:'good'});
  }catch(error){$('frustration-settings-status').className='settingsStatus warn';$('frustration-settings-status').textContent=error.message||String(error);showAppToast({title:'Settings could not be saved',body:error.message||String(error),kind:'warn',sticky:true});}
  finally{button.disabled=false;button.textContent='Save and recalculate';}
+};
+let budgetSettingsDirty=false;
+function budgetNumber(id){const raw=$(id).value.trim();return raw===''?0:Number(raw);}
+function parsedBudgetThresholds(){
+ const values=$('budget-input-thresholds').value.split(',').map(value=>Number(value.trim())).filter(value=>Number.isFinite(value));
+ return [...new Set(values)].sort((a,b)=>a-b);
+}
+function paintBudgetSettings(settings){
+ settings=settings||{monthly_total:0,allocations:{},thresholds:[80,90,100],native_notifications:true};
+ if(budgetSettingsDirty)return;
+ $('budget-input-total').value=Number(settings.monthly_total||0)||'';
+ $('budget-input-claude').value=Number(settings.allocations?.claude||0)||'';
+ $('budget-input-codex').value=Number(settings.allocations?.codex||0)||'';
+ $('budget-input-cursor').value=Number(settings.allocations?.cursor||0)||'';
+ $('budget-input-thresholds').value=(settings.thresholds||[80,90,100]).join(', ');
+ $('budget-input-notifications').checked=settings.native_notifications!==false;
+}
+function budgetAlertState(){
+ try{const value=JSON.parse(localStorage.getItem('tm_monthly_budget_alerts')||'{}');return value&&typeof value==='object'?value:{};}catch(error){return {};}
+}
+function observeBudgetThresholds(status){
+ if(!status?.configured||status.settings?.native_notifications===false)return;
+ const state=budgetAlertState(),crossed=status.thresholds_crossed||[],seen=state[status.month];
+ if(!Array.isArray(seen)){state[status.month]=crossed;localStorage.setItem('tm_monthly_budget_alerts',JSON.stringify(state));return;}
+ const fresh=crossed.filter(value=>!seen.includes(value));
+ if(!fresh.length)return;
+ state[status.month]=[...new Set([...seen,...crossed])];localStorage.setItem('tm_monthly_budget_alerts',JSON.stringify(state));
+ const threshold=fresh[fresh.length-1],lower=status.lower_bound?'At least ':'';
+ showAppToast({title:`Monthly budget reached ${threshold}%`,body:`${lower}${money(status.spend)} of ${money(status.budget)} recorded for ${status.month}.`,kind:threshold>=100?'warn':'neutral',sticky:threshold>=100});
+ if(Notification.permission==='granted')fireNotification('Token Meter monthly budget',`${lower}${money(status.spend)} of ${money(status.budget)} recorded (${threshold}%).`,`monthly:${status.month}:${threshold}`,{dedupe:true});
+}
+function renderBudgets(xs){
+ if(!xs)return;
+ const status=xs.budget||{},settings=xs.budgets||status.settings||{},months=xs.monthly||[];
+ const configured=!!status.configured,lower=status.lower_bound?'At least ':'',allocations=settings.allocations||{};
+ const allocatedTotal=Object.values(allocations).reduce((sum,value)=>sum+Number(value||0),0);
+ $('budget-spend').textContent=`${lower}${money(status.spend||0)}`;
+ $('budget-spend-note').textContent=`${status.active_days||0} active spend ${countWord(status.active_days||0,'day')} · ${status.month||'current month'}`;
+ $('budget-total').textContent=configured?money(status.budget):'Not set';
+ $('budget-total-note').textContent=configured?(allocatedTotal?`${money(allocatedTotal)} allocated · ${money(status.unallocated||0)} flexible`:'Shared across all runtimes'):'Set a total to enable tracking';
+ $('budget-remaining').textContent=configured?money(status.remaining||0):'--';
+ $('budget-remaining').className=`v mono${configured&&Number(status.percent||0)>=.8?' warn':''}`;
+ $('budget-remaining-note').textContent=status.lower_bound?'Coverage is partial; true remaining may be lower':configured?`${status.days_remaining||0} calendar days left`:'No monthly limit';
+ $('budget-projected').textContent=status.projection_ready?money(status.projected_spend):'--';
+ $('budget-projected').className=`v mono${status.projection_ready&&status.projected_spend>status.budget?' warn':''}`;
+ $('budget-projected-note').textContent=status.projection_ready?`${money(Math.abs(status.projected_spend-status.budget))} ${status.projected_spend>status.budget?'over':'under'} budget at current pace`:`Shown after ${status.projection_min_active_days||3} active spend days`;
+ const ratio=configured?Math.max(0,Number(status.percent||0)):0,progress=$('budget-progress');
+ progress.querySelector('i').style.width=Math.min(100,100*ratio)+'%';progress.setAttribute('aria-valuenow',String(Math.round(100*ratio)));progress.classList.toggle('warn',ratio>=.8);
+ $('budget-progress-markers').innerHTML=configured?(settings.thresholds||[]).filter(value=>value>0&&value<=100).map(value=>`<span style="left:${value}%"></span>`).join(''):'';
+ const stateLabel={unconfigured:'Not configured',on_track:'On track',warning:'Threshold crossed',over:'Budget exceeded'}[status.state]||'Current month';
+ $('budget-state').textContent=stateLabel;
+ $('budget-state').className=`agentAccessBadge budgetState ${status.state||'unconfigured'}`;
+ $('budget-current-note').textContent=configured?`${pct(ratio)} used · ${status.next_threshold?`${status.next_threshold}% next alert`:'all thresholds crossed'}`:'Add a monthly total to start tracking';
+ $('budget-coverage').className=`budgetCoverage${status.lower_bound?' warn':''}`;
+ $('budget-coverage').textContent=status.lower_bound?'Partial cost coverage: recorded spend is a lower bound.':status.estimated?'Includes labeled local cost estimates.':'Cost coverage is complete for discovered sessions.';
+ const runtimes=status.runtimes||[],hasAllocations=runtimes.some(row=>Number(row.allocation||0)>0),runtimeSpend=Math.max(0,Number(status.spend||0));
+ $('budget-allocation-note').textContent=hasAllocations?`${money(allocatedTotal)} assigned · ${money(status.unallocated||0)} flexible`:'No allocations set · bars show share of recorded spend.';
+ const runtimeColors={claude:'#b78cff',codex:'var(--accent)',cursor:'var(--good)'};
+ $('budget-runtimes').innerHTML=runtimes.map(row=>{
+  const spend=Number(row.spend||0),allocated=Number(row.allocation||0),percent=allocated?spend/allocated:(runtimeSpend?spend/runtimeSpend:0),over=allocated&&spend>allocated;
+  const meta=allocated?`${pct(percent)} of ${money(allocated)} allocation · ${over?`${money(spend-allocated)} over`: `${money(row.remaining||0)} remaining`}`:runtimeSpend?`${pct(percent)} of recorded spend · no runtime allocation`:'No recorded spend · no runtime allocation';
+  const color=over?'var(--bad)':runtimeColors[row.provider]||'var(--accent)';
+  return `<div class=budgetRuntime style="--provider-color:${color}"><span class=budgetRuntimeName>${esc(row.label||row.provider)}</span><span class="budgetRuntimeValue mono">${money(spend)}</span><span class=budgetRuntimeTrack><i style="width:${Math.min(100,100*percent)}%"></i></span><span class=budgetRuntimeMeta>${meta}</span></div>`;
+ }).join('');
+ const history=months.slice().reverse(),maxValue=Math.max(.01,...history.map(row=>Number(row.cost||0)),configured?Number(status.budget||0):0),plotMax=maxValue*1.12;
+ if(history.length){
+  const target=configured?`<div class=budgetTarget style="--target-height:${Math.min(96,100*Number(status.budget||0)/plotMax)}%"><span class=mono>${money(status.budget)} budget</span></div>`:'';
+  const bars=history.map(row=>{const height=Math.max(2,100*Number(row.cost||0)/plotMax),current=row.month===status.month?' current':'';return `<div class="budgetBar${current}" style="--bar-height:${height}%" title="${esc(row.month)}: ${money(row.cost)}"><b class=mono>${money(row.cost)}</b><i></i></div>`;}).join('');
+  const axis=history.map(row=>`<span class="${row.month===status.month?'current':''}">${esc(row.month.slice(2))}</span>`).join('');
+  $('budget-bars').innerHTML=`<div class=budgetChartInner style="--months:${history.length}"><div class=budgetPlot>${target}${bars}</div><div class=budgetAxis>${axis}</div></div>`;
+ }else $('budget-bars').innerHTML='<div class=signalEmpty>No monthly cost history yet</div>';
+ $('budget-history-note').textContent=history.length?`${history.length} ${countWord(history.length,'month')} · ${money(history.reduce((sum,row)=>sum+Number(row.cost||0),0))} recorded`:'';
+ $('budget-config-summary').textContent=configured?`${money(status.budget)} / month`:'Add monthly limit';
+ paintBudgetSettings(settings);
+ observeBudgetThresholds(status);
+}
+function renderSettings(xs){
+ if(!xs)return;
+ renderBudgets(xs);
+ renderFrustrationSettings(xs.language_signals);
+ renderModelPricing(xs.model_pricing);
+}
+$('budget-form').addEventListener('input',()=>{budgetSettingsDirty=true;$('budget-settings-status').className='settingsStatus warn';$('budget-settings-status').textContent='Unsaved changes';});
+$('budget-form').onsubmit=async event=>{
+ event.preventDefault();
+ const button=$('budget-save'),allocations={};
+ ['claude','codex','cursor'].forEach(provider=>{const value=budgetNumber(`budget-input-${provider}`);if(value)allocations[provider]=value;});
+ const payload={currency:'USD',monthly_total:budgetNumber('budget-input-total'),allocations,thresholds:parsedBudgetThresholds(),native_notifications:$('budget-input-notifications').checked};
+ button.disabled=true;button.textContent='Saving…';
+ try{
+  const response=await fetch('/settings/budgets',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':agentActionToken()},body:JSON.stringify(payload)});
+  const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'Could not save monthly budget.');
+  budgetSettingsDirty=false;
+  if(LATEST?.xsession){LATEST.xsession.budgets=result.budgets;LATEST.xsession.budget=result.budget;LATEST.xsession.monthly=result.monthly;}
+  renderBudgets(LATEST?.xsession||result);
+  $('budget-settings-status').className='settingsStatus good';$('budget-settings-status').textContent='Saved · monthly rollup updated';
+  showAppToast({title:'Monthly budget updated',body:payload.monthly_total?`${money(payload.monthly_total)} per month across all runtimes.`:'Monthly budget tracking is unconfigured.',kind:'good'});
+ }catch(error){$('budget-settings-status').className='settingsStatus warn';$('budget-settings-status').textContent=error.message||String(error);showAppToast({title:'Budget could not be saved',body:error.message||String(error),kind:'warn',sticky:true});}
+ finally{button.disabled=false;button.textContent='Save budget';}
 };
 function renderAgentAccess(status){
  AGENT_ACCESS=status;
@@ -1331,14 +1609,32 @@ $('notify-test').onclick=()=>{
 };
 
 const SESSION_BUDGET_DEFAULT=10;
+const SESSION_BUDGET_SLIDER_MIN=0.5;
+const SESSION_BUDGET_SLIDER_BASE_MAX=100;
 let sessionBudgets={};
 try{sessionBudgets=JSON.parse(localStorage.getItem('tm_session_budgets')||'{}')||{};}catch(e){sessionBudgets={};}
 localStorage.removeItem('tm_budget');
 function budgetSessionKey(s){return String(s?.source?.id||s?.session||'unknown');}
 function saveSessionBudgets(){try{localStorage.setItem('tm_session_budgets',JSON.stringify(sessionBudgets));}catch(e){}}
+function sessionBudgetSliderMax(s,value){
+ const reference=Math.max(SESSION_BUDGET_DEFAULT,Number(value)||0,Number(s?.total_cost)||0);
+ return Math.max(SESSION_BUDGET_SLIDER_BASE_MAX,Math.ceil(reference*1.5/10)*10);
+}
+function syncSessionBudgetControls(value,s=CURRENT){
+ const n=Math.max(0.5,Number(value)||SESSION_BUDGET_DEFAULT);
+ const slider=$('budget-slider'),max=sessionBudgetSliderMax(s,n);
+ $('budget').value=formatBudgetInput(n);
+ slider.max=String(max);
+ slider.value=String(Math.min(max,Math.max(SESSION_BUDGET_SLIDER_MIN,n)));
+ const min=Number(slider.min)||SESSION_BUDGET_SLIDER_MIN;
+ slider.style.setProperty('--budget-fill',`${Math.max(0,Math.min(100,100*(Number(slider.value)-min)/(max-min||1)))}%`);
+  $('budget-slider-min').textContent=`$${min.toFixed(2)}`;
+ $('budget-slider-max').textContent=money(max);
+ $('session-budget-spend').textContent=metricAvailable(s||{},'cost')?`Current spend ${money(s?.total_cost||0)}${s?.cost_approx?' est':''}`:'Current spend unavailable';
+}
 function loadBudgetForSession(s){
  const saved=parseFloat(sessionBudgets[budgetSessionKey(s)]);
- $('budget').value=formatBudgetInput(Number.isFinite(saved)&&saved>0?saved:SESSION_BUDGET_DEFAULT);
+ syncSessionBudgetControls(Number.isFinite(saved)&&saved>0?saved:SESSION_BUDGET_DEFAULT,s);
 }
 function saveBudgetForSession(value){
  if(!CURRENT)return;
@@ -1346,10 +1642,14 @@ function saveBudgetForSession(value){
  if(!Number.isFinite(n)||n<=0)return;
  sessionBudgets[budgetSessionKey(CURRENT)]=n;
  saveSessionBudgets();
+ syncSessionBudgetControls(n,CURRENT);
+ return n;
 }
 $('budget').value=String(SESSION_BUDGET_DEFAULT);
 $('budget').addEventListener('input',()=>saveBudgetForSession($('budget').value));
 $('budget').addEventListener('change',()=>{if(CURRENT)renderSession(CURRENT);});
+$('budget-slider').addEventListener('input',()=>saveBudgetForSession($('budget-slider').value));
+$('budget-slider').addEventListener('change',()=>{if(CURRENT)renderSession(CURRENT);});
 const savedSpike=localStorage.getItem('tm_spike');
 if(savedSpike!==null)$('spike').value=savedSpike;
 if(!$('spike').value)$('spike').value='0.50';
@@ -1365,9 +1665,7 @@ function formatBudgetInput(n){
 }
 function setBudgetCap(n){
  const value=formatBudgetInput(n);
- $('budget').value=value;
- saveBudgetForSession(value);
- return parseFloat(value);
+ return saveBudgetForSession(value)||parseFloat(value);
 }
 function extendBudget(){
  if(!CURRENT) return;
@@ -1435,7 +1733,7 @@ async function loadLogSessions(){
  }).then(payload=>{
   logSessionInventory=payload.sessions||[];
   logSessionInventoryAt=Number(payload.generated_at||0);
-  if(LATEST&&$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+  if(LATEST&&$('view-logs').classList.contains('on'))renderLogs(LATEST.xsession);
   return logSessionInventory;
  }).catch(()=>logSessionInventory||[]).finally(()=>{logSessionsRequest=null;});
  return logSessionsRequest;
@@ -1453,6 +1751,7 @@ let frustrationModel=localStorage.getItem('tm_frustration_model')||'';
 let frustrationRange=localStorage.getItem('tm_frustration_range')||'30';
 let frustrationGroup=localStorage.getItem('tm_frustration_group')||'day';
 let frustrationChatMode=localStorage.getItem('tm_frustration_chat_mode')||'affected';
+let languageSignalGroup=localStorage.getItem('tm_language_signal_group')||'positive';
 if(!['recent','cost','tokens','executions','wait'].includes(globalSort)) globalSort='recent';
 if(!['all','24h','7d','30d','90d'].includes(globalTime)) globalTime='all';
 if(!['7','30','90','all'].includes(modelRange))modelRange='30';
@@ -1460,6 +1759,7 @@ if(!['speed','wait'].includes(modelTrendMetric))modelTrendMetric='speed';
 if(!['7','30','90','all'].includes(frustrationRange))frustrationRange='30';
 if(!['day','week'].includes(frustrationGroup))frustrationGroup='day';
 if(!['affected','all'].includes(frustrationChatMode))frustrationChatMode='affected';
+if(!['positive','friction'].includes(languageSignalGroup))languageSignalGroup='positive';
 $('m-range').value=modelRange;
 $('m-model-options').addEventListener('change',event=>{
  const input=event.target.closest('input[data-model-choice]');if(!input)return;
@@ -1474,10 +1774,11 @@ document.addEventListener('pointerdown',event=>{const picker=$('m-model-picker')
 $('m-range').addEventListener('change',e=>{modelRange=e.target.value;localStorage.setItem('tm_model_range',modelRange);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);});
 $('m-metric').onclick=event=>{const metric=event.target.dataset.modelMetric;if(!metric)return;modelTrendMetric=metric;localStorage.setItem('tm_model_trend_metric',metric);if(LATEST)renderModelStats(LATEST.xsession?.model_stats);};
 $('f-range').value=frustrationRange;
-$('f-model').addEventListener('change',e=>{frustrationModel=e.target.value;localStorage.setItem('tm_frustration_model',frustrationModel);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);});
-$('f-range').addEventListener('change',e=>{frustrationRange=e.target.value;localStorage.setItem('tm_frustration_range',frustrationRange);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);});
-$('f-group').onclick=e=>{if(e.target.dataset.fgroup){frustrationGroup=e.target.dataset.fgroup;localStorage.setItem('tm_frustration_group',frustrationGroup);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}};
-$('f-chat-mode').onclick=e=>{if(e.target.dataset.fchat){frustrationChatMode=e.target.dataset.fchat;localStorage.setItem('tm_frustration_chat_mode',frustrationChatMode);if(LATEST)renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}};
+$('f-model').addEventListener('change',e=>{frustrationModel=e.target.value;localStorage.setItem('tm_frustration_model',frustrationModel);if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);});
+$('f-range').addEventListener('change',e=>{frustrationRange=e.target.value;localStorage.setItem('tm_frustration_range',frustrationRange);if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);});
+$('f-group').onclick=e=>{if(e.target.dataset.fgroup){frustrationGroup=e.target.dataset.fgroup;localStorage.setItem('tm_frustration_group',frustrationGroup);if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}};
+$('f-chat-mode').onclick=e=>{if(e.target.dataset.fchat){frustrationChatMode=e.target.dataset.fchat;localStorage.setItem('tm_frustration_chat_mode',frustrationChatMode);if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}};
+$('f-signal-group').onclick=e=>{if(e.target.dataset.fsignal){languageSignalGroup=e.target.dataset.fsignal;localStorage.setItem('tm_language_signal_group',languageSignalGroup);frustrationModel='';localStorage.removeItem('tm_frustration_model');if(LATEST)renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}};
 $('f-add-terms').onclick=()=>{setHashRoute('settings');setTimeout(()=>$('frustration-settings').scrollIntoView({behavior:'smooth',block:'start'}),30);};
 function paintGlobalSort(){
  [...$('g-sort').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.gsort===globalSort));
@@ -1489,16 +1790,16 @@ $('g-time').value=globalTime;
 function paintGlobalFilters(){
  $('g-clear').disabled=!(globalSearch.trim()||globalApp||globalProject||globalTime!=='all');
 }
-$('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
-$('g-app').addEventListener('change',e=>{ globalApp=e.target.value; localStorage.setItem('tm_global_app',globalApp); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
-$('g-project').addEventListener('change',e=>{ globalProject=e.target.value; localStorage.setItem('tm_global_project',globalProject); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
-$('g-time').addEventListener('change',e=>{ globalTime=e.target.value; localStorage.setItem('tm_global_time',globalTime); paintGlobalFilters(); if(LATEST) renderGlobal(LATEST.xsession); });
+$('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
+$('g-app').addEventListener('change',e=>{ globalApp=e.target.value; localStorage.setItem('tm_global_app',globalApp); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
+$('g-project').addEventListener('change',e=>{ globalProject=e.target.value; localStorage.setItem('tm_global_project',globalProject); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
+$('g-time').addEventListener('change',e=>{ globalTime=e.target.value; localStorage.setItem('tm_global_time',globalTime); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
 $('g-clear').onclick=()=>{
  globalSearch='';globalApp='';globalProject='';globalTime='all';
  $('g-search').value='';$('g-app').value='';$('g-project').value='';$('g-time').value='all';
  ['tm_global_search','tm_global_app','tm_global_project','tm_global_time'].forEach(key=>localStorage.removeItem(key));
  paintGlobalFilters();
- if(LATEST)renderGlobal(LATEST.xsession);
+ if(LATEST)renderLogs(LATEST.xsession);
 };
 $('g-active-filters').onclick=event=>{
  const key=event.target.closest('button[data-clear-log-filter]')?.dataset.clearLogFilter;
@@ -1508,9 +1809,9 @@ $('g-active-filters').onclick=event=>{
  if(key==='project'){globalProject='';$('g-project').value='';localStorage.removeItem('tm_global_project');}
  if(key==='time'){globalTime='all';$('g-time').value='all';localStorage.removeItem('tm_global_time');}
  paintGlobalFilters();
- if(LATEST)renderGlobal(LATEST.xsession);
+ if(LATEST)renderLogs(LATEST.xsession);
 };
-$('g-sort').onclick=e=>{ if(e.target.dataset.gsort){ globalSort=e.target.dataset.gsort; localStorage.setItem('tm_global_sort',globalSort); paintGlobalSort(); if(LATEST) renderGlobal(LATEST.xsession); } };
+$('g-sort').onclick=e=>{ if(e.target.dataset.gsort){ globalSort=e.target.dataset.gsort; localStorage.setItem('tm_global_sort',globalSort); paintGlobalSort(); if(LATEST) renderLogs(LATEST.xsession); } };
 paintGlobalSort();
 paintGlobalFilters();
 
@@ -2028,6 +2329,52 @@ function sessionStartMessage(s){
  return String(event?.detail||'').trim();
 }
 
+function renderCurrentRun(s){
+ const source=s.source||{},throughput=s.throughput||{},wait=s.wait_time||{},context=s.context||{},tools=s.tools||{},cache=s.cache||{},timing=s.timing||{};
+ const costAvailable=metricAvailable(s,'cost'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput');
+ const contextPct=Math.max(0,Math.min(1,Number(context.latest_pct)||0)),toolResultTokens=tools.total_output_tokens||0;
+ const alert=sessionAlert(s),frozen=!!s.ended,cursorEstimate=s.provider==='cursor',cap=dollarInputValue('budget',Infinity),costPerTask=s.analyses?.cost_per_task||{};
+ $('preview-provider').textContent=source.label||s.provider||'source';
+ $('preview-provider').className='badge app '+appBadgeClass(s);
+ $('preview-project').textContent=s.project||source.project||'';
+ $('preview-model').textContent=s.primary_model||'model unavailable';
+ $('preview-state').textContent=pinned?'Pinned':(frozen?'Complete':'Live');
+ $('preview-idle').textContent=frozen?'frozen':idleLabel(s.idle_s);
+ $('preview-cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
+ $('preview-cost-note').textContent=alert.msg?alert.msg:(costAvailable&&Number.isFinite(cap)?`${money(Math.max(0,cap-(s.total_cost||0)))} before the ${money(cap)} session cap`:source.pricing_note||'Cost evidence unavailable.');
+ $('preview-status-card').classList.toggle('warn',!!alert.msg);
+ $('preview-context-pct').textContent=context.window?pct(contextPct):'--';
+ $('preview-context-bar').setAttribute('aria-valuenow',String(Math.round(contextPct*100)));
+ $('preview-context-bar').querySelector('i').style.width=`${Math.round(contextPct*100)}%`;
+ $('preview-started-at').textContent=dt12(timing.start_local)||'--';
+ $('preview-last-label').textContent=frozen?'Completed':'Last activity';
+ $('preview-last-at').textContent=dt12(timing.end_local)||'--';
+ $('preview-speed').textContent=throughputAvailable&&throughput.available?`${speedFmt(throughput.output_tps)} tok/s`:'--';
+ $('preview-speed-note').textContent=throughputAvailable&&throughput.available?`${throughput.basis==='tool_free'?'tool-free':'end-to-end'} · ${pct(throughput.timing_coverage)} coverage`:'timing unavailable';
+ $('preview-wait').textContent=wait.available?waitFmt(wait.total_s):'--';
+ $('preview-wait-note').textContent=wait.available?`${waitFmt(wait.avg_s)} average · ${f(wait.sample_count)} completed`:'wait unavailable';
+ $('preview-context').textContent=context.latest?f(context.latest):'--';
+ $('preview-context-note').textContent=context.window?`${pct(contextPct)} of ${f(context.window)} window`:'window unavailable';
+ $('preview-executions').textContent=f(s.turns||0);
+ $('preview-executions-note').textContent=s.primary_model||'model unavailable';
+ $('preview-tools').textContent=f(tools.total_calls||0);
+ $('preview-tools-note').textContent=`${f(tools.activity?.observed_unique??tools.unique_used??0)} observed types`;
+ $('preview-tool-results').textContent=f(toolResultTokens);
+ $('preview-tool-results-note').textContent=`${f(tools.total_calls||0)} calls · estimated returned tokens`;
+ $('preview-cache-rate').textContent=cacheAvailable?pct(cache.input_share||0):'--';
+ $('preview-cache-rate-note').textContent=cacheAvailable?`${f(cache.total||0)} cached · ${f(cache.fresh||0)} fresh`:'cache accounting unavailable';
+ $('preview-cache-saved').textContent=cacheAvailable?money(cache.saved||s.cache_saved||0):'--';
+ $('preview-cache-saved-note').textContent=cacheAvailable?`${money(cache.cost||0)} cache cost · avoided spend`:'cache savings unavailable';
+ $('preview-burn').textContent=costAvailable&&timing.duration_available?money(s.burn_usd_min)+(cursorEstimate?' est':''):'--';
+ $('preview-burn-note').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tokens/min · active`:(timing.duration_available?'billing unavailable':'execution timing unavailable');
+ $('preview-cost-task').textContent=costAvailable?money(costPerTask.per_task||0)+(cursorEstimate?' est':''):'--';
+ $('preview-cost-task-note').textContent=costAvailable?`${f(costPerTask.completed||0)} completed tasks`:'billing unavailable';
+ const startMessage=sessionStartMessage(s)||'No user message captured.';
+ $('preview-start').textContent=startMessage;
+ $('preview-start').dataset.tip=startMessage;
+ $('preview-start').setAttribute('aria-description',startMessage);
+}
+
 function renderSession(s){
  CURRENT=s;
  loadBudgetForSession(s);
@@ -2075,7 +2422,7 @@ function renderSession(s){
  $('burnsm').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tok/min · active${cursorEstimate?' · local proxy':''}`:(timing.duration_available?'active timing available · billing unavailable':'execution timing unavailable');
  $('cpt').textContent=costAvailable?money(s.analyses?.cost_per_task?.per_task||0)+(cursorEstimate?' est':''):'--';
  $('cptsm').textContent=costAvailable?f(s.analyses?.cost_per_task?.completed||0)+` completed${cursorEstimate?' · local proxy':''}`:'billing unavailable';
- renderOverview(s); renderCurrentOptimization(s); renderTrace(s.trace); renderTools(s.tools);
+ renderOverview(s); renderCurrentOptimization(s); renderTrace(s.trace); renderTools(s.tools); renderCurrentRun(s);
 
  const semTot=Object.values(sem).reduce((a,b)=>a+(b||0),0)||1;
  const segs=[['reasoning','var(--reason)'],['output','var(--output)'],['retrieval','var(--retrieval)'],['coordination','var(--coord)']];
@@ -2130,7 +2477,7 @@ $('session-delete-confirm').onclick=async()=>{
   LATEST=state;CURRENT=state;
   if(returnToLogs||!stateSessionId(state)){
    setHashRoute('logs',{replace:true,apply:false});showTab('logs');
-   if(state.xsession)renderGlobal(state.xsession);
+   if(state.xsession)renderLogs(state.xsession);
   }else{
    if(history.replaceState)history.replaceState(null,'','/#summary');
    applyHashRoute();renderSession(state);
@@ -2141,36 +2488,6 @@ $('session-delete-confirm').onclick=async()=>{
   showAppToast({title:'Session deletion failed',body:error.message||String(error),kind:'warn',sticky:true});
  }
 };
-
-function recommendationLabel(value){
- return ({disable:'disable candidate',fix_or_disable:'fix or disable',narrow_results:'narrow results',reduce_repeats:'reduce repeats',scope:'scope to project',keep:'keep'})[value]||String(value||'review').replaceAll('_',' ');
-}
-function renderGlobalWaste(waste){
- waste=waste||{};
- const total=waste.total_output_tokens||0, flagged=waste.flagged_tokens||0;
- $('g-tool-tokens').textContent=f(total);
- $('g-tool-token-note').textContent=`${f(waste.total_calls||0)} calls · ${f(waste.sessions_with_tools||0)} sessions`;
- $('g-flagged-tokens').textContent=f(flagged);
- $('g-flagged-note').textContent=total?`${pct(flagged/total)} of returned tokens matched a rule`:'no tool results yet';
- $('g-oversized').textContent=f(waste.oversized_calls||0);
- $('g-errors-repeats').textContent=f((waste.errors||0)+(waste.repeat_calls||0));
- $('g-errors-repeat-note').textContent=`${f(waste.errors||0)} errors · ${f(waste.repeat_calls||0)} exact repeats`;
-
- const bars=(waste.by_name||[]).filter(r=>r.output_tokens>0).slice(0,8), mx=Math.max(1,...bars.map(r=>r.output_tokens||0));
- $('g-tool-bars').innerHTML=bars.length?bars.map(r=>`<div class=wasteBar><div class=head><span>${esc(r.display||r.name)} <span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></span><span class=mono>${f(r.output_tokens)}</span></div><div class=track><i style="width:${100*(r.output_tokens||0)/mx}%"></i></div></div>`).join(''):'<div class=subline>no tool results yet</div>';
-
- const trend=waste.trend||[], tmax=Math.max(1,...trend.map(r=>r.tokens||0));
- $('g-tool-waste-trend').innerHTML=trend.length?trend.map(r=>{const th=Math.max(2,100*(r.tokens||0)/tmax), fh=r.tokens?100*(r.flagged_tokens||0)/r.tokens:0; return `<div class=wasteDay data-l="${esc(r.day.slice(5))}: ${f(r.tokens)} total · ${f(r.flagged_tokens)} flagged"><div class=total style="height:${th}%"><div class=flagged style="height:${fh}%"></div></div></div>`;}).join(''):'<div class=subline>no daily tool-result history</div>';
-
- const icon={good:'✓',warn:'!',neutral:'›'};
- $('g-waste-insights').innerHTML=(waste.insights||[]).length?(waste.insights||[]).map(i=>`<div class="ins ${esc(i.kind||'neutral')}"><div class=glyph>${icon[i.kind]||'›'}</div><div class=copy><div class=title>${esc(i.title||'Signal')}</div><div class=text>${esc(i.text||'')}</div>${i.detail?`<div class=detail>${esc(i.detail)}</div>`:''}${i.action?`<div class=action>${esc(i.action)}</div>`:''}</div><div class=meta>${i.action?'action':'signal'}</div></div>`).join(''):'<div class="ins empty">No global tool-waste signals yet</div>';
-
- const rows=waste.by_name||[];
- $('g-tool-table').querySelector('tbody').innerHTML=rows.length?rows.map(r=>{
-  const used=r.advertised_sessions?`${f(r.sessions_used)}/${f(r.advertised_sessions)} reported`:f(r.sessions_used);
-  return `<tr><td class=nm>${esc(r.display||r.name)}<div class=subline>${esc(r.reason||'')}</div></td><td><span class="chip ${r.kind==='mcp'?'mcp':''}">${esc(r.namespace)}</span></td><td class="num mono">${used}</td><td class="num mono">${f(r.calls)}</td><td class="num mono">${f(r.output_tokens)}</td><td class="num mono">${f(r.flagged_tokens)}</td><td class="num mono">${f(r.errors)}</td><td>${esc(r.last_used||'Never')}</td><td><span class="reco ${esc(r.recommendation)}">${esc(recommendationLabel(r.recommendation))}</span></td></tr>`;
- }).join(''):'<tr><td colspan=9 style=color:var(--faint)>no tool evidence yet</td></tr>';
-}
 
 const CAPABILITY_SORT_KEYS=new Set(['name','type','runtime','state','use','returned','last','control']);
 let capabilityType='all', capabilityState='all', capabilityRuntime='all', capabilitySearch='';
@@ -2539,47 +2856,7 @@ $('d-trend-mode').onclick=event=>{const mode=event.target.dataset.dailyTrend;if(
 $('d-older').onclick=()=>{const days=LATEST?.xsession?.daily||[],i=days.findIndex(row=>row.day===dailySelected);if(i>=0&&i<days.length-1){dailySelected=days[i+1].day;renderDaily(LATEST.xsession);}};
 $('d-newer').onclick=()=>{const days=LATEST?.xsession?.daily||[],i=days.findIndex(row=>row.day===dailySelected);if(i>0){dailySelected=days[i-1].day;renderDaily(LATEST.xsession);}};
 
-const LEARN_TERMS=[
-	 ['Active time','Time attributed to model execution windows. Waiting between prompts is excluded when the trace provides enough timing evidence.'],
- ['Burn rate','Tokens or estimated dollars consumed per minute of active execution time.'],
- ['Cache hit ratio','The share of input tokens served from provider prompt cache instead of processed as fresh input.'],
- ['Cached input','Previously processed input reused from a provider cache. It still has a cost, usually lower than fresh input.'],
-	 ['Confidence interval','A range describing uncertainty around the matched-pace estimate. If its 95% interval crosses 1.00, Token Meter reports the runtimes as approximately the same.'],
- ['Context use','The latest or peak input size divided by the model context-window limit.'],
- ['Context window','The maximum token capacity available to the model for instructions, conversation, tools, and generated work.'],
-	 ['Cursor local estimate','A non-billing estimate built from Cursor Composer context snapshots, visible model output, request timing, and configured public rates.'],
- ['Deferred definition','A tool definition kept out of initial context and loaded only when the runtime decides it is needed.'],
- ['Eager definition','A tool definition loaded into initial context before the tool is called.'],
- ['Estimated cost','API-equivalent cost calculated from trace-visible tokens and public model rates. Subscription billing can differ.'],
- ['Execution','One model response cycle, which may include reasoning, tool calls, and a final response.'],
- ['Flagged tokens','Returned tool-result tokens matching at least one oversized, exact-repeat, or structured-error rule.'],
- ['Fresh input','Input tokens processed normally rather than read from prompt cache.'],
- ['Input tokens','Instructions, conversation, tool definitions, and other context sent to the model.'],
-	 ['Input context proxy','Cursor\'s persisted context snapshot used as a local approximation of model input. It is not a provider-reported billable token count.'],
-	 ['Match coverage','Matched pairs divided by the smaller eligible runtime history. Token Meter requires at least 30% coverage before reporting a matched-pace verdict.'],
-	 ['Matched pace','A pairwise comparison of end-to-end turn duration after matching measurable workload shape and recency. It requires exactly two model runtimes, at least 20 pairs, and 30% coverage.'],
-	 ['Model runtime','One model used through one execution environment, such as Claude Code, Claude Desktop, Claude-3P, or Codex. Runtime histories stay separate.'],
-	 ['Observed output pace','Trace-observed model output tokens divided by attributable generation time. It is a diagnostic, not the primary cross-runtime speed verdict.'],
- ['Optional group','A user-installed skill pack represented by one native runtime control. MCP servers remain read-only evidence.'],
- ['Output tokens','Tokens generated by the model, including visible output and any trace-reported reasoning tokens.'],
- ['Returned tokens','Estimated tokens in tool and MCP results visible in local traces.'],
- ['Review candidate','An enabled removable group with no observed use across the scanned logs. It is a prompt for review, not an automatic verdict.'],
- ['Tool call','A model request to a local, built-in, or MCP-provided function.'],
-	 ['Tokens','Units used by models to process text and structured data. Token counts are not the same as words or characters.'],
-	 ['Typical workload','Median peak context, output, tool calls, and model calls among completed timed turns. It describes measurable workload shape, not semantic difficulty.'],
- ['Typical wait','Median prompt-to-completed-response wait among timed requests. It includes reasoning and tools, while trace-visible pauses waiting for human input are excluded.'],
-	 ['Visible-output estimate','Estimated tokens derived from model-authored text persisted in a Cursor trace. Hidden reasoning and unpersisted model work may be absent.'],
-	 ['Wait time','Wall-clock time from a user prompt until the completed response. It includes reasoning and tool use because the user is still waiting; lower is better.'],
-];
-function renderGlossary(){
- const q=$('learn-search').value.trim().toLowerCase();
- const rows=LEARN_TERMS.filter(([term,definition])=>!q||`${term} ${definition}`.toLowerCase().includes(q));
- $('learn-count').textContent=`${f(rows.length)} ${countWord(rows.length,'term')}`;
- $('learn-glossary').innerHTML=rows.length?rows.map(([term,definition])=>`<div class=termRow><dt>${esc(term)}</dt><dd>${esc(definition)}</dd></div>`).join(''):'<div class=subline>No terms match this search</div>';
-}
-$('learn-search').oninput=renderGlossary;
 [...document.querySelectorAll('[data-learn-route]')].forEach(button=>button.onclick=()=>setHashRoute(button.dataset.learnRoute));
-renderGlossary();
 
 const MODEL_COUNTER_KEYS=['input_tokens','output_tokens','executions','cost','timed_output_tokens','timed_seconds','timed_samples','tool_free_output_tokens','tool_free_seconds','tool_free_samples','ttft_total_s','ttft_samples','wait_seconds','wait_samples','user_pause_seconds'];
 const MODEL_ARRAY_KEYS=['wait_durations_s','workload_peak_inputs','workload_outputs','workload_tool_calls','workload_model_calls','workload_cache_ratios'];
@@ -2750,24 +3027,29 @@ function frustrationPeriodLabel(row){
 function drawFrustrationTrend(rows){
  const svg=$('f-chart'),tip=$('f-chart-tip'),points=(rows||[]).slice(-18);
  if(!points.length){svg.innerHTML='<text x="520" y="143" text-anchor="middle" fill="var(--faint)" font-size="12">No dated user turns in this window</text>';tip.style.display='none';return;}
- const VW=1040,VH=286,ML=50,MR=56,MT=20,MB=38,PW=VW-ML-MR,PH=VH-MT-MB,step=PW/points.length;
+ const VW=1040,VH=286,ML=50,MR=56,MT=20,MB=38,PW=VW-ML-MR,PH=VH-MT-MB,step=PW/points.length,signalColor=languageSignalGroup==='positive'?cssVar('--good'):cssVar('--warn');
  const maxTurns=Math.max(1,...points.map(row=>Number(row.user_turns||0))),barW=Math.max(10,Math.min(34,step*.54));
  const x=index=>ML+step*(index+.5),turnY=value=>MT+PH*(1-Math.max(0,Number(value||0))/maxTurns),rateY=value=>MT+PH*(1-Math.max(0,Math.min(1,Number(value||0))));
  let html='';
  for(let i=0;i<=4;i++){const ratio=1-i/4,y=MT+PH*i/4;html+=`<line x1="${ML}" x2="${ML+PW}" y1="${y}" y2="${y}" stroke="${CHART.grid}" stroke-width="1"/><text x="${ML-8}" y="${y+4}" text-anchor="end" fill="${CHART.lbl}" font-size="10">${compactNumber(maxTurns*ratio)}</text><text x="${ML+PW+8}" y="${y+4}" fill="${CHART.lbl}" font-size="10">${Math.round(100*ratio)}%</text>`;}
- points.forEach((row,index)=>{const tx=x(index),totalY=turnY(row.user_turns),matchY=turnY(row.utterances);html+=`<rect x="${tx-barW/2}" y="${totalY}" width="${barW}" height="${Math.max(0,MT+PH-totalY)}" rx="3" fill="rgba(0,188,235,.16)" stroke="rgba(0,188,235,.34)"/><rect x="${tx-barW/2}" y="${matchY}" width="${barW}" height="${Math.max(0,MT+PH-matchY)}" rx="3" fill="rgba(255,180,87,.82)"/>`;});
+ points.forEach((row,index)=>{const tx=x(index),totalY=turnY(row.user_turns),matchY=turnY(row.utterances);html+=`<rect x="${tx-barW/2}" y="${totalY}" width="${barW}" height="${Math.max(0,MT+PH-totalY)}" rx="3" fill="rgba(0,188,235,.16)" stroke="rgba(0,188,235,.34)"/><rect x="${tx-barW/2}" y="${matchY}" width="${barW}" height="${Math.max(0,MT+PH-matchY)}" rx="3" fill="${signalColor}" opacity=".82"/>`;});
  const path=points.map((row,index)=>`${index?'L':'M'}${x(index).toFixed(1)},${rateY(row.rate).toFixed(1)}`).join(' ');
- html+=`<path d="${path}" fill="none" stroke="${cssVar('--warn')}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
- points.forEach((row,index)=>{const tx=x(index),ry=rateY(row.rate),active=Number(row.utterances||0)>0;html+=`<circle cx="${tx}" cy="${ry}" r="${active?4.5:3}" fill="${active?cssVar('--warn'):cssVar('--faint')}" stroke="#07090c" stroke-width="2"/>`;});
+ html+=`<path d="${path}" fill="none" stroke="${signalColor}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+ points.forEach((row,index)=>{const tx=x(index),ry=rateY(row.rate),active=Number(row.utterances||0)>0;html+=`<circle cx="${tx}" cy="${ry}" r="${active?4.5:3}" fill="${active?signalColor:cssVar('--faint')}" stroke="#07090c" stroke-width="2"/>`;});
  const every=Math.max(1,Math.ceil(points.length/8));
  points.forEach((row,index)=>{if(index===points.length-1||index%every===0)html+=`<text x="${x(index)}" y="${VH-12}" text-anchor="middle" fill="${CHART.lbl}" font-size="10">${esc(frustrationPeriodLabel(row))}</text>`;html+=`<rect data-f-chart-index="${index}" x="${ML+step*index}" y="${MT}" width="${step}" height="${PH}" fill="transparent" pointer-events="all"/>`;});
  html+=`<text x="8" y="12" fill="${CHART.lbl}" font-size="10">user turns</text><text x="${VW-8}" y="12" text-anchor="end" fill="${CHART.lbl}" font-size="10">rate</text>`;
  svg.innerHTML=html;
- const show=(event,row)=>{const rect=svg.parentElement.getBoundingClientRect();tip.innerHTML=`<div class=h>${esc(frustrationPeriodLabel(row))}</div><div class=r><span>user turns</span><b>${f(row.user_turns)}</b></div><div class=r><span>matched utterances</span><b>${f(row.utterances)}</b></div><div class=r><span>frustration rate</span><b>${pct(row.rate)}</b></div><div class=r><span>term hits</span><b>${f(row.matches)}</b></div>`;tip.style.display='block';tip.style.left=Math.min(rect.width-tip.offsetWidth-8,Math.max(8,event.clientX-rect.left+12))+'px';tip.style.top=Math.max(8,event.clientY-rect.top-tip.offsetHeight-10)+'px';};
+ const show=(event,row)=>{const rect=svg.parentElement.getBoundingClientRect();tip.innerHTML=`<div class=h>${esc(frustrationPeriodLabel(row))}</div><div class=r><span>user turns</span><b>${f(row.user_turns)}</b></div><div class=r><span>matched utterances</span><b>${f(row.utterances)}</b></div><div class=r><span>match rate</span><b>${pct(row.rate)}</b></div><div class=r><span>phrase hits</span><b>${f(row.matches)}</b></div>`;tip.style.display='block';tip.style.left=Math.min(rect.width-tip.offsetWidth-8,Math.max(8,event.clientX-rect.left+12))+'px';tip.style.top=Math.max(8,event.clientY-rect.top-tip.offsetHeight-10)+'px';};
  [...svg.querySelectorAll('[data-f-chart-index]')].forEach((hit,index)=>{hit.onpointerenter=event=>show(event,points[index]);hit.onpointermove=event=>show(event,points[index]);hit.onpointerleave=()=>tip.style.display='none';});
 }
-function renderFrustration(signal,sessions){
- signal=signal||{models:[],daily:[],weekly:[],configured_terms:[]};sessions=sessions||[];
+function renderFrustration(signals,sessions){
+ signals=signals||{};
+ const signal=signals[languageSignalGroup]||signals.friction||{models:[],daily:[],weekly:[],configured_terms:[]};
+ const signalLabel=languageSignalGroup==='positive'?'Positive':'Friction';
+ sessions=sessions||[];
+ $('model-frustration').classList.toggle('positive',languageSignalGroup==='positive');
+ [...$('f-signal-group').querySelectorAll('button')].forEach(button=>button.classList.toggle('on',button.dataset.fsignal===languageSignalGroup));
  const modelOptions=(signal.models||[]).map(row=>({...row,id:row.id||row.model,label:row.runtime?`${row.model} · ${row.runtime}`:row.model})).sort((a,b)=>a.label.localeCompare(b.label));
  if(frustrationModel&&!modelOptions.some(row=>row.id===frustrationModel)){const legacy=modelOptions.find(row=>row.model===frustrationModel);frustrationModel=legacy?.id||'';if(frustrationModel)localStorage.setItem('tm_frustration_model',frustrationModel);else localStorage.removeItem('tm_frustration_model');}
  $('f-model').innerHTML='<option value="">All model runtimes</option>'+modelOptions.map(row=>`<option value="${esc(row.id)}">${esc(row.label)}</option>`).join('');
@@ -2777,7 +3059,8 @@ function renderFrustration(signal,sessions){
  const selectedModel=frustrationModel?modelOptions.find(row=>row.id===frustrationModel):null,selected=selectedModel||signal;
  const total=frustrationWindow(selected);
  const sessionRows=sessions.map(session=>{
-  const base=selectedModel&&session.runtime===selectedModel.runtime?(session.frustration?.models||[]).find(row=>row.model===selectedModel.model):selectedModel?null:session.frustration;
+  const sessionSignal=session.language_signals?.[languageSignalGroup]||(languageSignalGroup==='friction'?session.frustration:null);
+  const base=selectedModel&&session.runtime===selectedModel.runtime?(sessionSignal?.models||[]).find(row=>row.model===selectedModel.model):selectedModel?null:sessionSignal;
   return {session,window:frustrationWindow(base)};
  }).filter(row=>row.window.user_turns);
  const affected=sessionRows.filter(row=>row.window.utterances);
@@ -2787,59 +3070,26 @@ function renderFrustration(signal,sessions){
  $('f-sessions').textContent=f(affectedCount);$('f-sessions-note').textContent=frustrationRange==='all'&&!frustrationModel?`${f(signal.sessions_with_user_turns||0)} chats with user turns`:`${f(sessionRows.length)} visible chats in this window`;
  $('f-matches').textContent=f(total.matches);
  const series=frustrationSeries(selected);
- $('f-trend-note').textContent=`${selectedModel?.label||'All model runtimes'} · ${frustrationRange==='all'?'all recorded history':`last ${frustrationRange} days`} · volume bars with frustration-rate line`;
+ $('f-trend-note').textContent=`${signalLabel} · ${selectedModel?.label||'all model runtimes'} · ${frustrationRange==='all'?'all recorded history':`last ${frustrationRange} days`} · volume bars with match-rate line`;
  drawFrustrationTrend(series);
  const modelRows=modelOptions.map(row=>({...row,window:frustrationWindow(row)})).filter(row=>row.window.user_turns).sort((a,b)=>b.window.utterances-a.window.utterances||b.window.rate-a.window.rate||b.window.user_turns-a.window.user_turns);
  const maxModelRate=Math.max(.001,...modelRows.map(row=>row.window.rate||0));
  $('f-models').innerHTML=modelRows.length?modelRows.map(row=>`<button class="signalRank${row.id===frustrationModel?' selected':''}" data-frustration-model="${esc(row.id)}" type=button title="Filter dashboard to ${esc(row.label)}"><div class=signalRankHead><span class=signalRankName>${esc(row.label)}</span><span class="signalRankValue mono">${pct(row.window.rate)}</span></div><div class=signalRankTrack><i style="width:${100*Number(row.window.rate||0)/maxModelRate}%"></i></div><div class=signalRankMeta>${f(row.window.utterances)} matched / ${f(row.window.user_turns)} user turns · ${f(row.window.matches)} hits</div></button>`).join(''):'<div class=signalEmpty>No model-attributed user turns</div>';
- [...$('f-models').querySelectorAll('[data-frustration-model]')].forEach(button=>button.onclick=()=>{frustrationModel=button.dataset.frustrationModel;localStorage.setItem('tm_frustration_model',frustrationModel);renderFrustration(signal,sessions);});
+ [...$('f-models').querySelectorAll('[data-frustration-model]')].forEach(button=>button.onclick=()=>{frustrationModel=button.dataset.frustrationModel;localStorage.setItem('tm_frustration_model',frustrationModel);renderFrustration(signals,sessions);});
  const terms=total.terms||[],maxTerm=Math.max(1,...terms.map(row=>Number(row.count||0)));
  $('f-terms').innerHTML=terms.length?terms.map(row=>`<div class=signalRank><div class=signalRankHead><span class=signalRankName>${esc(row.term)}</span><span class="signalRankValue mono">${f(row.count)}</span></div><div class=signalRankTrack><i style="width:${100*Number(row.count||0)/maxTerm}%"></i></div></div>`).join(''):'<div class=signalEmpty>No configured terms matched</div>';
  sessionRows.sort((a,b)=>b.window.utterances-a.window.utterances||b.window.rate-a.window.rate||(b.session.mtime||0)-(a.session.mtime||0));
  const chatRows=(frustrationChatMode==='affected'?affected:sessionRows).slice(0,50),quietCount=Math.max(0,sessionRows.length-affected.length);
  $('f-chat-summary').textContent=frustrationChatMode==='affected'?`${f(affected.length)} affected · ${f(quietCount)} without matches`:`${f(sessionRows.length)} chats · affected first`;
- $('f-chats').innerHTML=chatRows.length?chatRows.map(row=>{const modelNames=selectedModel?.label||((row.session.frustration?.models||[]).filter(item=>item.user_turns).map(item=>item.model).join(', ')||'unknown')+` · ${row.session.runtime||row.session.label||'runtime'}`,quiet=!row.window.utterances;return `<div class="chatSignal${quiet?' quiet':''}"><div class=chatSignalMain><div class=chatSignalTitle title="${esc(row.session.title||row.session.id)}">${esc(row.session.title||row.session.id)}</div><div class=chatSignalMeta>${esc(row.session.project||'local')} · ${esc(modelNames)}</div><div class=chatSignalStats><div class=chatSignalTrack><i style="width:${100*Math.max(0,Math.min(1,Number(row.window.rate||0)))}%"></i></div><span class=chatSignalCount>${f(row.window.utterances)} / ${f(row.window.user_turns)} turns</span></div></div><div class=chatSignalSide><span class=signalRateBadge>${pct(row.window.rate)}</span><button class=tbtn data-frustration-session="${esc(row.session.id)}" type=button>Open</button></div></div>`;}).join(''):'<div class=signalEmpty>No chats matched the configured terms</div>';
+ $('f-chats').innerHTML=chatRows.length?chatRows.map(row=>{const sessionSignal=row.session.language_signals?.[languageSignalGroup]||(languageSignalGroup==='friction'?row.session.frustration:null),modelNames=selectedModel?.label||((sessionSignal?.models||[]).filter(item=>item.user_turns).map(item=>item.model).join(', ')||'unknown')+` · ${row.session.runtime||row.session.label||'runtime'}`,quiet=!row.window.utterances;return `<div class="chatSignal${quiet?' quiet':''}"><div class=chatSignalMain><div class=chatSignalTitle title="${esc(row.session.title||row.session.id)}">${esc(row.session.title||row.session.id)}</div><div class=chatSignalMeta>${esc(row.session.project||'local')} · ${esc(modelNames)}</div><div class=chatSignalStats><div class=chatSignalTrack><i style="width:${100*Math.max(0,Math.min(1,Number(row.window.rate||0)))}%"></i></div><span class=chatSignalCount>${f(row.window.utterances)} / ${f(row.window.user_turns)} turns</span></div></div><div class=chatSignalSide><span class=signalRateBadge>${pct(row.window.rate)}</span><button class=tbtn data-frustration-session="${esc(row.session.id)}" type=button>Open</button></div></div>`;}).join(''):`<div class=signalEmpty>No chats matched the configured ${signalLabel.toLowerCase()} phrases</div>`;
  [...$('f-chats').querySelectorAll('[data-frustration-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.frustrationSession));
- renderFrustrationSettings(signal);
+ renderFrustrationSettings(signals);
 }
 
-function renderGlobal(xs){
+function renderLogs(xs){
  if(!xs)return;
- const generatedAt=Number(xs.generated_at||0),globalCostAvailable=metricAvailable(xs,'cost'),globalTokensAvailable=metricAvailable(xs,'tokens'),globalCostPartial=metricPartial(xs,'cost'),globalTokensPartial=metricPartial(xs,'tokens'),hasCursorEstimate=hasLocalEstimate(xs);
+ const generatedAt=Number(xs.generated_at||0);
  $('g-hint').textContent=generatedAt?`live · updated ${new Date(generatedAt*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'recent activity';
-	 $('g-cost').textContent=globalCostAvailable?money(xs.total_cost)+(globalCostPartial?' partial':'')+estimateSuffix(xs):'--';
- const providerLine=(xs.providers||[]).slice(0,3).map(p=>`${esc(p.provider)} ${metricAvailable(p,'cost')?money(p.cost)+estimateSuffix(p):'cost unavailable'}`).join(' · ');
- $('g-sub').innerHTML=`<b>${f(xs.total_sessions)}</b> logs`+(providerLine?` · ${providerLine}`:'')+(hasCursorEstimate?' · Cursor uses local proxies':'');
- const today=(xs.daily||[]).find(row=>row.day===localDayKey())||{cost:0,sessions:0,projects:0};
-	 $('g-today-cost').textContent=metricAvailable(today,'cost')?money(today.cost)+partialSuffix(today,'cost')+estimateSuffix(today):'--';
-	 $('g-today-note').textContent=`${f(today.sessions)} ${countWord(today.sessions,'log')} · ${f(today.projects)} ${countWord(today.projects,'project')}`;
-	 const globalWait=xs.wait_time||{};
-	 $('g-wait').textContent=globalWait.available?waitFmt(globalWait.total_s):'--';
-	 $('g-wait-note').textContent=globalWait.available?`${waitFmt(globalWait.avg_s)} average · ${f(globalWait.sample_count)} timed ${countWord(globalWait.sample_count,'request')}`:'no completed wait timing';
- $('g-logs-total').textContent=f(xs.total_sessions);
- $('g-executions-total').textContent=f(xs.total_executions);
- $('g-tokens-total').textContent=globalTokensAvailable?f(xs.total_tokens)+(globalTokensPartial?' partial':'')+estimateSuffix(xs):'--';
- const optional=xs.capabilities?.summary?.optional||{};
- $('g-review-total').textContent=f(optional.unused);
- const providerMax=Math.max(.001,...(xs.providers||[]).map(row=>row.cost||0));
- $('g-provider-overview').innerHTML=(xs.providers||[]).length?(xs.providers||[]).map(row=>{const available=metricAvailable(row,'cost'),share=available&&(xs.total_cost||0)?row.cost/xs.total_cost:0,estimated=hasLocalEstimate(row);return `<div class=overviewRow><div><div class=name>${esc(row.provider)}</div><div class=meta>${f(row.sessions)} ${countWord(row.sessions,'log')} · ${available?pct(share)+' of covered spend'+(estimated?' · local est':''):'cost unavailable'}</div><div class=mini style="margin:5px 0 0"><i style="width:${100*(row.cost||0)/providerMax}%"></i></div></div><div class="value mono">${available?money(row.cost)+estimateSuffix(row):'--'}</div></div>`;}).join(''):'<div class=subline>no runtime activity</div>';
- const mmTot=xs.model_mix.reduce((a,b)=>a+b.cost,0)||1;
- const pal={'claude-opus-4-8':'var(--reason)','claude-fable-5':'var(--toolcall)','claude-sonnet-4-6':'var(--retrieval)','claude-haiku-4-5':'var(--good)','gpt-5.5':'var(--accent)','gpt-5.4':'var(--retrieval)','gpt-5.4-mini':'var(--good)'};
- $('g-mm').innerHTML=xs.model_mix.length?xs.model_mix.slice(0,6).map(m=>{const w=100*m.cost/mmTot; return `<div style=margin-bottom:9px><div style="display:flex;justify-content:space-between;font-size:12px;gap:10px"><span>${esc(m.model)} · ${esc(m.runtime||'unknown')}</span><span class=mono>${money(m.cost)+estimateSuffix(m)} · ${pct(m.cost/mmTot)}</span></div><div class=mini style="margin:4px 0 0"><i style="width:${w}%;background:${pal[m.model]||'var(--dim)'}"></i></div></div>`;}).join(''):'<div class=subline>no model spend yet</div>';
- const tr=xs.trend||[], tmax=Math.max(1,...tr.map(t=>t.cost));
- $('g-spark').innerHTML=tr.map(t=>`<div class="b${t.anomaly?' anom':''}${hasLocalEstimate(t)?' estimated':''}" style="height:${100*t.cost/tmax}%" data-l="${esc(t.day.slice(5))}: ${money(t.cost)+estimateSuffix(t)}${t.estimated_cost?` (${money(t.estimated_cost)} local estimate)`:''}"></div>`).join('');
- const an=tr.filter(t=>t.anomaly).length;
- $('g-trend').textContent=tr.length?`${money(tr.reduce((a,b)=>a+b.cost,0))} over ${tr.length} days`+(an?` · ${an} spike(s)`:''):'no history';
- renderGlobalWaste(xs.tool_waste||{});
- const priorities=[];
- if(optional.unused)priorities.push(['warn',`${f(optional.unused)} capability ${countWord(optional.unused,'group')} need review`,'Only user-installed skill packs with native controls are included.']);
- if(an)priorities.push(['warn',`${f(an)} reported-cost ${countWord(an,'spike')} detected${globalCostPartial?' in covered logs':''}`,'Local Cursor estimates are excluded from spike detection. Open Daily to compare the affected dates.']);
- if(globalCostPartial)priorities.push(['neutral','Spend and token totals have partial coverage','One or more traces lack enough local usage or pricing evidence; their timing, context, and tools are still included.']);
- if(!priorities.length)priorities.push(['good','No immediate cross-log issue detected','Review Daily periodically and act only when a signal repeats.']);
- $('g-global-priorities').innerHTML=priorities.map(([kind,title,detail])=>`<div class="priorityRow ${kind}"><i></i><div><b>${esc(title)}</b><span>${esc(detail)}</span></div></div>`).join('');
- const costly=(xs.sessions||[]).slice().sort((a,b)=>(b.cost||0)-(a.cost||0)).slice(0,5);
- $('g-overview-sessions').innerHTML=costly.length?costly.map(row=>`<div class=overviewRow><div><div class=name>${esc(row.title)}</div><div class=meta>${esc(row.project)} · ${esc(row.label||row.provider)}${hasLocalEstimate(row)?' · local est':''}</div></div><div class=value><div class=mono>${metricAvailable(row,'cost')?money(row.cost)+estimateSuffix(row):'--'}</div><button class=tbtn data-global-session="${esc(row.id)}" type=button>Open</button></div></div>`).join(''):'<div class=subline>no logs yet</div>';
- [...$('g-overview-sessions').querySelectorAll('[data-global-session]')].forEach(button=>button.onclick=()=>selectSession(button.dataset.globalSession));
  const all=$('view-logs').classList.contains('on')&&logSessionInventory?logSessionInventory:(xs.sessions||[]);
  const apps=[...new Map(all.map(session=>[
   appFilterGroup(session),
@@ -2950,6 +3200,11 @@ function renderLogStats(sessions){
 function selectSession(id,{updateUrl=true,replace=false,show=true}={}){
  id=String(id||'').trim();
  if(!id)return Promise.resolve();
+ if(LATEST&&id===stateSessionId(LATEST)){
+  return Promise.resolve(followLatestSession({
+   updateUrl:true,replace:updateUrl?replace:true,show
+  }));
+ }
  if(updateUrl&&history.pushState)history[replace?'replaceState':'pushState'](null,'',sessionRoute(id));
  pinned=id;
  const request=++sessionRequest;
@@ -2975,25 +3230,36 @@ function selectSession(id,{updateUrl=true,replace=false,show=true}={}){
   return null;
  });
 }
-function goToLatestSession(){
+function followLatestSession({updateUrl=true,replace=false,show=true,preservePanel=false}={}){
  sessionRequest++; pinned=null; CURRENT=LATEST;
- if(history.pushState)history.pushState(null,'','/#summary');
- applyHashRoute();
- if(LATEST)renderSession(LATEST);
+ if(updateUrl&&history.pushState){
+  const panel=preservePanel&&PANEL_KEYS.includes(sessionPanel)?sessionPanel:'summary';
+  history[replace?'replaceState':'pushState'](null,'',`/#${panel}`);
+ }
+ if(show){
+  applyHashRoute();
+  if(LATEST)renderSession(LATEST);
+ }
+ return LATEST;
 }
+function goToLatestSession(){followLatestSession();}
 $('unpin').onclick=goToLatestSession;
 
 let statePollBusy=false;
 function applyLiveState(state){
  LATEST=state;$('live').classList.remove('dead');
- if(!pinned&&$('view-session').classList.contains('on'))renderSession(LATEST);
- else if(!$('view-session').classList.contains('on'))$('livetxt').textContent='live';
-	 if($('view-global').classList.contains('on')||$('view-logs').classList.contains('on'))renderGlobal(LATEST.xsession);
+ if(pinned&&pinned===stateSessionId(LATEST)){
+  followLatestSession({updateUrl:true,replace:true,show:false,preservePanel:true});
+ }
+ const sessionSurfaceActive=$('view-session').classList.contains('on');
+ if(!pinned&&sessionSurfaceActive)renderSession(LATEST);
+ else if(!sessionSurfaceActive)$('livetxt').textContent='live';
+	 if($('view-logs').classList.contains('on'))renderLogs(LATEST.xsession);
 	 if($('view-logs').classList.contains('on')&&(!logSessionInventory||logSessionInventoryAt!==Number(LATEST.xsession?.generated_at||0)))loadLogSessions();
-	 if($('view-models').classList.contains('on')){renderModelStats(LATEST.xsession?.model_stats);renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions);}
+	 if($('view-models').classList.contains('on')){renderModelStats(LATEST.xsession?.model_stats);renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}
 	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
-	 if($('view-settings').classList.contains('on')){renderFrustrationSettings(LATEST.xsession?.frustration);renderModelPricing(LATEST.xsession?.model_pricing);}
+	 if($('view-settings').classList.contains('on'))renderSettings(LATEST.xsession);
 }
 async function refreshLiveState(){
  if(statePollBusy)return;

@@ -3,12 +3,15 @@ import Foundation
 
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
 private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#summary")!
+private let tokenMeterBudgetSettingsURL = URL(string: "http://127.0.0.1:8722/#settings-budgets")!
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
 private let selectedTabDefaultsKey = "TokenMeterSelectedTab"
 private let titleModeDefaultsKey = "TokenMeterTitleMode"
+private let titleMetricsDefaultsKey = "TokenMeterTitleMetrics"
 private let quotaAlertsEnabledDefaultsKey = "TokenMeterQuotaAlertsEnabled"
 private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
 private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
+private let budgetNotificationStatesDefaultsKey = "TokenMeterBudgetNotificationStates"
 private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
 
 // Token Meter accent blue (#00BCEB)
@@ -94,11 +97,22 @@ enum MenuTab: String, CaseIterable {
     }
 }
 
-enum StatusTitleMode: String {
-    case run
+enum TitleMetric: String, CaseIterable {
+    case cost
+    case speed
+    case context
+    case model
     case limits
 
-    var title: String { self == .run ? "Run" : "Limits" }
+    var title: String {
+        switch self {
+        case .cost: return "Cost"
+        case .speed: return "Output speed"
+        case .context: return "Context"
+        case .model: return "Model"
+        case .limits: return "Limits"
+        }
+    }
 }
 
 struct QuotaPace {
@@ -205,6 +219,73 @@ struct ProviderQuota {
 struct QuotaNotificationState: Codable {
     var lastUsedPercent: Double
     var resetAt: TimeInterval?
+    var firedThresholds: Set<Int>
+}
+
+struct BudgetScope {
+    var id: String
+    var label: String
+    var percent: Double
+}
+
+struct MonthlyBudget {
+    var month: String
+    var configured: Bool
+    var spend: Double
+    var budget: Double
+    var percent: Double
+    var lowerBound: Bool
+    var nativeNotifications: Bool
+    var thresholds: [Int]
+    var scopes: [BudgetScope]
+
+    static func fromJSON(_ dict: [String: Any]?) -> MonthlyBudget? {
+        guard let dict = dict else { return nil }
+        let configured = bool(dict["configured"])
+        let settings = dict["settings"] as? [String: Any] ?? [:]
+        let thresholds = (settings["thresholds"] as? [Any] ?? [])
+            .compactMap { optionalDouble($0).map(Int.init) }
+        let runtimes = (dict["runtimes"] as? [[String: Any]] ?? []).compactMap { row -> BudgetScope? in
+            guard optionalDouble(row["allocation"]) ?? 0 > 0,
+                  let percent = optionalDouble(row["percent"]),
+                  let id = string(row["provider"])
+            else { return nil }
+            return BudgetScope(id: id, label: string(row["label"]) ?? id.capitalized, percent: percent * 100)
+        }
+        var scopes = runtimes
+        if configured {
+            scopes.insert(BudgetScope(id: "overall", label: "Overall", percent: double(dict["percent"]) * 100), at: 0)
+        }
+        return MonthlyBudget(
+            month: string(dict["month"]) ?? "",
+            configured: configured,
+            spend: double(dict["spend"]),
+            budget: double(dict["budget"]),
+            percent: double(dict["percent"]) * 100,
+            lowerBound: bool(dict["lower_bound"]),
+            nativeNotifications: settings["native_notifications"] == nil
+                ? true : bool(settings["native_notifications"]),
+            thresholds: thresholds.isEmpty ? [80, 90, 100] : thresholds,
+            scopes: scopes
+        )
+    }
+
+    var compactLabel: String {
+        guard configured else { return "Budget not set" }
+        let prefix = lowerBound ? "≥" : ""
+        return "\(prefix)\(Int(percent.rounded()))% budget"
+    }
+
+    var toolTip: String {
+        guard configured else { return "Monthly budget is not configured." }
+        let prefix = lowerBound ? "At least " : ""
+        return "\(prefix)\(formatMoney(spend)) of \(formatMoney(budget)) recorded for \(month)."
+    }
+}
+
+struct BudgetNotificationState: Codable {
+    var month: String
+    var lastPercent: Double
     var firedThresholds: Set<Int>
 }
 
@@ -560,9 +641,16 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var selectedTab = MenuTab(
         rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? ""
     ) ?? .run
-    private var titleMode = StatusTitleMode(
-        rawValue: tokenMeterDefaults.string(forKey: titleModeDefaultsKey) ?? ""
-    ) ?? .run
+    private var titleMetrics: Set<TitleMetric> = {
+        if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
+            let metrics = Set(saved.compactMap(TitleMetric.init(rawValue:)))
+            if !metrics.isEmpty { return metrics }
+        }
+        if tokenMeterDefaults.string(forKey: titleModeDefaultsKey) == "limits" {
+            return [.limits]
+        }
+        return [.cost, .speed]
+    }()
     private var quotaAlertsEnabled: Bool = {
         if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }
         return tokenMeterDefaults.bool(forKey: quotaAlertsEnabledDefaultsKey)
@@ -577,10 +665,17 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { return [:] }
         return states
     }()
+    private var budgetNotificationStates: [String: BudgetNotificationState] = {
+        guard let data = tokenMeterDefaults.data(forKey: budgetNotificationStatesDefaultsKey),
+              let states = try? JSONDecoder().decode([String: BudgetNotificationState].self, from: data)
+        else { return [:] }
+        return states
+    }()
     private var quotaObservationEstablished = false
     private var menuIsOpen = false
     private var menuRefreshPending = false
     private var snapshot = MeterSnapshot.disconnected("Waiting for http://127.0.0.1:8722/menubar")
+    private var monthlyBudget: MonthlyBudget?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -652,7 +747,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.providerQuotas = (dict["provider_quotas"] as? [[String: Any]] ?? [])
                     .compactMap(ProviderQuota.fromJSON)
                 self.snapshot = MeterSnapshot.fromJSON(dict)
+                self.monthlyBudget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
                 self.evaluateQuotaNotifications()
+                self.evaluateBudgetNotifications()
                 self.refreshMenu()
             }
         }.resume()
@@ -702,6 +799,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         addAction("Open Dashboard", #selector(openDashboard))
         addAction("Open Daily Brief", #selector(openDailyBrief))
+        addAction("Open Budget Settings", #selector(openBudgetSettings))
         addAction("Open Trace", #selector(openTrace), enabled: snapshot.connected)
         addAction("Open Tools", #selector(openToolsAndSkills))
         menu.addItem(.separator())
@@ -730,21 +828,40 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addMetricRow("Last execution", snapshot.costAvailable
                          ? "\(formatMoney(snapshot.lastTurnCost))\(snapshot.estimatedCost ? " est" : "")"
                          : "--")
+            if let budget = monthlyBudget {
+                addMetricRow("Monthly budget", budget.compactLabel, toolTip: budget.toolTip)
+            }
         } else {
             addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
         }
     }
 
     private func updateStatusTitle() {
-        let title = titleMode == .limits ? (limitsStatusTitle() ?? snapshot.statusTitle) : snapshot.statusTitle
+        let title = selectedStatusTitle()
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.labelColor,
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         ]
         statusItem.button?.attributedTitle = NSAttributedString(string: title, attributes: attrs)
-        statusItem.button?.toolTip = titleMode == .limits
-            ? limitsStatusTooltip() ?? snapshot.statusTooltip
-            : snapshot.statusTooltip
+        var toolTip = snapshot.statusTooltip
+        if let limits = limitsStatusTooltip() { toolTip += "\nLimits: \(limits)" }
+        if let budget = monthlyBudget { toolTip += "\nBudget: \(budget.toolTip)" }
+        statusItem.button?.toolTip = toolTip
+    }
+
+    private func selectedStatusTitle() -> String {
+        guard snapshot.connected else { return snapshot.verdict.prefix }
+        let parts = TitleMetric.allCases.compactMap { metric -> String? in
+            guard titleMetrics.contains(metric) else { return nil }
+            switch metric {
+            case .cost: return snapshot.costLabel
+            case .speed: return snapshot.outputSpeedLabel
+            case .context: return snapshot.contextLabel
+            case .model: return snapshot.model
+            case .limits: return limitsStatusTitle()
+            }
+        }
+        return parts.isEmpty ? "TM" : parts.joined(separator: " · ")
     }
 
     private func limitsStatusTitle() -> String? {
@@ -916,11 +1033,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let titleItem = NSMenuItem(title: "Menu bar title", action: nil, keyEquivalent: "")
         let titleMenu = NSMenu(title: "Menu bar title")
-        for mode in [StatusTitleMode.run, .limits] {
-            let item = NSMenuItem(title: mode.title, action: #selector(setTitleMode(_:)), keyEquivalent: "")
+        for metric in TitleMetric.allCases {
+            let item = NSMenuItem(title: metric.title, action: #selector(toggleTitleMetric(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = mode.rawValue
-            item.state = titleMode == mode ? .on : .off
+            item.representedObject = metric.rawValue
+            item.state = titleMetrics.contains(metric) ? .on : .off
             titleMenu.addItem(item)
         }
         titleItem.submenu = titleMenu
@@ -1083,12 +1200,20 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async { [weak self] in self?.rebuildMenu() }
     }
 
-    @objc private func setTitleMode(_ sender: NSMenuItem) {
+    @objc private func toggleTitleMetric(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
-              let mode = StatusTitleMode(rawValue: raw)
+              let metric = TitleMetric(rawValue: raw)
         else { return }
-        titleMode = mode
-        tokenMeterDefaults.set(mode.rawValue, forKey: titleModeDefaultsKey)
+        if titleMetrics.contains(metric) {
+            titleMetrics.remove(metric)
+        } else {
+            titleMetrics.insert(metric)
+        }
+        tokenMeterDefaults.set(
+            TitleMetric.allCases.filter(titleMetrics.contains).map(\.rawValue),
+            forKey: titleMetricsDefaultsKey
+        )
+        tokenMeterDefaults.removeObject(forKey: titleModeDefaultsKey)
         refreshMenu()
     }
 
@@ -1171,6 +1296,48 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    private func evaluateBudgetNotifications() {
+        guard let budget = monthlyBudget, budget.configured else { return }
+        var changed = false
+        for scope in budget.scopes {
+            let key = scope.id
+            guard var previous = budgetNotificationStates[key],
+                  previous.month == budget.month
+            else {
+                budgetNotificationStates[key] = BudgetNotificationState(
+                    month: budget.month,
+                    lastPercent: scope.percent,
+                    firedThresholds: Set(budget.thresholds.filter { scope.percent >= Double($0) })
+                )
+                changed = true
+                continue
+            }
+            if budget.nativeNotifications {
+                let crossed = budget.thresholds.filter { threshold in
+                    previous.lastPercent < Double(threshold)
+                        && scope.percent >= Double(threshold)
+                        && !previous.firedThresholds.contains(threshold)
+                }
+                if let threshold = crossed.max() {
+                    let prefix = budget.lowerBound ? "At least " : ""
+                    deliverQuotaNotification(
+                        title: "\(scope.label) monthly budget reached \(threshold)%",
+                        body: scope.id == "overall"
+                            ? "\(prefix)\(formatMoney(budget.spend)) of \(formatMoney(budget.budget)) recorded for \(budget.month)."
+                            : "\(scope.label) reached \(Int(scope.percent.rounded()))% of its allocation."
+                    )
+                    previous.firedThresholds.formUnion(crossed)
+                }
+            }
+            previous.lastPercent = scope.percent
+            budgetNotificationStates[key] = previous
+            changed = true
+        }
+        if changed, let data = try? JSONEncoder().encode(budgetNotificationStates) {
+            tokenMeterDefaults.set(data, forKey: budgetNotificationStatesDefaultsKey)
+        }
+    }
+
     private func deliverQuotaNotification(title: String, body: String) {
         if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" { return }
         let process = Process()
@@ -1203,6 +1370,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openDailyBrief() {
         openDashboardPanel("daily", includePinnedSession: false)
+    }
+
+    @objc private func openBudgetSettings() {
+        NSWorkspace.shared.open(tokenMeterBudgetSettingsURL)
     }
 
     @objc private func openTrace() {
@@ -1348,7 +1519,13 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         let snapshot = MeterSnapshot.fromJSON(dict)
         let quotas = (dict["provider_quotas"] as? [[String: Any]] ?? []).compactMap(ProviderQuota.fromJSON)
         let savedTab = MenuTab(rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? "") ?? .run
-        let savedMode = StatusTitleMode(rawValue: tokenMeterDefaults.string(forKey: titleModeDefaultsKey) ?? "") ?? .run
+        let savedMetrics: Set<TitleMetric> = {
+            if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
+                let parsed = Set(saved.compactMap(TitleMetric.init(rawValue:)))
+                if !parsed.isEmpty { return parsed }
+            }
+            return [.cost, .speed]
+        }()
         let alertsEnabled = tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil
             ? true : tokenMeterDefaults.bool(forKey: quotaAlertsEnabledDefaultsKey)
         let savedThreshold = tokenMeterDefaults.integer(forKey: quotaAlertThresholdDefaultsKey)
@@ -1357,13 +1534,22 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             .filter(\.fresh)
             .flatMap { provider in provider.windows.map { (provider: provider, window: $0) } }
             .max { $0.window.usedPercent < $1.window.usedPercent }
-        let activeTitle = savedMode == .limits && constrained != nil
-            ? "\(constrained!.provider.label) \(constrained!.window.percentLabel) · \(constrained!.window.compactKind)"
-            : snapshot.statusTitle
+        let activeTitle = TitleMetric.allCases.compactMap { metric -> String? in
+            guard savedMetrics.contains(metric) else { return nil }
+            switch metric {
+            case .cost: return snapshot.costLabel
+            case .speed: return snapshot.outputSpeedLabel
+            case .context: return snapshot.contextLabel
+            case .model: return snapshot.model
+            case .limits:
+                guard let constrained = constrained else { return nil }
+                return "\(constrained.provider.label) \(constrained.window.percentLabel) · \(constrained.window.compactKind)"
+            }
+        }.joined(separator: " · ")
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)
         print("active-title=\(activeTitle)")
-        print("tab=\(savedTab.title) title-mode=\(savedMode.title)")
+        print("tab=\(savedTab.title) title-metrics=\(TitleMetric.allCases.filter(savedMetrics.contains).map(\.title).joined(separator: ","))")
         print("quota-alerts=\(alertsEnabled ? "on" : "off") warn-at=\(alertThreshold)%")
         for provider in quotas {
             let windows = provider.windows.map { "\($0.label)=\($0.percentLabel)" }.joined(separator: ",")

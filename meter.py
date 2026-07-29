@@ -71,6 +71,10 @@ DEFAULT_FRUSTRATION_TERMS = [
     "fuck", "fck", "fucked", "fucking", "shit", "shitty", "bullshit",
     "idiot", "stupid", "useless", "crap", "damn", "wtf",
 ]
+DEFAULT_POSITIVE_TERMS = [
+    "thank you", "thanks", "perfect", "great",
+    "exactly what i needed", "works now", "love it",
+]
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
@@ -78,8 +82,12 @@ MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
+BUDGET_PROVIDERS = ("claude", "codex", "cursor")
+DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
+MAX_MONTHLY_BUDGET = 100_000_000.0
 
 CLAUDE_PRICE = {
+    "claude-opus-5": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
     "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
     "claude-fable-5": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
     # Introductory pricing through 2026-08-31; standard pricing is $3/$15 afterward.
@@ -377,12 +385,12 @@ def atomic_write_text(path, text):
     os.replace(tmp, path)
 
 
-def normalize_frustration_terms(values):
-    """Normalize a user-editable term list while preserving display order."""
+def normalize_language_signal_terms(values, group="language signal"):
+    """Normalize one user-editable lexical group while preserving display order."""
     if isinstance(values, str):
         values = re.split(r"[,\n]", values)
     if not isinstance(values, list):
-        raise ValueError("Frustration terms must be a list or comma-separated text.")
+        raise ValueError(f"{group.title()} terms must be a list or comma-separated text.")
     normalized = []
     seen = set()
     for value in values:
@@ -390,56 +398,119 @@ def normalize_frustration_terms(values):
         if not term:
             continue
         if len(term) > MAX_FRUSTRATION_TERM_LENGTH:
-            raise ValueError(f"Each frustration term must be {MAX_FRUSTRATION_TERM_LENGTH} characters or fewer.")
+            raise ValueError(
+                f"Each {group} term must be {MAX_FRUSTRATION_TERM_LENGTH} characters or fewer."
+            )
         if any(ord(char) < 32 for char in term):
-            raise ValueError("Frustration terms cannot contain control characters.")
+            raise ValueError(f"{group.title()} terms cannot contain control characters.")
         if term not in seen:
             normalized.append(term)
             seen.add(term)
     if len(normalized) > MAX_FRUSTRATION_TERMS:
-        raise ValueError(f"Use at most {MAX_FRUSTRATION_TERMS} frustration terms.")
+        raise ValueError(f"Use at most {MAX_FRUSTRATION_TERMS} {group} terms.")
     return normalized
 
 
-def frustration_settings(path=None):
+def normalize_frustration_terms(values):
+    """Backward-compatible Friction-group normalizer."""
+    return normalize_language_signal_terms(values, "friction")
+
+
+def language_signal_settings(path=None):
     path = path or TOKEN_METER_SETTINGS
     settings = load_json(path, {})
     if not isinstance(settings, dict):
         settings = {}
-    if "frustration_terms" not in settings:
-        terms = list(DEFAULT_FRUSTRATION_TERMS)
-    else:
+
+    raw = settings.get("language_signal_terms")
+    defaults = {
+        "positive": list(DEFAULT_POSITIVE_TERMS),
+        "friction": list(DEFAULT_FRUSTRATION_TERMS),
+    }
+    groups = {}
+    for group in ("positive", "friction"):
+        values = raw.get(group) if isinstance(raw, dict) and group in raw else None
+        if values is None and group == "friction" and "frustration_terms" in settings:
+            values = settings.get("frustration_terms")
         try:
-            terms = normalize_frustration_terms(settings.get("frustration_terms"))
+            groups[group] = (
+                normalize_language_signal_terms(values, group)
+                if values is not None else list(defaults[group])
+            )
         except ValueError:
-            terms = list(DEFAULT_FRUSTRATION_TERMS)
+            groups[group] = list(defaults[group])
     return {
-        "terms": terms,
-        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        **groups,
+        "defaults": defaults,
         "max_terms": MAX_FRUSTRATION_TERMS,
+        "method": (
+            "case-insensitive whole-phrase match; quoted or discussed phrases can match; "
+            "not sentiment analysis"
+        ),
     }
 
 
-def set_frustration_terms(values, path=None):
-    """Persist the machine-wide frustration lexicon used by every session."""
+def set_language_signal_terms(values, path=None):
+    """Persist both machine-wide lexical signal groups atomically."""
     path = path or TOKEN_METER_SETTINGS
+    if not isinstance(values, dict):
+        return {"ok": False, "error": "Language signal terms must be an object."}
+    current = language_signal_settings(path)
     try:
-        terms = normalize_frustration_terms(values)
+        groups = {
+            group: normalize_language_signal_terms(
+                values.get(group, current[group]), group
+            )
+            for group in ("positive", "friction")
+        }
     except ValueError as error:
         return {"ok": False, "error": str(error)}
     settings = load_json(path, {})
     if not isinstance(settings, dict):
         settings = {}
-    settings["frustration_terms"] = terms
+    changed = (
+        settings.get("language_signal_terms") != groups
+        or "frustration_terms" in settings
+    )
+    settings["language_signal_terms"] = groups
+    settings.pop("frustration_terms", None)
     try:
         atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     except OSError as error:
         return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
     return {
         "ok": True,
-        "terms": terms,
-        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        "changed": changed,
+        **groups,
+        "defaults": {
+            "positive": list(DEFAULT_POSITIVE_TERMS),
+            "friction": list(DEFAULT_FRUSTRATION_TERMS),
+        },
         "max_terms": MAX_FRUSTRATION_TERMS,
+    }
+
+
+def frustration_settings(path=None):
+    """Return the Friction group through the legacy settings contract."""
+    settings = language_signal_settings(path)
+    return {
+        "terms": list(settings["friction"]),
+        "defaults": list(settings["defaults"]["friction"]),
+        "max_terms": settings["max_terms"],
+    }
+
+
+def set_frustration_terms(values, path=None):
+    """Persist the Friction group through the legacy settings contract."""
+    result = set_language_signal_terms({"friction": values}, path)
+    if not result.get("ok"):
+        return result
+    return {
+        "ok": True,
+        "changed": result.get("changed", False),
+        "terms": list(result["friction"]),
+        "defaults": list(result["defaults"]["friction"]),
+        "max_terms": result["max_terms"],
     }
 
 
@@ -642,6 +713,103 @@ def set_model_price(provider, model, prices=None, remove=False, path=None):
         "removed": bool(remove),
         "model_pricing": model_pricing_settings(path),
     }
+
+
+def normalize_budget_settings(values):
+    """Validate one machine-wide monthly budget configuration."""
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise ValueError("Budget settings must be an object.")
+    currency = str(values.get("currency") or "USD").strip().upper()
+    if currency != "USD":
+        raise ValueError("Token Meter budgets currently support USD only.")
+
+    total = values.get("monthly_total", 0)
+    if isinstance(total, bool) or not isinstance(total, (int, float)):
+        raise ValueError("Monthly budget must be a number.")
+    total = float(total)
+    if not math.isfinite(total) or total < 0 or total > MAX_MONTHLY_BUDGET:
+        raise ValueError(
+            f"Monthly budget must be between 0 and {MAX_MONTHLY_BUDGET:,.0f}."
+        )
+
+    raw_allocations = values.get("allocations") or {}
+    if not isinstance(raw_allocations, dict):
+        raise ValueError("Runtime allocations must be an object.")
+    unknown = sorted(set(raw_allocations) - set(BUDGET_PROVIDERS))
+    if unknown:
+        raise ValueError("Runtime allocations support Claude, Codex, and Cursor only.")
+    allocations = {}
+    for provider in BUDGET_PROVIDERS:
+        value = raw_allocations.get(provider, 0)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{provider.title()} allocation must be a number.")
+        value = float(value)
+        if not math.isfinite(value) or value < 0 or value > MAX_MONTHLY_BUDGET:
+            raise ValueError(
+                f"{provider.title()} allocation must be between 0 and "
+                f"{MAX_MONTHLY_BUDGET:,.0f}."
+            )
+        if value:
+            allocations[provider] = value
+    if sum(allocations.values()) > total + 1e-9:
+        raise ValueError("Runtime allocations cannot exceed the monthly budget.")
+
+    raw_thresholds = values.get("thresholds", DEFAULT_BUDGET_THRESHOLDS)
+    if not isinstance(raw_thresholds, list) and not isinstance(raw_thresholds, tuple):
+        raise ValueError("Budget thresholds must be a list.")
+    thresholds = []
+    for raw in raw_thresholds:
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError("Budget thresholds must be whole percentages.")
+        value = int(raw)
+        if value != raw or value < 1 or value > 100:
+            raise ValueError("Budget thresholds must be whole percentages from 1 to 100.")
+        thresholds.append(value)
+    if not thresholds or len(thresholds) > 10 or thresholds != sorted(set(thresholds)):
+        raise ValueError("Use 1 to 10 unique budget thresholds in increasing order.")
+
+    native_notifications = values.get("native_notifications", True)
+    if not isinstance(native_notifications, bool):
+        raise ValueError("Budget notifications must be on or off.")
+    return {
+        "currency": "USD",
+        "monthly_total": total,
+        "allocations": allocations,
+        "thresholds": thresholds,
+        "native_notifications": native_notifications,
+    }
+
+
+def budget_settings(path=None):
+    """Load the durable monthly budget, failing closed to an unconfigured budget."""
+    path = path or TOKEN_METER_SETTINGS
+    settings = load_json(path, {})
+    raw = settings.get("budgets") if isinstance(settings, dict) else {}
+    try:
+        return normalize_budget_settings(raw)
+    except ValueError:
+        return normalize_budget_settings({})
+
+
+def set_budget_settings(values, path=None):
+    """Persist a validated machine-wide monthly budget atomically."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        normalized = normalize_budget_settings(values)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    changed = settings.get("budgets") != normalized
+    settings["budgets"] = normalized
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    return {"ok": True, "changed": changed, "budgets": normalized}
 
 
 def toml_named_sections(path, table):
@@ -2320,16 +2488,17 @@ def rollup_frustration_events(events):
     return result
 
 
-def analyze_frustration(provider, objs, terms=None, default_model=None):
-    terms = list(frustration_settings()["terms"] if terms is None else terms)
+def user_turns_for_provider(provider, objs, default_model=None):
     if provider == "codex":
-        turns = codex_user_turns(objs, default_model)
-    elif provider == "cursor":
-        turns = cursor_user_turns(objs, default_model)
-    else:
-        turns = claude_user_turns(objs, default_model)
+        return codex_user_turns(objs, default_model)
+    if provider == "cursor":
+        return cursor_user_turns(objs, default_model)
+    return claude_user_turns(objs, default_model)
+
+
+def language_signal_events(turns, terms, default_model=None):
     events = []
-    for turn in turns:
+    for turn in turns or []:
         ts = turn.get("ts") or 0
         day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
         term_counts = frustration_term_counts(turn.get("text"), terms)
@@ -2342,6 +2511,39 @@ def analyze_frustration(provider, objs, terms=None, default_model=None):
             "matches": sum(term_counts.values()),
             "term_counts": term_counts,
         })
+    return events
+
+
+def analyze_language_signal_turns(turns, terms=None, default_model=None):
+    configured = language_signal_settings() if terms is None else terms
+    rollups = {}
+    events = {}
+    for group in ("positive", "friction"):
+        group_terms = list(configured.get(group) or [])
+        group_events = language_signal_events(turns, group_terms, default_model)
+        events[group] = group_events
+        rollups[group] = rollup_frustration_events(group_events)
+    return rollups, events
+
+
+def analyze_language_signals(provider, objs, terms=None, default_model=None):
+    turns = user_turns_for_provider(provider, objs, default_model)
+    return analyze_language_signal_turns(turns, terms, default_model)
+
+
+def attach_language_signals(row, rollups, events):
+    row["language_signals"] = rollups
+    row["_language_signal_events"] = events
+    row["frustration"] = rollups.get("friction") or rollup_frustration_events([])
+    row["_frustration_events"] = events.get("friction") or []
+    return row
+
+
+def analyze_frustration(provider, objs, terms=None, default_model=None):
+    """Backward-compatible Friction-only lexical analysis."""
+    configured = list(frustration_settings()["terms"] if terms is None else terms)
+    turns = user_turns_for_provider(provider, objs, default_model)
+    events = language_signal_events(turns, configured, default_model)
     return rollup_frustration_events(events), events
 
 
@@ -4428,9 +4630,10 @@ def claude_summary(source, objs):
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
-    row["frustration"], row["_frustration_events"] = analyze_frustration(
+    signal_rollups, signal_events = analyze_language_signals(
         "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
     )
+    attach_language_signals(row, signal_rollups, signal_events)
     row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
     return row
 
@@ -4490,9 +4693,10 @@ def codex_summary(source, objs):
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
-    row["frustration"], row["_frustration_events"] = analyze_frustration(
+    signal_rollups, signal_events = analyze_language_signals(
         "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
     )
+    attach_language_signals(row, signal_rollups, signal_events)
     row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
     return row
 
@@ -4647,20 +4851,16 @@ def cursor_summary(source, objs=None):
     row["token_estimate"] = bool(state.get("token_estimate"))
     row["provenance"] = usage_provenance([row])
     row["usage_basis"] = row["provenance"]["usage_basis"]
-    terms = frustration_settings()["terms"]
-    events = []
+    turns = []
     for execution in executions:
         ts = float(execution.get("ts") or 0)
-        day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
-        term_counts = frustration_term_counts(execution.get("user_input") or "", terms)
-        events.append({
-            "ts": ts, "day": day, "week": week_start(day),
+        turns.append({
+            "ts": ts,
+            "text": execution.get("user_input") or "",
             "model": execution.get("model") or "unknown",
-            "utterance": bool(term_counts), "matches": sum(term_counts.values()),
-            "term_counts": term_counts,
         })
-    row["frustration"] = rollup_frustration_events(events)
-    row["_frustration_events"] = events
+    signal_rollups, signal_events = analyze_language_signal_turns(turns)
+    attach_language_signals(row, signal_rollups, signal_events)
     calls = []
     for execution in executions:
         for tool in execution.get("tools") or []:
@@ -5882,6 +6082,228 @@ def daily_summaries(session_rows, limit=30):
     return result
 
 
+def monthly_summaries(session_rows, limit=12):
+    """Aggregate spend into local calendar months with provider and coverage detail."""
+    months = {}
+
+    def month_row(month):
+        return months.setdefault(month, {
+            "month": month, "cost": 0.0, "days": {},
+            "session_ids": set(), "cost_covered_ids": set(), "estimated_ids": set(),
+            "estimated_cost": 0.0, "providers": {},
+        })
+
+    def provider_row(row, provider):
+        return row["providers"].setdefault(provider, {
+            "provider": provider, "cost": 0.0, "session_ids": set(),
+            "cost_covered_ids": set(), "estimated_ids": set(), "estimated_cost": 0.0,
+        })
+
+    def mark_activity(row, session, day):
+        provider = session.get("provider") or "unknown"
+        session_id = session.get("id") or session.get("path") or "unknown"
+        runtime = provider_row(row, provider)
+        row["session_ids"].add(session_id)
+        runtime["session_ids"].add(session_id)
+        if metric_available(session, "cost"):
+            row["cost_covered_ids"].add(session_id)
+            runtime["cost_covered_ids"].add(session_id)
+        if session.get("token_estimate"):
+            row["estimated_ids"].add(session_id)
+            runtime["estimated_ids"].add(session_id)
+        row["days"].setdefault(day, {
+            "day": day, "cost": 0.0, "providers": defaultdict(float),
+        })
+        return runtime
+
+    for session in session_rows or []:
+        provider = session.get("provider") or "unknown"
+        estimated = bool(session.get("token_estimate"))
+        activity_days = {
+            str(item.get("day") or "")
+            for item in (session.get("_model_daily") or [])
+            if item.get("day")
+        }
+        activity_days.update(
+            str(item.get("day") or "")
+            for item in (session.get("_wait_samples") or [])
+            if item.get("day")
+        )
+        activity_days.update(
+            str(day) for day in (session.get("_day_cost") or {}) if day
+        )
+        for day in activity_days:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                continue
+            mark_activity(month_row(day[:7]), session, day)
+        for day, raw_cost in (session.get("_day_cost") or {}).items():
+            day = str(day or "")
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                continue
+            cost = float(raw_cost or 0)
+            row = month_row(day[:7])
+            runtime = mark_activity(row, session, day)
+            row["cost"] += cost
+            runtime["cost"] += cost
+            row["days"][day]["cost"] += cost
+            row["days"][day]["providers"][provider] += cost
+            if estimated:
+                row["estimated_cost"] += cost
+                runtime["estimated_cost"] += cost
+
+    keys = sorted(months, reverse=True)
+    if limit is not None and limit > 0:
+        keys = keys[:limit]
+    result = []
+    for month in keys:
+        row = months[month]
+        session_ids = row.pop("session_ids")
+        cost_ids = row.pop("cost_covered_ids")
+        estimated_ids = row.pop("estimated_ids")
+        providers = []
+        for runtime in row["providers"].values():
+            runtime_ids = runtime.pop("session_ids")
+            runtime_cost_ids = runtime.pop("cost_covered_ids")
+            runtime_estimated_ids = runtime.pop("estimated_ids")
+            runtime["coverage"] = {
+                "cost": {
+                    "covered_sessions": len(runtime_cost_ids),
+                    "total_sessions": len(runtime_ids),
+                    "complete": len(runtime_cost_ids) == len(runtime_ids),
+                }
+            }
+            runtime["provenance"] = make_usage_provenance(
+                runtime_ids, runtime_estimated_ids, runtime_cost_ids,
+                runtime.pop("estimated_cost"), 0,
+            )
+            runtime["usage_basis"] = runtime["provenance"]["usage_basis"]
+            providers.append(runtime)
+        providers.sort(key=lambda item: (-item["cost"], item["provider"]))
+        coverage = {
+            "cost": {
+                "covered_sessions": len(cost_ids),
+                "total_sessions": len(session_ids),
+                "complete": len(cost_ids) == len(session_ids),
+            }
+        }
+        provenance = make_usage_provenance(
+            session_ids, estimated_ids, cost_ids, row.pop("estimated_cost"), 0,
+        )
+        days = []
+        for day in sorted(row["days"]):
+            item = row["days"][day]
+            item["providers"] = [
+                {"provider": provider, "cost": cost}
+                for provider, cost in sorted(
+                    item["providers"].items(), key=lambda pair: (-pair[1], pair[0])
+                )
+            ]
+            days.append(item)
+        result.append({
+            "month": month,
+            "cost": row["cost"],
+            "sessions": len(session_ids),
+            "active_days": sum(1 for item in days if item["cost"] > 0),
+            "observed_days": len(days),
+            "days": days,
+            "providers": providers,
+            "coverage": coverage,
+            "provenance": provenance,
+            "usage_basis": provenance["usage_basis"],
+            "availability": {"cost": bool(cost_ids)},
+        })
+    return result
+
+
+def monthly_budget_status(months, settings=None, now=None):
+    """Combine the current calendar-month rollup with configured budget targets."""
+    settings = normalize_budget_settings(settings or {})
+    now = now or datetime.datetime.now().astimezone()
+    month_key = now.strftime("%Y-%m")
+    current = next(
+        (row for row in (months or []) if row.get("month") == month_key),
+        {
+            "month": month_key, "cost": 0.0, "sessions": 0, "active_days": 0,
+            "observed_days": 0, "days": [], "providers": [],
+            "coverage": {"cost": {
+                "covered_sessions": 0, "total_sessions": 0, "complete": True,
+            }},
+            "provenance": make_usage_provenance((), (), ()),
+            "usage_basis": "unavailable", "availability": {"cost": False},
+        },
+    )
+    total = float(settings["monthly_total"])
+    spend = float(current.get("cost") or 0)
+    percent = spend / total if total else 0.0
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    elapsed_days = max(1, min(days_in_month, now.day))
+    active_days = int(current.get("active_days") or 0)
+    projected = (
+        spend / elapsed_days * days_in_month
+        if total and active_days >= 3 else None
+    )
+    provider_spend = {
+        row.get("provider"): float(row.get("cost") or 0)
+        for row in (current.get("providers") or [])
+    }
+    allocations = settings["allocations"]
+    runtimes = []
+    for provider in BUDGET_PROVIDERS:
+        allocation = float(allocations.get(provider) or 0)
+        runtime_spend = provider_spend.get(provider, 0.0)
+        runtimes.append({
+            "provider": provider,
+            "label": provider.title(),
+            "spend": runtime_spend,
+            "allocation": allocation,
+            "percent": runtime_spend / allocation if allocation else None,
+            "remaining": max(0.0, allocation - runtime_spend) if allocation else None,
+        })
+    cost_coverage = (current.get("coverage") or {}).get("cost") or {}
+    partial = bool(
+        cost_coverage.get("total_sessions")
+        and not cost_coverage.get("complete")
+    )
+    estimated = bool((current.get("provenance") or {}).get("estimated_sessions"))
+    crossed = [value for value in settings["thresholds"] if percent >= value / 100]
+    if not total:
+        state = "unconfigured"
+    elif percent >= 1:
+        state = "over"
+    elif crossed:
+        state = "warning"
+    else:
+        state = "on_track"
+    return {
+        "month": month_key,
+        "configured": total > 0,
+        "currency": settings["currency"],
+        "budget": total,
+        "spend": spend,
+        "percent": percent,
+        "remaining": max(0.0, total - spend) if total else None,
+        "unallocated": max(0.0, total - sum(allocations.values())) if total else 0.0,
+        "active_days": active_days,
+        "elapsed_days": elapsed_days,
+        "days_in_month": days_in_month,
+        "days_remaining": max(0, days_in_month - elapsed_days),
+        "projected_spend": projected,
+        "projection_ready": projected is not None,
+        "projection_min_active_days": 3,
+        "partial": partial,
+        "estimated": estimated,
+        "lower_bound": partial,
+        "state": state,
+        "thresholds_crossed": crossed,
+        "next_threshold": next(
+            (value for value in settings["thresholds"] if percent < value / 100),
+            None,
+        ),
+        "runtimes": runtimes,
+        "settings": settings,
+    }
+
+
 MATCHED_PACE_MIN_PAIRS = 20
 MATCHED_PACE_MIN_COVERAGE = 0.30
 
@@ -6320,35 +6742,70 @@ def aggregate_model_stats(session_rows):
     }
 
 
-def aggregate_frustration(session_rows, terms=None):
-    """Aggregate lexical frustration evidence without retaining message content."""
-    settings = frustration_settings()
-    configured_terms = list(settings["terms"] if terms is None else terms)
-    events = []
-    for session in session_rows or []:
-        runtime = session.get("runtime") or source_runtime_label(session)
-        for source_event in session.get("_frustration_events") or []:
-            event = dict(source_event)
-            model = event.get("model") or "unknown"
-            event["runtime"] = runtime
-            event["model_id"] = f"{model}::{runtime}"
-            events.append(event)
-    result = rollup_frustration_events(events)
-    result.update({
-        "configured_terms": configured_terms,
-        "default_terms": list(settings["defaults"]),
+def aggregate_language_signals(session_rows, terms=None):
+    """Aggregate Positive and Friction lexical evidence without retaining messages."""
+    settings = language_signal_settings()
+    configured = {
+        group: list((terms or {}).get(group, settings[group]))
+        for group in ("positive", "friction")
+    }
+    results = {}
+    for group in ("positive", "friction"):
+        events = []
+        for session in session_rows or []:
+            runtime = session.get("runtime") or source_runtime_label(session)
+            stored = session.get("_language_signal_events") or {}
+            source_events = stored.get(group) if isinstance(stored, dict) else None
+            if source_events is None and group == "friction":
+                source_events = session.get("_frustration_events") or []
+            for source_event in source_events or []:
+                event = dict(source_event)
+                model = event.get("model") or "unknown"
+                event["runtime"] = runtime
+                event["model_id"] = f"{model}::{runtime}"
+                events.append(event)
+        result = rollup_frustration_events(events)
+
+        def session_rollup(session):
+            stored = session.get("language_signals") or {}
+            if isinstance(stored, dict) and group in stored:
+                return stored.get(group) or {}
+            return (session.get("frustration") or {}) if group == "friction" else {}
+
+        result.update({
+            "group": group,
+            "configured_terms": configured[group],
+            "default_terms": list(settings["defaults"][group]),
+            "max_terms": settings["max_terms"],
+            "matched_sessions": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("utterances") or 0) > 0
+            ),
+            "affected_sessions": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("utterances") or 0) > 0
+            ),
+            "sessions_with_user_turns": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("user_turns") or 0) > 0
+            ),
+            "method": settings["method"],
+        })
+        results[group] = result
+    return {
+        "positive": results["positive"],
+        "friction": results["friction"],
+        "configured_terms": configured,
+        "default_terms": settings["defaults"],
         "max_terms": settings["max_terms"],
-        "affected_sessions": sum(
-            1 for session in (session_rows or [])
-            if ((session.get("frustration") or {}).get("utterances") or 0) > 0
-        ),
-        "sessions_with_user_turns": sum(
-            1 for session in (session_rows or [])
-            if ((session.get("frustration") or {}).get("user_turns") or 0) > 0
-        ),
-        "method": "case-insensitive whole-term match; one matched user turn equals one utterance",
-    })
-    return result
+        "method": settings["method"],
+    }
+
+
+def aggregate_frustration(session_rows, terms=None):
+    """Backward-compatible aggregate for the Friction language-signal group."""
+    configured = None if terms is None else {"friction": terms}
+    return aggregate_language_signals(session_rows, configured)["friction"]
 
 
 def metric_coverage(rows, metric):
@@ -6427,6 +6884,9 @@ def cross_session():
         mm.append(item)
     mm.sort(key=lambda item: (-item["cost"], -item["tokens"], item["id"]))
     daily = daily_summaries(internal_rows)
+    monthly = monthly_summaries(internal_rows)
+    budgets = budget_settings()
+    budget = monthly_budget_status(monthly, budgets)
     daily_by_day = {row["day"]: row for row in daily}
     days = sorted(day_cost)
     trend = []
@@ -6448,7 +6908,8 @@ def cross_session():
         item["anomaly_basis"] = "reported_only"
 
     total = sum(item["cost"] for item in mm)
-    premium = (model_name_cost.get("claude-opus-4-8", 0)
+    premium = (model_name_cost.get("claude-opus-5", 0)
+               + model_name_cost.get("claude-opus-4-8", 0)
                + model_name_cost.get("claude-fable-5", 0)
                + model_name_cost.get("gpt-5.5", 0))
     tool_waste = global_tool_waste(internal_rows)
@@ -6505,10 +6966,14 @@ def cross_session():
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
         "model_stats": aggregate_model_stats(internal_rows),
+        "language_signals": aggregate_language_signals(internal_rows),
         "frustration": aggregate_frustration(internal_rows),
         "model_pricing": model_pricing_settings(),
+        "budgets": budgets,
+        "budget": budget,
         "tool_waste": tool_waste,
         "daily": daily,
+        "monthly": monthly,
         "capabilities": capability_inventory(tool_waste),
         "session_actions": session_action_capability(),
     }
@@ -8051,6 +8516,8 @@ def menubar_state(session_id=None):
     selected_id = source.get("id")
     model = next((row.get("model") for row in reversed(st.get("executions") or [])
                   if row.get("model")), None) or source.get("model") or "unknown"
+    cross = _xsess.get("data") or (STATE or {}).get("xsession") or {}
+    budget = cross.get("budget") or monthly_budget_status([], budget_settings())
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
@@ -8113,6 +8580,7 @@ def menubar_state(session_id=None):
             sources, selected_id=requested_id if selected_source else selected_id, limit=5
         ),
         "provider_quotas": provider_quota_snapshots(),
+        "budget": budget,
         "ts": st.get("ts"),
     }
 
@@ -8252,7 +8720,8 @@ class H(BaseHTTPRequestHandler):
         req_path = urlparse(self.path).path
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete",
-                            "/settings/frustration", "/settings/model-pricing"):
+                            "/settings/frustration", "/settings/language-signals",
+                            "/settings/model-pricing", "/settings/budgets"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -8274,7 +8743,7 @@ class H(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = 0
-        if length <= 0 or length > 4096:
+        if length <= 0 or length > 8192:
             self._send(json.dumps({"ok": False, "error": "Invalid request size."}),
                        "application/json", status=400)
             return
@@ -8284,12 +8753,23 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps({"ok": False, "error": "Invalid JSON."}),
                        "application/json", status=400)
             return
+        if req_path == "/settings/language-signals":
+            result = set_language_signal_terms(payload.get("terms") or payload)
+            if result.get("ok"):
+                _summary_cache.clear()
+                cross = refresh_cross_session_state()
+                result["language_signals"] = cross.get("language_signals") or {}
+                result["frustration"] = cross.get("frustration") or {}
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
         if req_path == "/settings/frustration":
             result = set_frustration_terms(payload.get("terms"))
             if result.get("ok"):
                 _summary_cache.clear()
                 cross = refresh_cross_session_state()
                 result["frustration"] = cross.get("frustration") or {}
+                result["language_signals"] = cross.get("language_signals") or {}
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return
@@ -8308,6 +8788,16 @@ class H(BaseHTTPRequestHandler):
                 updated = recompute(source) if source else None
                 cross = refresh_cross_session_state(updated or STATE)
                 result["model_pricing"] = cross.get("model_pricing") or result["model_pricing"]
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/settings/budgets":
+            result = set_budget_settings(payload)
+            if result.get("ok"):
+                cross = refresh_cross_session_state()
+                result["budgets"] = cross.get("budgets") or result["budgets"]
+                result["budget"] = cross.get("budget") or {}
+                result["monthly"] = cross.get("monthly") or []
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return

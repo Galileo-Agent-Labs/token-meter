@@ -1,6 +1,7 @@
 import unittest
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -686,6 +687,49 @@ class ModelPerformanceTests(unittest.TestCase):
 
 
 class FrustrationSignalTests(unittest.TestCase):
+    def test_language_signal_settings_migrate_friction_and_preserve_other_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({
+                "frustration_terms": ["damn"],
+                "model_pricing": {"claude": {"custom": {
+                    "input": 1, "output": 2, "cache_write": 0, "cache_read": 0,
+                }}},
+            }))
+            loaded = meter.language_signal_settings(str(path))
+            saved = meter.set_language_signal_terms(
+                {"positive": ["Perfect", "thanks"], "friction": ["damn"]},
+                str(path),
+            )
+            stored = json.loads(path.read_text())
+        self.assertEqual(loaded["friction"], ["damn"])
+        self.assertEqual(loaded["positive"], meter.DEFAULT_POSITIVE_TERMS)
+        self.assertTrue(saved["ok"])
+        self.assertEqual(stored["language_signal_terms"], {
+            "positive": ["perfect", "thanks"], "friction": ["damn"],
+        })
+        self.assertNotIn("frustration_terms", stored)
+        self.assertIn("model_pricing", stored)
+
+    def test_positive_and_friction_are_aggregated_independently_without_text(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-07T08:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"type": "event_msg", "timestamp": "2026-07-07T08:00:02.000Z",
+             "payload": {"type": "user_message", "message": "Perfect, thank you"}},
+            {"type": "event_msg", "timestamp": "2026-07-07T08:02:00.000Z",
+             "payload": {"type": "user_message", "message": "damn this is broken"}},
+        ]
+        rollups, events = meter.analyze_language_signals(
+            "codex", objs, {"positive": ["perfect", "thank you"], "friction": ["damn"]}
+        )
+        self.assertEqual(rollups["positive"]["utterances"], 1)
+        self.assertEqual(rollups["positive"]["matches"], 2)
+        self.assertEqual(rollups["friction"]["utterances"], 1)
+        self.assertEqual(rollups["friction"]["matches"], 1)
+        self.assertNotIn("text", events["positive"][0])
+        self.assertNotIn("text", events["friction"][0])
+
     def test_matches_whole_terms_and_counts_repeated_hits(self):
         counts = meter.frustration_term_counts(
             "Fuck, fuck this bullshit. Classify is safe.", ["fuck", "bullshit", "ass"]
@@ -789,6 +833,20 @@ class FrustrationSignalTests(unittest.TestCase):
 
 
 class PricingTests(unittest.TestCase):
+    def test_opus_5_uses_published_api_rates(self):
+        price, approximate = meter.price_for("claude-opus-5", "claude")
+        self.assertEqual(price, {
+            "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.5,
+        })
+        self.assertFalse(approximate)
+        row = next(
+            item for item in meter.model_pricing_settings()["models"]
+            if item["provider"] == "claude" and item["model"] == "claude-opus-5"
+        )
+        self.assertTrue(row["builtin"])
+        self.assertFalse(row["overridden"])
+        self.assertEqual(row["source"], "built-in")
+
     def test_sonnet_5_uses_introductory_api_rates(self):
         price, approximate = meter.price_for("claude-sonnet-5", "claude")
         self.assertEqual(price, {"input": 2.0, "output": 10.0, "cache_write": 2.5, "cache_read": 0.2})
@@ -1111,18 +1169,165 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("stop-color='%2300bceb'", self.page)
         self.assertIn('name=theme-color content="#07090c"', self.page)
 
-    def test_current_header_keeps_session_start_message_visible(self):
-        self.assertIn("id=session-start", self.page)
-        self.assertIn("id=session-start-text", self.page)
+    def test_current_header_keeps_one_line_session_start_message_visible(self):
+        self.assertIn('class="card previewStartStrip"', self.page)
+        self.assertIn("id=preview-start", self.page)
         self.assertIn("function sessionStartMessage(s)", self.page)
-        self.assertIn("$('session-start-text').textContent=startMessage", self.page)
-        self.assertLess(self.page.index("id=session-start"), self.page.index("id=session-tabs"))
+        self.assertIn("$('preview-start').textContent=startMessage", self.page)
+        current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
+            "<div class=view id=view-logs>", 1
+        )[0]
+        self.assertLess(current.index("id=preview-start"), current.index("id=preview-run-chart-slot"))
+        self.assertIn("text-overflow:ellipsis;white-space:nowrap", self.page)
 
     def test_current_output_card_shows_trace_backed_output_speed(self):
-        for marker in ("id=output-tps", "s.throughput||{}", "speedFmt(throughput.output_tps)",
+        for marker in ("id=preview-speed", "s.throughput||{}", "speedFmt(throughput.output_tps)",
                        "tool-free", "end-to-end", "reasoning and thinking output",
                        "external tool-result tokens"):
             self.assertIn(marker, self.page)
+        self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
+
+    def test_old_current_summary_is_only_a_hidden_renderer_depot(self):
+        for marker in (
+            "id=session-depot hidden", "id=usage-details", "tm_usage_details_open",
+            "id=cost", "id=input-tok", "id=output-tok", "id=output-tps",
+            "id=ov-duration", "id=ov-context",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("class=view id=session-depot", self.page)
+        self.assertNotIn("class=\"view on\" id=session-depot", self.page)
+
+    def test_current_summary_keeps_session_budget_slider(self):
+        summary = self.page[
+            self.page.index("id=panel-summary"):
+            self.page.index("id=panel-activity")
+        ]
+        alerts = self.page[
+            self.page.index("id=panel-alerts"):
+            self.page.index("id=view-logs")
+        ]
+        for marker in (
+            "id=session-budget-control", "id=budget-slider type=range",
+            "id=budget type=number", "id=session-budget-spend",
+            "function syncSessionBudgetControls", "tm_session_budgets",
+            "$('budget-slider').addEventListener('input'",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("id=budget-slider type=range", summary)
+        self.assertIn("id=budget type=number", summary)
+        self.assertNotIn("id=budget type=number", alerts)
+        self.assertIn(
+            "Set a live-run cap without changing the machine-wide monthly budget.",
+            summary,
+        )
+
+    def test_promoted_current_is_dense_complete_and_settings_stay_dedicated(self):
+        for marker in (
+            "id=tab-session", 'class="view on" id=view-session',
+            "id=current-tabs", "id=preview-run-chart-slot",
+            "id=preview-run-budget-slot", "id=preview-token-split-slot",
+            "id=preview-activity-slot", "id=preview-tools-slot",
+            "id=preview-insights-slot", "id=preview-alerts-slot",
+            "id=preview-surface-run", "id=preview-surface-activity",
+            "id=preview-surface-tools", "id=preview-surface-insights",
+            "id=preview-surface-alerts", "id=session-activity-home",
+            "id=session-tools-home", "id=session-insights-home",
+            "id=session-alerts-home", "data-current-panel=run",
+            "data-current-panel=activity", "data-current-panel=tools",
+            "data-current-panel=insights", "data-current-panel=alerts",
+            "id=session-token-split-home", "id=session-token-split-module",
+            "class=\"card previewStartStrip\"", "class=settingsPageLayout",
+            "class=\"card settingsMap\"", "data-settings-target=agent-access",
+            "function restoreCurrentModules()", "function showCurrentPanel(panel)",
+            "function renderCurrentRun(s)",
+            "if(h==='preview-settings')", "setHashRoute('settings',{replace:true,apply:false})",
+            "const legacyCurrentRoutes={preview:'summary','preview-run':'summary'",
+        ):
+            self.assertIn(marker, self.page)
+        for metric_id in (
+            "preview-speed", "preview-wait",
+            "preview-context", "preview-executions", "preview-tools",
+            "preview-tool-results", "preview-cache-rate", "preview-cache-saved",
+            "preview-burn", "preview-cost-task", "preview-started-at",
+            "preview-last-at",
+        ):
+            self.assertIn(f"id={metric_id}", self.page)
+        for removed_id in (
+            "preview-input", "preview-output", "preview-thinking", "preview-avg-cost",
+        ):
+            self.assertNotIn(f"id={removed_id}", self.page)
+        for unique_id in (
+            "iochart", "sembar", "session-token-split-module", "panel-activity",
+            "panel-tools", "trace", "tooltbl", "execTools", "budget", "agent-access",
+            "frustration-settings", "model-pricing-settings",
+        ):
+            self.assertEqual(
+                len(re.findall(rf"\bid={re.escape(unique_id)}(?:\s|>)", self.page)),
+                1,
+                f"{unique_id} must be moved, not cloned",
+            )
+        self.assertNotIn("id=tab-preview", self.page)
+        self.assertNotIn("id=view-preview", self.page)
+        current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
+            "<div class=view id=view-logs>", 1
+        )[0]
+        self.assertNotIn("Settings map", current)
+        self.assertNotIn("id=agent-access", current)
+        self.assertNotIn("id=frustration-settings", current)
+        self.assertNotIn("id=model-pricing-settings", current)
+        self.assertNotIn("What needs attention", current)
+        self.assertNotIn("Open original Current", current)
+        self.assertNotIn("Experimental", current)
+        self.assertNotIn("Current preview", current)
+        self.assertEqual(current.count("card previewKpi fieldtip"), 10)
+        self.assertLess(current.index("id=preview-start"), current.index("id=preview-run-chart-slot"))
+        self.assertLess(
+            current.index("id=preview-run-chart-slot"),
+            current.index("id=preview-token-split-slot"),
+        )
+        self.assertIn("previewSpeed", current)
+        self.assertIn("text-overflow:ellipsis;white-space:nowrap", self.page)
+        self.assertIn(
+            "if(t!=='session')restoreCurrentModules();",
+            self.page,
+        )
+        self.assertIn(
+            "mountCurrentModule('preview-run-chart-slot','session-chart-module')",
+            self.page,
+        )
+        self.assertIn(
+            "mountCurrentModule('preview-token-split-slot','session-token-split-module')",
+            self.page,
+        )
+        self.assertIn(
+            "['session-token-split-home','session-token-split-module']",
+            self.page,
+        )
+        self.assertIn(
+            "['session-activity-home','panel-activity']",
+            self.page,
+        )
+        self.assertIn(
+            "['session-tools-home','panel-tools']",
+            self.page,
+        )
+        self.assertIn(
+            "['session-insights-home','panel-insights']",
+            self.page,
+        )
+        self.assertIn(
+            "['session-alerts-home','panel-alerts']",
+            self.page,
+        )
+        self.assertIn(
+            "mountCurrentModule(`preview-${panel}-slot`,`panel-${panel}`)",
+            self.page,
+        )
+        self.assertIn(
+            "$('current-tabs').onclick=event=>{if(event.target.dataset.currentPanel)setHashRoute(CURRENT_PANEL_ROUTES[event.target.dataset.currentPanel]);};",
+            self.page,
+        )
+        self.assertNotIn("mountCurrentModule('preview-settings", self.page)
 
     def test_model_stats_is_a_first_class_top_level_route(self):
         for marker in ("id=tab-models", "id=view-models", "id=m-speed", "id=m-chart",
@@ -1152,9 +1357,9 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
 
-    def test_wait_time_is_first_class_across_current_logs_global_models_and_daily(self):
+    def test_wait_time_is_first_class_across_current_logs_models_and_daily(self):
         for marker in (
-            "data-chart=wait", "drawWaitChart", "id=g-wait", "data-gsort=wait",
+            "data-chart=wait", "drawWaitChart", "data-gsort=wait",
             "id=lf-wait", "id=m-wait", "id=m-metric", "data-model-metric=wait",
             "id=d-wait", "id=d-trend-mode", "data-daily-trend=wait",
             "Prompt-to-completed-response", "lower is better",
@@ -1163,17 +1368,18 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("wait_time?.total_s", self.page)
         self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
-    def test_frustration_is_inside_models_with_global_settings(self):
+    def test_language_signals_are_inside_models_with_machine_wide_settings(self):
         for marker in (
             "id=model-frustration", "id=f-utterances",
             "id=f-rate", "id=f-chart", "id=f-models", "id=f-chats",
             "id=f-chat-mode", "drawFrustrationTrend",
-            "id=f-add-terms", "id=frustration-terms", "id=frustration-save",
-            "/settings/frustration",
+            "id=f-add-terms", "id=positive-terms", "id=frustration-terms",
+            "id=frustration-save", "id=f-signal-group",
+            "/settings/language-signals", "User language signals", "Positive", "Friction",
         ):
             self.assertIn(marker, self.page)
         self.assertIn("if(h==='models'||h==='frustration')", self.page)
-        self.assertIn("renderFrustration(LATEST.xsession?.frustration,LATEST.xsession?.sessions)", self.page)
+        self.assertIn("renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions)", self.page)
         self.assertIn("$('f-add-terms').onclick=()=>{setHashRoute('settings')", self.page)
         self.assertIn("$('frustration-settings').scrollIntoView", self.page)
         self.assertIn("Add more terms", self.page)
@@ -1200,13 +1406,13 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("USD per 1 million tokens", self.page)
         self.assertIn("recalculate current and historical cost estimates", self.page)
         self.assertLess(
-            self.page.index("id=frustration-settings"),
             self.page.index("id=model-pricing-settings"),
+            self.page.index("id=frustration-settings"),
         )
         self.assertNotIn("id=cursor-source-status", self.page)
         self.assertNotIn("Local trace source", self.page)
         self.assertNotIn("function renderCursorSourceStatus", self.page)
-        self.assertIn("if(h==='settings'||h==='model-pricing')", self.page)
+        self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("$('model-pricing-settings').scrollIntoView", self.page)
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
@@ -1221,7 +1427,7 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertRegex(self.page, r"id=tab-capabilities[^>]*>Tools</button>")
         self.assertIn("data-cstate=review", self.page)
-        self.assertIn("MCP servers remain read-only evidence", self.page)
+        self.assertIn("They remain read-only in Token Meter", self.page)
 
     def test_capability_card_tooltips_are_not_clipped(self):
         self.assertIn(".capHero .pad{padding:13px 15px;overflow:visible}", self.page)
@@ -1236,36 +1442,72 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("row.reviewable!==false", self.page)
         self.assertNotIn("...group,id:group.item_id", self.page)
 
-    def test_global_daily_learn_and_settings_views_are_first_class_routes(self):
-        for marker in ("id=tab-logs", "id=view-logs", "id=tab-daily", "id=view-daily", "id=tab-learn", "id=view-learn",
-                       "id=tab-settings", "id=view-settings"):
+    def test_logs_daily_learn_and_settings_are_first_class_routes(self):
+        for marker in (
+            "id=tab-logs", "id=view-logs", "id=tab-daily", "id=view-daily",
+            "id=tab-learn", "id=view-learn", "id=tab-settings", "id=view-settings",
+        ):
             self.assertIn(marker, self.page)
-        self.assertIn("data-global-panel=overview", self.page)
-        self.assertIn("id=global-panel-overview", self.page)
-        self.assertNotIn("data-global-panel=logs", self.page)
-        self.assertNotIn("id=global-panel-logs", self.page)
-        self.assertIn("const GLOBAL_PANEL_KEYS=['overview','insights','evidence'];", self.page)
-        self.assertIn("h==='logs'||h==='global-logs'", self.page)
+        for removed in (
+            "id=tab-global", "id=view-global", "data-global-panel",
+            "id=tab-budgets", "id=view-budgets",
+        ):
+            self.assertNotIn(removed, self.page)
+        self.assertIn("const legacyGlobal=h==='global'||h==='global-logs'", self.page)
+        self.assertIn("if(legacyGlobal)setHashRoute('logs',{replace:true,apply:false})", self.page)
         self.assertIn("live · updated ${new Date(generatedAt*1000).toLocaleTimeString", self.page)
-        self.assertLess(self.page.index("id=tab-daily"), self.page.index("id=tab-logs"))
-        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-global"))
+        self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-logs"))
+        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-daily"))
         self.assertIn("id=d-day-select", self.page)
-        self.assertIn("id=learn-glossary", self.page)
+        self.assertNotIn("id=learn-glossary", self.page)
+        self.assertIn("Recommended workflow", self.page)
         self.assertIn("if(h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
-        self.assertIn("if(h==='settings'||h==='model-pricing')", self.page)
+        self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
+        self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
+
+    def test_settings_monthly_budget_tracks_total_allocations_history_and_alerts(self):
+        for marker in (
+            "id=budget-settings", "data-settings-target=budget-settings",
+            "id=budget-spend", "id=budget-total", "id=budget-remaining",
+            "id=budget-projected", "id=budget-runtimes", "id=budget-bars",
+            "id=budget-progress-markers", "id=budget-allocation-note",
+            "id=budget-config-summary", "class=budgetDashboard",
+            "class=\"card pad budgetLead\"", "class=\"card pad budgetConfig\"",
+            "class=budgetLeadBody", "class=budgetDetailGrid",
+            "class=budgetReadouts", "class=budgetRuntimeTrack",
+            "class=budgetFormGroup", "class=budgetCoreFields",
+            "class=budgetAllocationFields",
+            "class=budgetChartInner", "class=budgetTarget",
+            "id=budget-input-claude", "id=budget-input-codex",
+            "id=budget-input-cursor", "id=budget-input-thresholds",
+            "/settings/budgets", "tm_monthly_budget_alerts",
+            "Partial cost coverage: recorded spend is a lower bound.",
+            "No allocations set · bars show share of recorded spend.",
+            "Shared across all runtimes",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("class=budgetHero", self.page)
+        self.assertNotIn("class=budgetGrid", self.page)
+        self.assertNotIn("budgetConfigInitialized", self.page)
+        self.assertNotIn("<details class=\"card budgetConfig\"", self.page)
+        self.assertNotIn("<span class=budgetRuntimeName>Unallocated</span>", self.page)
+        self.assertNotIn("id=tab-budgets", self.page)
+        self.assertNotIn("id=view-budgets", self.page)
+        settings = self.page[self.page.index("id=view-settings"):]
+        self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
 
     def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
-            "tab-session", "tab-daily", "tab-logs", "tab-global", "tab-models",
+            "tab-session", "tab-logs", "tab-daily", "tab-models",
             "tab-capabilities", "tab-learn", "tab-settings",
         ]
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-trigger", "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit8'",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
             "key==='k'", "event.key==='ArrowDown'", "event.key==='Enter'",
             "aria-keyshortcuts=\"Meta+K Control+K\"",
         ):
@@ -1323,7 +1565,8 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_agent_access_has_a_dedicated_settings_tab(self):
         for marker in ("id=agent-discovery", "id=agent-access", "id=agent-clients",
-                       "id=agent-dialog", "/agent-access/status", "/agent-access/toggle"):
+                       "id=agent-dialog", "/agent-access/status", "/agent-access/toggle",
+                       "class=\"card settingsMap\"", "class=settingsSignalGrid"):
             self.assertIn(marker, self.page)
         for tool in ("mcp__tokenmeter__check", "mcp__tokenmeter__usage",
                      "mcp__tokenmeter__capabilities"):
@@ -1333,6 +1576,17 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("setHashRoute('settings')", self.page)
         self.assertIn("After connecting Token Meter in Settings", self.page)
         self.assertIn("tm_agent_discovery_dismissed", self.page)
+        settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
+            "</div>\n</div>\n<dialog class=commandPalette", 1
+        )[0]
+        self.assertLess(settings.index("data-settings-target=agent-access"),
+                        settings.index("data-settings-target=model-pricing-settings"))
+        self.assertLess(settings.index("data-settings-target=model-pricing-settings"),
+                        settings.index("data-settings-target=frustration-settings"))
+        self.assertLess(settings.index("id=agent-access"),
+                        settings.index("id=model-pricing-settings"))
+        self.assertLess(settings.index("id=model-pricing-settings"),
+                        settings.index("id=frustration-settings"))
 
     def test_learn_has_user_question_starters(self):
         self.assertIn("Should I keep this run going?", self.page)
@@ -1349,8 +1603,8 @@ class DashboardLayoutTests(unittest.TestCase):
             "Select two model runtimes", "Read matched pace first",
             "Check coverage and uncertainty", "Treat tok/s as diagnostic",
             "What matching cannot prove", "data-learn-route=models",
-            "Confidence interval", "Match coverage", "Matched pace",
-            "Model runtime", "Observed output pace", "Typical workload",
+            "95% confidence interval", "smaller-history coverage", "Matched pace",
+            "model runtime", "Observed output pace", "Typical workload",
             "Typical wait", "semantic difficulty", "less than 30% coverage",
             "The 95% confidence interval crosses 1.00",
             "$('m-coverage').setAttribute('aria-valuenow'",
@@ -1376,12 +1630,31 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
         self.assertIn("el.onclick=()=>selectSession(el.dataset.id)", self.page)
 
+    def test_active_session_opened_from_logs_follows_live_state(self):
+        self.assertIn("function followLatestSession", self.page)
+        self.assertIn(
+            "if(LATEST&&id===stateSessionId(LATEST)){\n"
+            "  return Promise.resolve(followLatestSession({\n"
+            "   updateUrl:true,replace:updateUrl?replace:true,show",
+            self.page,
+        )
+        self.assertIn(
+            "if(pinned&&pinned===stateSessionId(LATEST)){\n"
+            "  followLatestSession({updateUrl:true,replace:true,show:false,preservePanel:true});",
+            self.page,
+        )
+        self.assertIn(
+            "const sessionSurfaceActive=$('view-session').classList.contains('on');\n"
+            " if(!pinned&&sessionSurfaceActive)renderSession(LATEST);",
+            self.page,
+        )
+
     def test_cursor_provenance_is_integrated_across_dashboard_views(self):
         for marker in (
-            "const hasLocalEstimate", "const estimateSuffix", "reported-cost",
+            "const hasLocalEstimate", "const estimateSuffix",
             "local token proxies are not comparable", "stroke-dasharray",
-            "id=c-runtime-filter", "Cursor local estimate", "Input context proxy",
-            "Visible-output estimate", "m.runtime||'unknown'",
+            "id=c-runtime-filter", "Input context proxy",
+            "visible text estimate", "hasLocalEstimate(row)",
         ):
             self.assertIn(marker, self.page)
 
@@ -1472,10 +1745,15 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn("Only provider-reported limits are shown", self.source)
         self.assertIn('coverage=\\(coverage)', self.source)
 
-    def test_limits_title_and_quota_notifications_have_safe_defaults(self):
-        self.assertIn('enum StatusTitleMode: String', self.source)
+    def test_configurable_title_and_quota_notifications_have_safe_defaults(self):
+        self.assertIn('enum TitleMetric: String, CaseIterable', self.source)
+        self.assertIn('return [.cost, .speed]', self.source)
+        self.assertIn('for metric in TitleMetric.allCases', self.source)
+        self.assertIn('#selector(toggleTitleMetric(_:))', self.source)
+        self.assertIn('TitleMetric.allCases.filter(titleMetrics.contains).map(\\.rawValue)', self.source)
         self.assertIn('private func limitsStatusTitle() -> String?', self.source)
         self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel) · \\(constrained.window.compactKind)"', self.source)
+        self.assertIn('var toolTip = snapshot.statusTooltip', self.source)
         self.assertIn('if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }', self.source)
         self.assertIn('let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()', self.source)
         self.assertIn('guard var previous = quotaNotificationStates[key] else', self.source)
@@ -1483,6 +1761,18 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('quotaObservationEstablished = true', self.source)
         self.assertIn('process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")', self.source)
         self.assertIn('"--", title, body', self.source)
+
+    def test_monthly_budget_status_and_transition_alerts_are_native(self):
+        for marker in (
+            'struct MonthlyBudget',
+            'addAction("Open Budget Settings", #selector(openBudgetSettings))',
+            'tokenMeterBudgetSettingsURL',
+            'addMetricRow("Monthly budget"', 'private func evaluateBudgetNotifications()',
+            'budgetNotificationStatesDefaultsKey', 'previous.month == budget.month',
+            'firedThresholds: Set(budget.thresholds.filter',
+            'if budget.nativeNotifications', 'monthly budget reached',
+        ):
+            self.assertIn(marker, self.source)
 
 
 class ProviderQuotaTests(unittest.TestCase):
@@ -1746,6 +2036,21 @@ class MenubarSessionTests(unittest.TestCase):
         current.assert_not_called()
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["provider_quotas"], [])
+
+    def test_menubar_uses_published_monthly_budget_when_cross_cache_rotates(self):
+        budget = {
+            "month": "2026-07", "configured": True, "budget": 1000,
+            "spend": 420, "percent": 0.42, "settings": {
+                "monthly_total": 1000, "allocations": {}, "thresholds": [80, 90, 100],
+                "native_notifications": True,
+            },
+        }
+        with mock.patch.object(meter, "STATE", {"xsession": {"budget": budget}}), \
+                mock.patch.object(meter, "all_session_sources", return_value=[]), \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]), \
+                mock.patch.dict(meter._xsess, {"data": None}, clear=False):
+            payload = meter.menubar_state()
+        self.assertEqual(payload["budget"], budget)
 
 
 class DynamicCatalogTests(unittest.TestCase):
@@ -2426,6 +2731,93 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual(days[0]["wait_time"]["total_s"], 90)
         self.assertEqual(days[0]["wait_time"]["avg_s"], 30)
         self.assertEqual(days[0]["wait_time"]["max_s"], 40)
+
+
+class MonthlyBudgetTests(unittest.TestCase):
+    def test_settings_validate_allocations_and_preserve_other_machine_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"model_pricing": {"claude": {}}}))
+            invalid = meter.set_budget_settings({
+                "monthly_total": 100,
+                "allocations": {"claude": 80, "codex": 30},
+                "thresholds": [80, 90, 100],
+                "native_notifications": True,
+            }, str(path))
+            result = meter.set_budget_settings({
+                "monthly_total": 100,
+                "allocations": {"claude": 50, "codex": 30},
+                "thresholds": [75, 90, 100],
+                "native_notifications": False,
+            }, str(path))
+            stored = json.loads(path.read_text())
+        self.assertFalse(invalid["ok"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(stored["budgets"]["monthly_total"], 100)
+        self.assertEqual(stored["budgets"]["allocations"], {"claude": 50, "codex": 30})
+        self.assertIn("model_pricing", stored)
+
+    def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
+        sessions = [
+            {
+                "id": "reported", "provider": "claude",
+                "_day_cost": {"2026-07-01": 20, "2026-07-03": 10},
+                "_model_daily": [{"day": "2026-07-01"}],
+                "availability": {"cost": True},
+            },
+            {
+                "id": "estimated", "provider": "cursor", "token_estimate": True,
+                "_day_cost": {"2026-07-02": 5},
+                "_model_daily": [{"day": "2026-07-02"}],
+                "availability": {"cost": True},
+            },
+            {
+                "id": "missing", "provider": "codex",
+                "_model_daily": [{"day": "2026-07-04"}],
+                "availability": {"cost": False},
+            },
+        ]
+        rows = meter.monthly_summaries(sessions)
+        self.assertEqual(rows[0]["month"], "2026-07")
+        self.assertEqual(rows[0]["cost"], 35)
+        self.assertEqual(rows[0]["active_days"], 3)
+        self.assertEqual(rows[0]["sessions"], 3)
+        self.assertFalse(rows[0]["coverage"]["cost"]["complete"])
+        self.assertEqual(rows[0]["provenance"]["estimated_cost"], 5)
+        self.assertEqual(
+            {row["provider"]: row["cost"] for row in rows[0]["providers"]},
+            {"claude": 30, "cursor": 5, "codex": 0},
+        )
+
+    def test_budget_status_projects_after_three_spend_days_and_marks_lower_bound(self):
+        months = [{
+            "month": "2026-07", "cost": 60, "active_days": 3, "observed_days": 4,
+            "providers": [
+                {"provider": "claude", "cost": 40},
+                {"provider": "codex", "cost": 20},
+            ],
+            "coverage": {"cost": {
+                "covered_sessions": 2, "total_sessions": 3, "complete": False,
+            }},
+            "provenance": {
+                "estimated_sessions": 0, "estimated_cost": 0,
+                "usage_basis": "reported",
+            },
+        }]
+        status = meter.monthly_budget_status(months, {
+            "monthly_total": 100,
+            "allocations": {"claude": 50, "codex": 30},
+            "thresholds": [50, 80, 100],
+            "native_notifications": True,
+        }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
+        self.assertEqual(status["spend"], 60)
+        self.assertEqual(status["unallocated"], 20)
+        self.assertAlmostEqual(status["projected_spend"], 186)
+        self.assertTrue(status["lower_bound"])
+        self.assertEqual(status["thresholds_crossed"], [50])
+        self.assertEqual(status["next_threshold"], 80)
+        claude = next(row for row in status["runtimes"] if row["provider"] == "claude")
+        self.assertEqual(claude["percent"], 0.8)
 
 
 if __name__ == "__main__":

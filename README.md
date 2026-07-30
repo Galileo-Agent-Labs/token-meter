@@ -14,7 +14,7 @@ turns them into one live dashboard.
 | **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
-| **Manage a monthly budget** | Set one machine-wide monthly limit, optionally allocate it across Claude, Codex, and Cursor, review month-to-date spend and projections, and receive threshold alerts. |
+| **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in Current and the menu bar. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
 | **Keep data private** | Run analysis stays on your Mac and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
@@ -42,6 +42,9 @@ The installer checks the required tools, installs the server and menu bar login
 items,
 waits for the local server, verifies both endpoints, prints
 `Token Meter installation complete`, and returns control to your terminal.
+It starts the server first and lets the initial local-history index finish before
+starting the menu bar, so large coding histories may take longer on the first run
+without requiring a retry.
 It copies the runtime into `~/Library/Application Support/Token Meter/runtime`,
 so the cloned folder is not used for automatic startup.
 
@@ -122,10 +125,12 @@ review aggregate usage, or inspect user-installed skill-pack hygiene; prompts,
 reasoning, tool contents, credentials, and configuration values are never
 returned.
 
-The same view contains the complete monthly budget experience: one machine-wide
-total, optional Claude/Codex/Cursor allocations, unallocated reserve,
-month-to-date spend, runtime progress, projections after three active spend
-days, up to 12 calendar months of history, and alert thresholds. When trace
+The same view contains the complete monthly budget experience: individual
+Claude/Codex/Cursor budgets that default to $1,000 each and are added into one
+machine-wide total, month-to-date spend, runtime progress, projections after
+three active spend days, up to 12 calendar months of history, and alert
+thresholds. A runtime-specific overrun remains visible in Current and as a red
+warning symbol in the menu bar even when the combined total is still on track. When trace
 coverage is partial, spend is labeled “at least” and remaining budget is not
 presented as guaranteed headroom. Settings also holds model pricing and the
 experimental Positive and Friction phrase groups. Language-signal edits are
@@ -170,8 +175,8 @@ observation establishes a baseline and never sends a catch-up notification.
 2. Confirm **Current** follows the run and check cost plus context pressure.
 3. Set a session budget in **Current → Summary**, and configure spike or browser
    notifications under **Current → Alerts**.
-4. Set an overall monthly limit and optional runtime allocations in **Settings
-   → Monthly budget**.
+4. Review or change the default $1,000 Claude, Codex, and Cursor monthly budgets
+   in **Settings → Monthly budget**; their sum becomes the machine-wide limit.
 5. Connect Codex or Claude Code from **Settings** if you want on-demand answers
    inside the agent.
 6. After a few runs, use **Logs** and **Daily** to compare apps and explain

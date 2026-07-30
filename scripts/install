@@ -8,6 +8,7 @@ MENUBAR_LABEL="com.token-meter.menubar"
 HEALTH_URL="http://127.0.0.1:8722/health"
 MENUBAR_URL="http://127.0.0.1:8722/menubar"
 DASHBOARD_URL="http://127.0.0.1:8722"
+READINESS_TIMEOUT_SECONDS="${TOKEN_METER_READINESS_TIMEOUT_SECONDS:-600}"
 
 fail() {
   echo "Token Meter installation failed: $*" >&2
@@ -26,6 +27,10 @@ for command_name in git python3 swiftc curl launchctl ditto; do
     fail "$command_name is required but was not found."
   fi
 done
+
+if [[ ! "$READINESS_TIMEOUT_SECONDS" =~ ^[0-9]+$ || "$READINESS_TIMEOUT_SECONDS" -lt 1 ]]; then
+  fail "TOKEN_METER_READINESS_TIMEOUT_SECONDS must be a positive whole number."
+fi
 
 for required_path in \
   "$SOURCE_ROOT/meter.py" \
@@ -61,15 +66,16 @@ if [[ -n "$commit" ]]; then
   printf '%s\n' "$commit" > "$INSTALL_ROOT/INSTALLED_REVISION"
 fi
 
-"$INSTALL_ROOT/scripts/install-launch-agent"
+"$INSTALL_ROOT/scripts/install-launch-agent" server-only
 
 health_json=""
-for _ in $(seq 1 80); do
-  health_json="$(curl -fsS --max-time 1 "$HEALTH_URL" 2>/dev/null || true)"
+readiness_deadline=$((SECONDS + READINESS_TIMEOUT_SECONDS))
+while (( SECONDS < readiness_deadline )); do
+  health_json="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
   if [[ "$health_json" == *'"ok": true'* && "$health_json" == *'"state_ready": true'* ]]; then
     break
   fi
-  sleep 0.25
+  sleep 1
 done
 
 if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": true'* ]]; then
@@ -82,7 +88,7 @@ if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": tru
   if [[ -f "$INSTALL_ROOT/meter.log" ]]; then
     tail -n 30 "$INSTALL_ROOT/meter.log" >&2 || true
   fi
-  fail "the local server did not become ready at $HEALTH_URL."
+  fail "the local server did not finish indexing within ${READINESS_TIMEOUT_SECONDS}s at $HEALTH_URL."
 fi
 
 if ! server_launch_state="$(launchctl print "gui/$UID/$SERVER_LABEL" 2>&1)"; then
@@ -90,11 +96,6 @@ if ! server_launch_state="$(launchctl print "gui/$UID/$SERVER_LABEL" 2>&1)"; the
 fi
 [[ "$server_launch_state" == *"$INSTALL_ROOT/meter.py"* ]] \
   || fail "a different Token Meter installation owns the local server LaunchAgent."
-if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
-  fail "the menu bar LaunchAgent was not registered."
-fi
-[[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
-  || fail "a different Token Meter installation owns the menu bar LaunchAgent."
 
 printf '%s' "$health_json" | python3 -c '
 import json
@@ -116,6 +117,14 @@ if not matches:
         f"(page_path={shown_page})."
     )
 ' "$INSTALL_ROOT"
+
+"$INSTALL_ROOT/scripts/install-launch-agent" menubar-only
+
+if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
+  fail "the menu bar LaunchAgent was not registered."
+fi
+[[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
+  || fail "a different Token Meter installation owns the menu bar LaunchAgent."
 
 curl -fsS --max-time 5 "$MENUBAR_URL" \
   | python3 -c 'import json, sys; json.load(sys.stdin)' \

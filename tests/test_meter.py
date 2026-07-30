@@ -10,6 +10,45 @@ from unittest import mock
 import meter
 
 
+class SourceDiscoveryCacheTests(unittest.TestCase):
+    def test_codex_metadata_is_reused_until_the_trace_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            session_meta = {
+                "type": "session_meta",
+                "payload": {"id": "session", "cwd": "/repo"},
+            }
+            first_turn = {
+                "type": "turn_context",
+                "payload": {"model": "gpt-first"},
+            }
+            path.write_text(
+                json.dumps(session_meta) + "\n" + json.dumps(first_turn) + "\n"
+            )
+            meter._codex_meta_cache.pop(str(path), None)
+
+            first = meter.codex_meta(str(path))
+            with mock.patch(
+                "builtins.open",
+                side_effect=AssertionError("unchanged metadata should come from cache"),
+            ):
+                second = meter.codex_meta(str(path))
+
+            second_turn = {
+                "type": "turn_context",
+                "payload": {"model": "gpt-second"},
+            }
+            path.write_text(
+                json.dumps(session_meta) + "\n" + json.dumps(second_turn) + "\n"
+            )
+            third = meter.codex_meta(str(path))
+            meter._codex_meta_cache.pop(str(path), None)
+
+        self.assertEqual(first["model"], "gpt-first")
+        self.assertEqual(second["model"], "gpt-first")
+        self.assertEqual(third["model"], "gpt-second")
+
+
 class CursorTraceTests(unittest.TestCase):
     def source(self, path="/tmp/cursor-session.jsonl", session_id="cursor-session"):
         return {
@@ -602,6 +641,71 @@ class ModelPerformanceTests(unittest.TestCase):
             },
         )
 
+    def test_project_model_stats_scopes_exactly_and_omits_session_identity(self):
+        def session(session_id, project, output):
+            return {
+                "id": session_id, "path": f"/private/logs/{session_id}.jsonl",
+                "title": f"Private title {session_id}",
+                "provider": "codex", "runtime": "Codex", "project": project,
+                "availability": meter.metric_availability("codex"),
+                "model_stats": [{
+                    "model": "gpt-5.6", "cost": 1, "tokens": 100 + output,
+                    "input_tokens": 100, "output_tokens": output, "executions": 1,
+                }],
+                "_model_daily": [{
+                    "model": "gpt-5.6", "day": "2026-07-30", "cost": 1,
+                    "input_tokens": 100, "output_tokens": output, "executions": 1,
+                }],
+                "_performance_samples": [], "_wait_samples": [],
+            }
+
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["internal_rows"] = (
+                session("secret-a", "/repo/a", 10),
+                session("secret-b", "/repo/b", 40),
+            )
+            meter._xsess["project_model_stats"] = {}
+            with mock.patch.object(meter, "cross_session",
+                                   return_value={"generated_at": 123}):
+                payload, status = meter.project_model_stats("/repo/a")
+                missing, missing_status = meter.project_model_stats("")
+                unknown, unknown_status = meter.project_model_stats("/repo/unknown")
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["generated_at"], 123)
+        self.assertEqual(payload["model_stats"]["models"][0]["output_tokens"], 10)
+        self.assertNotIn("projects", payload["model_stats"])
+        encoded = json.dumps(payload)
+        self.assertNotIn("/repo/a", encoded)
+        self.assertNotIn("/private/logs", encoded)
+        self.assertNotIn("secret-a", encoded)
+        self.assertNotIn("Private title", encoded)
+        self.assertEqual(missing_status, 400)
+        self.assertFalse(missing["ok"])
+        self.assertEqual(unknown_status, 404)
+        self.assertFalse(unknown["ok"])
+        self.assertIn(
+            'elif req_path == "/model-stats":',
+            Path(meter.__file__).read_text(),
+        )
+
+    def test_model_project_options_are_sorted_and_bounded(self):
+        sessions = [
+            {"project": f"/repo/{index:04d}", "provider": "codex",
+             "model_stats": [], "_model_daily": [], "_performance_samples": [],
+             "_wait_samples": []}
+            for index in range(meter.MODEL_PROJECT_OPTION_LIMIT + 1)
+        ]
+        result = meter.aggregate_model_stats(reversed(sessions))
+        self.assertEqual(len(result["projects"]), meter.MODEL_PROJECT_OPTION_LIMIT)
+        self.assertEqual(result["projects"][0], "/repo/0000")
+        self.assertTrue(result["projects_truncated"])
+
     def test_cursor_samples_are_excluded_from_matched_pace(self):
         samples = [{
             "model": "gpt-5.6", "day": "2026-07-20", "ts": index + 1,
@@ -1106,6 +1210,22 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
         self.assertEqual(result["total_sessions"], 2)
         self.assertEqual(result["generated_at"], 123)
 
+    def test_logs_inventory_returns_loading_without_rebuilding_cold_history(self):
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess.update({"data": None, "at": 0, "sessions": []})
+            with mock.patch.object(
+                meter, "cross_session",
+                side_effect=AssertionError("logs request must not rebuild cold history"),
+            ):
+                result = meter.log_sessions_state()
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+        self.assertTrue(result["loading"])
+        self.assertIsNone(result["total_sessions"])
+        self.assertEqual(result["sessions"], [])
+
     def test_cross_session_separates_runtime_models_and_reported_alert_basis(self):
         def row(source):
             estimated = source["provider"] == "cursor"
@@ -1186,6 +1306,47 @@ class DashboardLayoutTests(unittest.TestCase):
                        "external tool-result tokens"):
             self.assertIn(marker, self.page)
         self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
+
+    def test_token_insight_notifications_only_include_operational_warnings(self):
+        self.assertIn("function isNotifiableInsight(i)", self.page)
+        self.assertIn(
+            "i?.kind==='warn'&&(key==='context-high'||key==='low-yield-latest')",
+            self.page,
+        )
+        self.assertIn(
+            "if(liveView) ins.filter(isNotifiableInsight).forEach(i=>fireNotification('Token insight'",
+            self.page,
+        )
+        self.assertNotIn("i.kind==='warn'||i.kind==='good'", self.page)
+
+    def test_monthly_budget_alerts_recover_missed_exceeded_state(self):
+        for marker in (
+            "function budgetExceededAlertState()",
+            "tm_monthly_budget_exceeded_alerts",
+            "previous=state[status.month]",
+            "Array.isArray(previous)?previous",
+            "status.state==='over'||Number(status.percent||0)>=1",
+            "exceededState=budgetExceededAlertState()",
+            "monthExceeded.inApp===true",
+            "monthExceeded.browser===true",
+            "deliverMissedBrowserAlert",
+            "notifyOn&&canNotify&&Notification.permission==='granted'",
+            "Token Meter budget exceeded",
+            "requireInteraction:isExceeded",
+            "pushAppNotice(title,body",
+            "state[status.month]=[...new Set([...seen,...crossed])]",
+            "inApp:inAppNotified||alertExceeded",
+            "browser:browserNotified||deliverMissedBrowserAlert",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn(
+            "status.settings?.native_notifications===false",
+            self.page,
+        )
+        self.assertNotIn(
+            "if(!Array.isArray(seen)){state[status.month]=crossed",
+            self.page,
+        )
 
     def test_old_current_summary_is_only_a_hidden_renderer_depot(self):
         for marker in (
@@ -1357,6 +1518,46 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
 
+    def test_model_stats_supports_project_scoped_average_io_trends(self):
+        for marker in (
+            "id=m-project", "tm_model_project", "tm_model_project_filters",
+            "/model-stats?project=", "renderActiveModelStats",
+            "modelProjectRequest", "modelProjectLoadingKey",
+            "data-model-metric=avg_input", "data-model-metric=avg_output",
+            "MODEL_TREND_METRICS", "modelTokensPerExecution",
+            "Model trends", "avg input / execution", "avg output / execution",
+            "input / exec", "output / exec",
+            "<small>avg input</small>", "<small>avg output</small>",
+            "Daily model ${metric.note} and output token volume",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("modelProjectCache.set(key,payload.model_stats)", self.page)
+        self.assertIn("request!==modelProjectRequest||project!==modelProject", self.page)
+        self.assertNotIn(
+            "$('m-trend-title').textContent=modelTrendMetric==='wait'",
+            self.page,
+        )
+
+    def test_model_trend_hover_panel_is_scrollable_and_pointer_stable(self):
+        model_trend = self.page.split("function drawModelTrend(chart){", 1)[1].split(
+            "function renderMatchedPace", 1
+        )[0]
+        for marker in (
+            '#m-chart-tip{pointer-events:auto;overscroll-behavior:contain;',
+            "scrollbar-gutter:stable",
+            '#m-chart-tip .h{position:sticky;top:0',
+            'id=m-chart-tip tabindex=0 aria-label="Model details for hovered day"',
+            "const scheduleTipHide=()=>",
+            "setTimeout(hideTip,180)",
+            "hit.onpointerleave=scheduleTipHide",
+            "tip.onpointerenter=cancelTipHide",
+            "tip.onpointerleave=scheduleTipHide",
+            "rightX+tip.offsetWidth<=rect.width-8",
+            "if(dayChanged)tip.scrollTop=0",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("hit.onpointerleave=()=>tip.style.display='none'", model_trend)
+
     def test_wait_time_is_first_class_across_current_logs_models_and_daily(self):
         for marker in (
             "data-chart=wait", "drawWaitChart", "data-gsort=wait",
@@ -1390,6 +1591,24 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=model-frustration"), self.page.index("id=view-daily"))
         self.assertNotIn("id=f-model-table", self.page)
         self.assertNotIn("id=f-session-table", self.page)
+
+    def test_language_signals_use_compact_uniform_panels(self):
+        for marker in (
+            'class="modelHead signalHead"',
+            'class="modelControls signalControls"',
+            "class=signalTrendControls",
+            ".frustrationHero .modelKpi{min-height:78px",
+            ".frustrationChart{height:220px}",
+            ".frustrationBreakdown{grid-template-columns:repeat(3,minmax(0,1fr))",
+            ".signalPanel{height:350px;display:flex;flex-direction:column",
+            ".signalRankList,.chatSignalList{min-height:0;flex:1;overflow:auto",
+            "@media(max-width:900px){.modelControls,.signalControls{grid-template-columns:repeat(3,minmax(0,1fr))}.frustrationBreakdown{grid-template-columns:1fr}",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn(
+            'style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end"',
+            self.page,
+        )
 
     def test_model_pricing_is_editable_and_supports_new_models_in_settings(self):
         for marker in (
@@ -1467,36 +1686,86 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
 
-    def test_settings_monthly_budget_tracks_total_allocations_history_and_alerts(self):
+    def test_settings_monthly_budget_derives_total_from_runtime_budgets(self):
         for marker in (
             "id=budget-settings", "data-settings-target=budget-settings",
             "id=budget-spend", "id=budget-total", "id=budget-remaining",
             "id=budget-projected", "id=budget-runtimes", "id=budget-bars",
             "id=budget-progress-markers", "id=budget-allocation-note",
-            "id=budget-config-summary", "class=budgetDashboard",
-            "class=\"card pad budgetLead\"", "class=\"card pad budgetConfig\"",
+            "id=budget-config-summary", "id=budget-plan-jump",
+            "class=budgetDashboard", "class=budgetLeadHeadActions",
+            "class=\"card pad budgetLead\"",
+            "class=\"card pad budgetRuntimeCard budgetConfig\"",
             "class=budgetLeadBody", "class=budgetDetailGrid",
-            "class=budgetReadouts", "class=budgetRuntimeTrack",
+            "class=budgetSpendSummary", "class=budgetSpendLimit",
+            "class=budgetReadouts", "class=budgetRuntimeValue",
+            "class=budgetRuntimeTrack",
             "class=budgetFormGroup", "class=budgetCoreFields",
-            "class=budgetAllocationFields",
+            "class=\"budgetForm budgetInlineForm\"",
+            "class=budgetRuntimeHead", "class=budgetRuntimeInput",
             "class=budgetChartInner", "class=budgetTarget",
             "id=budget-input-claude", "id=budget-input-codex",
             "id=budget-input-cursor", "id=budget-input-thresholds",
+            "id=budget-runtime-spend-claude",
+            "id=budget-runtime-spend-codex",
+            "id=budget-runtime-spend-cursor",
+            "id=budget-runtime-track-claude",
+            "id=budget-runtime-meta-claude",
             "/settings/budgets", "tm_monthly_budget_alerts",
             "Partial cost coverage: recorded spend is a lower bound.",
-            "No allocations set · bars show share of recorded spend.",
-            "Shared across all runtimes",
+            "Calculated budget",
+            "The sum of the Claude, Codex, and Cursor budgets.",
+            "Runtime budgets are added to calculate the monthly total.",
+            "Claude + Codex + Cursor",
+            "planJump.textContent=configured?'Edit budgets':'Set budgets'",
+            "config.scrollIntoView({behavior:",
+            "const config=$('budget-config'),input=$('budget-input-claude')",
+            "input.focus({preventScroll:true})",
+            "function budgetAllocationsFromInputs()",
+            "function previewCalculatedBudget()",
+            "const payload={currency:'USD',allocations,thresholds:",
+            "per month from runtime budgets.",
+            "Save budgets",
+            "Set budgets</h2>",
+            "Spent this month</span><span>Budget (USD)",
+            "@media(min-width:901px){.budgetDetailGrid{align-items:stretch}",
+            ".budgetHistory .budgetChartInner{flex:1;display:grid",
+            "DEFAULT_RUNTIME_BUDGET=1000",
+            "value=1000",
         ):
             self.assertIn(marker, self.page)
         self.assertNotIn("class=budgetHero", self.page)
         self.assertNotIn("class=budgetGrid", self.page)
         self.assertNotIn("budgetConfigInitialized", self.page)
         self.assertNotIn("<details class=\"card budgetConfig\"", self.page)
+        self.assertNotIn("<h2>Budget plan</h2>", self.page)
         self.assertNotIn("<span class=budgetRuntimeName>Unallocated</span>", self.page)
+        self.assertNotIn("$('budget-runtimes').innerHTML", self.page)
         self.assertNotIn("id=tab-budgets", self.page)
         self.assertNotIn("id=view-budgets", self.page)
+        self.assertNotIn("no runtime allocation", self.page)
+        self.assertNotIn("id=budget-input-total", self.page)
+        self.assertNotIn("Monthly total (USD)", self.page)
+        self.assertNotIn("Runtime allocations cannot exceed", self.page)
+        self.assertEqual(self.page.count(" id=budget-config>"), 1)
         settings = self.page[self.page.index("id=view-settings"):]
+        self.assertLess(settings.index("class=budgetDetailGrid"), settings.index("id=budget-config"))
+        self.assertLess(settings.index("<h2>Monthly spend</h2>"), settings.index("id=budget-config"))
         self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
+
+    def test_current_surfaces_runtime_budget_overruns(self):
+        for marker in (
+            "id=current-budget-warning",
+            "id=current-budget-warning-msg",
+            "id=current-budget-settings",
+            "Open budget settings",
+            "function renderCurrentBudgetWarning(status)",
+            "status?.exceeded_runtimes||[]",
+            "renderCurrentBudgetWarning(s.xsession?.budget||LATEST?.xsession?.budget)",
+            "runtimeAttention?`${runtimeExceeded.map(row=>row.label).join(', ')} over budget`",
+            "row.exceeded===true",
+        ):
+            self.assertIn(marker, self.page)
 
     def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
@@ -1508,7 +1777,8 @@ class DashboardLayoutTests(unittest.TestCase):
         for marker in (
             "id=command-trigger", "id=command-palette", "id=command-search",
             "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
-            "key==='k'", "event.key==='ArrowDown'", "event.key==='Enter'",
+            "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
+            "event.key==='Enter'",
             "aria-keyshortcuts=\"Meta+K Control+K\"",
         ):
             self.assertIn(marker, self.page)
@@ -1517,6 +1787,71 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("shortcut:'⌥", self.page)
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
+
+    def test_current_onboarding_uses_seven_closeable_teaching_lessons(self):
+        current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
+            '<div class=view id=view-logs>', 1
+        )[0]
+        self.assertLess(current.index("id=onboarding-card"),
+                        current.index("class=previewRunMeta"))
+        for marker in (
+            "id=onboarding-card", "id=onboarding-toggle",
+            "id=onboarding-progress", "id=onboarding-next",
+            "id=onboarding-checklist", "aria-valuemax=7",
+            "id=learn-onboarding-status", "id=learn-onboarding-action",
+            "id=onboarding-dialog", "id=onboarding-dialog-title",
+            "id=onboarding-dialog-points", "id=onboarding-dialog-close",
+            "Closing this lesson marks the step complete",
+            "id=command-coach", "id=command-coach-done",
+            "Close it when you are done; no command is required",
+            "Open the command palette from anywhere",
+            "Jump directly to a top-level view",
+        ):
+            self.assertIn(marker, self.page)
+        steps = self.page.split("const ONBOARDING_STEPS=[", 1)[1].split(
+            "const ONBOARDING_STEP_IDS", 1
+        )[0]
+        self.assertEqual(steps.count("id:'"), 7)
+        self.assertEqual(steps.count("lesson:'"), 7)
+        self.assertEqual(steps.count("points:["), 7)
+        for step_id in (
+            "current", "activity", "logs", "daily", "models", "capabilities",
+            "palette",
+        ):
+            self.assertIn(f"id:'{step_id}'", steps)
+        self.assertIn("short:'Models'", steps)
+        self.assertIn("short:'Tools'", steps)
+        self.assertIn("route:'models'", steps)
+        self.assertIn("route:'capabilities'", steps)
+        for marker in (
+            "const ONBOARDING_KEY='tm_onboarding_v1'",
+            "raw.completed.filter(id=>ONBOARDING_STEP_IDS.has(id))",
+            "card.hidden=complete",
+            "onboardingState.collapsed&&!complete",
+            "completed_at:onboardingState.completedAt||0",
+            "function resumeOrRestartOnboarding()",
+            "complete?'Replay onboarding':'Resume onboarding'",
+            "action:'onboarding'",
+            "command.action==='onboarding'",
+            "function runNavigationCommand(command,{source='palette'}={})",
+            "function openOnboardingLesson(id)",
+            "function finishOnboardingLesson()",
+            "if(id)commitOnboardingSteps([id]);",
+            "setTimeout(()=>openOnboardingLesson(step.id),0)",
+            "if(lessonDialog.open&&event.key==='Escape')",
+            "if(onboardingNextStep()?.id==='palette')onboardingPaletteLessonArmed=true",
+            "const finishPaletteLesson=onboardingPaletteLessonArmed",
+            "if(finishPaletteLesson)commitOnboardingSteps(['palette'])",
+            "runNavigationCommand(command,{source:'shortcut'})",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("const teachPalette=", self.page)
+        self.assertNotIn("openOnboardingLesson('palette')", self.page)
+        self.assertNotIn("function markOnboardingRoute(", self.page)
+        self.assertNotIn("function onboardingStepForRoute(", self.page)
+        self.assertNotIn("commitOnboardingSteps([step.id]);", self.page)
+        self.assertNotIn("onboarding-dismiss", self.page)
+        self.assertNotIn("Dismiss onboarding", self.page)
 
     def test_logs_support_app_project_and_time_range_filters(self):
         for marker in ("id=g-app", "id=g-project", "id=g-time", "App filter",
@@ -1771,8 +2106,33 @@ class MenubarSourceTests(unittest.TestCase):
             'budgetNotificationStatesDefaultsKey', 'previous.month == budget.month',
             'firedThresholds: Set(budget.thresholds.filter',
             'if budget.nativeNotifications', 'monthly budget reached',
+            'var exceeded: Bool { configured && percent >= 100 }',
+            'var anyExceeded: Bool { exceeded || !exceededRuntimeScopes.isEmpty }',
+            'if let scope = exceededRuntimeScopes.first',
+            'return "⚠︎ \\(scope.label) · \\(Int(scope.percent.rounded()))%"',
+            'budgetExceededMonthsDefaultsKey',
+            'budgetExceededNotificationMonths',
+            'title: "Overall monthly budget exceeded"',
+            'return monthlyBudget?.anyExceeded == true ? "⚠︎ \\(base)" : base',
+            'budgetExceeded ? NSColor.white : NSColor.labelColor',
+            'let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)',
+            'let warningRange = (title as NSString).range(of: "⚠︎")',
+            'attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)',
+            'valueColor: .labelColor',
+            'strong: budget.anyExceeded',
+            'let activeTitle = budget?.anyExceeded == true ? "⚠︎ \\(baseTitle)" : baseTitle',
+            'print("budget-state=\\(budget?.compactLabel ?? "unconfigured") exceeded=\\(budget?.anyExceeded == true)")',
         ):
             self.assertIn(marker, self.source)
+        self.assertNotIn("· over budget", self.source)
+        self.assertNotIn(
+            'monthlyBudget?.exceeded == true ? NSColor.systemRed : NSColor.labelColor',
+            self.source,
+        )
+        self.assertNotIn(
+            'valueColor: budget.exceeded ? .systemRed : .labelColor',
+            self.source,
+        )
 
 
 class ProviderQuotaTests(unittest.TestCase):
@@ -1982,6 +2342,92 @@ class ProviderQuotaTests(unittest.TestCase):
         self.assertNotIn("secret", result["error"])
 
 
+class HealthStateTests(unittest.TestCase):
+    def test_health_uses_cached_inventory_without_discovering_sessions(self):
+        inventory = {
+            "ready": True,
+            "sources": (),
+            "count": 2400,
+            "clients": {"codex": 2300, "claude_code": 100},
+            "updated_at": 1,
+        }
+        with mock.patch.object(meter, "STATE", {"source": {"id": "ready"}}), \
+                mock.patch.object(meter, "_SOURCE_INVENTORY", inventory), \
+                mock.patch.object(meter, "page_path", return_value="/runtime/page.html"), \
+                mock.patch.object(
+                    meter, "all_session_sources",
+                    side_effect=AssertionError("health must not discover sessions"),
+                ):
+            payload, status = meter.health_state()
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["state_ready"])
+        self.assertTrue(payload["inventory_ready"])
+        self.assertEqual(payload["sources"], 2400)
+        self.assertEqual(payload["source_clients"], {"codex": 2300, "claude_code": 100})
+
+    def test_health_marks_undiscovered_inventory_unavailable_instead_of_zero(self):
+        inventory = {
+            "ready": False, "sources": (), "count": None, "clients": {}, "updated_at": None,
+        }
+        with mock.patch.object(meter, "STATE", {}), \
+                mock.patch.object(meter, "_SOURCE_INVENTORY", inventory), \
+                mock.patch.object(meter, "page_path", return_value="/runtime/page.html"):
+            payload, status = meter.health_state()
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["state_ready"])
+        self.assertFalse(payload["inventory_ready"])
+        self.assertIsNone(payload["sources"])
+        self.assertEqual(payload["source_clients"], {})
+
+    def test_current_state_returns_loading_without_competing_with_watcher(self):
+        inventory = {
+            "ready": True, "sources": (), "count": 5000, "clients": {"codex": 5000},
+            "updated_at": 1,
+        }
+        with mock.patch.object(meter, "STATE", {}), \
+                mock.patch.object(meter, "_SOURCE_INVENTORY", inventory), \
+                mock.patch.object(
+                    meter, "newest_source",
+                    side_effect=AssertionError("state request must not rediscover sessions"),
+                ), \
+                mock.patch.object(
+                    meter, "recompute",
+                    side_effect=AssertionError("state request must not rebuild history"),
+                ):
+            payload = meter.current_state()
+
+        self.assertTrue(payload["loading"])
+        self.assertIn("5,000 local sessions", payload["message"])
+
+    def test_watcher_publishes_ready_empty_state_when_no_logs_exist(self):
+        published = []
+        inventory_updates = []
+        with mock.patch.object(meter, "STATE", {}), \
+                mock.patch.object(meter, "all_session_sources", return_value=[]), \
+                mock.patch.object(
+                    meter, "publish_source_inventory",
+                    side_effect=lambda sources: inventory_updates.append(list(sources)),
+                ), \
+                mock.patch.object(
+                    meter, "refresh_cross_session_state",
+                    return_value={"sessions": [], "total_sessions": 0},
+                ), \
+                mock.patch.object(meter, "publish", side_effect=published.append), \
+                mock.patch.object(meter.time, "monotonic", return_value=3), \
+                mock.patch.object(meter.time, "sleep", side_effect=StopIteration):
+            with self.assertRaises(StopIteration):
+                meter.watcher()
+
+        self.assertEqual(inventory_updates, [[]])
+        self.assertEqual(len(published), 1)
+        self.assertFalse(published[0]["loading"])
+        self.assertEqual(published[0]["xsession"]["total_sessions"], 0)
+
+
 class MenubarSessionTests(unittest.TestCase):
     def test_recent_sessions_are_limited_and_keep_an_older_pin_visible(self):
         sources = [{
@@ -2010,7 +2456,8 @@ class MenubarSessionTests(unittest.TestCase):
             "throughput": {"available": True, "output_tps": 42.5, "basis": "end_to_end",
                            "sample_count": 2, "timing_coverage": 0.75},
         }
-        with mock.patch.object(meter, "all_session_sources", return_value=sources), \
+        with mock.patch.object(meter, "STATE", {"source": {"id": "live"}}), \
+                mock.patch.object(meter, "cached_session_sources", return_value=(sources, True)), \
                 mock.patch.object(meter, "recompute", return_value=state), \
                 mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
             payload = meter.menubar_state("pinned")
@@ -2028,14 +2475,35 @@ class MenubarSessionTests(unittest.TestCase):
 
     def test_cold_start_does_not_rebuild_all_history_for_each_menu_poll(self):
         with mock.patch.object(meter, "STATE", {}), \
-                mock.patch.object(meter, "all_session_sources", return_value=[]), \
-                mock.patch.object(meter, "current_state") as current, \
+                mock.patch.object(meter, "cached_session_sources", return_value=([], False)), \
+                mock.patch.object(
+                    meter, "all_session_sources",
+                    side_effect=AssertionError("menu polling must not discover sessions"),
+                ), \
+                mock.patch.object(meter, "recompute") as recompute, \
                 mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
             payload = meter.menubar_state()
 
-        current.assert_not_called()
+        recompute.assert_not_called()
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["provider_quotas"], [])
+
+    def test_cold_start_does_not_recompute_a_persisted_pinned_session(self):
+        sources = [{
+            "id": "pinned", "provider": "codex", "label": "Codex",
+            "path": "/tmp/pinned.jsonl", "session": "pinned.jsonl",
+            "project": "/repo", "mtime": 1,
+        }]
+        with mock.patch.object(meter, "STATE", {}), \
+                mock.patch.object(meter, "cached_session_sources", return_value=(sources, True)), \
+                mock.patch.object(meter, "recompute") as recompute, \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
+            payload = meter.menubar_state("pinned")
+
+        recompute.assert_not_called()
+        self.assertTrue(payload["selection"]["pinned"])
+        self.assertEqual(payload["selection"]["selected_id"], "pinned")
+        self.assertFalse(payload["selection"]["missing"])
 
     def test_menubar_uses_published_monthly_budget_when_cross_cache_rotates(self):
         budget = {
@@ -2046,7 +2514,7 @@ class MenubarSessionTests(unittest.TestCase):
             },
         }
         with mock.patch.object(meter, "STATE", {"xsession": {"budget": budget}}), \
-                mock.patch.object(meter, "all_session_sources", return_value=[]), \
+                mock.patch.object(meter, "cached_session_sources", return_value=([], True)), \
                 mock.patch.object(meter, "provider_quota_snapshots", return_value=[]), \
                 mock.patch.dict(meter._xsess, {"data": None}, clear=False):
             payload = meter.menubar_state()
@@ -2413,9 +2881,19 @@ class InstallationTests(unittest.TestCase):
     def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
         script = (root / "scripts" / "install").read_text()
-        self.assertIn('"$INSTALL_ROOT/scripts/install-launch-agent"', script)
+        server_start = script.index(
+            '"$INSTALL_ROOT/scripts/install-launch-agent" server-only'
+        )
+        readiness_check = script.index('"state_ready": true')
+        menubar_start = script.index(
+            '"$INSTALL_ROOT/scripts/install-launch-agent" menubar-only'
+        )
+        self.assertLess(server_start, readiness_check)
+        self.assertLess(readiness_check, menubar_start)
         self.assertIn('$HOME/Library/Application Support/Token Meter/runtime', script)
-        self.assertIn('"state_ready": true', script)
+        self.assertIn('TOKEN_METER_READINESS_TIMEOUT_SECONDS:-600', script)
+        self.assertIn('curl -fsS --max-time 5 "$HEALTH_URL"', script)
+        self.assertNotIn('curl -fsS --max-time 1 "$HEALTH_URL"', script)
         self.assertIn('launchctl print "gui/$UID/$SERVER_LABEL"', script)
         self.assertIn('launchctl print "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('"$INSTALL_ROOT/meter.py"', script)
@@ -2432,8 +2910,25 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("<string>$MENUBAR_PROGRAM</string>", script)
         self.assertEqual(script.count("<key>KeepAlive</key>"), 2)
         self.assertNotIn("start-token-meter", script)
+        self.assertIn("all|server-only|menubar-only", script)
+        self.assertIn("server-only)", script)
+        self.assertIn("menubar-only)", script)
+        self.assertNotIn("kickstart -k", script)
+        self.assertIn("attempt <= 10", script)
+        self.assertIn('launchctl print "gui/$UID/$label"', script)
+        self.assertIn("sleep 0.2", script)
         for label in ("SERVER_LABEL", "MENUBAR_LABEL"):
             self.assertIn(f'launchctl bootout "gui/$UID/${label}"', script)
+
+    def test_foreground_launcher_waits_for_indexing_before_starting_menubar(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "start-token-meter").read_text()
+        readiness_check = script.index('"state_ready": true')
+        menubar_start = script.index('exec "$ROOT/scripts/run-menubar"')
+        self.assertLess(readiness_check, menubar_start)
+        self.assertIn('TOKEN_METER_READINESS_TIMEOUT_SECONDS:-600', script)
+        self.assertIn('curl -fsS --max-time 5 "$HEALTH_URL"', script)
+        self.assertNotIn('curl -fsS --max-time 1 "$HEALTH_URL"', script)
 
     def test_uninstaller_removes_both_supervised_jobs(self):
         root = Path(__file__).resolve().parents[1]
@@ -2734,28 +3229,58 @@ class DailySummaryTests(unittest.TestCase):
 
 
 class MonthlyBudgetTests(unittest.TestCase):
-    def test_settings_validate_allocations_and_preserve_other_machine_settings(self):
+    def test_settings_derive_total_from_allocations_and_preserve_other_machine_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
             path.write_text(json.dumps({"model_pricing": {"claude": {}}}))
             invalid = meter.set_budget_settings({
-                "monthly_total": 100,
-                "allocations": {"claude": 80, "codex": 30},
+                "allocations": {"claude": 60_000_000, "codex": 50_000_000},
                 "thresholds": [80, 90, 100],
                 "native_notifications": True,
             }, str(path))
             result = meter.set_budget_settings({
-                "monthly_total": 100,
-                "allocations": {"claude": 50, "codex": 30},
+                "allocations": {"claude": 50, "codex": 30, "cursor": 0},
                 "thresholds": [75, 90, 100],
                 "native_notifications": False,
             }, str(path))
             stored = json.loads(path.read_text())
         self.assertFalse(invalid["ok"])
         self.assertTrue(result["ok"])
-        self.assertEqual(stored["budgets"]["monthly_total"], 100)
-        self.assertEqual(stored["budgets"]["allocations"], {"claude": 50, "codex": 30})
+        self.assertEqual(stored["budgets"]["monthly_total"], 80)
+        self.assertEqual(
+            stored["budgets"]["allocations"],
+            {"claude": 50, "codex": 30, "cursor": 0},
+        )
         self.assertIn("model_pricing", stored)
+
+    def test_missing_runtime_budgets_default_to_1000_and_explicit_zero_is_preserved(self):
+        legacy = {
+            "currency": "USD",
+            "monthly_total": 100,
+            "allocations": {},
+            "thresholds": [80, 90, 100],
+            "native_notifications": True,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"budgets": legacy}))
+            loaded = meter.budget_settings(str(path))
+            saved = meter.set_budget_settings({
+                "allocations": {"claude": 0, "codex": 1490, "cursor": 0},
+                "thresholds": [80, 90, 100],
+                "native_notifications": True,
+            }, str(path))
+        self.assertEqual(loaded["monthly_total"], 3000)
+        self.assertEqual(
+            loaded["allocations"],
+            {"claude": 1000, "codex": 1000, "cursor": 1000},
+        )
+        self.assertTrue(saved["ok"])
+        self.assertEqual(saved["budgets"]["monthly_total"], 1490)
+        self.assertEqual(
+            saved["budgets"]["allocations"],
+            {"claude": 0, "codex": 1490, "cursor": 0},
+        )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
         sessions = [
@@ -2805,19 +3330,43 @@ class MonthlyBudgetTests(unittest.TestCase):
             },
         }]
         status = meter.monthly_budget_status(months, {
-            "monthly_total": 100,
-            "allocations": {"claude": 50, "codex": 30},
+            "allocations": {"claude": 50, "codex": 30, "cursor": 0},
             "thresholds": [50, 80, 100],
             "native_notifications": True,
         }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
         self.assertEqual(status["spend"], 60)
-        self.assertEqual(status["unallocated"], 20)
+        self.assertEqual(status["budget"], 80)
+        self.assertEqual(status["remaining"], 20)
+        self.assertEqual(status["unallocated"], 0)
         self.assertAlmostEqual(status["projected_spend"], 186)
         self.assertTrue(status["lower_bound"])
         self.assertEqual(status["thresholds_crossed"], [50])
         self.assertEqual(status["next_threshold"], 80)
         claude = next(row for row in status["runtimes"] if row["provider"] == "claude")
         self.assertEqual(claude["percent"], 0.8)
+
+    def test_runtime_overrun_is_reported_while_overall_budget_is_on_track(self):
+        months = [{
+            "month": "2026-07", "cost": 1501, "active_days": 4,
+            "providers": [{"provider": "codex", "cost": 1501}],
+            "coverage": {"cost": {
+                "covered_sessions": 1, "total_sessions": 1, "complete": True,
+            }},
+            "provenance": {"estimated_sessions": 0},
+        }]
+        status = meter.monthly_budget_status(months, {
+            "allocations": {"claude": 1000, "codex": 1490, "cursor": 1000},
+            "thresholds": [80, 90, 100],
+            "native_notifications": True,
+        }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
+        self.assertEqual(status["state"], "on_track")
+        self.assertTrue(status["runtime_exceeded"])
+        self.assertTrue(status["attention"])
+        self.assertEqual(len(status["exceeded_runtimes"]), 1)
+        self.assertEqual(status["exceeded_runtimes"][0]["provider"], "codex")
+        self.assertEqual(status["exceeded_runtimes"][0]["over_by"], 11)
+        codex = next(row for row in status["runtimes"] if row["provider"] == "codex")
+        self.assertTrue(codex["exceeded"])
 
 
 if __name__ == "__main__":

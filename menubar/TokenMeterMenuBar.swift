@@ -12,6 +12,7 @@ private let quotaAlertsEnabledDefaultsKey = "TokenMeterQuotaAlertsEnabled"
 private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
 private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
 private let budgetNotificationStatesDefaultsKey = "TokenMeterBudgetNotificationStates"
+private let budgetExceededMonthsDefaultsKey = "TokenMeterBudgetExceededNotificationMonths"
 private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
 
 // Token Meter accent blue (#00BCEB)
@@ -225,6 +226,8 @@ struct QuotaNotificationState: Codable {
 struct BudgetScope {
     var id: String
     var label: String
+    var spend: Double
+    var budget: Double
     var percent: Double
 }
 
@@ -250,11 +253,23 @@ struct MonthlyBudget {
                   let percent = optionalDouble(row["percent"]),
                   let id = string(row["provider"])
             else { return nil }
-            return BudgetScope(id: id, label: string(row["label"]) ?? id.capitalized, percent: percent * 100)
+            return BudgetScope(
+                id: id,
+                label: string(row["label"]) ?? id.capitalized,
+                spend: double(row["spend"]),
+                budget: double(row["allocation"]),
+                percent: percent * 100
+            )
         }
         var scopes = runtimes
         if configured {
-            scopes.insert(BudgetScope(id: "overall", label: "Overall", percent: double(dict["percent"]) * 100), at: 0)
+            scopes.insert(BudgetScope(
+                id: "overall",
+                label: "Overall",
+                spend: double(dict["spend"]),
+                budget: double(dict["budget"]),
+                percent: double(dict["percent"]) * 100
+            ), at: 0)
         }
         return MonthlyBudget(
             month: string(dict["month"]) ?? "",
@@ -272,14 +287,28 @@ struct MonthlyBudget {
 
     var compactLabel: String {
         guard configured else { return "Budget not set" }
+        if let scope = exceededRuntimeScopes.first {
+            return "⚠︎ \(scope.label) · \(Int(scope.percent.rounded()))%"
+        }
+        if exceeded { return "⚠︎ Overall · \(Int(percent.rounded()))%" }
         let prefix = lowerBound ? "≥" : ""
         return "\(prefix)\(Int(percent.rounded()))% budget"
     }
 
+    var exceeded: Bool { configured && percent >= 100 }
+    var exceededRuntimeScopes: [BudgetScope] {
+        scopes.filter { $0.id != "overall" && $0.percent >= 100 }
+    }
+    var anyExceeded: Bool { exceeded || !exceededRuntimeScopes.isEmpty }
+
     var toolTip: String {
         guard configured else { return "Monthly budget is not configured." }
         let prefix = lowerBound ? "At least " : ""
-        return "\(prefix)\(formatMoney(spend)) of \(formatMoney(budget)) recorded for \(month)."
+        let overall = "\(prefix)\(formatMoney(spend)) of \(formatMoney(budget)) recorded for \(month)."
+        let runtimeWarnings = exceededRuntimeScopes.map {
+            "\($0.label): \(formatMoney($0.spend)) of \(formatMoney($0.budget)) (\(Int($0.percent.rounded()))%)."
+        }
+        return ([overall] + runtimeWarnings).joined(separator: "\n")
     }
 }
 
@@ -671,6 +700,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         else { return [:] }
         return states
     }()
+    private var budgetExceededNotificationMonths = Set(
+        tokenMeterDefaults.stringArray(forKey: budgetExceededMonthsDefaultsKey) ?? []
+    )
     private var quotaObservationEstablished = false
     private var menuIsOpen = false
     private var menuRefreshPending = false
@@ -829,7 +861,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                          ? "\(formatMoney(snapshot.lastTurnCost))\(snapshot.estimatedCost ? " est" : "")"
                          : "--")
             if let budget = monthlyBudget {
-                addMetricRow("Monthly budget", budget.compactLabel, toolTip: budget.toolTip)
+                addMetricRow("Monthly budget", budget.compactLabel,
+                    valueColor: .labelColor,
+                    strong: budget.anyExceeded,
+                    toolTip: budget.toolTip
+                )
             }
         } else {
             addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
@@ -838,11 +874,19 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateStatusTitle() {
         let title = selectedStatusTitle()
+        let budgetExceeded = monthlyBudget?.anyExceeded == true
         let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: budgetExceeded ? NSColor.white : NSColor.labelColor,
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         ]
-        statusItem.button?.attributedTitle = NSAttributedString(string: title, attributes: attrs)
+        let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)
+        if budgetExceeded {
+            let warningRange = (title as NSString).range(of: "⚠︎")
+            if warningRange.location != NSNotFound {
+                attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)
+            }
+        }
+        statusItem.button?.attributedTitle = attributedTitle
         var toolTip = snapshot.statusTooltip
         if let limits = limitsStatusTooltip() { toolTip += "\nLimits: \(limits)" }
         if let budget = monthlyBudget { toolTip += "\nBudget: \(budget.toolTip)" }
@@ -861,7 +905,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .limits: return limitsStatusTitle()
             }
         }
-        return parts.isEmpty ? "TM" : parts.joined(separator: " · ")
+        let base = parts.isEmpty ? "TM" : parts.joined(separator: " · ")
+        return monthlyBudget?.anyExceeded == true ? "⚠︎ \(base)" : base
     }
 
     private func limitsStatusTitle() -> String? {
@@ -1298,6 +1343,20 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func evaluateBudgetNotifications() {
         guard let budget = monthlyBudget, budget.configured else { return }
+        if budget.nativeNotifications,
+           budget.exceeded,
+           !budgetExceededNotificationMonths.contains(budget.month) {
+            let prefix = budget.lowerBound ? "At least " : ""
+            deliverQuotaNotification(
+                title: "Overall monthly budget exceeded",
+                body: "\(prefix)\(formatMoney(budget.spend)) of \(formatMoney(budget.budget)) recorded for \(budget.month) (\(Int(budget.percent.rounded()))% used)."
+            )
+            budgetExceededNotificationMonths.insert(budget.month)
+            tokenMeterDefaults.set(
+                Array(budgetExceededNotificationMonths).sorted(),
+                forKey: budgetExceededMonthsDefaultsKey
+            )
+        }
         var changed = false
         for scope in budget.scopes {
             let key = scope.id
@@ -1318,7 +1377,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         && scope.percent >= Double(threshold)
                         && !previous.firedThresholds.contains(threshold)
                 }
-                if let threshold = crossed.max() {
+                let overallExceededAlreadyReported = scope.id == "overall"
+                    && budget.exceeded
+                    && budgetExceededNotificationMonths.contains(budget.month)
+                if let threshold = crossed.max(), !overallExceededAlreadyReported {
                     let prefix = budget.lowerBound ? "At least " : ""
                     deliverQuotaNotification(
                         title: "\(scope.label) monthly budget reached \(threshold)%",
@@ -1326,8 +1388,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                             ? "\(prefix)\(formatMoney(budget.spend)) of \(formatMoney(budget.budget)) recorded for \(budget.month)."
                             : "\(scope.label) reached \(Int(scope.percent.rounded()))% of its allocation."
                     )
-                    previous.firedThresholds.formUnion(crossed)
                 }
+                previous.firedThresholds.formUnion(crossed)
             }
             previous.lastPercent = scope.percent
             budgetNotificationStates[key] = previous
@@ -1517,6 +1579,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             throw NSError(domain: "TokenMeterMenuBar", code: 1, userInfo: [NSLocalizedDescriptionKey: "Response was not a JSON object."])
         }
         let snapshot = MeterSnapshot.fromJSON(dict)
+        let budget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
         let quotas = (dict["provider_quotas"] as? [[String: Any]] ?? []).compactMap(ProviderQuota.fromJSON)
         let savedTab = MenuTab(rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? "") ?? .run
         let savedMetrics: Set<TitleMetric> = {
@@ -1534,7 +1597,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             .filter(\.fresh)
             .flatMap { provider in provider.windows.map { (provider: provider, window: $0) } }
             .max { $0.window.usedPercent < $1.window.usedPercent }
-        let activeTitle = TitleMetric.allCases.compactMap { metric -> String? in
+        let baseTitle = TitleMetric.allCases.compactMap { metric -> String? in
             guard savedMetrics.contains(metric) else { return nil }
             switch metric {
             case .cost: return snapshot.costLabel
@@ -1546,9 +1609,11 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
                 return "\(constrained.provider.label) \(constrained.window.percentLabel) · \(constrained.window.compactKind)"
             }
         }.joined(separator: " · ")
+        let activeTitle = budget?.anyExceeded == true ? "⚠︎ \(baseTitle)" : baseTitle
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)
         print("active-title=\(activeTitle)")
+        print("budget-state=\(budget?.compactLabel ?? "unconfigured") exceeded=\(budget?.anyExceeded == true)")
         print("tab=\(savedTab.title) title-metrics=\(TitleMetric.allCases.filter(savedMetrics.contains).map(\.title).joined(separator: ","))")
         print("quota-alerts=\(alertsEnabled ? "on" : "off") warn-at=\(alertThreshold)%")
         for provider in quotas {

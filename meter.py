@@ -83,6 +83,7 @@ MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
 BUDGET_PROVIDERS = ("claude", "codex", "cursor")
+DEFAULT_RUNTIME_BUDGET = 1_000.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
 
@@ -142,10 +143,24 @@ BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512
 
 subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
-_xsess = {"data": None, "at": 0.0, "sessions": []}
+_SOURCE_INVENTORY = {
+    "ready": False,
+    "sources": (),
+    "count": None,
+    "clients": {},
+    "updated_at": None,
+}
+_xsess = {
+    "data": None, "at": 0.0, "sessions": [],
+    "internal_rows": (), "project_model_stats": {},
+}
 _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
+MODEL_PROJECT_OPTION_LIMIT = 500
 _summary_cache = {}
+_codex_meta_cache = {}
+_claude_cwd_cache = {}
+_source_metadata_lock = threading.Lock()
 _model_pricing_cache = {
     "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
 }
@@ -725,15 +740,6 @@ def normalize_budget_settings(values):
     if currency != "USD":
         raise ValueError("Token Meter budgets currently support USD only.")
 
-    total = values.get("monthly_total", 0)
-    if isinstance(total, bool) or not isinstance(total, (int, float)):
-        raise ValueError("Monthly budget must be a number.")
-    total = float(total)
-    if not math.isfinite(total) or total < 0 or total > MAX_MONTHLY_BUDGET:
-        raise ValueError(
-            f"Monthly budget must be between 0 and {MAX_MONTHLY_BUDGET:,.0f}."
-        )
-
     raw_allocations = values.get("allocations") or {}
     if not isinstance(raw_allocations, dict):
         raise ValueError("Runtime allocations must be an object.")
@@ -742,7 +748,7 @@ def normalize_budget_settings(values):
         raise ValueError("Runtime allocations support Claude, Codex, and Cursor only.")
     allocations = {}
     for provider in BUDGET_PROVIDERS:
-        value = raw_allocations.get(provider, 0)
+        value = raw_allocations.get(provider, DEFAULT_RUNTIME_BUDGET)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{provider.title()} allocation must be a number.")
         value = float(value)
@@ -751,10 +757,13 @@ def normalize_budget_settings(values):
                 f"{provider.title()} allocation must be between 0 and "
                 f"{MAX_MONTHLY_BUDGET:,.0f}."
             )
-        if value:
-            allocations[provider] = value
-    if sum(allocations.values()) > total + 1e-9:
-        raise ValueError("Runtime allocations cannot exceed the monthly budget.")
+        allocations[provider] = value
+    derived_total = sum(allocations.values())
+    if derived_total > MAX_MONTHLY_BUDGET:
+        raise ValueError(
+            f"Combined runtime budget must not exceed {MAX_MONTHLY_BUDGET:,.0f}."
+        )
+    total = derived_total
 
     raw_thresholds = values.get("thresholds", DEFAULT_BUDGET_THRESHOLDS)
     if not isinstance(raw_thresholds, list) and not isinstance(raw_thresholds, tuple):
@@ -783,7 +792,7 @@ def normalize_budget_settings(values):
 
 
 def budget_settings(path=None):
-    """Load the durable monthly budget, failing closed to an unconfigured budget."""
+    """Load the durable monthly budget with defaults for missing runtimes."""
     path = path or TOKEN_METER_SETTINGS
     settings = load_json(path, {})
     raw = settings.get("budgets") if isinstance(settings, dict) else {}
@@ -839,6 +848,15 @@ def safe_mtime(path):
         return os.path.getmtime(path)
     except OSError:
         return 0
+
+
+def file_signature(path):
+    """Return a cheap cache key that changes when a trace is replaced or appended."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
 
 
 def home_shorten(path):
@@ -980,6 +998,13 @@ def decode_cursor_project(name):
 
 def claude_trace_cwd(path, max_lines=120):
     """Prefer Claude's recorded cwd over its lossy hyphen-encoded folder name."""
+    signature = file_signature(path)
+    cache_key = (path, max_lines)
+    with _source_metadata_lock:
+        cached = _claude_cwd_cache.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return cached["cwd"]
+    cwd = ""
     try:
         with open(path, encoding="utf-8") as fh:
             for index, line in enumerate(fh):
@@ -991,12 +1016,15 @@ def claude_trace_cwd(path, max_lines=120):
                     row = json.loads(line)
                 except (TypeError, json.JSONDecodeError):
                     continue
-                cwd = row.get("cwd") if isinstance(row, dict) else None
-                if isinstance(cwd, str) and cwd.strip():
-                    return cwd.strip()
+                candidate = row.get("cwd") if isinstance(row, dict) else None
+                if isinstance(candidate, str) and candidate.strip():
+                    cwd = candidate.strip()
+                    break
     except OSError:
         pass
-    return ""
+    with _source_metadata_lock:
+        _claude_cwd_cache[cache_key] = {"signature": signature, "cwd": cwd}
+    return cwd
 
 
 def codex_id_from_path(path, meta=None):
@@ -1059,6 +1087,11 @@ def catalog_counts(catalog):
 
 
 def codex_meta(path):
+    signature = file_signature(path)
+    with _source_metadata_lock:
+        cached = _codex_meta_cache.get(path)
+        if cached and cached["signature"] == signature:
+            return dict(cached["meta"])
     meta = {"session_id": None, "cwd": None, "model": None, "model_provider": None,
             "tools_loaded": 0, "tools_eager": 0, "tools_deferred": 0,
             "tool_catalog": [], "tool_namespaces": []}
@@ -1091,6 +1124,8 @@ def codex_meta(path):
                     meta["model"] = payload.get("model") or meta["model"]
     except FileNotFoundError:
         pass
+    with _source_metadata_lock:
+        _codex_meta_cache[path] = {"signature": signature, "meta": dict(meta)}
     return meta
 
 
@@ -1519,7 +1554,37 @@ def all_session_sources():
 
     sources.extend(cursor_sources.values())
 
+    discovered_paths = {source.get("path") for source in sources if source.get("path")}
+    with _source_metadata_lock:
+        for stale_path in set(_codex_meta_cache) - discovered_paths:
+            _codex_meta_cache.pop(stale_path, None)
+        for stale_key in tuple(_claude_cwd_cache):
+            if stale_key[0] not in discovered_paths:
+                _claude_cwd_cache.pop(stale_key, None)
     return sources
+
+
+def publish_source_inventory(sources):
+    """Atomically publish a reusable discovery snapshot for lightweight endpoints."""
+    global _SOURCE_INVENTORY
+    source_rows = tuple(sources or ())
+    clients = defaultdict(int)
+    for source in source_rows:
+        clients[source.get("client") or source.get("provider") or "unknown"] += 1
+    _SOURCE_INVENTORY = {
+        "ready": True,
+        "sources": source_rows,
+        "count": len(source_rows),
+        "clients": dict(clients),
+        "updated_at": time.time(),
+    }
+    return _SOURCE_INVENTORY
+
+
+def cached_session_sources():
+    """Return the watcher-owned source snapshot without touching the filesystem."""
+    inventory = _SOURCE_INVENTORY
+    return list(inventory.get("sources") or ()), bool(inventory.get("ready"))
 
 
 def source_from_path(path):
@@ -6251,6 +6316,7 @@ def monthly_budget_status(months, settings=None, now=None):
     for provider in BUDGET_PROVIDERS:
         allocation = float(allocations.get(provider) or 0)
         runtime_spend = provider_spend.get(provider, 0.0)
+        exceeded = bool(allocation and runtime_spend >= allocation)
         runtimes.append({
             "provider": provider,
             "label": provider.title(),
@@ -6258,7 +6324,21 @@ def monthly_budget_status(months, settings=None, now=None):
             "allocation": allocation,
             "percent": runtime_spend / allocation if allocation else None,
             "remaining": max(0.0, allocation - runtime_spend) if allocation else None,
+            "exceeded": exceeded,
+            "over_by": max(0.0, runtime_spend - allocation) if allocation else 0.0,
         })
+    exceeded_runtimes = [
+        {
+            "provider": row["provider"],
+            "label": row["label"],
+            "spend": row["spend"],
+            "allocation": row["allocation"],
+            "percent": row["percent"],
+            "over_by": row["over_by"],
+        }
+        for row in runtimes
+        if row["exceeded"]
+    ]
     cost_coverage = (current.get("coverage") or {}).get("cost") or {}
     partial = bool(
         cost_coverage.get("total_sessions")
@@ -6294,6 +6374,9 @@ def monthly_budget_status(months, settings=None, now=None):
         "estimated": estimated,
         "lower_bound": partial,
         "state": state,
+        "runtime_exceeded": bool(exceeded_runtimes),
+        "exceeded_runtimes": exceeded_runtimes,
+        "attention": state == "over" or bool(exceeded_runtimes),
         "thresholds_crossed": crossed,
         "next_threshold": next(
             (value for value in settings["thresholds"] if percent < value / 100),
@@ -6506,6 +6589,7 @@ def _finalize_throughput_fields(row):
 
 def aggregate_model_stats(session_rows):
     """Aggregate model I/O by runtime and build workload-matched pace comparisons."""
+    session_rows = list(session_rows or [])
     models = {}
     pace_groups = defaultdict(list)
 
@@ -6559,7 +6643,7 @@ def aggregate_model_stats(session_rows):
         if session.get("token_estimate"):
             target["_estimated_ids"].add(session_id)
 
-    for session in session_rows or []:
+    for session in session_rows:
         provider = session.get("provider") or "unknown"
         runtime = session.get("runtime") or source_runtime_label(session)
         session_id = session.get("id") or session.get("path") or f"session-{id(session)}"
@@ -6730,12 +6814,18 @@ def aggregate_model_stats(session_rows):
                                  -row["executions"], -row["wait_samples"],
                                  row["model"], row["runtime"]))
     valid_ids = {row["id"] for row in result}
+    projects = sorted({
+        str(session.get("project") or "No project")
+        for session in session_rows
+    }, key=str.casefold)
     return {
         "models": result,
         "total_models": len(result),
         "total_model_names": len({row["model"] for row in result}),
         "first_day": min((day["day"] for row in result for day in row["daily"]), default=""),
         "last_day": max((day["day"] for row in result for day in row["daily"]), default=""),
+        "projects": projects[:MODEL_PROJECT_OPTION_LIMIT],
+        "projects_truncated": len(projects) > MODEL_PROJECT_OPTION_LIMIT,
         "matched_pace": matched_pace_windows({
             row_id: samples for row_id, samples in pace_groups.items() if row_id in valid_ids
         }),
@@ -6818,7 +6908,7 @@ def metric_coverage(rows, metric):
     }
 
 
-def cross_session():
+def cross_session(sources=None):
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
         return _xsess["data"]
@@ -6831,7 +6921,8 @@ def cross_session():
     provider_cost, provider_sessions = defaultdict(float), defaultdict(int)
     provider_rows = defaultdict(list)
 
-    for source in all_session_sources():
+    source_rows = list(sources) if sources is not None else all_session_sources()
+    for source in source_rows:
         row = session_summary(source)
         if row["turns"] == 0:
             continue
@@ -6977,18 +7068,59 @@ def cross_session():
         "capabilities": capability_inventory(tool_waste),
         "session_actions": session_action_capability(),
     }
+    _xsess["internal_rows"] = tuple(internal_rows)
+    _xsess["project_model_stats"] = {}
     _xsess["data"], _xsess["at"] = data, now
     return data
 
 
+def project_model_stats(project):
+    """Return aggregate-only model evidence for one exact discovered project."""
+    project = str(project or "")
+    if not project or len(project) > 1024:
+        return {"ok": False, "error": "A valid project is required."}, 400
+    cross = cross_session()
+    cache = _xsess.setdefault("project_model_stats", {})
+    cached = cache.get(project)
+    if cached is not None:
+        return {
+            "ok": True,
+            "generated_at": cross.get("generated_at"),
+            "model_stats": cached,
+        }, 200
+    matching = [
+        row for row in (_xsess.get("internal_rows") or ())
+        if str(row.get("project") or "No project") == project
+    ]
+    if not matching:
+        return {"ok": False, "error": "Project was not found."}, 404
+    stats = aggregate_model_stats(matching)
+    stats.pop("projects", None)
+    stats.pop("projects_truncated", None)
+    cache[project] = stats
+    return {
+        "ok": True,
+        "generated_at": cross.get("generated_at"),
+        "model_stats": stats,
+    }, 200
+
+
 def log_sessions_state():
     """Return the complete lightweight log inventory outside the polled state payload."""
-    cross = cross_session()
+    cross = _xsess.get("data")
+    if not cross:
+        return {
+            "generated_at": None,
+            "sessions": [],
+            "total_sessions": None,
+            "loading": True,
+        }
     sessions = list(_xsess.get("sessions") or cross.get("sessions") or [])
     return {
         "generated_at": cross.get("generated_at"),
         "sessions": sessions,
         "total_sessions": int(cross.get("total_sessions") or len(sessions)),
+        "loading": False,
     }
 
 
@@ -7072,13 +7204,16 @@ def publish_after_session_delete():
 def current_state():
     if STATE:
         return STATE
-    source = newest_source()
-    st = recompute(source) if source else None
-    if st:
-        return attach_cross_session(st)
+    inventory = _SOURCE_INVENTORY
+    count = inventory.get("count")
+    if inventory.get("ready") and count is not None:
+        message = f"Token Meter is indexing {count:,} local session{'s' if count != 1 else ''}."
+    else:
+        message = "Token Meter is discovering local session history."
     return {
         "ok": False,
-        "message": "No Claude, Codex, or Cursor logs found yet.",
+        "loading": True,
+        "message": message,
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -8485,13 +8620,16 @@ def menubar_recent_sessions(sources, selected_id=None, limit=5):
 
 def menubar_state(session_id=None):
     requested_id = str(session_id or "").strip()
-    sources = all_session_sources()
-    selected_source = find_session(requested_id, sources=sources) if requested_id else None
-    missing = bool(requested_id and not selected_source)
+    sources, inventory_ready = cached_session_sources()
+    selected_source = (
+        find_session(requested_id, sources=sources)
+        if requested_id and inventory_ready else None
+    )
+    missing = bool(requested_id and inventory_ready and not selected_source)
     # The watcher owns the first full recompute. Calling current_state() here
     # before it publishes would make every two-second native poll independently
     # rebuild all cross-session history and starve the cold-start worker.
-    st = recompute(selected_source) if selected_source else (STATE or {
+    st = recompute(selected_source) if selected_source and STATE else (STATE or {
         "ok": False,
         "message": "Token Meter is loading local session history.",
         "source": {},
@@ -8501,7 +8639,7 @@ def menubar_state(session_id=None):
         "executions": [],
         "insights": [],
     })
-    if selected_source and not st:
+    if selected_source and STATE and not st:
         missing = True
         selected_source = None
         st = current_state()
@@ -8514,6 +8652,7 @@ def menubar_state(session_id=None):
     verdict = menubar_verdict(st, recommendation)
     availability = st.get("availability") or metric_availability(st.get("provider"))
     selected_id = source.get("id")
+    effective_selected_id = requested_id if selected_source else selected_id
     model = next((row.get("model") for row in reversed(st.get("executions") or [])
                   if row.get("model")), None) or source.get("model") or "unknown"
     cross = _xsess.get("data") or (STATE or {}).get("xsession") or {}
@@ -8572,12 +8711,12 @@ def menubar_state(session_id=None):
         "insights": (st.get("insights") or [])[:4],
         "selection": {
             "requested_id": requested_id or None,
-            "selected_id": selected_id,
+            "selected_id": effective_selected_id,
             "pinned": bool(requested_id and selected_source),
             "missing": missing,
         },
         "recent_sessions": menubar_recent_sessions(
-            sources, selected_id=requested_id if selected_source else selected_id, limit=5
+            sources, selected_id=effective_selected_id, limit=5
         ),
         "provider_quotas": provider_quota_snapshots(),
         "budget": budget,
@@ -8592,6 +8731,7 @@ def watcher():
     last_cross_refresh = 0.0
     while True:
         sources = all_session_sources()
+        publish_source_inventory(sources)
         nf = max(sources, key=lambda source: source["mtime"]) if sources else None
         sources_sig = source_mtime_signature(sources)
         if sources_sig != last_sources_sig:
@@ -8613,13 +8753,32 @@ def watcher():
                 updated_state = recompute(cur)
                 if updated_state:
                     cache_at = _xsess.get("at") or 0.0
-                    publish(attach_cross_session(updated_state))
+                    publish(attach_cross_session(
+                        updated_state,
+                        cross_session(sources=sources),
+                    ))
                     if (_xsess.get("at") or 0.0) > cache_at:
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
         now = time.monotonic()
         if cross_dirty and now - last_cross_refresh >= _XSESS_LIVE_REFRESH_S:
-            refresh_cross_session_state(updated_state or STATE)
+            cross = refresh_cross_session_state(
+                updated_state or STATE,
+                builder=lambda: cross_session(sources=sources),
+            )
+            if not STATE:
+                publish({
+                    "ok": False,
+                    "loading": False,
+                    "message": "No readable Claude, Codex, or Cursor logs found yet.",
+                    "source": {},
+                    "total_cost": 0,
+                    "total_tokens": 0,
+                    "turns": 0,
+                    "context": {},
+                    "insights": [],
+                    "xsession": cross,
+                })
             cross_dirty = False
             last_cross_refresh = now
         time.sleep(0.5)
@@ -8680,6 +8839,25 @@ def missing_page_html():
   <ul>{candidates}</ul>
 </body>
 </html>"""
+
+
+def health_state():
+    """Return constant-time liveness/readiness from watcher-owned cached state."""
+    path = page_path()
+    inventory = _SOURCE_INVENTORY
+    inventory_ready = bool(inventory.get("ready"))
+    payload = {
+        "ok": bool(path),
+        "state_ready": bool(STATE),
+        "inventory_ready": inventory_ready,
+        "sources": inventory.get("count") if inventory_ready else None,
+        "source_clients": dict(inventory.get("clients") or {}) if inventory_ready else {},
+        "port": PORT,
+        "page_ready": bool(path),
+        "page_path": path,
+        "page_candidates": PAGE_CANDIDATES,
+    }
+    return payload, 200 if path else 503
 
 
 class H(BaseHTTPRequestHandler):
@@ -8859,27 +9037,18 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(current_state()), "application/json")
         elif req_path == "/logs":
             self._send(json.dumps(log_sessions_state()), "application/json")
+        elif req_path == "/model-stats":
+            project = (parse_qs(parsed.query).get("project") or [""])[0]
+            payload, status = project_model_stats(project)
+            self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/agent-access/status":
             self._send(json.dumps(agent_access_status()), "application/json")
         elif req_path == "/menubar":
             sid = (parse_qs(parsed.query).get("session") or [""])[0][:240]
             self._send(json.dumps(menubar_state(sid)), "application/json")
         elif req_path == "/health":
-            path = page_path()
-            sources = all_session_sources()
-            clients = defaultdict(int)
-            for source in sources:
-                clients[source.get("client") or source.get("provider") or "unknown"] += 1
-            self._send(json.dumps({
-                "ok": bool(path),
-                "state_ready": bool(STATE),
-                "sources": len(sources),
-                "source_clients": dict(clients),
-                "port": PORT,
-                "page_ready": bool(path),
-                "page_path": path,
-                "page_candidates": PAGE_CANDIDATES,
-            }), "application/json", status=200 if path else 503)
+            payload, status = health_state()
+            self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/events":
             # Older dashboard builds used EventSource and can keep reconnecting
             # even after Chromium replaces the visible tab with an error page.

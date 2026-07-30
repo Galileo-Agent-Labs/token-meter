@@ -67,17 +67,16 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 ## Agent Workflow
 
 - Read this file before editing, then inspect the relevant implementation and tests.
-- For a new feature, require the agreed GitHub issue described in `CONTRIBUTING.md`. If the user has not supplied one, stop and ask for it before changing code.
 - For a bug fix, reproduce the problem when practical and distinguish the observed failure from an inferred cause.
-- Keep work scoped to the requested bug or approved feature. Preserve unrelated changes and avoid opportunistic refactors.
+- Keep work scoped to the requested bug or feature. Preserve unrelated changes and avoid opportunistic refactors.
 - Add or update tests with the implementation and run the relevant commands in this file.
 - Before handoff, report the files changed, exact validation results, installed-runtime checks when applicable, and anything not verified.
 - Do not push, open a pull request, publish, or otherwise send changes externally unless the user explicitly requests it.
 
 ## Change Boundaries
 
-- Bug fixes and documentation may proceed directly; new features require the approved issue enforced above.
-- Prefer the smallest complete behavior and retain current semantics outside the approved scope.
+- Bug fixes, documentation, and new features may proceed directly when clearly requested by the user.
+- Prefer the smallest complete behavior and retain current semantics outside the requested scope.
 - Update tests with implementation. UI-source string assertions are useful but do not replace behavioral tests.
 - Keep API payloads bounded and free of local paths or raw exception text.
 - Keep Current-session caps separate from machine-wide monthly budgets.

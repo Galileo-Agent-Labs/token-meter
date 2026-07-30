@@ -3189,6 +3189,11 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("AyatanaAppIndicator3", tray)
         self.assertIn("AppIndicator3", tray)
         self.assertIn("XDG_CONFIG_HOME", tray)
+        self.assertIn("refresh_menu_content", tray)
+        self.assertIn("self.indicator.set_menu(self.menu)", tray)
+        self.assertNotIn("self.indicator.set_menu(menu)", tray)
+        self.assertIn("Recent sessions", tray)
+        self.assertIn("Provider limits", tray)
 
     def test_linux_runtime_uses_xdg_desktop_and_trash_paths(self):
         if not meter.IS_LINUX:

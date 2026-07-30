@@ -14,8 +14,10 @@ turns them into one live dashboard.
 | **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the desktop companion—tabs on macOS and provider submenus on Linux—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
+| **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in Current and the menu bar. |
+| **Install updates explicitly** | Check the configured Git upstream once per hour by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
-| **Move around quickly** | Open common views with the command palette and keyboard shortcuts, or use the searchable glossary when a metric is unfamiliar. |
+| **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
 | **Keep data private** | Run analysis stays on your computer and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
 
 Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, the
@@ -40,31 +42,14 @@ git clone https://github.com/Galileo-Agent-Labs/token-meter.git
 The installer checks the required tools, installs the server and desktop tray
 startup items, waits for the local server, verifies both endpoints, prints
 `Token Meter installation complete`, and returns control to your terminal.
+It starts the server first and lets the initial local-history index finish before
+starting the menu bar or desktop tray, so large coding histories may take longer
+on the first run without requiring a retry.
 It copies a stable runtime outside the clone: the macOS default is
 `~/Library/Application Support/Token Meter/runtime`; the Linux default is
 `~/.local/share/token-meter/runtime`. The clone is not used for automatic startup.
 
-### Install With A Coding Agent
-
-On macOS, you can paste this prompt into a coding agent that can run commands
-on your Mac:
-
-```text
-Install Token Meter from https://github.com/Galileo-Agent-Labs/token-meter.git.
-Clone it and run scripts/install. Let the script install its stable runtime in
-~/Library/Application Support/Token Meter/runtime.
-Complete the installation yourself. If your sandbox blocks access to my user
-Application Support runtime, LaunchAgents directory, or launchctl, request
-narrowly scoped permission through your approval interface and continue after
-I approve it. Do not ask me to copy commands into Terminal, do not use sudo,
-and do not disable macOS security features. Verify that
-com.token-meter.server and com.token-meter.menubar are running from the
-installed runtime,
-that /health and /menubar return valid responses, and report the installed
-commit, dashboard URL, automatic-start status, and uninstall command.
-```
-
-Token Meter starts its local server and menu bar widget automatically after
+Token Meter starts its local server and menu bar or desktop tray widget automatically after
 installation and after future logins. Open the dashboard at:
 
 ```text
@@ -89,30 +74,15 @@ This foreground workflow is separate from the persistent installer above.
 ### 1. Follow The Current Run
 
 Start on **Current** while an agent is working. The top cards show estimated
-cost, prompt-to-response wait time, input/output/thinking tokens, tool-result
-volume, and cache behavior. Use
-**Execution Overview** and the chart below it to spot context growth, expensive
-executions, long waits, or unusually large tool results before deciding whether
-to continue.
+cost, prompt-to-response wait, context, input, output, and output speed. Expand
+**Usage details** when you need thinking tokens, tool-result volume, cache
+behavior, efficiency metrics, or the execution profile.
 
 <p align="center">
   <img src="images/dashboard.png" alt="Token Meter Current view with live cost, token, context, and execution metrics" width="900">
 </p>
 
-### 2. See All Apps In One View
-
-Open **Global** to combine local Claude, Codex, and Cursor history in one place.
-Compare covered token consumption and estimated spend, plus cumulative wait
-time by runtime and model, see the 14-day
-trend, and jump directly to the highest-cost logs or review candidates. This is
-the cross-app view for answering what you used, where you used it, and what
-deserves attention next.
-
-<p align="center">
-  <img src="images/global.png" alt="Token Meter Global view combining Claude, Codex, and Cursor activity, covered spend, model mix, and review priorities" width="900">
-</p>
-
-### 3. Find Expensive Or Noisy Logs
+### 2. Find Expensive Or Noisy Logs
 
 Open **Logs** to search by title, project, model, or provider. Project and time
 filters recalculate the cost, token, execution, wait-time, and model summaries
@@ -125,7 +95,7 @@ to macOS Trash after confirmation.
   <img src="images/logs-filtering.png" alt="Token Meter Logs view with project and time filters, model statistics, and cost-ranked runs" width="900">
 </p>
 
-### 4. Explain A Day's Spend
+### 3. Explain A Day's Spend
 
 Open **Daily** to inspect a recorded local day. The brief compares spend with
 the previous day and recent pace, identifies the largest cost driver, and breaks
@@ -136,7 +106,7 @@ Switch the trend between Spend and Wait, then select any day to see what changed
   <img src="images/daily.png" alt="Token Meter Daily brief with spend trend, day-over-day comparison, highest-cost logs, and Claude versus Codex runtime split" width="900">
 </p>
 
-### 5. Inspect Tools, MCPs, And Skills
+### 4. Inspect Tools, MCPs, And Skills
 
 Open **Tools** to see the capabilities found across scanned Claude and
 Codex logs. Compare observed use, returned tokens, last-use evidence, and eager
@@ -147,22 +117,35 @@ limits review and disable actions to eligible user-installed skill packs.
   <img src="images/tool-analytics.png" alt="Token Meter Tools and Skills view with observed capability use, catalog definition tokens, review candidates, and skill-pack controls" width="900">
 </p>
 
-### 6. Ask Token Meter From Codex Or Claude
+### 5. Configure Token Meter
 
 Open **Settings** to connect the local, read-only `tokenmeter` MCP server to
 Codex, Claude Code, or both. Token Meter previews the exact command and manages
 only its own user-level entry. Connected agents can check the current run,
 review aggregate usage, or inspect user-installed skill-pack hygiene; prompts,
 reasoning, tool contents, credentials, and configuration values are never
-returned. The same view holds the machine-wide frustration lexicon; edits are
-recalculated across every discovered session. Start a new agent session after
-connecting.
+returned.
+
+The same view contains the complete monthly budget experience: individual
+Claude/Codex/Cursor budgets that default to $1,000 each and are added into one
+machine-wide total, month-to-date spend, runtime progress, projections after
+three active spend days, up to 12 calendar months of history, and alert
+thresholds. A runtime-specific overrun remains visible in Current and as a red
+warning symbol in the menu bar even when the combined total is still on track. When trace
+coverage is partial, spend is labeled “at least” and remaining budget is not
+presented as guaranteed headroom. Settings also holds model pricing and the
+experimental Positive and Friction phrase groups. Language-signal edits are
+recalculated across discovered sessions without retaining raw message text.
+Start a new agent session after connecting the MCP.
 
 <p align="center">
   <img src="images/mcp.png" alt="Token Meter Settings view for connecting read-only access from Codex and Claude Code" width="900">
 </p>
 
-### 7. Keep The Live Signal In The Menu Bar
+Per-session caps remain directly available in **Current → Summary** as a slider
+with an exact dollar field.
+
+### 6. Keep The Live Signal In The Menu Bar
 
 The macOS companion has five native tabs: **Run**, **All**, **Claude**,
 **Codex**, and **Cursor**. Run keeps the current task's estimated cost, tokens,
@@ -175,9 +158,10 @@ missing means unreported or unavailable, never 0%. Named limits such as Codex
 Spark remain separate from regular limits, and Cursor's monthly Plan cap is not
 renamed as a session or weekly allowance.
 
-The status-bar title defaults to the existing amount-first Run summary. Under
-**Settings → Menu bar title**, switch to **Limits** to show the most constrained
-fresh provider window instead. Quota notifications are on by default for new
+The status-bar title defaults to **Cost + Output speed**. Under **Settings →
+Menu bar title**, independently enable or disable Cost, Output speed, Context,
+Model, and Limits; hovering always shows the complete available summary.
+Quota notifications are on by default for new
 installs, warn at 80% by default, always treat 95% and exhaustion as critical,
 and report resets after a previously warned window rolls over. The first quota
 observation establishes a baseline and never sends a catch-up notification.
@@ -190,11 +174,14 @@ observation establishes a baseline and never sends a catch-up notification.
 
 1. Install or start Token Meter, then begin a Claude, Codex, or Cursor task.
 2. Confirm **Current** follows the run and check cost plus context pressure.
-3. Set a session budget or enable notifications under **Current → Alerts**.
-4. Connect Codex or Claude Code from **Settings** if you want on-demand answers
+3. Set a session budget in **Current → Summary**, and configure spike or browser
+   notifications under **Current → Alerts**.
+4. Review or change the default $1,000 Claude, Codex, and Cursor monthly budgets
+   in **Settings → Monthly budget**; their sum becomes the machine-wide limit.
+5. Connect Codex or Claude Code from **Settings** if you want on-demand answers
    inside the agent.
-5. After a few runs, use **Global** and **Daily** to compare apps and explain
-   spend, then open **Logs** or **Tools** for the underlying evidence.
+6. After a few runs, use **Logs** and **Daily** to compare apps and explain
+   spend, then open **Tools** for capability evidence.
 
 ## Requirements
 
@@ -262,6 +249,25 @@ Connecting does not create background monitoring or interruptions. The tools
 run only when the user or agent calls them; Token Meter's browser and menu-bar
 alerts remain the proactive channels.
 
+## Software Updates
+
+**Check for updates every hour** is enabled by default in **Settings → Software
+updates**. Token Meter immediately fetches revision metadata from the Git
+upstream configured during installation, then checks again once per hour while
+the server is running. The installer keeps a dedicated update checkout beside
+the runtime so the background service does not need access to a development
+checkout under a macOS-protected folder such as Documents. You can disable
+these checks at any time. Checks do not merge, pull, reinstall, or send
+telemetry.
+
+When the managed checkout is clean, has not diverged, and is behind its upstream, a
+**New update available** button appears at the bottom right of the dashboard.
+Clicking it performs a fast-forward update, reruns the existing installer, and
+reloads the dashboard after the local server restarts. If the checkout has
+local changes or has diverged, Token Meter leaves it untouched and reports the
+problem in Settings. The development checkout used for the original install is
+not modified by the background checker or update button.
+
 ## Automatic Startup And Uninstall
 
 On macOS, the installer creates separate user LaunchAgents for the local server
@@ -322,7 +328,7 @@ Claude Desktop metadata contains the Desktop title, project directory, model,
 and a `cliSessionId`. Token Meter joins that id to the authoritative Claude
 trace under `~/.claude/projects`, so Desktop sessions use the same validated
 cost, token, tool, and execution parser without appearing twice. They are
-labeled `Claude Desktop` in Current and Global views.
+labeled `Claude Desktop` in Current and Logs.
 
 Agent/Cowork sessions use Claude Desktop's selected workspace folder when the
 trace itself runs from the managed `outputs` directory. Sessions without a
@@ -353,25 +359,23 @@ state whenever that source or its enrichment changes. Shared Cursor database
 and request-log timestamps invalidate cached parsing but do not make every
 Cursor session look equally recent.
 
-The Global tab keeps spend/model/trend cards visible and uses `Overview`,
-`Global insights`, and `Capability evidence` subtabs. Logs have a dedicated
-top-level tab. Clicking a log opens it as a frozen view at
+Logs has a dedicated top-level tab. Clicking a log opens it as a frozen view at
 `/sessions/<session-id>#summary`, so refreshing or sharing that local URL
 restores the same log. Clicking the top-level `Current` tab or `Back to live`
 always removes the session path and returns to the active newest log.
 
 Dashboard tabs are addressable routes. The menu bar opens `#summary` for Open
 Dashboard, `#daily` for Open Daily Brief, `#activity` for Open Trace, and
-`#capabilities` for Tools, and `#settings` for machine-level settings.
-Current-session panels keep their panel name in the hash. Logs use `#logs`,
-while Global subtabs use `#global-overview`, `#global-insights`, and
-`#global-evidence`; the old `#global-logs` route redirects to `#logs`.
+`#capabilities` for Tools and `#settings-budgets` for monthly budget settings.
+Current-session panels keep their panel name in the hash. Logs use `#logs`.
+Legacy `#global*` routes redirect to Logs, while `#budgets` redirects to
+`#settings-budgets`.
 
-The top navigation follows the review sequence **Current → Daily → Logs →
-Global → Models → Frustration → Tools → Learn → Settings**.
-Press **Command+K** on macOS or **Ctrl+K** elsewhere to search every view plus
-Current and Global subtabs. **Option/Alt+1–9** opens the nine top-level views
-directly; Option/Alt+1 keeps Current's return-to-live behavior.
+The top navigation follows the review sequence **Current → Logs → Daily →
+Models → Tools → Learn → Settings**. Press **Command+K** on macOS or **Ctrl+K**
+elsewhere to search every view plus Current and Settings destinations.
+**⌥1–7** opens the seven top-level views directly; ⌥1 keeps Current's
+return-to-live behavior.
 
 ## What The Dashboard Shows
 
@@ -380,7 +384,9 @@ The Current tab includes:
 - Summary: live cost, tokens, completed prompt-to-response wait, burn rate per
   active minute, cache behavior, context pressure, per-execution input/output
   trajectory, per-request wait history, session tool activity, optional
-  skill-pack use, and unused user-installed packs. Gaps between prompts are
+  skill-pack use, and unused user-installed packs. The first screen keeps cost,
+  context, wait, input, output, and output speed visible; the rest is under a
+  remembered Usage details disclosure. Gaps between prompts are
   excluded from wait time and burn rate. Observed wait timing also excludes
   trace-visible pauses where the agent asks for human input and waits for the
   answer.
@@ -388,29 +394,12 @@ The Current tab includes:
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.
 - Insights: plain-language log signals.
-- Alerts: a per-session budget that starts at $10 for every new session, plus
-  execution-spike events.
+- Summary: a browser-local per-session budget slider that starts at $10 for every
+  new session and keeps an exact dollar field for precise caps.
+- Alerts: execution-spike events and browser notifications.
 
 The Current header also offers Delete session. It uses the same confirmation
 as Logs and warns when the selected session appears to still be live.
-
-The Global tab includes:
-
-- Total estimated spend across supported local traces. Cursor values are marked
-  as local estimates; partial coverage appears only when a trace lacks enough
-  context or public pricing evidence.
-- Cumulative completed-request wait, with average and timed-request count.
-- Provider and model mix.
-- 14-day spend trend with anomaly markers.
-- An Overview-first subtab with today, runtime/model mix, review priorities, and
-  the highest-cost logs.
-- A Global insights subtab with trace-observed tool-result totals and tokens
-  flagged by oversized, exact-repeat, or structured-error rules, ranked
-  payloads, and a 14-day result-token trend.
-- A Capability evidence subtab with project concentration, last use, failures,
-  recommendations, and server-level MCP evidence.
-- MCP rows remain read-only; supported user-installed skill-pack changes live
-  in the Tools tab.
 
 The Logs tab includes the searchable log inventory with an exact Projects
 folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
@@ -471,6 +460,10 @@ multiple rules.
 ## Cost Notes
 
 Claude costs are computed from the local `CLAUDE_PRICE` table in `meter.py`.
+The bundled Claude list includes Opus 5 at $5 per million input tokens and $25
+per million output tokens, with the standard cache multipliers represented as
+$6.25 for cache writes and $0.50 for cached input. Prices can still be edited or
+extended manually in Settings.
 Codex costs are computed from the local `OPENAI_PRICE` table and are shown as
 estimates because Codex subscription billing can differ from public API-rate
 accounting.
@@ -480,7 +473,7 @@ trace-visible context snapshot per execution, with sparse intermediate
 checkpoints interpolated between persisted values. Output uses deduplicated
 assistant and thinking text at four characters per token. The persisted model
 and speed variant select the rate; Composer 2.5 uses its separate Standard or
-Fast rate. These values make Current, Logs, Daily, Global, Models, MCP, and the
+Fast rate. These values make Current, Logs, Daily, Models, MCP, and the
 menu bar useful, but they are not a replacement for Cursor's billing dashboard.
 Cache usage, hidden reasoning, and repeated internal model-call input are not
 available locally. Token Meter therefore labels Cursor tokens, cost, and output
@@ -650,7 +643,6 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |-- images/
 |   |-- dashboard.png                # README dashboard screenshot
 |   |-- daily.png                    # README daily spend screenshot
-|   |-- global.png                   # README cross-app overview screenshot
 |   |-- logs-filtering.png           # README log review screenshot
 |   |-- mcp.png                      # README agent connection screenshot
 |   |-- tool-analytics.png           # README tools and skills screenshot
@@ -659,7 +651,7 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |   |-- TokenMeterMenuBar.swift      # native macOS menu bar companion
 |   `-- token_meter_tray.py          # Linux KDE/GNOME AppIndicator tray
 |-- scripts/
-|   |-- install                      # complete human or agent-driven install
+|   |-- install                      # install the local runtime and login items
 |   |-- run-menubar                  # build and run the menu bar companion
 |   |-- start-token-meter            # start server if needed, then menu bar
 |   |-- install-launch-agent         # install macOS login items
@@ -684,7 +676,6 @@ meter.py
 page.html
 images/dashboard.png
 images/daily.png
-images/global.png
 images/logs-filtering.png
 images/mcp.png
 images/tool-analytics.png

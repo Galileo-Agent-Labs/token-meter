@@ -5,10 +5,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT_URL="http://127.0.0.1:8722/"
 HEALTH_URL="http://127.0.0.1:8722/health"
 LOG="$ROOT/meter.log"
+READINESS_TIMEOUT_SECONDS="${TOKEN_METER_READINESS_TIMEOUT_SECONDS:-600}"
 
 if [[ ! -f "$ROOT/page.html" ]]; then
   echo "Missing dashboard UI: $ROOT/page.html" >&2
   echo "Run from a full token-meter clone, or copy page.html next to meter.py." >&2
+  exit 1
+fi
+
+if [[ ! "$READINESS_TIMEOUT_SECONDS" =~ ^[0-9]+$ || "$READINESS_TIMEOUT_SECONDS" -lt 1 ]]; then
+  echo "TOKEN_METER_READINESS_TIMEOUT_SECONDS must be a positive whole number." >&2
   exit 1
 fi
 
@@ -21,23 +27,25 @@ if [[ "$page_body" == *"page.html not found next to meter.py"* || "$page_body" =
   exit 1
 fi
 
-if ! curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+health_json="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+if [[ "$health_json" != *'"ok": true'* ]]; then
   nohup python3 "$ROOT/meter.py" >> "$LOG" 2>&1 &
-  ready=0
-  for _ in $(seq 1 40); do
-    if curl -fsS --max-time 1 "$HEALTH_URL" >/dev/null 2>&1; then
-      ready=1
-      break
-    fi
-    sleep 0.25
-  done
-  if [[ "$ready" -ne 1 ]]; then
-    echo "Token Meter server did not become healthy at $HEALTH_URL" >&2
-    if [[ -f "$LOG" ]]; then
-      tail -n 20 "$LOG" >&2
-    fi
-    exit 1
+fi
+
+readiness_deadline=$((SECONDS + READINESS_TIMEOUT_SECONDS))
+while (( SECONDS < readiness_deadline )); do
+  health_json="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+  if [[ "$health_json" == *'"ok": true'* && "$health_json" == *'"state_ready": true'* ]]; then
+    break
   fi
+  sleep 1
+done
+if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": true'* ]]; then
+  echo "Token Meter did not finish indexing within ${READINESS_TIMEOUT_SECONDS}s at $HEALTH_URL" >&2
+  if [[ -f "$LOG" ]]; then
+    tail -n 20 "$LOG" >&2
+  fi
+  exit 1
 fi
 
 exec "$ROOT/scripts/run-menubar"

@@ -81,11 +81,18 @@ else:
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
+TOKEN_METER_UPDATE_STATUS = os.path.expanduser(
+    os.environ.get("TOKEN_METER_UPDATE_STATUS", "~/.token-meter/update-status.json")
+)
 PORT = 8722
 
 DEFAULT_FRUSTRATION_TERMS = [
     "fuck", "fck", "fucked", "fucking", "shit", "shitty", "bullshit",
     "idiot", "stupid", "useless", "crap", "damn", "wtf",
+]
+DEFAULT_POSITIVE_TERMS = [
+    "thank you", "thanks", "perfect", "great",
+    "exactly what i needed", "works now", "love it",
 ]
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
@@ -94,8 +101,16 @@ MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
+BUDGET_PROVIDERS = ("claude", "codex", "cursor")
+DEFAULT_RUNTIME_BUDGET = 1_000.0
+DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
+MAX_MONTHLY_BUDGET = 100_000_000.0
+UPDATE_CHECK_INTERVAL_S = 60 * 60
+UPDATE_FETCH_TIMEOUT_S = 45
+UPDATE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$")
 
 CLAUDE_PRICE = {
+    "claude-opus-5": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
     "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
     "claude-fable-5": {"input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50},
     # Introductory pricing through 2026-08-31; standard pricing is $3/$15 afterward.
@@ -150,10 +165,24 @@ BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512
 
 subscribers, subscribers_lock = [], threading.Lock()
 STATE = {}
-_xsess = {"data": None, "at": 0.0, "sessions": []}
+_SOURCE_INVENTORY = {
+    "ready": False,
+    "sources": (),
+    "count": None,
+    "clients": {},
+    "updated_at": None,
+}
+_xsess = {
+    "data": None, "at": 0.0, "sessions": [],
+    "internal_rows": (), "project_model_stats": {},
+}
 _XSESS_TTL = 15.0
 _XSESS_LIVE_REFRESH_S = 2.0
+MODEL_PROJECT_OPTION_LIMIT = 500
 _summary_cache = {}
+_codex_meta_cache = {}
+_claude_cwd_cache = {}
+_source_metadata_lock = threading.Lock()
 _model_pricing_cache = {
     "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
 }
@@ -161,6 +190,8 @@ _cursor_request_cache = {}
 _quota_cache = {}
 _quota_inflight = set()
 _quota_lock = threading.Lock()
+_update_operation_lock = threading.Lock()
+_update_wake = threading.Event()
 _ACTION_TOKEN = secrets.token_urlsafe(24)
 AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
@@ -393,12 +424,12 @@ def atomic_write_text(path, text):
     os.replace(tmp, path)
 
 
-def normalize_frustration_terms(values):
-    """Normalize a user-editable term list while preserving display order."""
+def normalize_language_signal_terms(values, group="language signal"):
+    """Normalize one user-editable lexical group while preserving display order."""
     if isinstance(values, str):
         values = re.split(r"[,\n]", values)
     if not isinstance(values, list):
-        raise ValueError("Frustration terms must be a list or comma-separated text.")
+        raise ValueError(f"{group.title()} terms must be a list or comma-separated text.")
     normalized = []
     seen = set()
     for value in values:
@@ -406,56 +437,119 @@ def normalize_frustration_terms(values):
         if not term:
             continue
         if len(term) > MAX_FRUSTRATION_TERM_LENGTH:
-            raise ValueError(f"Each frustration term must be {MAX_FRUSTRATION_TERM_LENGTH} characters or fewer.")
+            raise ValueError(
+                f"Each {group} term must be {MAX_FRUSTRATION_TERM_LENGTH} characters or fewer."
+            )
         if any(ord(char) < 32 for char in term):
-            raise ValueError("Frustration terms cannot contain control characters.")
+            raise ValueError(f"{group.title()} terms cannot contain control characters.")
         if term not in seen:
             normalized.append(term)
             seen.add(term)
     if len(normalized) > MAX_FRUSTRATION_TERMS:
-        raise ValueError(f"Use at most {MAX_FRUSTRATION_TERMS} frustration terms.")
+        raise ValueError(f"Use at most {MAX_FRUSTRATION_TERMS} {group} terms.")
     return normalized
 
 
-def frustration_settings(path=None):
+def normalize_frustration_terms(values):
+    """Backward-compatible Friction-group normalizer."""
+    return normalize_language_signal_terms(values, "friction")
+
+
+def language_signal_settings(path=None):
     path = path or TOKEN_METER_SETTINGS
     settings = load_json(path, {})
     if not isinstance(settings, dict):
         settings = {}
-    if "frustration_terms" not in settings:
-        terms = list(DEFAULT_FRUSTRATION_TERMS)
-    else:
+
+    raw = settings.get("language_signal_terms")
+    defaults = {
+        "positive": list(DEFAULT_POSITIVE_TERMS),
+        "friction": list(DEFAULT_FRUSTRATION_TERMS),
+    }
+    groups = {}
+    for group in ("positive", "friction"):
+        values = raw.get(group) if isinstance(raw, dict) and group in raw else None
+        if values is None and group == "friction" and "frustration_terms" in settings:
+            values = settings.get("frustration_terms")
         try:
-            terms = normalize_frustration_terms(settings.get("frustration_terms"))
+            groups[group] = (
+                normalize_language_signal_terms(values, group)
+                if values is not None else list(defaults[group])
+            )
         except ValueError:
-            terms = list(DEFAULT_FRUSTRATION_TERMS)
+            groups[group] = list(defaults[group])
     return {
-        "terms": terms,
-        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        **groups,
+        "defaults": defaults,
         "max_terms": MAX_FRUSTRATION_TERMS,
+        "method": (
+            "case-insensitive whole-phrase match; quoted or discussed phrases can match; "
+            "not sentiment analysis"
+        ),
     }
 
 
-def set_frustration_terms(values, path=None):
-    """Persist the machine-wide frustration lexicon used by every session."""
+def set_language_signal_terms(values, path=None):
+    """Persist both machine-wide lexical signal groups atomically."""
     path = path or TOKEN_METER_SETTINGS
+    if not isinstance(values, dict):
+        return {"ok": False, "error": "Language signal terms must be an object."}
+    current = language_signal_settings(path)
     try:
-        terms = normalize_frustration_terms(values)
+        groups = {
+            group: normalize_language_signal_terms(
+                values.get(group, current[group]), group
+            )
+            for group in ("positive", "friction")
+        }
     except ValueError as error:
         return {"ok": False, "error": str(error)}
     settings = load_json(path, {})
     if not isinstance(settings, dict):
         settings = {}
-    settings["frustration_terms"] = terms
+    changed = (
+        settings.get("language_signal_terms") != groups
+        or "frustration_terms" in settings
+    )
+    settings["language_signal_terms"] = groups
+    settings.pop("frustration_terms", None)
     try:
         atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     except OSError as error:
         return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
     return {
         "ok": True,
-        "terms": terms,
-        "defaults": list(DEFAULT_FRUSTRATION_TERMS),
+        "changed": changed,
+        **groups,
+        "defaults": {
+            "positive": list(DEFAULT_POSITIVE_TERMS),
+            "friction": list(DEFAULT_FRUSTRATION_TERMS),
+        },
         "max_terms": MAX_FRUSTRATION_TERMS,
+    }
+
+
+def frustration_settings(path=None):
+    """Return the Friction group through the legacy settings contract."""
+    settings = language_signal_settings(path)
+    return {
+        "terms": list(settings["friction"]),
+        "defaults": list(settings["defaults"]["friction"]),
+        "max_terms": settings["max_terms"],
+    }
+
+
+def set_frustration_terms(values, path=None):
+    """Persist the Friction group through the legacy settings contract."""
+    result = set_language_signal_terms({"friction": values}, path)
+    if not result.get("ok"):
+        return result
+    return {
+        "ok": True,
+        "changed": result.get("changed", False),
+        "terms": list(result["friction"]),
+        "defaults": list(result["defaults"]["friction"]),
+        "max_terms": result["max_terms"],
     }
 
 
@@ -660,6 +754,489 @@ def set_model_price(provider, model, prices=None, remove=False, path=None):
     }
 
 
+def normalize_budget_settings(values):
+    """Validate one machine-wide monthly budget configuration."""
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise ValueError("Budget settings must be an object.")
+    currency = str(values.get("currency") or "USD").strip().upper()
+    if currency != "USD":
+        raise ValueError("Token Meter budgets currently support USD only.")
+
+    raw_allocations = values.get("allocations") or {}
+    if not isinstance(raw_allocations, dict):
+        raise ValueError("Runtime allocations must be an object.")
+    unknown = sorted(set(raw_allocations) - set(BUDGET_PROVIDERS))
+    if unknown:
+        raise ValueError("Runtime allocations support Claude, Codex, and Cursor only.")
+    allocations = {}
+    for provider in BUDGET_PROVIDERS:
+        value = raw_allocations.get(provider, DEFAULT_RUNTIME_BUDGET)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{provider.title()} allocation must be a number.")
+        value = float(value)
+        if not math.isfinite(value) or value < 0 or value > MAX_MONTHLY_BUDGET:
+            raise ValueError(
+                f"{provider.title()} allocation must be between 0 and "
+                f"{MAX_MONTHLY_BUDGET:,.0f}."
+            )
+        allocations[provider] = value
+    derived_total = sum(allocations.values())
+    if derived_total > MAX_MONTHLY_BUDGET:
+        raise ValueError(
+            f"Combined runtime budget must not exceed {MAX_MONTHLY_BUDGET:,.0f}."
+        )
+    total = derived_total
+
+    raw_thresholds = values.get("thresholds", DEFAULT_BUDGET_THRESHOLDS)
+    if not isinstance(raw_thresholds, list) and not isinstance(raw_thresholds, tuple):
+        raise ValueError("Budget thresholds must be a list.")
+    thresholds = []
+    for raw in raw_thresholds:
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise ValueError("Budget thresholds must be whole percentages.")
+        value = int(raw)
+        if value != raw or value < 1 or value > 100:
+            raise ValueError("Budget thresholds must be whole percentages from 1 to 100.")
+        thresholds.append(value)
+    if not thresholds or len(thresholds) > 10 or thresholds != sorted(set(thresholds)):
+        raise ValueError("Use 1 to 10 unique budget thresholds in increasing order.")
+
+    native_notifications = values.get("native_notifications", True)
+    if not isinstance(native_notifications, bool):
+        raise ValueError("Budget notifications must be on or off.")
+    return {
+        "currency": "USD",
+        "monthly_total": total,
+        "allocations": allocations,
+        "thresholds": thresholds,
+        "native_notifications": native_notifications,
+    }
+
+
+def budget_settings(path=None):
+    """Load the durable monthly budget with defaults for missing runtimes."""
+    path = path or TOKEN_METER_SETTINGS
+    settings = load_json(path, {})
+    raw = settings.get("budgets") if isinstance(settings, dict) else {}
+    try:
+        return normalize_budget_settings(raw)
+    except ValueError:
+        return normalize_budget_settings({})
+
+
+def set_budget_settings(values, path=None):
+    """Persist a validated machine-wide monthly budget atomically."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        normalized = normalize_budget_settings(values)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    changed = settings.get("budgets") != normalized
+    settings["budgets"] = normalized
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    return {"ok": True, "changed": changed, "budgets": normalized}
+
+
+def normalize_update_settings(values):
+    """Validate the machine-wide software-update preference."""
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise ValueError("Update settings must be an object.")
+    enabled = values.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError("Hourly update checks must be on or off.")
+    return {
+        "enabled": enabled,
+        "interval_seconds": UPDATE_CHECK_INTERVAL_S,
+    }
+
+
+def update_settings(path=None):
+    """Load the default-on hourly update-check preference."""
+    path = path or TOKEN_METER_SETTINGS
+    settings = load_json(path, {})
+    raw = settings.get("updates") if isinstance(settings, dict) else {}
+    try:
+        return normalize_update_settings(raw)
+    except ValueError:
+        return normalize_update_settings({})
+
+
+def set_update_settings(values, path=None):
+    """Persist the update-check preference without changing the checkout."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        normalized = normalize_update_settings(values)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    stored = {"enabled": normalized["enabled"]}
+    changed = settings.get("updates") != stored
+    settings["updates"] = stored
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    _update_wake.set()
+    return {"ok": True, "changed": changed, "updates": normalized}
+
+
+def _safe_update_revision(value):
+    value = str(value or "").strip().lower()
+    return value if re.fullmatch(r"[0-9a-f]{7,40}", value) else ""
+
+
+def _safe_update_int(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def source_checkout_path():
+    """Find the installer checkout without returning it through the HTTP API."""
+    runtime_root = os.path.dirname(os.path.realpath(__file__))
+    candidates = []
+    explicit = os.environ.get("TOKEN_METER_SOURCE_CHECKOUT")
+    if explicit:
+        candidates.append(explicit)
+    marker = os.path.join(runtime_root, "SOURCE_CHECKOUT")
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            candidates.append(fh.read(4096).strip())
+    except OSError:
+        pass
+    candidates.append(runtime_root)
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate = os.path.realpath(os.path.abspath(os.path.expanduser(candidate)))
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (os.path.exists(os.path.join(candidate, ".git"))
+                and os.path.isfile(os.path.join(candidate, "scripts", "install"))):
+            return candidate
+    return ""
+
+
+def _update_status_record(path=None):
+    path = path or TOKEN_METER_UPDATE_STATUS
+    raw = load_json(path, {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def _persist_update_status(values, path=None):
+    """Write only the bounded fields used across update checks and restarts."""
+    path = path or TOKEN_METER_UPDATE_STATUS
+    previous = _update_status_record(path)
+    allowed = {
+        "phase", "error_code", "current_revision", "latest_revision",
+        "previous_revision", "checked_at", "started_at", "installed_at",
+        "available", "can_update", "dirty", "ahead", "behind",
+    }
+    record = {
+        key: values[key]
+        for key in allowed
+        if key in values
+    }
+    for key in ("installed_at", "previous_revision"):
+        if key not in record and key in previous:
+            record[key] = previous[key]
+    try:
+        atomic_write_text(path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+def _update_message(state, error_code="", latest_revision=""):
+    if state == "disabled":
+        return "Hourly update checks are off."
+    if state == "checking":
+        return "Checking the configured Git upstream."
+    if state == "updating":
+        return "Pulling and reinstalling Token Meter."
+    if state == "updated":
+        return "Token Meter was updated successfully."
+    if state == "available":
+        return (
+            f"Version {latest_revision} is ready to install."
+            if latest_revision else "A new version is ready to install."
+        )
+    if state == "current":
+        return "This installation matches its configured upstream."
+    if state == "waiting":
+        return "Waiting for the first update check."
+    messages = {
+        "source_unavailable": "The installed source checkout is unavailable.",
+        "git_unavailable": "Git is unavailable, so Token Meter cannot check for updates.",
+        "upstream_unavailable": "The source checkout has no usable tracking upstream.",
+        "fetch_failed": "Token Meter could not fetch the configured Git upstream.",
+        "inspect_failed": "Token Meter could not compare the installed and upstream revisions.",
+        "dirty_checkout": "An update exists, but the source checkout has local changes.",
+        "diverged_checkout": "An update exists, but the source checkout has diverged.",
+        "launch_failed": "Token Meter could not start the updater.",
+        "install_failed": "The update did not install. The existing checkout needs attention.",
+    }
+    return messages.get(error_code, "Update status is unavailable.")
+
+
+def software_update_status(settings_path=None, status_path=None):
+    """Return a bounded, path-free update snapshot for the local dashboard."""
+    settings = update_settings(settings_path)
+    raw = _update_status_record(status_path)
+    enabled = settings["enabled"]
+    phase = str(raw.get("phase") or "")
+    error_code = str(raw.get("error_code") or "")
+    current_revision = _safe_update_revision(raw.get("current_revision"))
+    latest_revision = _safe_update_revision(raw.get("latest_revision"))
+    active_phases = {"starting", "fetching", "installing"}
+    if not enabled:
+        state = "disabled"
+    elif phase in active_phases:
+        state = "updating"
+    elif phase == "checking":
+        state = "checking"
+    elif phase == "complete":
+        state = "updated"
+    elif phase == "available" and raw.get("can_update") is True:
+        state = "available"
+    elif phase == "current":
+        state = "current"
+    elif phase in {"available", "error", "failed"}:
+        state = "attention"
+    else:
+        state = "waiting"
+    checked_at = _safe_update_int(raw.get("checked_at"))
+    return {
+        "enabled": enabled,
+        "interval_seconds": UPDATE_CHECK_INTERVAL_S,
+        "state": state,
+        "checking": state == "checking",
+        "updating": state == "updating",
+        "available": bool(enabled and raw.get("available")),
+        "can_update": bool(enabled and raw.get("can_update")),
+        "dirty": bool(raw.get("dirty")),
+        "ahead": _safe_update_int(raw.get("ahead")),
+        "behind": _safe_update_int(raw.get("behind")),
+        "current_revision": current_revision,
+        "latest_revision": latest_revision,
+        "checked_at": checked_at,
+        "next_check_at": checked_at + UPDATE_CHECK_INTERVAL_S if enabled and checked_at else 0,
+        "installed_at": _safe_update_int(raw.get("installed_at")),
+        "message": _update_message(state, error_code, latest_revision),
+        "actions": {"token": _ACTION_TOKEN, "check": True, "install": True},
+    }
+
+
+def _run_update_git(checkout, args, runner=None, timeout=None):
+    runner = runner or subprocess.run
+    result = runner(
+        ["git", "-C", checkout] + list(args),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout or UPDATE_FETCH_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("git command failed")
+    return (result.stdout or "").strip()
+
+
+def check_for_software_update(
+        checkout=None, runner=None, now=None, settings_path=None, status_path=None):
+    """Fetch and compare the tracking upstream without changing the worktree."""
+    now = int(now or time.time())
+    if not update_settings(settings_path)["enabled"]:
+        return software_update_status(settings_path, status_path)
+    if not _update_operation_lock.acquire(blocking=False):
+        return software_update_status(settings_path, status_path)
+    try:
+        previous = _update_status_record(status_path)
+        _persist_update_status({
+            "phase": "checking",
+            "checked_at": _safe_update_int(previous.get("checked_at")),
+            "current_revision": previous.get("current_revision", ""),
+            "latest_revision": previous.get("latest_revision", ""),
+        }, status_path)
+        checkout = checkout or source_checkout_path()
+        if not checkout:
+            _persist_update_status({
+                "phase": "error", "error_code": "source_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        if not shutil.which("git"):
+            _persist_update_status({
+                "phase": "error", "error_code": "git_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            upstream = _run_update_git(
+                checkout, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+                runner,
+            )
+            if not UPDATE_REF_RE.fullmatch(upstream) or "/" not in upstream:
+                raise ValueError("invalid upstream")
+            remote = upstream.split("/", 1)[0]
+        except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
+            _persist_update_status({
+                "phase": "error", "error_code": "upstream_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            _run_update_git(
+                checkout, ["fetch", "--quiet", "--prune", "--no-tags", remote],
+                runner, UPDATE_FETCH_TIMEOUT_S,
+            )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            _persist_update_status({
+                "phase": "error", "error_code": "fetch_failed", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            current_revision = _safe_update_revision(
+                _run_update_git(checkout, ["rev-parse", "HEAD"], runner)
+            )
+            latest_revision = _safe_update_revision(
+                _run_update_git(checkout, ["rev-parse", "@{upstream}"], runner)
+            )
+            counts = _run_update_git(
+                checkout, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+                runner,
+            ).split()
+            if len(counts) != 2:
+                raise ValueError("invalid revision counts")
+            ahead, behind = (int(counts[0]), int(counts[1]))
+            dirty = bool(_run_update_git(checkout, ["status", "--porcelain"], runner))
+            if min(ahead, behind) < 0 or not current_revision or not latest_revision:
+                raise ValueError("invalid revision state")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
+            _persist_update_status({
+                "phase": "error", "error_code": "inspect_failed", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        available = behind > 0
+        can_update = bool(available and ahead == 0 and not dirty)
+        error_code = (
+            "diverged_checkout" if available and ahead > 0
+            else ("dirty_checkout" if available and dirty else "")
+        )
+        _persist_update_status({
+            "phase": "available" if available else "current",
+            "error_code": error_code,
+            "current_revision": current_revision,
+            "latest_revision": latest_revision,
+            "checked_at": now,
+            "available": available,
+            "can_update": can_update,
+            "dirty": dirty,
+            "ahead": ahead,
+            "behind": behind,
+        }, status_path)
+        return software_update_status(settings_path, status_path)
+    finally:
+        _update_operation_lock.release()
+
+
+def trigger_software_update_check(settings_path=None, status_path=None):
+    """Start one non-blocking update check for a dashboard or settings action."""
+    if not update_settings(settings_path)["enabled"]:
+        return {"ok": False, "error": "Enable hourly update checks first."}
+    if str(_update_status_record(status_path).get("phase") or "") in {
+            "starting", "fetching", "installing"}:
+        return {"ok": False, "error": "A Token Meter update is already in progress."}
+    if _update_operation_lock.locked():
+        return {"ok": True, "status": software_update_status(settings_path, status_path)}
+    previous = _update_status_record(status_path)
+    _persist_update_status({
+        "phase": "checking",
+        "checked_at": _safe_update_int(previous.get("checked_at")),
+        "current_revision": previous.get("current_revision", ""),
+        "latest_revision": previous.get("latest_revision", ""),
+    }, status_path)
+    threading.Thread(
+        target=check_for_software_update,
+        kwargs={"settings_path": settings_path, "status_path": status_path},
+        daemon=True,
+    ).start()
+    return {"ok": True, "status": software_update_status(settings_path, status_path)}
+
+
+def start_software_update(popen=None, settings_path=None, status_path=None):
+    """Launch the detached fast-forward-and-reinstall helper."""
+    status = software_update_status(settings_path, status_path)
+    if not status["enabled"]:
+        return {"ok": False, "error": "Enable hourly update checks first."}
+    if not status["available"] or not status["can_update"]:
+        return {"ok": False, "error": "No safely installable update is available."}
+    checkout = source_checkout_path()
+    script = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scripts", "update")
+    if not checkout or not os.path.isfile(script) or not os.access(script, os.X_OK):
+        return {"ok": False, "error": "The installed updater is unavailable."}
+    started_at = int(time.time())
+    _persist_update_status({
+        "phase": "starting",
+        "started_at": started_at,
+        "checked_at": status["checked_at"],
+        "previous_revision": status["current_revision"],
+        "current_revision": status["current_revision"],
+        "latest_revision": status["latest_revision"],
+        "available": True,
+        "can_update": False,
+    }, status_path)
+    popen = popen or subprocess.Popen
+    try:
+        popen(
+            [script, checkout, status_path or TOKEN_METER_UPDATE_STATUS],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError:
+        _persist_update_status({
+            "phase": "failed", "error_code": "launch_failed",
+            "checked_at": status["checked_at"],
+            "current_revision": status["current_revision"],
+            "latest_revision": status["latest_revision"],
+        }, status_path)
+        return {"ok": False, "error": "Token Meter could not start the updater."}
+    return {"ok": True, "status": software_update_status(settings_path, status_path)}
+
+
+def software_update_watcher():
+    """Run an immediate enabled check, then wait one hour between fetches."""
+    while True:
+        _update_wake.clear()
+        settings = update_settings()
+        if not settings["enabled"]:
+            _update_wake.wait(60)
+            continue
+        phase = str(_update_status_record().get("phase") or "")
+        if phase in {"starting", "fetching", "installing"}:
+            _update_wake.wait(5)
+            continue
+        if phase in {"complete", "failed"}:
+            _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
+            continue
+        check_for_software_update()
+        _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
+
+
 def toml_named_sections(path, table):
     """Read simple enabled state from named TOML sections without a TOML dependency."""
     try:
@@ -687,6 +1264,15 @@ def safe_mtime(path):
         return os.path.getmtime(path)
     except OSError:
         return 0
+
+
+def file_signature(path):
+    """Return a cheap cache key that changes when a trace is replaced or appended."""
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
 
 
 def home_shorten(path):
@@ -828,6 +1414,13 @@ def decode_cursor_project(name):
 
 def claude_trace_cwd(path, max_lines=120):
     """Prefer Claude's recorded cwd over its lossy hyphen-encoded folder name."""
+    signature = file_signature(path)
+    cache_key = (path, max_lines)
+    with _source_metadata_lock:
+        cached = _claude_cwd_cache.get(cache_key)
+        if cached and cached["signature"] == signature:
+            return cached["cwd"]
+    cwd = ""
     try:
         with open(path, encoding="utf-8") as fh:
             for index, line in enumerate(fh):
@@ -839,12 +1432,15 @@ def claude_trace_cwd(path, max_lines=120):
                     row = json.loads(line)
                 except (TypeError, json.JSONDecodeError):
                     continue
-                cwd = row.get("cwd") if isinstance(row, dict) else None
-                if isinstance(cwd, str) and cwd.strip():
-                    return cwd.strip()
+                candidate = row.get("cwd") if isinstance(row, dict) else None
+                if isinstance(candidate, str) and candidate.strip():
+                    cwd = candidate.strip()
+                    break
     except OSError:
         pass
-    return ""
+    with _source_metadata_lock:
+        _claude_cwd_cache[cache_key] = {"signature": signature, "cwd": cwd}
+    return cwd
 
 
 def codex_id_from_path(path, meta=None):
@@ -907,6 +1503,11 @@ def catalog_counts(catalog):
 
 
 def codex_meta(path):
+    signature = file_signature(path)
+    with _source_metadata_lock:
+        cached = _codex_meta_cache.get(path)
+        if cached and cached["signature"] == signature:
+            return dict(cached["meta"])
     meta = {"session_id": None, "cwd": None, "model": None, "model_provider": None,
             "tools_loaded": 0, "tools_eager": 0, "tools_deferred": 0,
             "tool_catalog": [], "tool_namespaces": []}
@@ -939,6 +1540,8 @@ def codex_meta(path):
                     meta["model"] = payload.get("model") or meta["model"]
     except FileNotFoundError:
         pass
+    with _source_metadata_lock:
+        _codex_meta_cache[path] = {"signature": signature, "meta": dict(meta)}
     return meta
 
 
@@ -1367,7 +1970,37 @@ def all_session_sources():
 
     sources.extend(cursor_sources.values())
 
+    discovered_paths = {source.get("path") for source in sources if source.get("path")}
+    with _source_metadata_lock:
+        for stale_path in set(_codex_meta_cache) - discovered_paths:
+            _codex_meta_cache.pop(stale_path, None)
+        for stale_key in tuple(_claude_cwd_cache):
+            if stale_key[0] not in discovered_paths:
+                _claude_cwd_cache.pop(stale_key, None)
     return sources
+
+
+def publish_source_inventory(sources):
+    """Atomically publish a reusable discovery snapshot for lightweight endpoints."""
+    global _SOURCE_INVENTORY
+    source_rows = tuple(sources or ())
+    clients = defaultdict(int)
+    for source in source_rows:
+        clients[source.get("client") or source.get("provider") or "unknown"] += 1
+    _SOURCE_INVENTORY = {
+        "ready": True,
+        "sources": source_rows,
+        "count": len(source_rows),
+        "clients": dict(clients),
+        "updated_at": time.time(),
+    }
+    return _SOURCE_INVENTORY
+
+
+def cached_session_sources():
+    """Return the watcher-owned source snapshot without touching the filesystem."""
+    inventory = _SOURCE_INVENTORY
+    return list(inventory.get("sources") or ()), bool(inventory.get("ready"))
 
 
 def source_from_path(path):
@@ -2349,16 +2982,17 @@ def rollup_frustration_events(events):
     return result
 
 
-def analyze_frustration(provider, objs, terms=None, default_model=None):
-    terms = list(frustration_settings()["terms"] if terms is None else terms)
+def user_turns_for_provider(provider, objs, default_model=None):
     if provider == "codex":
-        turns = codex_user_turns(objs, default_model)
-    elif provider == "cursor":
-        turns = cursor_user_turns(objs, default_model)
-    else:
-        turns = claude_user_turns(objs, default_model)
+        return codex_user_turns(objs, default_model)
+    if provider == "cursor":
+        return cursor_user_turns(objs, default_model)
+    return claude_user_turns(objs, default_model)
+
+
+def language_signal_events(turns, terms, default_model=None):
     events = []
-    for turn in turns:
+    for turn in turns or []:
         ts = turn.get("ts") or 0
         day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
         term_counts = frustration_term_counts(turn.get("text"), terms)
@@ -2371,6 +3005,39 @@ def analyze_frustration(provider, objs, terms=None, default_model=None):
             "matches": sum(term_counts.values()),
             "term_counts": term_counts,
         })
+    return events
+
+
+def analyze_language_signal_turns(turns, terms=None, default_model=None):
+    configured = language_signal_settings() if terms is None else terms
+    rollups = {}
+    events = {}
+    for group in ("positive", "friction"):
+        group_terms = list(configured.get(group) or [])
+        group_events = language_signal_events(turns, group_terms, default_model)
+        events[group] = group_events
+        rollups[group] = rollup_frustration_events(group_events)
+    return rollups, events
+
+
+def analyze_language_signals(provider, objs, terms=None, default_model=None):
+    turns = user_turns_for_provider(provider, objs, default_model)
+    return analyze_language_signal_turns(turns, terms, default_model)
+
+
+def attach_language_signals(row, rollups, events):
+    row["language_signals"] = rollups
+    row["_language_signal_events"] = events
+    row["frustration"] = rollups.get("friction") or rollup_frustration_events([])
+    row["_frustration_events"] = events.get("friction") or []
+    return row
+
+
+def analyze_frustration(provider, objs, terms=None, default_model=None):
+    """Backward-compatible Friction-only lexical analysis."""
+    configured = list(frustration_settings()["terms"] if terms is None else terms)
+    turns = user_turns_for_provider(provider, objs, default_model)
+    events = language_signal_events(turns, configured, default_model)
     return rollup_frustration_events(events), events
 
 
@@ -4457,9 +5124,10 @@ def claude_summary(source, objs):
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
-    row["frustration"], row["_frustration_events"] = analyze_frustration(
+    signal_rollups, signal_events = analyze_language_signals(
         "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
     )
+    attach_language_signals(row, signal_rollups, signal_events)
     row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
     return row
 
@@ -4519,9 +5187,10 @@ def codex_summary(source, objs):
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
-    row["frustration"], row["_frustration_events"] = analyze_frustration(
+    signal_rollups, signal_events = analyze_language_signals(
         "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
     )
+    attach_language_signals(row, signal_rollups, signal_events)
     row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])
     return row
 
@@ -4676,20 +5345,16 @@ def cursor_summary(source, objs=None):
     row["token_estimate"] = bool(state.get("token_estimate"))
     row["provenance"] = usage_provenance([row])
     row["usage_basis"] = row["provenance"]["usage_basis"]
-    terms = frustration_settings()["terms"]
-    events = []
+    turns = []
     for execution in executions:
         ts = float(execution.get("ts") or 0)
-        day = time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else ""
-        term_counts = frustration_term_counts(execution.get("user_input") or "", terms)
-        events.append({
-            "ts": ts, "day": day, "week": week_start(day),
+        turns.append({
+            "ts": ts,
+            "text": execution.get("user_input") or "",
             "model": execution.get("model") or "unknown",
-            "utterance": bool(term_counts), "matches": sum(term_counts.values()),
-            "term_counts": term_counts,
         })
-    row["frustration"] = rollup_frustration_events(events)
-    row["_frustration_events"] = events
+    signal_rollups, signal_events = analyze_language_signal_turns(turns)
+    attach_language_signals(row, signal_rollups, signal_events)
     calls = []
     for execution in executions:
         for tool in execution.get("tools") or []:
@@ -5912,6 +6577,246 @@ def daily_summaries(session_rows, limit=30):
     return result
 
 
+def monthly_summaries(session_rows, limit=12):
+    """Aggregate spend into local calendar months with provider and coverage detail."""
+    months = {}
+
+    def month_row(month):
+        return months.setdefault(month, {
+            "month": month, "cost": 0.0, "days": {},
+            "session_ids": set(), "cost_covered_ids": set(), "estimated_ids": set(),
+            "estimated_cost": 0.0, "providers": {},
+        })
+
+    def provider_row(row, provider):
+        return row["providers"].setdefault(provider, {
+            "provider": provider, "cost": 0.0, "session_ids": set(),
+            "cost_covered_ids": set(), "estimated_ids": set(), "estimated_cost": 0.0,
+        })
+
+    def mark_activity(row, session, day):
+        provider = session.get("provider") or "unknown"
+        session_id = session.get("id") or session.get("path") or "unknown"
+        runtime = provider_row(row, provider)
+        row["session_ids"].add(session_id)
+        runtime["session_ids"].add(session_id)
+        if metric_available(session, "cost"):
+            row["cost_covered_ids"].add(session_id)
+            runtime["cost_covered_ids"].add(session_id)
+        if session.get("token_estimate"):
+            row["estimated_ids"].add(session_id)
+            runtime["estimated_ids"].add(session_id)
+        row["days"].setdefault(day, {
+            "day": day, "cost": 0.0, "providers": defaultdict(float),
+        })
+        return runtime
+
+    for session in session_rows or []:
+        provider = session.get("provider") or "unknown"
+        estimated = bool(session.get("token_estimate"))
+        activity_days = {
+            str(item.get("day") or "")
+            for item in (session.get("_model_daily") or [])
+            if item.get("day")
+        }
+        activity_days.update(
+            str(item.get("day") or "")
+            for item in (session.get("_wait_samples") or [])
+            if item.get("day")
+        )
+        activity_days.update(
+            str(day) for day in (session.get("_day_cost") or {}) if day
+        )
+        for day in activity_days:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                continue
+            mark_activity(month_row(day[:7]), session, day)
+        for day, raw_cost in (session.get("_day_cost") or {}).items():
+            day = str(day or "")
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                continue
+            cost = float(raw_cost or 0)
+            row = month_row(day[:7])
+            runtime = mark_activity(row, session, day)
+            row["cost"] += cost
+            runtime["cost"] += cost
+            row["days"][day]["cost"] += cost
+            row["days"][day]["providers"][provider] += cost
+            if estimated:
+                row["estimated_cost"] += cost
+                runtime["estimated_cost"] += cost
+
+    keys = sorted(months, reverse=True)
+    if limit is not None and limit > 0:
+        keys = keys[:limit]
+    result = []
+    for month in keys:
+        row = months[month]
+        session_ids = row.pop("session_ids")
+        cost_ids = row.pop("cost_covered_ids")
+        estimated_ids = row.pop("estimated_ids")
+        providers = []
+        for runtime in row["providers"].values():
+            runtime_ids = runtime.pop("session_ids")
+            runtime_cost_ids = runtime.pop("cost_covered_ids")
+            runtime_estimated_ids = runtime.pop("estimated_ids")
+            runtime["coverage"] = {
+                "cost": {
+                    "covered_sessions": len(runtime_cost_ids),
+                    "total_sessions": len(runtime_ids),
+                    "complete": len(runtime_cost_ids) == len(runtime_ids),
+                }
+            }
+            runtime["provenance"] = make_usage_provenance(
+                runtime_ids, runtime_estimated_ids, runtime_cost_ids,
+                runtime.pop("estimated_cost"), 0,
+            )
+            runtime["usage_basis"] = runtime["provenance"]["usage_basis"]
+            providers.append(runtime)
+        providers.sort(key=lambda item: (-item["cost"], item["provider"]))
+        coverage = {
+            "cost": {
+                "covered_sessions": len(cost_ids),
+                "total_sessions": len(session_ids),
+                "complete": len(cost_ids) == len(session_ids),
+            }
+        }
+        provenance = make_usage_provenance(
+            session_ids, estimated_ids, cost_ids, row.pop("estimated_cost"), 0,
+        )
+        days = []
+        for day in sorted(row["days"]):
+            item = row["days"][day]
+            item["providers"] = [
+                {"provider": provider, "cost": cost}
+                for provider, cost in sorted(
+                    item["providers"].items(), key=lambda pair: (-pair[1], pair[0])
+                )
+            ]
+            days.append(item)
+        result.append({
+            "month": month,
+            "cost": row["cost"],
+            "sessions": len(session_ids),
+            "active_days": sum(1 for item in days if item["cost"] > 0),
+            "observed_days": len(days),
+            "days": days,
+            "providers": providers,
+            "coverage": coverage,
+            "provenance": provenance,
+            "usage_basis": provenance["usage_basis"],
+            "availability": {"cost": bool(cost_ids)},
+        })
+    return result
+
+
+def monthly_budget_status(months, settings=None, now=None):
+    """Combine the current calendar-month rollup with configured budget targets."""
+    settings = normalize_budget_settings(settings or {})
+    now = now or datetime.datetime.now().astimezone()
+    month_key = now.strftime("%Y-%m")
+    current = next(
+        (row for row in (months or []) if row.get("month") == month_key),
+        {
+            "month": month_key, "cost": 0.0, "sessions": 0, "active_days": 0,
+            "observed_days": 0, "days": [], "providers": [],
+            "coverage": {"cost": {
+                "covered_sessions": 0, "total_sessions": 0, "complete": True,
+            }},
+            "provenance": make_usage_provenance((), (), ()),
+            "usage_basis": "unavailable", "availability": {"cost": False},
+        },
+    )
+    total = float(settings["monthly_total"])
+    spend = float(current.get("cost") or 0)
+    percent = spend / total if total else 0.0
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    elapsed_days = max(1, min(days_in_month, now.day))
+    active_days = int(current.get("active_days") or 0)
+    projected = (
+        spend / elapsed_days * days_in_month
+        if total and active_days >= 3 else None
+    )
+    provider_spend = {
+        row.get("provider"): float(row.get("cost") or 0)
+        for row in (current.get("providers") or [])
+    }
+    allocations = settings["allocations"]
+    runtimes = []
+    for provider in BUDGET_PROVIDERS:
+        allocation = float(allocations.get(provider) or 0)
+        runtime_spend = provider_spend.get(provider, 0.0)
+        exceeded = bool(allocation and runtime_spend >= allocation)
+        runtimes.append({
+            "provider": provider,
+            "label": provider.title(),
+            "spend": runtime_spend,
+            "allocation": allocation,
+            "percent": runtime_spend / allocation if allocation else None,
+            "remaining": max(0.0, allocation - runtime_spend) if allocation else None,
+            "exceeded": exceeded,
+            "over_by": max(0.0, runtime_spend - allocation) if allocation else 0.0,
+        })
+    exceeded_runtimes = [
+        {
+            "provider": row["provider"],
+            "label": row["label"],
+            "spend": row["spend"],
+            "allocation": row["allocation"],
+            "percent": row["percent"],
+            "over_by": row["over_by"],
+        }
+        for row in runtimes
+        if row["exceeded"]
+    ]
+    cost_coverage = (current.get("coverage") or {}).get("cost") or {}
+    partial = bool(
+        cost_coverage.get("total_sessions")
+        and not cost_coverage.get("complete")
+    )
+    estimated = bool((current.get("provenance") or {}).get("estimated_sessions"))
+    crossed = [value for value in settings["thresholds"] if percent >= value / 100]
+    if not total:
+        state = "unconfigured"
+    elif percent >= 1:
+        state = "over"
+    elif crossed:
+        state = "warning"
+    else:
+        state = "on_track"
+    return {
+        "month": month_key,
+        "configured": total > 0,
+        "currency": settings["currency"],
+        "budget": total,
+        "spend": spend,
+        "percent": percent,
+        "remaining": max(0.0, total - spend) if total else None,
+        "unallocated": max(0.0, total - sum(allocations.values())) if total else 0.0,
+        "active_days": active_days,
+        "elapsed_days": elapsed_days,
+        "days_in_month": days_in_month,
+        "days_remaining": max(0, days_in_month - elapsed_days),
+        "projected_spend": projected,
+        "projection_ready": projected is not None,
+        "projection_min_active_days": 3,
+        "partial": partial,
+        "estimated": estimated,
+        "lower_bound": partial,
+        "state": state,
+        "runtime_exceeded": bool(exceeded_runtimes),
+        "exceeded_runtimes": exceeded_runtimes,
+        "attention": state == "over" or bool(exceeded_runtimes),
+        "thresholds_crossed": crossed,
+        "next_threshold": next(
+            (value for value in settings["thresholds"] if percent < value / 100),
+            None,
+        ),
+        "runtimes": runtimes,
+        "settings": settings,
+    }
+
+
 MATCHED_PACE_MIN_PAIRS = 20
 MATCHED_PACE_MIN_COVERAGE = 0.30
 
@@ -6114,6 +7019,7 @@ def _finalize_throughput_fields(row):
 
 def aggregate_model_stats(session_rows):
     """Aggregate model I/O by runtime and build workload-matched pace comparisons."""
+    session_rows = list(session_rows or [])
     models = {}
     pace_groups = defaultdict(list)
 
@@ -6167,7 +7073,7 @@ def aggregate_model_stats(session_rows):
         if session.get("token_estimate"):
             target["_estimated_ids"].add(session_id)
 
-    for session in session_rows or []:
+    for session in session_rows:
         provider = session.get("provider") or "unknown"
         runtime = session.get("runtime") or source_runtime_label(session)
         session_id = session.get("id") or session.get("path") or f"session-{id(session)}"
@@ -6338,47 +7244,88 @@ def aggregate_model_stats(session_rows):
                                  -row["executions"], -row["wait_samples"],
                                  row["model"], row["runtime"]))
     valid_ids = {row["id"] for row in result}
+    projects = sorted({
+        str(session.get("project") or "No project")
+        for session in session_rows
+    }, key=str.casefold)
     return {
         "models": result,
         "total_models": len(result),
         "total_model_names": len({row["model"] for row in result}),
         "first_day": min((day["day"] for row in result for day in row["daily"]), default=""),
         "last_day": max((day["day"] for row in result for day in row["daily"]), default=""),
+        "projects": projects[:MODEL_PROJECT_OPTION_LIMIT],
+        "projects_truncated": len(projects) > MODEL_PROJECT_OPTION_LIMIT,
         "matched_pace": matched_pace_windows({
             row_id: samples for row_id, samples in pace_groups.items() if row_id in valid_ids
         }),
     }
 
 
-def aggregate_frustration(session_rows, terms=None):
-    """Aggregate lexical frustration evidence without retaining message content."""
-    settings = frustration_settings()
-    configured_terms = list(settings["terms"] if terms is None else terms)
-    events = []
-    for session in session_rows or []:
-        runtime = session.get("runtime") or source_runtime_label(session)
-        for source_event in session.get("_frustration_events") or []:
-            event = dict(source_event)
-            model = event.get("model") or "unknown"
-            event["runtime"] = runtime
-            event["model_id"] = f"{model}::{runtime}"
-            events.append(event)
-    result = rollup_frustration_events(events)
-    result.update({
-        "configured_terms": configured_terms,
-        "default_terms": list(settings["defaults"]),
+def aggregate_language_signals(session_rows, terms=None):
+    """Aggregate Positive and Friction lexical evidence without retaining messages."""
+    settings = language_signal_settings()
+    configured = {
+        group: list((terms or {}).get(group, settings[group]))
+        for group in ("positive", "friction")
+    }
+    results = {}
+    for group in ("positive", "friction"):
+        events = []
+        for session in session_rows or []:
+            runtime = session.get("runtime") or source_runtime_label(session)
+            stored = session.get("_language_signal_events") or {}
+            source_events = stored.get(group) if isinstance(stored, dict) else None
+            if source_events is None and group == "friction":
+                source_events = session.get("_frustration_events") or []
+            for source_event in source_events or []:
+                event = dict(source_event)
+                model = event.get("model") or "unknown"
+                event["runtime"] = runtime
+                event["model_id"] = f"{model}::{runtime}"
+                events.append(event)
+        result = rollup_frustration_events(events)
+
+        def session_rollup(session):
+            stored = session.get("language_signals") or {}
+            if isinstance(stored, dict) and group in stored:
+                return stored.get(group) or {}
+            return (session.get("frustration") or {}) if group == "friction" else {}
+
+        result.update({
+            "group": group,
+            "configured_terms": configured[group],
+            "default_terms": list(settings["defaults"][group]),
+            "max_terms": settings["max_terms"],
+            "matched_sessions": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("utterances") or 0) > 0
+            ),
+            "affected_sessions": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("utterances") or 0) > 0
+            ),
+            "sessions_with_user_turns": sum(
+                1 for session in (session_rows or [])
+                if (session_rollup(session).get("user_turns") or 0) > 0
+            ),
+            "method": settings["method"],
+        })
+        results[group] = result
+    return {
+        "positive": results["positive"],
+        "friction": results["friction"],
+        "configured_terms": configured,
+        "default_terms": settings["defaults"],
         "max_terms": settings["max_terms"],
-        "affected_sessions": sum(
-            1 for session in (session_rows or [])
-            if ((session.get("frustration") or {}).get("utterances") or 0) > 0
-        ),
-        "sessions_with_user_turns": sum(
-            1 for session in (session_rows or [])
-            if ((session.get("frustration") or {}).get("user_turns") or 0) > 0
-        ),
-        "method": "case-insensitive whole-term match; one matched user turn equals one utterance",
-    })
-    return result
+        "method": settings["method"],
+    }
+
+
+def aggregate_frustration(session_rows, terms=None):
+    """Backward-compatible aggregate for the Friction language-signal group."""
+    configured = None if terms is None else {"friction": terms}
+    return aggregate_language_signals(session_rows, configured)["friction"]
 
 
 def metric_coverage(rows, metric):
@@ -6391,7 +7338,7 @@ def metric_coverage(rows, metric):
     }
 
 
-def cross_session():
+def cross_session(sources=None):
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
         return _xsess["data"]
@@ -6404,7 +7351,8 @@ def cross_session():
     provider_cost, provider_sessions = defaultdict(float), defaultdict(int)
     provider_rows = defaultdict(list)
 
-    for source in all_session_sources():
+    source_rows = list(sources) if sources is not None else all_session_sources()
+    for source in source_rows:
         row = session_summary(source)
         if row["turns"] == 0:
             continue
@@ -6457,6 +7405,9 @@ def cross_session():
         mm.append(item)
     mm.sort(key=lambda item: (-item["cost"], -item["tokens"], item["id"]))
     daily = daily_summaries(internal_rows)
+    monthly = monthly_summaries(internal_rows)
+    budgets = budget_settings()
+    budget = monthly_budget_status(monthly, budgets)
     daily_by_day = {row["day"]: row for row in daily}
     days = sorted(day_cost)
     trend = []
@@ -6478,7 +7429,8 @@ def cross_session():
         item["anomaly_basis"] = "reported_only"
 
     total = sum(item["cost"] for item in mm)
-    premium = (model_name_cost.get("claude-opus-4-8", 0)
+    premium = (model_name_cost.get("claude-opus-5", 0)
+               + model_name_cost.get("claude-opus-4-8", 0)
                + model_name_cost.get("claude-fable-5", 0)
                + model_name_cost.get("gpt-5.5", 0))
     tool_waste = global_tool_waste(internal_rows)
@@ -6535,25 +7487,70 @@ def cross_session():
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
         "model_stats": aggregate_model_stats(internal_rows),
+        "language_signals": aggregate_language_signals(internal_rows),
         "frustration": aggregate_frustration(internal_rows),
         "model_pricing": model_pricing_settings(),
+        "budgets": budgets,
+        "budget": budget,
         "tool_waste": tool_waste,
         "daily": daily,
+        "monthly": monthly,
         "capabilities": capability_inventory(tool_waste),
         "session_actions": session_action_capability(),
     }
+    _xsess["internal_rows"] = tuple(internal_rows)
+    _xsess["project_model_stats"] = {}
     _xsess["data"], _xsess["at"] = data, now
     return data
 
 
+def project_model_stats(project):
+    """Return aggregate-only model evidence for one exact discovered project."""
+    project = str(project or "")
+    if not project or len(project) > 1024:
+        return {"ok": False, "error": "A valid project is required."}, 400
+    cross = cross_session()
+    cache = _xsess.setdefault("project_model_stats", {})
+    cached = cache.get(project)
+    if cached is not None:
+        return {
+            "ok": True,
+            "generated_at": cross.get("generated_at"),
+            "model_stats": cached,
+        }, 200
+    matching = [
+        row for row in (_xsess.get("internal_rows") or ())
+        if str(row.get("project") or "No project") == project
+    ]
+    if not matching:
+        return {"ok": False, "error": "Project was not found."}, 404
+    stats = aggregate_model_stats(matching)
+    stats.pop("projects", None)
+    stats.pop("projects_truncated", None)
+    cache[project] = stats
+    return {
+        "ok": True,
+        "generated_at": cross.get("generated_at"),
+        "model_stats": stats,
+    }, 200
+
+
 def log_sessions_state():
     """Return the complete lightweight log inventory outside the polled state payload."""
-    cross = cross_session()
+    cross = _xsess.get("data")
+    if not cross:
+        return {
+            "generated_at": None,
+            "sessions": [],
+            "total_sessions": None,
+            "loading": True,
+        }
     sessions = list(_xsess.get("sessions") or cross.get("sessions") or [])
     return {
         "generated_at": cross.get("generated_at"),
         "sessions": sessions,
         "total_sessions": int(cross.get("total_sessions") or len(sessions)),
+        "loading": False,
     }
 
 
@@ -6637,13 +7634,16 @@ def publish_after_session_delete():
 def current_state():
     if STATE:
         return STATE
-    source = newest_source()
-    st = recompute(source) if source else None
-    if st:
-        return attach_cross_session(st)
+    inventory = _SOURCE_INVENTORY
+    count = inventory.get("count")
+    if inventory.get("ready") and count is not None:
+        message = f"Token Meter is indexing {count:,} local session{'s' if count != 1 else ''}."
+    else:
+        message = "Token Meter is discovering local session history."
     return {
         "ok": False,
-        "message": "No Claude, Codex, or Cursor logs found yet.",
+        "loading": True,
+        "message": message,
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -8050,13 +9050,16 @@ def menubar_recent_sessions(sources, selected_id=None, limit=5):
 
 def menubar_state(session_id=None):
     requested_id = str(session_id or "").strip()
-    sources = all_session_sources()
-    selected_source = find_session(requested_id, sources=sources) if requested_id else None
-    missing = bool(requested_id and not selected_source)
+    sources, inventory_ready = cached_session_sources()
+    selected_source = (
+        find_session(requested_id, sources=sources)
+        if requested_id and inventory_ready else None
+    )
+    missing = bool(requested_id and inventory_ready and not selected_source)
     # The watcher owns the first full recompute. Calling current_state() here
     # before it publishes would make every two-second native poll independently
     # rebuild all cross-session history and starve the cold-start worker.
-    st = recompute(selected_source) if selected_source else (STATE or {
+    st = recompute(selected_source) if selected_source and STATE else (STATE or {
         "ok": False,
         "message": "Token Meter is loading local session history.",
         "source": {},
@@ -8066,7 +9069,7 @@ def menubar_state(session_id=None):
         "executions": [],
         "insights": [],
     })
-    if selected_source and not st:
+    if selected_source and STATE and not st:
         missing = True
         selected_source = None
         st = current_state()
@@ -8079,8 +9082,11 @@ def menubar_state(session_id=None):
     verdict = menubar_verdict(st, recommendation)
     availability = st.get("availability") or metric_availability(st.get("provider"))
     selected_id = source.get("id")
+    effective_selected_id = requested_id if selected_source else selected_id
     model = next((row.get("model") for row in reversed(st.get("executions") or [])
                   if row.get("model")), None) or source.get("model") or "unknown"
+    cross = _xsess.get("data") or (STATE or {}).get("xsession") or {}
+    budget = cross.get("budget") or monthly_budget_status([], budget_settings())
     return {
         "ok": bool(st.get("source")),
         "provider": st.get("provider"),
@@ -8135,14 +9141,15 @@ def menubar_state(session_id=None):
         "insights": (st.get("insights") or [])[:4],
         "selection": {
             "requested_id": requested_id or None,
-            "selected_id": selected_id,
+            "selected_id": effective_selected_id,
             "pinned": bool(requested_id and selected_source),
             "missing": missing,
         },
         "recent_sessions": menubar_recent_sessions(
-            sources, selected_id=requested_id if selected_source else selected_id, limit=5
+            sources, selected_id=effective_selected_id, limit=5
         ),
         "provider_quotas": provider_quota_snapshots(),
+        "budget": budget,
         "ts": st.get("ts"),
     }
 
@@ -8154,6 +9161,7 @@ def watcher():
     last_cross_refresh = 0.0
     while True:
         sources = all_session_sources()
+        publish_source_inventory(sources)
         nf = max(sources, key=lambda source: source["mtime"]) if sources else None
         sources_sig = source_mtime_signature(sources)
         if sources_sig != last_sources_sig:
@@ -8175,13 +9183,32 @@ def watcher():
                 updated_state = recompute(cur)
                 if updated_state:
                     cache_at = _xsess.get("at") or 0.0
-                    publish(attach_cross_session(updated_state))
+                    publish(attach_cross_session(
+                        updated_state,
+                        cross_session(sources=sources),
+                    ))
                     if (_xsess.get("at") or 0.0) > cache_at:
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
         now = time.monotonic()
         if cross_dirty and now - last_cross_refresh >= _XSESS_LIVE_REFRESH_S:
-            refresh_cross_session_state(updated_state or STATE)
+            cross = refresh_cross_session_state(
+                updated_state or STATE,
+                builder=lambda: cross_session(sources=sources),
+            )
+            if not STATE:
+                publish({
+                    "ok": False,
+                    "loading": False,
+                    "message": "No readable Claude, Codex, or Cursor logs found yet.",
+                    "source": {},
+                    "total_cost": 0,
+                    "total_tokens": 0,
+                    "turns": 0,
+                    "context": {},
+                    "insights": [],
+                    "xsession": cross,
+                })
             cross_dirty = False
             last_cross_refresh = now
         time.sleep(0.5)
@@ -8244,6 +9271,25 @@ def missing_page_html():
 </html>"""
 
 
+def health_state():
+    """Return constant-time liveness/readiness from watcher-owned cached state."""
+    path = page_path()
+    inventory = _SOURCE_INVENTORY
+    inventory_ready = bool(inventory.get("ready"))
+    payload = {
+        "ok": bool(path),
+        "state_ready": bool(STATE),
+        "inventory_ready": inventory_ready,
+        "sources": inventory.get("count") if inventory_ready else None,
+        "source_clients": dict(inventory.get("clients") or {}) if inventory_ready else {},
+        "port": PORT,
+        "page_ready": bool(path),
+        "page_path": path,
+        "page_candidates": PAGE_CANDIDATES,
+    }
+    return payload, 200 if path else 503
+
+
 class H(BaseHTTPRequestHandler):
     def handle(self):
         try:
@@ -8282,7 +9328,9 @@ class H(BaseHTTPRequestHandler):
         req_path = urlparse(self.path).path
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete",
-                            "/settings/frustration", "/settings/model-pricing"):
+                            "/settings/frustration", "/settings/language-signals",
+                            "/settings/model-pricing", "/settings/budgets",
+                            "/settings/updates", "/updates/check", "/updates/install"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -8304,7 +9352,7 @@ class H(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = 0
-        if length <= 0 or length > 4096:
+        if length <= 0 or length > 8192:
             self._send(json.dumps({"ok": False, "error": "Invalid request size."}),
                        "application/json", status=400)
             return
@@ -8314,12 +9362,23 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps({"ok": False, "error": "Invalid JSON."}),
                        "application/json", status=400)
             return
+        if req_path == "/settings/language-signals":
+            result = set_language_signal_terms(payload.get("terms") or payload)
+            if result.get("ok"):
+                _summary_cache.clear()
+                cross = refresh_cross_session_state()
+                result["language_signals"] = cross.get("language_signals") or {}
+                result["frustration"] = cross.get("frustration") or {}
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
         if req_path == "/settings/frustration":
             result = set_frustration_terms(payload.get("terms"))
             if result.get("ok"):
                 _summary_cache.clear()
                 cross = refresh_cross_session_state()
                 result["frustration"] = cross.get("frustration") or {}
+                result["language_signals"] = cross.get("language_signals") or {}
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return
@@ -8340,6 +9399,36 @@ class H(BaseHTTPRequestHandler):
                 result["model_pricing"] = cross.get("model_pricing") or result["model_pricing"]
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/settings/budgets":
+            result = set_budget_settings(payload)
+            if result.get("ok"):
+                cross = refresh_cross_session_state()
+                result["budgets"] = cross.get("budgets") or result["budgets"]
+                result["budget"] = cross.get("budget") or {}
+                result["monthly"] = cross.get("monthly") or []
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/settings/updates":
+            result = set_update_settings(payload)
+            if result.get("ok") and result["updates"]["enabled"]:
+                check = trigger_software_update_check()
+                result["status"] = check.get("status") or software_update_status()
+            elif result.get("ok"):
+                result["status"] = software_update_status()
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/updates/check":
+            result = trigger_software_update_check()
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/updates/install":
+            result = start_software_update()
+            self._send(json.dumps(result), "application/json",
+                       status=202 if result.get("ok") else 409)
             return
         if req_path == "/agent-access/toggle":
             result = set_agent_access(payload.get("client"), payload.get("enabled"))
@@ -8399,27 +9488,20 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(current_state()), "application/json")
         elif req_path == "/logs":
             self._send(json.dumps(log_sessions_state()), "application/json")
+        elif req_path == "/model-stats":
+            project = (parse_qs(parsed.query).get("project") or [""])[0]
+            payload, status = project_model_stats(project)
+            self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/agent-access/status":
             self._send(json.dumps(agent_access_status()), "application/json")
         elif req_path == "/menubar":
             sid = (parse_qs(parsed.query).get("session") or [""])[0][:240]
             self._send(json.dumps(menubar_state(sid)), "application/json")
         elif req_path == "/health":
-            path = page_path()
-            sources = all_session_sources()
-            clients = defaultdict(int)
-            for source in sources:
-                clients[source.get("client") or source.get("provider") or "unknown"] += 1
-            self._send(json.dumps({
-                "ok": bool(path),
-                "state_ready": bool(STATE),
-                "sources": len(sources),
-                "source_clients": dict(clients),
-                "port": PORT,
-                "page_ready": bool(path),
-                "page_path": path,
-                "page_candidates": PAGE_CANDIDATES,
-            }), "application/json", status=200 if path else 503)
+            payload, status = health_state()
+            self._send(json.dumps(payload), "application/json", status=status)
+        elif req_path == "/updates/status":
+            self._send(json.dumps(software_update_status()), "application/json")
         elif req_path == "/events":
             # Older dashboard builds used EventSource and can keep reconnecting
             # even after Chromium replaces the visible tab with an error page.
@@ -8442,6 +9524,7 @@ class TokenMeterHTTPServer(ThreadingHTTPServer):
 
 if __name__ == "__main__":
     threading.Thread(target=watcher, daemon=True).start()
+    threading.Thread(target=software_update_watcher, daemon=True).start()
     srv = TokenMeterHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
     print("Auto-following newest ~/.claude, ~/.codex, and ~/.cursor log. Ctrl-C to stop.")

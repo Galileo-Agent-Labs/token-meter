@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MODE="${1:-all}"
 SERVER_LABEL="com.token-meter.server"
 MENUBAR_LABEL="com.token-meter.menubar"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
@@ -10,6 +11,14 @@ MENUBAR_PLIST="$LAUNCH_AGENTS_DIR/$MENUBAR_LABEL.plist"
 PYTHON_BIN="$(command -v python3 || true)"
 SERVER_PROGRAM="$ROOT/meter.py"
 MENUBAR_PROGRAM="$ROOT/scripts/run-menubar"
+
+case "$MODE" in
+  all|server-only|menubar-only) ;;
+  *)
+    echo "Usage: $0 [all|server-only|menubar-only]" >&2
+    exit 2
+    ;;
+esac
 
 if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" ]]; then
   echo "Missing executable: python3" >&2
@@ -31,8 +40,6 @@ if ! mkdir -p "$LAUNCH_AGENTS_DIR"; then
   echo "exact user directory, then retry." >&2
   exit 1
 fi
-launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
-launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
 
 if ! cat > "$SERVER_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -103,26 +110,74 @@ then
   exit 1
 fi
 
-if ! bootstrap_output="$(launchctl bootstrap "gui/$UID" "$SERVER_PLIST" 2>&1)"; then
+bootstrap_service() {
+  local label="$1" plist="$2" bootstrap_output="" attempt
+  for ((attempt = 1; attempt <= 10; attempt++)); do
+    if bootstrap_output="$(launchctl bootstrap "gui/$UID" "$plist" 2>&1)"; then
+      # A bootout immediately followed by bootstrap can briefly report success
+      # before the prior removal finishes. Verify the replacement survives that
+      # handoff; otherwise retry the bootstrap instead of leaving the installer
+      # waiting on a job that has disappeared.
+      sleep 0.5
+      if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
+      sleep 0.5
+      if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    sleep 0.2
+  done
   echo "$bootstrap_output" >&2
-  echo "Token Meter could not register its local server." >&2
-  echo "If a coding agent is running this installer, approve its request to access" >&2
-  echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
-  exit 1
-fi
-if ! bootstrap_output="$(launchctl bootstrap "gui/$UID" "$MENUBAR_PLIST" 2>&1)"; then
-  echo "$bootstrap_output" >&2
-  launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
-  echo "Token Meter could not register its menu bar companion." >&2
-  echo "If a coding agent is running this installer, approve its request to access" >&2
-  echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
-  exit 1
-fi
-launchctl kickstart -k "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
-launchctl kickstart -k "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+  return 1
+}
 
-echo "Installed $SERVER_LABEL"
-echo "LaunchAgent: $SERVER_PLIST"
-echo "Installed $MENUBAR_LABEL"
-echo "LaunchAgent: $MENUBAR_PLIST"
+start_server() {
+  if ! bootstrap_service "$SERVER_LABEL" "$SERVER_PLIST"; then
+    echo "Token Meter could not register its local server." >&2
+    echo "If a coding agent is running this installer, approve its request to access" >&2
+    echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
+    return 1
+  fi
+  launchctl kickstart "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+  echo "Installed $SERVER_LABEL"
+  echo "LaunchAgent: $SERVER_PLIST"
+}
+
+start_menubar() {
+  if ! bootstrap_service "$MENUBAR_LABEL" "$MENUBAR_PLIST"; then
+    echo "Token Meter could not register its menu bar companion." >&2
+    echo "If a coding agent is running this installer, approve its request to access" >&2
+    echo "$HOME/Library/LaunchAgents and control this user LaunchAgent, then retry." >&2
+    return 1
+  fi
+  launchctl kickstart "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+  echo "Installed $MENUBAR_LABEL"
+  echo "LaunchAgent: $MENUBAR_PLIST"
+}
+
+case "$MODE" in
+  server-only)
+    launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+    launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+    start_server
+    ;;
+  menubar-only)
+    launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+    start_menubar
+    ;;
+  all)
+    launchctl bootout "gui/$UID/$MENUBAR_LABEL" >/dev/null 2>&1 || true
+    launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+    start_server
+    if ! start_menubar; then
+      launchctl bootout "gui/$UID/$SERVER_LABEL" >/dev/null 2>&1 || true
+      exit 1
+    fi
+    ;;
+esac
+
 echo "Uninstall: $ROOT/scripts/uninstall-launch-agent"

@@ -12,11 +12,14 @@ else
   exit 1
 fi
 INSTALL_ROOT="${TOKEN_METER_INSTALL_ROOT:-$DEFAULT_INSTALL_ROOT}"
+INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
+MANAGED_SOURCE_ROOT="${TOKEN_METER_SOURCE_ROOT:-$INSTALL_PARENT/source}"
 SERVER_LABEL="com.token-meter.server"
 MENUBAR_LABEL="com.token-meter.menubar"
 HEALTH_URL="http://127.0.0.1:8722/health"
 MENUBAR_URL="http://127.0.0.1:8722/menubar"
 DASHBOARD_URL="http://127.0.0.1:8722"
+READINESS_TIMEOUT_SECONDS="${TOKEN_METER_READINESS_TIMEOUT_SECONDS:-600}"
 
 fail() {
   echo "Token Meter installation failed: $*" >&2
@@ -42,9 +45,11 @@ required_paths=(
   meter.py page.html token_meter_mcp.py menubar/TokenMeterMenuBar.swift
   scripts/install-launch-agent scripts/run-menubar scripts/start-token-meter
 )
+
 if [[ "$PLATFORM" == "Linux" ]]; then
   required_paths+=(menubar/token_meter_tray.py scripts/install-systemd-user scripts/uninstall-systemd-user)
 fi
+
 for relative_path in "${required_paths[@]}"; do
   [[ -e "$SOURCE_ROOT/$relative_path" ]] \
     || fail "the repository checkout is incomplete: $SOURCE_ROOT/$relative_path is missing."
@@ -56,6 +61,58 @@ fi
 if [[ "$PLATFORM" == "Linux" ]] && ! systemctl --user show-environment >/dev/null 2>&1; then
   fail "the systemd user manager is unavailable. Log into a systemd-based KDE or GNOME desktop session, then retry."
 fi
+if [[ ! "$READINESS_TIMEOUT_SECONDS" =~ ^[0-9]+$ || "$READINESS_TIMEOUT_SECONDS" -lt 1 ]]; then
+  fail "TOKEN_METER_READINESS_TIMEOUT_SECONDS must be a positive whole number."
+fi
+
+mkdir -p "$INSTALL_PARENT"
+INSTALL_PARENT="$(cd "$INSTALL_PARENT" && pwd)"
+MANAGED_SOURCE_ROOT="${TOKEN_METER_SOURCE_ROOT:-$INSTALL_PARENT/source}"
+UPDATE_SOURCE_ROOT="$SOURCE_ROOT"
+if [[ "$SOURCE_ROOT" != "$MANAGED_SOURCE_ROOT" ]]; then
+  source_upstream="$(git -C "$SOURCE_ROOT" rev-parse \
+    --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+  source_remote="${source_upstream%%/*}"
+  source_branch="${source_upstream#*/}"
+  source_remote_url=""
+  if [[ "$source_upstream" == */* ]]; then
+    source_remote_url="$(git -C "$SOURCE_ROOT" remote get-url "$source_remote" 2>/dev/null || true)"
+  fi
+  if [[ -n "$source_remote_url" && -n "$source_branch" ]]; then
+    if [[ ! -e "$MANAGED_SOURCE_ROOT" ]]; then
+      git clone --quiet --no-local "$SOURCE_ROOT" "$MANAGED_SOURCE_ROOT" \
+        || fail "the managed update checkout could not be created."
+    fi
+    [[ -d "$MANAGED_SOURCE_ROOT/.git" ]] \
+      || fail "the managed update checkout is not a Git repository: $MANAGED_SOURCE_ROOT"
+    if [[ -n "$(git -C "$MANAGED_SOURCE_ROOT" status --porcelain 2>/dev/null || true)" ]]; then
+      fail "the managed update checkout has local changes: $MANAGED_SOURCE_ROOT"
+    fi
+    source_revision="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$source_revision" ]]; then
+      git -C "$MANAGED_SOURCE_ROOT" fetch --quiet --no-tags \
+        "$SOURCE_ROOT" "$source_revision" \
+        || fail "the managed update checkout could not read the installed revision."
+      git -C "$MANAGED_SOURCE_ROOT" merge --quiet --ff-only FETCH_HEAD \
+        || fail "the managed update checkout has diverged from the installed source."
+    fi
+    managed_remote_url="$(git -C "$MANAGED_SOURCE_ROOT" remote get-url origin 2>/dev/null || true)"
+    if [[ "$managed_remote_url" != "$source_remote_url" ]]; then
+      if [[ "$managed_remote_url" == "$SOURCE_ROOT" ]]; then
+        git -C "$MANAGED_SOURCE_ROOT" remote set-url origin "$source_remote_url"
+      else
+        fail "the managed update checkout belongs to a different upstream: $MANAGED_SOURCE_ROOT"
+      fi
+    fi
+    managed_branch="$(git -C "$MANAGED_SOURCE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [[ -n "$managed_branch" ]]; then
+      git -C "$MANAGED_SOURCE_ROOT" config "branch.$managed_branch.remote" origin
+      git -C "$MANAGED_SOURCE_ROOT" config \
+        "branch.$managed_branch.merge" "refs/heads/$source_branch"
+    fi
+    UPDATE_SOURCE_ROOT="$MANAGED_SOURCE_ROOT"
+  fi
+fi
 
 echo "Installing Token Meter from:"
 echo "  $SOURCE_ROOT"
@@ -63,6 +120,7 @@ echo "Runtime:"
 echo "  $INSTALL_ROOT"
 
 mkdir -p "$INSTALL_ROOT/menubar" "$INSTALL_ROOT/scripts"
+printf '%s\n' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"
 for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
   [[ -f "$SOURCE_ROOT/$runtime_file" ]] || continue
   if [[ "$PLATFORM" == "Darwin" ]]; then
@@ -89,18 +147,19 @@ if [[ -n "$commit" ]]; then
 fi
 
 if [[ "$PLATFORM" == "Darwin" ]]; then
-  "$INSTALL_ROOT/scripts/install-launch-agent"
+  "$INSTALL_ROOT/scripts/install-launch-agent" server-only
 else
-  "$INSTALL_ROOT/scripts/install-systemd-user"
+  "$INSTALL_ROOT/scripts/install-systemd-user" server-only
 fi
 
 health_json=""
-for _ in $(seq 1 80); do
-  health_json="$(curl -fsS --max-time 1 "$HEALTH_URL" 2>/dev/null || true)"
+readiness_deadline=$((SECONDS + READINESS_TIMEOUT_SECONDS))
+while (( SECONDS < readiness_deadline )); do
+  health_json="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
   if [[ "$health_json" == *'"ok": true'* && "$health_json" == *'"state_ready": true'* ]]; then
     break
   fi
-  sleep 0.25
+  sleep 1
 done
 
 if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": true'* ]]; then
@@ -111,7 +170,7 @@ if [[ "$health_json" != *'"ok": true'* || "$health_json" != *'"state_ready": tru
   else
     journalctl --user -u token-meter-server.service -n 30 --no-pager >&2 || true
   fi
-  fail "the local server did not become ready at $HEALTH_URL."
+  fail "the local server did not finish indexing within ${READINESS_TIMEOUT_SECONDS}s at $HEALTH_URL."
 fi
 
 if [[ "$PLATFORM" == "Darwin" ]]; then
@@ -120,22 +179,12 @@ if [[ "$PLATFORM" == "Darwin" ]]; then
   fi
   [[ "$server_launch_state" == *"$INSTALL_ROOT/meter.py"* ]] \
     || fail "a different Token Meter installation owns the local server LaunchAgent."
-  if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
-    fail "the menu bar LaunchAgent was not registered."
-  fi
-  [[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
-    || fail "a different Token Meter installation owns the menu bar LaunchAgent."
 else
   systemctl --user is-active --quiet token-meter-server.service \
     || fail "token-meter-server.service is not running."
-  systemctl --user is-active --quiet token-meter-tray.service \
-    || { journalctl --user -u token-meter-tray.service -n 30 --no-pager >&2 || true; fail "token-meter-tray.service is not running."; }
   server_fragment="$(systemctl --user show token-meter-server.service -p FragmentPath --value)"
-  tray_fragment="$(systemctl --user show token-meter-tray.service -p FragmentPath --value)"
   [[ "$server_fragment" == "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/token-meter-server.service" ]] \
     || fail "a different unit owns token-meter-server.service."
-  [[ "$tray_fragment" == "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/token-meter-tray.service" ]] \
-    || fail "a different unit owns token-meter-tray.service."
 fi
 
 printf '%s' "$health_json" | python3 -c '
@@ -153,8 +202,29 @@ if not matches:
                      f"(page_path={page or 'unknown'}).")
 ' "$INSTALL_ROOT"
 
-curl -fsS --max-time 5 "$MENUBAR_URL" | python3 -c 'import json, sys; json.load(sys.stdin)' \
-  || fail "the menu endpoint did not return valid JSON."
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  "$INSTALL_ROOT/scripts/install-launch-agent" menubar-only
+else
+  "$INSTALL_ROOT/scripts/install-systemd-user" menubar-only
+fi
+
+if [[ "$PLATFORM" == "Darwin" ]]; then
+  if ! menubar_launch_state="$(launchctl print "gui/$UID/$MENUBAR_LABEL" 2>&1)"; then
+    fail "the menu bar LaunchAgent was not registered."
+  fi
+  [[ "$menubar_launch_state" == *"$INSTALL_ROOT/scripts/run-menubar"* ]] \
+    || fail "a different Token Meter installation owns the menu bar LaunchAgent."
+else
+  systemctl --user is-active --quiet token-meter-tray.service \
+    || { journalctl --user -u token-meter-tray.service -n 30 --no-pager >&2 || true; fail "token-meter-tray.service is not running."; }
+  tray_fragment="$(systemctl --user show token-meter-tray.service -p FragmentPath --value)"
+  [[ "$tray_fragment" == "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/token-meter-tray.service" ]] \
+    || fail "a different unit owns token-meter-tray.service."
+fi
+
+curl -fsS --max-time 5 "$MENUBAR_URL" \
+  | python3 -c 'import json, sys; json.load(sys.stdin)' \
+  || fail "the menu bar endpoint did not return valid JSON."
 
 echo
 echo "Token Meter installation complete."

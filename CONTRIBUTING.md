@@ -29,36 +29,11 @@ git switch -c fix/short-description
 
 ## Use a coding agent
 
-A coding agent can inspect the repository, implement the change, run tests, and
-prepare the pull request. Start it in the repository and give it a narrow task.
-You can adapt this prompt:
-
-```text
-Help me contribute to Token Meter.
-
-Task: <describe the bug or approved feature>
-Issue: <link the feature issue, or write "bug fix">
-
-Read CONTRIBUTING.md, README.md, and SECURITY.md before editing. Inspect the
-existing implementation and tests, reproduce the bug when possible, and
-preserve unrelated local changes.
-
-If this is a feature and I have not provided an approved issue, stop and ask me
-to open one before editing.
-
-Implement the smallest complete fix. Keep Token Meter local-only,
-dependency-free on the Python server, and read-only toward provider credentials
-and local agent data. Never include prompts, responses, credentials, account
-details, or local session logs in code, tests, commits, or tool output.
-
-Add or update tests and run the relevant validation commands from
-CONTRIBUTING.md. Show me the final diff, test results, and anything you could
-not verify. Do not push or open a pull request until I review the change.
-```
-
-For a feature, give the agent the approved issue and ask it to stay within that
-scope. For a bug, include reproduction steps, expected behavior, and actual
-behavior when you have them.
+Start the agent in the repository and give it a narrow bug report or an approved
+feature issue. Coding-agent instructions live in [AGENTS.md](AGENTS.md);
+Claude Code imports the same file through `CLAUDE.md`. Review the resulting
+diff and validation evidence before asking the agent to push or open a pull
+request.
 
 ## Local setup
 
@@ -72,7 +47,7 @@ checkout:
 ./scripts/install
 ```
 
-This starts the local server and menu bar companion. Open
+This starts the local server and menu bar or desktop tray companion. Open
 [http://localhost:8722](http://localhost:8722) and check its health with:
 
 ```bash
@@ -126,7 +101,7 @@ Run these checks from the repository root before opening a pull request:
 ```bash
 PYTHONPYCACHEPREFIX=/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py menubar/token_meter_tray.py
 python3 -m unittest discover -s tests -v
-bash -n scripts/*
+bash -n scripts/install scripts/install-launch-agent scripts/install-systemd-user scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent scripts/uninstall-systemd-user scripts/update
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
 git diff --check
 ```

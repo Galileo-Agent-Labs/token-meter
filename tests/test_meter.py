@@ -1420,7 +1420,7 @@ class DashboardLayoutTests(unittest.TestCase):
         for unique_id in (
             "iochart", "sembar", "session-token-split-module", "panel-activity",
             "panel-tools", "trace", "tooltbl", "execTools", "budget", "agent-access",
-            "frustration-settings", "model-pricing-settings",
+            "frustration-settings", "model-pricing-settings", "update-settings",
         ):
             self.assertEqual(
                 len(re.findall(rf"\bid={re.escape(unique_id)}(?:\s|>)", self.page)),
@@ -1752,6 +1752,55 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(settings.index("class=budgetDetailGrid"), settings.index("id=budget-config"))
         self.assertLess(settings.index("<h2>Monthly spend</h2>"), settings.index("id=budget-config"))
         self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
+
+    def test_software_updates_are_default_on_hourly_checks_with_an_explicit_install(self):
+        for marker in (
+            "data-settings-target=update-settings",
+            "id=update-settings",
+            "id=update-enabled",
+            "id=update-enabled type=checkbox checked",
+            "Check for updates every hour",
+            "Enabled by default",
+            "id=update-check",
+            "id=update-notice",
+            "New update available",
+            "/settings/updates",
+            "/updates/status",
+            "/updates/check",
+            "/updates/install",
+            "setInterval(refreshSoftwareUpdateStatus,60000)",
+            "status.available&&status.can_update",
+            "softwareUpdateTarget=SOFTWARE_UPDATE.latest_revision",
+            "softwareUpdateTarget&&state==='attention'",
+            "setTimeout(()=>location.reload(),350)",
+            "Checks fetch revision metadata only",
+            "Explicit install",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn(".updateNotice{position:fixed;right:18px;bottom:18px", self.page)
+        self.assertIn(".softwareUpdates{display:grid;gap:9px;padding:12px 16px!important}", self.page)
+        self.assertIn(
+            ".softwareUpdateActions{display:grid;grid-template-columns:auto minmax(0,1fr) auto",
+            self.page,
+        )
+        self.assertIn(
+            "<span class=softwareUpdateMeta id=update-settings-meta></span>",
+            self.page,
+        )
+        self.assertIn(".softwareUpdateActions .tbtn:disabled{opacity:.45;cursor:not-allowed}", self.page)
+        self.assertIn("body.classList.toggle('updateReady',showNotice)", self.page)
+        self.assertNotIn("setInterval(()=>postSoftwareUpdate('/updates/install'", self.page)
+        settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
+            "</div>\n</div>\n<dialog class=commandPalette", 1
+        )[0]
+        self.assertLess(
+            settings.index("data-settings-target=frustration-settings"),
+            settings.index("data-settings-target=update-settings"),
+        )
+        self.assertLess(
+            settings.index("id=frustration-settings"),
+            settings.index("id=update-settings"),
+        )
 
     def test_current_surfaces_runtime_budget_overruns(self):
         for marker in (
@@ -2877,6 +2926,158 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertLessEqual(len(result["evidence"]), 2)
 
 
+class SoftwareUpdateTests(unittest.TestCase):
+    def enabled_settings(self, root):
+        path = Path(root) / "settings.json"
+        path.write_text(json.dumps({"updates": {"enabled": True}, "keep": "value"}))
+        return path
+
+    def runner(self, outputs, calls):
+        def run(command, **kwargs):
+            args = tuple(command[3:])
+            calls.append(args)
+            value = outputs.get(args)
+            if isinstance(value, int):
+                return meter.subprocess.CompletedProcess(command, value, "", "failed")
+            if value is None:
+                raise AssertionError(f"Unexpected git command: {args}")
+            return meter.subprocess.CompletedProcess(command, 0, value, "")
+        return run
+
+    def test_update_setting_defaults_on_and_preserves_an_explicit_off_choice(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"model_pricing": {"claude": {}}}))
+            initial = meter.update_settings(str(path))
+            invalid = meter.set_update_settings({"enabled": "yes"}, str(path))
+            result = meter.set_update_settings({"enabled": False}, str(path))
+            stored = json.loads(path.read_text())
+            explicit = meter.update_settings(str(path))
+        self.assertTrue(initial["enabled"])
+        self.assertEqual(initial["interval_seconds"], 3600)
+        self.assertFalse(invalid["ok"])
+        self.assertTrue(result["ok"])
+        self.assertFalse(explicit["enabled"])
+        self.assertEqual(stored["updates"], {"enabled": False})
+        self.assertIn("model_pricing", stored)
+
+    def test_update_watcher_preserves_terminal_install_result_for_the_dashboard(self):
+        source = Path(meter.__file__).read_text()
+        self.assertIn('if phase in {"complete", "failed"}:', source)
+        self.assertIn("_update_wake.wait(UPDATE_CHECK_INTERVAL_S)", source)
+
+    def test_hourly_check_fetches_and_reports_a_clean_fast_forward_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            calls = []
+            outputs = {
+                ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                    "origin/main\n",
+                ("fetch", "--quiet", "--prune", "--no-tags", "origin"): "",
+                ("rev-parse", "HEAD"): "a" * 40,
+                ("rev-parse", "@{upstream}"): "b" * 40,
+                ("rev-list", "--left-right", "--count", "HEAD...@{upstream}"): "0\t2\n",
+                ("status", "--porcelain"): "",
+            }
+            with mock.patch.object(meter.shutil, "which", return_value="/usr/bin/git"):
+                status = meter.check_for_software_update(
+                    checkout=tmp,
+                    runner=self.runner(outputs, calls),
+                    now=1234,
+                    settings_path=str(settings_path),
+                    status_path=str(status_path),
+                )
+        self.assertEqual(status["state"], "available")
+        self.assertTrue(status["available"])
+        self.assertTrue(status["can_update"])
+        self.assertEqual(status["current_revision"], "a" * 40)
+        self.assertEqual(status["latest_revision"], "b" * 40)
+        self.assertEqual(status["behind"], 2)
+        self.assertIn(("fetch", "--quiet", "--prune", "--no-tags", "origin"), calls)
+        self.assertNotIn(tmp, json.dumps(status))
+
+    def test_available_update_fails_closed_when_checkout_is_dirty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            outputs = {
+                ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                    "origin/main\n",
+                ("fetch", "--quiet", "--prune", "--no-tags", "origin"): "",
+                ("rev-parse", "HEAD"): "a" * 40,
+                ("rev-parse", "@{upstream}"): "b" * 40,
+                ("rev-list", "--left-right", "--count", "HEAD...@{upstream}"): "0 1",
+                ("status", "--porcelain"): " M page.html\n",
+            }
+            with mock.patch.object(meter.shutil, "which", return_value="/usr/bin/git"):
+                status = meter.check_for_software_update(
+                    checkout=tmp,
+                    runner=self.runner(outputs, []),
+                    now=1234,
+                    settings_path=str(settings_path),
+                    status_path=str(status_path),
+                )
+        self.assertEqual(status["state"], "attention")
+        self.assertTrue(status["available"])
+        self.assertFalse(status["can_update"])
+        self.assertTrue(status["dirty"])
+        self.assertIn("local changes", status["message"])
+
+    def test_explicit_install_starts_only_the_bounded_detached_helper(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            meter._persist_update_status({
+                "phase": "available",
+                "current_revision": "a" * 40,
+                "latest_revision": "b" * 40,
+                "checked_at": 1234,
+                "available": True,
+                "can_update": True,
+                "ahead": 0,
+                "behind": 1,
+                "dirty": False,
+            }, str(status_path))
+            popen = mock.Mock()
+            with (mock.patch.object(meter, "source_checkout_path", return_value=tmp),
+                  mock.patch.object(meter.os.path, "isfile", return_value=True),
+                  mock.patch.object(meter.os, "access", return_value=True)):
+                result = meter.start_software_update(
+                    popen=popen,
+                    settings_path=str(settings_path),
+                    status_path=str(status_path),
+                )
+            command = popen.call_args.args[0]
+            kwargs = popen.call_args.kwargs
+        self.assertTrue(result["ok"])
+        self.assertTrue(command[0].endswith("/scripts/update"))
+        self.assertEqual(command[1:], [tmp, str(status_path)])
+        self.assertTrue(kwargs["start_new_session"])
+        self.assertTrue(kwargs["close_fds"])
+        self.assertNotIn(tmp, json.dumps(result))
+
+    def test_manual_check_cannot_overwrite_an_install_in_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            meter._persist_update_status({
+                "phase": "installing",
+                "current_revision": "b" * 40,
+                "latest_revision": "b" * 40,
+                "available": True,
+                "can_update": False,
+            }, str(status_path))
+            result = meter.trigger_software_update_check(
+                settings_path=str(settings_path),
+                status_path=str(status_path),
+            )
+            stored = json.loads(status_path.read_text())
+        self.assertFalse(result["ok"])
+        self.assertIn("already in progress", result["error"])
+        self.assertEqual(stored["phase"], "installing")
+
+
 class InstallationTests(unittest.TestCase):
     def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
@@ -2898,8 +3099,36 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('launchctl print "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('"$INSTALL_ROOT/meter.py"', script)
         self.assertIn('"$INSTALL_ROOT/scripts/run-menubar"', script)
+        self.assertIn(
+            'printf \'%s\\n\' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"',
+            script,
+        )
+        self.assertIn('git clone --quiet --no-local "$SOURCE_ROOT"', script)
+        self.assertIn(
+            'git -C "$MANAGED_SOURCE_ROOT" fetch --quiet --no-tags',
+            script,
+        )
+        self.assertIn(
+            'git -C "$MANAGED_SOURCE_ROOT" merge --quiet --ff-only FETCH_HEAD',
+            script,
+        )
+        self.assertIn('remote set-url origin "$source_remote_url"', script)
+        self.assertIn('"branch.$managed_branch.merge" "refs/heads/$source_branch"', script)
         self.assertIn("Token Meter installation complete.", script)
         self.assertNotRegex(script, r"(?m)^exec ")
+
+    def test_update_helper_requires_clean_fast_forward_then_reuses_installer(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "update").read_text()
+        self.assertIn("git -C \"$SOURCE_ROOT\" fetch --quiet --prune --no-tags", script)
+        self.assertIn("git -C \"$SOURCE_ROOT\" status --porcelain", script)
+        self.assertIn("git -C \"$SOURCE_ROOT\" merge --ff-only '@{upstream}'", script)
+        self.assertIn(
+            'TOKEN_METER_INSTALL_ROOT="$RUNTIME_ROOT" "$SOURCE_ROOT/scripts/install"',
+            script,
+        )
+        self.assertNotIn("reset --hard", script)
+        self.assertNotIn("sudo ", script)
 
     def test_launch_agents_supervise_server_and_menu_bar_independently(self):
         root = Path(__file__).resolve().parents[1]
@@ -2908,6 +3137,10 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('MENUBAR_LABEL="com.token-meter.menubar"', script)
         self.assertIn("<string>$SERVER_PROGRAM</string>", script)
         self.assertIn("<string>$MENUBAR_PROGRAM</string>", script)
+        self.assertIn("Verify the replacement survives that", script)
+        self.assertGreaterEqual(
+            script.count('launchctl print "gui/$UID/$label"'), 3,
+        )
         self.assertEqual(script.count("<key>KeepAlive</key>"), 2)
         self.assertNotIn("start-token-meter", script)
         self.assertIn("all|server-only|menubar-only", script)

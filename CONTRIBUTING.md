@@ -99,7 +99,7 @@ Run these checks from the repository root before opening a pull request:
 ```bash
 PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py
 python3 -m unittest discover -s tests -v
-bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent
+bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent scripts/update
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
 git diff --check
 ```

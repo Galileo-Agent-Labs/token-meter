@@ -15,6 +15,7 @@ turns them into one live dashboard.
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
 | **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in Current and the menu bar. |
+| **Install updates explicitly** | Check the configured Git upstream once per hour by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
 | **Keep data private** | Run analysis stays on your Mac and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
@@ -247,6 +248,25 @@ claude mcp remove tokenmeter --scope user
 Connecting does not create background monitoring or interruptions. The tools
 run only when the user or agent calls them; Token Meter's browser and menu-bar
 alerts remain the proactive channels.
+
+## Software Updates
+
+**Check for updates every hour** is enabled by default in **Settings → Software
+updates**. Token Meter immediately fetches revision metadata from the Git
+upstream configured during installation, then checks again once per hour while
+the server is running. The installer keeps a dedicated update checkout beside
+the runtime so the background service does not need access to a development
+checkout under a macOS-protected folder such as Documents. You can disable
+these checks at any time. Checks do not merge, pull, reinstall, or send
+telemetry.
+
+When the managed checkout is clean, has not diverged, and is behind its upstream, a
+**New update available** button appears at the bottom right of the dashboard.
+Clicking it performs a fast-forward update, reruns the existing installer, and
+reloads the dashboard after the local server restarts. If the checkout has
+local changes or has diverged, Token Meter leaves it untouched and reports the
+problem in Settings. The development checkout used for the original install is
+not modified by the background checker or update button.
 
 ## Automatic Startup And Uninstall
 

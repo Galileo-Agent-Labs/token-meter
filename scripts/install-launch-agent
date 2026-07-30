@@ -114,10 +114,20 @@ bootstrap_service() {
   local label="$1" plist="$2" bootstrap_output="" attempt
   for ((attempt = 1; attempt <= 10; attempt++)); do
     if bootstrap_output="$(launchctl bootstrap "gui/$UID" "$plist" 2>&1)"; then
-      return 0
+      # A bootout immediately followed by bootstrap can briefly report success
+      # before the prior removal finishes. Verify the replacement survives that
+      # handoff; otherwise retry the bootstrap instead of leaving the installer
+      # waiting on a job that has disappeared.
+      sleep 0.5
+      if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
+        return 0
+      fi
     fi
     if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
-      return 0
+      sleep 0.5
+      if launchctl print "gui/$UID/$label" >/dev/null 2>&1; then
+        return 0
+      fi
     fi
     sleep 0.2
   done

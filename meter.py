@@ -65,6 +65,9 @@ CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/l
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
+TOKEN_METER_UPDATE_STATUS = os.path.expanduser(
+    os.environ.get("TOKEN_METER_UPDATE_STATUS", "~/.token-meter/update-status.json")
+)
 PORT = 8722
 
 DEFAULT_FRUSTRATION_TERMS = [
@@ -86,6 +89,9 @@ BUDGET_PROVIDERS = ("claude", "codex", "cursor")
 DEFAULT_RUNTIME_BUDGET = 1_000.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
+UPDATE_CHECK_INTERVAL_S = 60 * 60
+UPDATE_FETCH_TIMEOUT_S = 45
+UPDATE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$")
 
 CLAUDE_PRICE = {
     "claude-opus-5": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
@@ -168,6 +174,8 @@ _cursor_request_cache = {}
 _quota_cache = {}
 _quota_inflight = set()
 _quota_lock = threading.Lock()
+_update_operation_lock = threading.Lock()
+_update_wake = threading.Event()
 _ACTION_TOKEN = secrets.token_urlsafe(24)
 AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
@@ -819,6 +827,398 @@ def set_budget_settings(values, path=None):
     except OSError as error:
         return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
     return {"ok": True, "changed": changed, "budgets": normalized}
+
+
+def normalize_update_settings(values):
+    """Validate the machine-wide software-update preference."""
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise ValueError("Update settings must be an object.")
+    enabled = values.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError("Hourly update checks must be on or off.")
+    return {
+        "enabled": enabled,
+        "interval_seconds": UPDATE_CHECK_INTERVAL_S,
+    }
+
+
+def update_settings(path=None):
+    """Load the default-on hourly update-check preference."""
+    path = path or TOKEN_METER_SETTINGS
+    settings = load_json(path, {})
+    raw = settings.get("updates") if isinstance(settings, dict) else {}
+    try:
+        return normalize_update_settings(raw)
+    except ValueError:
+        return normalize_update_settings({})
+
+
+def set_update_settings(values, path=None):
+    """Persist the update-check preference without changing the checkout."""
+    path = path or TOKEN_METER_SETTINGS
+    try:
+        normalized = normalize_update_settings(values)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    settings = load_json(path, {})
+    if not isinstance(settings, dict):
+        settings = {}
+    stored = {"enabled": normalized["enabled"]}
+    changed = settings.get("updates") != stored
+    settings["updates"] = stored
+    try:
+        atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    except OSError as error:
+        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    _update_wake.set()
+    return {"ok": True, "changed": changed, "updates": normalized}
+
+
+def _safe_update_revision(value):
+    value = str(value or "").strip().lower()
+    return value if re.fullmatch(r"[0-9a-f]{7,40}", value) else ""
+
+
+def _safe_update_int(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def source_checkout_path():
+    """Find the installer checkout without returning it through the HTTP API."""
+    runtime_root = os.path.dirname(os.path.realpath(__file__))
+    candidates = []
+    explicit = os.environ.get("TOKEN_METER_SOURCE_CHECKOUT")
+    if explicit:
+        candidates.append(explicit)
+    marker = os.path.join(runtime_root, "SOURCE_CHECKOUT")
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            candidates.append(fh.read(4096).strip())
+    except OSError:
+        pass
+    candidates.append(runtime_root)
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate = os.path.realpath(os.path.abspath(os.path.expanduser(candidate)))
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (os.path.exists(os.path.join(candidate, ".git"))
+                and os.path.isfile(os.path.join(candidate, "scripts", "install"))):
+            return candidate
+    return ""
+
+
+def _update_status_record(path=None):
+    path = path or TOKEN_METER_UPDATE_STATUS
+    raw = load_json(path, {})
+    return raw if isinstance(raw, dict) else {}
+
+
+def _persist_update_status(values, path=None):
+    """Write only the bounded fields used across update checks and restarts."""
+    path = path or TOKEN_METER_UPDATE_STATUS
+    previous = _update_status_record(path)
+    allowed = {
+        "phase", "error_code", "current_revision", "latest_revision",
+        "previous_revision", "checked_at", "started_at", "installed_at",
+        "available", "can_update", "dirty", "ahead", "behind",
+    }
+    record = {
+        key: values[key]
+        for key in allowed
+        if key in values
+    }
+    for key in ("installed_at", "previous_revision"):
+        if key not in record and key in previous:
+            record[key] = previous[key]
+    try:
+        atomic_write_text(path, json.dumps(record, indent=2, sort_keys=True) + "\n")
+    except OSError:
+        return False
+    return True
+
+
+def _update_message(state, error_code="", latest_revision=""):
+    if state == "disabled":
+        return "Hourly update checks are off."
+    if state == "checking":
+        return "Checking the configured Git upstream."
+    if state == "updating":
+        return "Pulling and reinstalling Token Meter."
+    if state == "updated":
+        return "Token Meter was updated successfully."
+    if state == "available":
+        return (
+            f"Version {latest_revision} is ready to install."
+            if latest_revision else "A new version is ready to install."
+        )
+    if state == "current":
+        return "This installation matches its configured upstream."
+    if state == "waiting":
+        return "Waiting for the first update check."
+    messages = {
+        "source_unavailable": "The installed source checkout is unavailable.",
+        "git_unavailable": "Git is unavailable, so Token Meter cannot check for updates.",
+        "upstream_unavailable": "The source checkout has no usable tracking upstream.",
+        "fetch_failed": "Token Meter could not fetch the configured Git upstream.",
+        "inspect_failed": "Token Meter could not compare the installed and upstream revisions.",
+        "dirty_checkout": "An update exists, but the source checkout has local changes.",
+        "diverged_checkout": "An update exists, but the source checkout has diverged.",
+        "launch_failed": "Token Meter could not start the updater.",
+        "install_failed": "The update did not install. The existing checkout needs attention.",
+    }
+    return messages.get(error_code, "Update status is unavailable.")
+
+
+def software_update_status(settings_path=None, status_path=None):
+    """Return a bounded, path-free update snapshot for the local dashboard."""
+    settings = update_settings(settings_path)
+    raw = _update_status_record(status_path)
+    enabled = settings["enabled"]
+    phase = str(raw.get("phase") or "")
+    error_code = str(raw.get("error_code") or "")
+    current_revision = _safe_update_revision(raw.get("current_revision"))
+    latest_revision = _safe_update_revision(raw.get("latest_revision"))
+    active_phases = {"starting", "fetching", "installing"}
+    if not enabled:
+        state = "disabled"
+    elif phase in active_phases:
+        state = "updating"
+    elif phase == "checking":
+        state = "checking"
+    elif phase == "complete":
+        state = "updated"
+    elif phase == "available" and raw.get("can_update") is True:
+        state = "available"
+    elif phase == "current":
+        state = "current"
+    elif phase in {"available", "error", "failed"}:
+        state = "attention"
+    else:
+        state = "waiting"
+    checked_at = _safe_update_int(raw.get("checked_at"))
+    return {
+        "enabled": enabled,
+        "interval_seconds": UPDATE_CHECK_INTERVAL_S,
+        "state": state,
+        "checking": state == "checking",
+        "updating": state == "updating",
+        "available": bool(enabled and raw.get("available")),
+        "can_update": bool(enabled and raw.get("can_update")),
+        "dirty": bool(raw.get("dirty")),
+        "ahead": _safe_update_int(raw.get("ahead")),
+        "behind": _safe_update_int(raw.get("behind")),
+        "current_revision": current_revision,
+        "latest_revision": latest_revision,
+        "checked_at": checked_at,
+        "next_check_at": checked_at + UPDATE_CHECK_INTERVAL_S if enabled and checked_at else 0,
+        "installed_at": _safe_update_int(raw.get("installed_at")),
+        "message": _update_message(state, error_code, latest_revision),
+        "actions": {"token": _ACTION_TOKEN, "check": True, "install": True},
+    }
+
+
+def _run_update_git(checkout, args, runner=None, timeout=None):
+    runner = runner or subprocess.run
+    result = runner(
+        ["git", "-C", checkout] + list(args),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout or UPDATE_FETCH_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("git command failed")
+    return (result.stdout or "").strip()
+
+
+def check_for_software_update(
+        checkout=None, runner=None, now=None, settings_path=None, status_path=None):
+    """Fetch and compare the tracking upstream without changing the worktree."""
+    now = int(now or time.time())
+    if not update_settings(settings_path)["enabled"]:
+        return software_update_status(settings_path, status_path)
+    if not _update_operation_lock.acquire(blocking=False):
+        return software_update_status(settings_path, status_path)
+    try:
+        previous = _update_status_record(status_path)
+        _persist_update_status({
+            "phase": "checking",
+            "checked_at": _safe_update_int(previous.get("checked_at")),
+            "current_revision": previous.get("current_revision", ""),
+            "latest_revision": previous.get("latest_revision", ""),
+        }, status_path)
+        checkout = checkout or source_checkout_path()
+        if not checkout:
+            _persist_update_status({
+                "phase": "error", "error_code": "source_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        if not shutil.which("git"):
+            _persist_update_status({
+                "phase": "error", "error_code": "git_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            upstream = _run_update_git(
+                checkout, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+                runner,
+            )
+            if not UPDATE_REF_RE.fullmatch(upstream) or "/" not in upstream:
+                raise ValueError("invalid upstream")
+            remote = upstream.split("/", 1)[0]
+        except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
+            _persist_update_status({
+                "phase": "error", "error_code": "upstream_unavailable", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            _run_update_git(
+                checkout, ["fetch", "--quiet", "--prune", "--no-tags", remote],
+                runner, UPDATE_FETCH_TIMEOUT_S,
+            )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            _persist_update_status({
+                "phase": "error", "error_code": "fetch_failed", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        try:
+            current_revision = _safe_update_revision(
+                _run_update_git(checkout, ["rev-parse", "HEAD"], runner)
+            )
+            latest_revision = _safe_update_revision(
+                _run_update_git(checkout, ["rev-parse", "@{upstream}"], runner)
+            )
+            counts = _run_update_git(
+                checkout, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+                runner,
+            ).split()
+            if len(counts) != 2:
+                raise ValueError("invalid revision counts")
+            ahead, behind = (int(counts[0]), int(counts[1]))
+            dirty = bool(_run_update_git(checkout, ["status", "--porcelain"], runner))
+            if min(ahead, behind) < 0 or not current_revision or not latest_revision:
+                raise ValueError("invalid revision state")
+        except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
+            _persist_update_status({
+                "phase": "error", "error_code": "inspect_failed", "checked_at": now,
+            }, status_path)
+            return software_update_status(settings_path, status_path)
+        available = behind > 0
+        can_update = bool(available and ahead == 0 and not dirty)
+        error_code = (
+            "diverged_checkout" if available and ahead > 0
+            else ("dirty_checkout" if available and dirty else "")
+        )
+        _persist_update_status({
+            "phase": "available" if available else "current",
+            "error_code": error_code,
+            "current_revision": current_revision,
+            "latest_revision": latest_revision,
+            "checked_at": now,
+            "available": available,
+            "can_update": can_update,
+            "dirty": dirty,
+            "ahead": ahead,
+            "behind": behind,
+        }, status_path)
+        return software_update_status(settings_path, status_path)
+    finally:
+        _update_operation_lock.release()
+
+
+def trigger_software_update_check(settings_path=None, status_path=None):
+    """Start one non-blocking update check for a dashboard or settings action."""
+    if not update_settings(settings_path)["enabled"]:
+        return {"ok": False, "error": "Enable hourly update checks first."}
+    if str(_update_status_record(status_path).get("phase") or "") in {
+            "starting", "fetching", "installing"}:
+        return {"ok": False, "error": "A Token Meter update is already in progress."}
+    if _update_operation_lock.locked():
+        return {"ok": True, "status": software_update_status(settings_path, status_path)}
+    previous = _update_status_record(status_path)
+    _persist_update_status({
+        "phase": "checking",
+        "checked_at": _safe_update_int(previous.get("checked_at")),
+        "current_revision": previous.get("current_revision", ""),
+        "latest_revision": previous.get("latest_revision", ""),
+    }, status_path)
+    threading.Thread(
+        target=check_for_software_update,
+        kwargs={"settings_path": settings_path, "status_path": status_path},
+        daemon=True,
+    ).start()
+    return {"ok": True, "status": software_update_status(settings_path, status_path)}
+
+
+def start_software_update(popen=None, settings_path=None, status_path=None):
+    """Launch the detached fast-forward-and-reinstall helper."""
+    status = software_update_status(settings_path, status_path)
+    if not status["enabled"]:
+        return {"ok": False, "error": "Enable hourly update checks first."}
+    if not status["available"] or not status["can_update"]:
+        return {"ok": False, "error": "No safely installable update is available."}
+    checkout = source_checkout_path()
+    script = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scripts", "update")
+    if not checkout or not os.path.isfile(script) or not os.access(script, os.X_OK):
+        return {"ok": False, "error": "The installed updater is unavailable."}
+    started_at = int(time.time())
+    _persist_update_status({
+        "phase": "starting",
+        "started_at": started_at,
+        "checked_at": status["checked_at"],
+        "previous_revision": status["current_revision"],
+        "current_revision": status["current_revision"],
+        "latest_revision": status["latest_revision"],
+        "available": True,
+        "can_update": False,
+    }, status_path)
+    popen = popen or subprocess.Popen
+    try:
+        popen(
+            [script, checkout, status_path or TOKEN_METER_UPDATE_STATUS],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError:
+        _persist_update_status({
+            "phase": "failed", "error_code": "launch_failed",
+            "checked_at": status["checked_at"],
+            "current_revision": status["current_revision"],
+            "latest_revision": status["latest_revision"],
+        }, status_path)
+        return {"ok": False, "error": "Token Meter could not start the updater."}
+    return {"ok": True, "status": software_update_status(settings_path, status_path)}
+
+
+def software_update_watcher():
+    """Run an immediate enabled check, then wait one hour between fetches."""
+    while True:
+        _update_wake.clear()
+        settings = update_settings()
+        if not settings["enabled"]:
+            _update_wake.wait(60)
+            continue
+        phase = str(_update_status_record().get("phase") or "")
+        if phase in {"starting", "fetching", "installing"}:
+            _update_wake.wait(5)
+            continue
+        if phase in {"complete", "failed"}:
+            _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
+            continue
+        check_for_software_update()
+        _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
 
 
 def toml_named_sections(path, table):
@@ -8899,7 +9299,8 @@ class H(BaseHTTPRequestHandler):
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete",
                             "/settings/frustration", "/settings/language-signals",
-                            "/settings/model-pricing", "/settings/budgets"):
+                            "/settings/model-pricing", "/settings/budgets",
+                            "/settings/updates", "/updates/check", "/updates/install"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -8979,6 +9380,26 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return
+        if req_path == "/settings/updates":
+            result = set_update_settings(payload)
+            if result.get("ok") and result["updates"]["enabled"]:
+                check = trigger_software_update_check()
+                result["status"] = check.get("status") or software_update_status()
+            elif result.get("ok"):
+                result["status"] = software_update_status()
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/updates/check":
+            result = trigger_software_update_check()
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/updates/install":
+            result = start_software_update()
+            self._send(json.dumps(result), "application/json",
+                       status=202 if result.get("ok") else 409)
+            return
         if req_path == "/agent-access/toggle":
             result = set_agent_access(payload.get("client"), payload.get("enabled"))
             status = 200 if result.get("ok") else (409 if result.get("conflict") else 400)
@@ -9049,6 +9470,8 @@ class H(BaseHTTPRequestHandler):
         elif req_path == "/health":
             payload, status = health_state()
             self._send(json.dumps(payload), "application/json", status=status)
+        elif req_path == "/updates/status":
+            self._send(json.dumps(software_update_status()), "application/json")
         elif req_path == "/events":
             # Older dashboard builds used EventSource and can keep reconnecting
             # even after Chromium replaces the visible tab with an error page.
@@ -9071,6 +9494,7 @@ class TokenMeterHTTPServer(ThreadingHTTPServer):
 
 if __name__ == "__main__":
     threading.Thread(target=watcher, daemon=True).start()
+    threading.Thread(target=software_update_watcher, daemon=True).start()
     srv = TokenMeterHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
     print("Auto-following newest ~/.claude, ~/.codex, and ~/.cursor log. Ctrl-C to stop.")

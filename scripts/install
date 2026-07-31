@@ -129,14 +129,22 @@ for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
     cp -p "$SOURCE_ROOT/$runtime_file" "$INSTALL_ROOT/$runtime_file"
   fi
 done
+
 if [[ "$PLATFORM" == "Darwin" ]]; then
   ditto "$SOURCE_ROOT/menubar" "$INSTALL_ROOT/menubar"
   ditto "$SOURCE_ROOT/scripts" "$INSTALL_ROOT/scripts"
+  ditto "$SOURCE_ROOT/assets" "$INSTALL_ROOT/assets"
 else
   cp -Rp "$SOURCE_ROOT/menubar/." "$INSTALL_ROOT/menubar/"
   cp -Rp "$SOURCE_ROOT/scripts/." "$INSTALL_ROOT/scripts/"
+  cp -Rp "$SOURCE_ROOT/assets/." "$INSTALL_ROOT/assets/"
+  
 fi
-chmod 755 "$INSTALL_ROOT"/scripts/* "$INSTALL_ROOT/menubar/token_meter_tray.py"
+chmod 755 "$INSTALL_ROOT"/scripts/* 
+
+if [[ "$PLATFORM" == "Linux" ]]; then
+  chmod 755 "$INSTALL_ROOT/menubar/token_meter_tray.py"
+fi
 
 commit="$(git -C "$SOURCE_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 if [[ -n "$commit" ]]; then

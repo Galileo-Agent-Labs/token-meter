@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T11:37:10Z",
+  "title": "Design System: Token Meter",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#07090c", "tonalRamp": ["oklch(15% 0.01 250)", "oklch(25% 0.01 250)", "oklch(35% 0.01 250)", "oklch(45% 0.01 250)", "oklch(60% 0.01 250)", "oklch(72% 0.01 250)", "oklch(84% 0.01 250)", "oklch(95% 0.01 250)"] },
+      "cool-panel": { "role": "neutral", "displayName": "Cool Panel", "canonical": "#111820", "tonalRamp": ["oklch(15% 0.02 245)", "oklch(25% 0.02 245)", "oklch(35% 0.02 245)", "oklch(45% 0.02 245)", "oklch(60% 0.02 245)", "oklch(72% 0.02 245)", "oklch(84% 0.02 245)", "oklch(95% 0.02 245)"] },
+      "cool-panel-raised": { "role": "neutral", "displayName": "Cool Panel Raised", "canonical": "#17212b", "tonalRamp": ["oklch(15% 0.025 245)", "oklch(25% 0.025 245)", "oklch(35% 0.025 245)", "oklch(45% 0.025 245)", "oklch(60% 0.025 245)", "oklch(72% 0.025 245)", "oklch(84% 0.025 245)", "oklch(95% 0.025 245)"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#f6f8fb", "tonalRamp": ["oklch(15% 0.008 250)", "oklch(25% 0.008 250)", "oklch(35% 0.008 250)", "oklch(45% 0.008 250)", "oklch(60% 0.008 250)", "oklch(72% 0.008 250)", "oklch(84% 0.008 250)", "oklch(95% 0.008 250)"] },
+      "muted": { "role": "neutral", "displayName": "Muted Steel", "canonical": "#a8b3c1", "tonalRamp": ["oklch(15% 0.02 250)", "oklch(25% 0.02 250)", "oklch(35% 0.02 250)", "oklch(45% 0.02 250)", "oklch(60% 0.02 250)", "oklch(72% 0.02 250)", "oklch(84% 0.02 250)", "oklch(95% 0.02 250)"] },
+      "faint": { "role": "neutral", "displayName": "Faint Slate", "canonical": "#748195", "tonalRamp": ["oklch(15% 0.03 250)", "oklch(25% 0.03 250)", "oklch(35% 0.03 250)", "oklch(45% 0.03 250)", "oklch(60% 0.03 250)", "oklch(72% 0.03 250)", "oklch(84% 0.03 250)", "oklch(95% 0.03 250)"] },
+      "electric-cyan": { "role": "primary", "displayName": "Electric Cyan", "canonical": "#00bceb", "tonalRamp": ["oklch(15% 0.1 225)", "oklch(25% 0.11 225)", "oklch(35% 0.12 225)", "oklch(45% 0.13 225)", "oklch(60% 0.14 225)", "oklch(72% 0.13 225)", "oklch(84% 0.09 225)", "oklch(95% 0.035 225)"] },
+      "blue-signal": { "role": "secondary", "displayName": "Blue Signal", "canonical": "#1ba0e1", "tonalRamp": ["oklch(15% 0.08 235)", "oklch(25% 0.09 235)", "oklch(35% 0.1 235)", "oklch(45% 0.11 235)", "oklch(60% 0.12 235)", "oklch(72% 0.11 235)", "oklch(84% 0.08 235)", "oklch(95% 0.03 235)"] },
+      "sky-signal": { "role": "secondary", "displayName": "Sky Signal", "canonical": "#7fdbf2", "tonalRamp": ["oklch(15% 0.07 220)", "oklch(25% 0.08 220)", "oklch(35% 0.09 220)", "oklch(45% 0.1 220)", "oklch(60% 0.11 220)", "oklch(72% 0.1 220)", "oklch(84% 0.075 220)", "oklch(95% 0.025 220)"] },
+      "positive": { "role": "tertiary", "displayName": "Positive Green", "canonical": "#66d990", "tonalRamp": ["oklch(15% 0.08 150)", "oklch(25% 0.1 150)", "oklch(35% 0.12 150)", "oklch(45% 0.14 150)", "oklch(60% 0.16 150)", "oklch(72% 0.14 150)", "oklch(84% 0.09 150)", "oklch(95% 0.03 150)"] },
+      "warning": { "role": "tertiary", "displayName": "Warning Amber", "canonical": "#ffb457", "tonalRamp": ["oklch(15% 0.08 70)", "oklch(25% 0.1 70)", "oklch(35% 0.12 70)", "oklch(45% 0.14 70)", "oklch(60% 0.16 70)", "oklch(72% 0.14 70)", "oklch(84% 0.09 70)", "oklch(95% 0.03 70)"] },
+      "danger": { "role": "tertiary", "displayName": "Danger Coral", "canonical": "#ff6f6f", "tonalRamp": ["oklch(15% 0.09 25)", "oklch(25% 0.11 25)", "oklch(35% 0.13 25)", "oklch(45% 0.15 25)", "oklch(60% 0.18 25)", "oklch(72% 0.15 25)", "oklch(84% 0.09 25)", "oklch(95% 0.03 25)"] },
+      "violet-signal": { "role": "secondary", "displayName": "Violet Signal", "canonical": "#c7a7ff", "tonalRamp": ["oklch(15% 0.07 300)", "oklch(25% 0.09 300)", "oklch(35% 0.11 300)", "oklch(45% 0.13 300)", "oklch(60% 0.15 300)", "oklch(72% 0.13 300)", "oklch(84% 0.09 300)", "oklch(95% 0.03 300)"] }
+    },
+    "typographyMeta": {
+      "spectrum-display": { "displayName": "Spectrum Display", "purpose": "The route title or selected Sessions task name inside the shared page header." },
+      "sessions-title": { "displayName": "Session Task Title", "purpose": "Primary task identity on a session instrument card." },
+      "body": { "displayName": "Dashboard Body", "purpose": "Compact interface copy and explanations throughout Token Meter." },
+      "data": { "displayName": "Measured Data", "purpose": "Tabular cost, context, speed, time, and identifier readouts." },
+      "label": { "displayName": "Instrument Label", "purpose": "Compact functional labels and status metadata." }
+    },
+    "shadows": [
+      { "name": "dashboard-surface", "value": "0 1px 0 rgba(255,255,255,.055), 0 18px 48px rgba(0,0,0,.36)", "purpose": "Substantial incumbent dashboard cards and surfaces." },
+      { "name": "dashboard-soft", "value": "0 1px 0 rgba(255,255,255,.045), 0 10px 28px rgba(0,0,0,.22)", "purpose": "Compact incumbent cards and controls." },
+      { "name": "session-hover", "value": "0 18px 38px rgba(0,0,0,.3)", "purpose": "Temporary lift for a hovered session instrument." },
+      { "name": "spectrum-gauge-glow", "value": "0 24px 58px rgba(0,96,132,.22)", "purpose": "Cool ambient light around the live context-pressure horizon." }
+    ],
+    "motion": [
+      { "name": "session-state", "value": "180ms cubic-bezier(.16,1,.3,1)", "purpose": "Session card lift, border, shadow, and opacity changes." },
+      { "name": "spectrum-reveal", "value": "680ms cubic-bezier(.16,1,.3,1)", "purpose": "One-time reveal of the spectrum field header geometry; disabled under reduced motion." },
+      { "name": "context-update", "value": "240ms ease", "purpose": "Live fill change in the context-pressure disc." }
+    ],
+    "breakpoints": [
+      { "name": "detail-stack", "value": "900px" },
+      { "name": "session-grid-stack", "value": "700px" },
+      { "name": "narrow", "value": "520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Action Button",
+      "kind": "button",
+      "refersTo": "action-button",
+      "description": "The shared compact cyan action used throughout the dashboard.",
+      "html": "<button class=\"ds-action-button\">Apply filter</button>",
+      "css": ".ds-action-button { border: 1px solid rgba(255,255,255,.14); background: linear-gradient(180deg,rgba(0,188,235,.18),rgba(0,188,235,.08)); color: #f6f8fb; border-radius: 8px; padding: 7px 10px; font: 720 12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; cursor: pointer; transition: border-color .16s, background .16s; } .ds-action-button:hover { border-color: rgba(0,188,235,.56); background: linear-gradient(180deg,rgba(0,188,235,.24),rgba(0,188,235,.1)); } .ds-action-button:focus-visible { outline: none; border-color: #00bceb; box-shadow: 0 0 0 3px rgba(0,188,235,.12); }"
+    },
+    {
+      "name": "Dashboard Text Field",
+      "kind": "input",
+      "refersTo": "text-field",
+      "description": "The shared compact search and filter field used across the dashboard.",
+      "html": "<input class=\"ds-text-field\" value=\"codex\" aria-label=\"Search sessions\">",
+      "css": ".ds-text-field { width: 280px; height: 38px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.045); color: #f6f8fb; border-radius: 8px; padding: 9px 11px; font: 13px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; box-shadow: inset 0 1px 0 rgba(255,255,255,.045); } .ds-text-field:focus-visible { outline: none; border-color: #00bceb; box-shadow: 0 0 0 3px rgba(0,188,235,.12); }"
+    },
+    {
+      "name": "Dashboard Navigation",
+      "kind": "nav",
+      "description": "The shared compact segmented navigation; the product order remains fixed.",
+      "html": "<nav class=\"ds-dashboard-nav\"><button class=\"ds-dashboard-tab ds-dashboard-tab-on\">Sessions</button><button class=\"ds-dashboard-tab\">Logs</button><button class=\"ds-dashboard-tab\">Daily</button></nav>",
+      "css": ".ds-dashboard-nav { display: flex; gap: 3px; width: max-content; border: 1px solid rgba(0,188,235,.16); border-radius: 8px; padding: 3px; background: rgba(7,12,17,.72); } .ds-dashboard-tab { border: 0; border-radius: 6px; padding: 7px 13px; background: transparent; color: #a8b3c1; font: 700 13px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; cursor: pointer; } .ds-dashboard-tab:hover { color: #f6f8fb; background: rgba(0,188,235,.07); } .ds-dashboard-tab:focus-visible { outline: 2px solid #00bceb; outline-offset: 2px; } .ds-dashboard-tab-on { color: #062430; background: linear-gradient(135deg,#00bceb,#1ba0e1 56%,#7fdbf2); box-shadow: 0 7px 20px rgba(0,188,235,.16); }"
+    },
+    {
+      "name": "Spectrum Page Header",
+      "kind": "header",
+      "description": "The reusable terse title field opening every top-level route; controls or a compact live-status line may occupy its trailing or lower edge.",
+      "html": "<header class=\"ds-spectrum-header\"><div><h1>Logs</h1><span class=\"ds-spectrum-meta\">live · updated 17:58</span></div></header>",
+      "css": ".ds-spectrum-header { position: relative; display: flex; min-height: 138px; align-items: flex-end; justify-content: space-between; overflow: hidden; padding: 24px 30px; border: 1px solid rgba(0,188,235,.24); border-radius: 8px; background: radial-gradient(circle at 74% 12%,rgba(127,219,242,.21),transparent 26%),linear-gradient(115deg,rgba(23,33,43,.98),rgba(10,18,25,.98) 48%,rgba(10,43,56,.94) 78%,rgba(20,17,36,.94)); color: #f6f8fb; } .ds-spectrum-header h1 { margin: 0; font: 610 48px/.98 \"Tektur Local\",\"Avenir Next Condensed\",sans-serif; letter-spacing: -.035em; } .ds-spectrum-meta { display: block; margin-top: 10px; color: #a8b3c1; font-size: 12px; }"
+    },
+    {
+      "name": "Provider Badge",
+      "kind": "chip",
+      "description": "A small provider identity signal; its color does not become the surrounding surface color.",
+      "html": "<span class=\"ds-provider-badge\">Codex</span>",
+      "css": ".ds-provider-badge { display: inline-flex; padding: 3px 7px; border: 1px solid rgba(0,188,235,.42); border-radius: 6px; background: rgba(0,188,235,.12); color: #7fdbf2; font: 700 10.5px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; }"
+    },
+    {
+      "name": "Dashboard Card",
+      "kind": "card",
+      "refersTo": "dashboard-card",
+      "description": "The shared cool, softly lifted spectrum container used across every route.",
+      "html": "<section class=\"ds-dashboard-card\"><span>Estimated cost</span><strong>$3.42</strong></section>",
+      "css": ".ds-dashboard-card { width: 260px; padding: 16px; border: 1px solid rgba(255,255,255,.075); border-radius: 8px; background: linear-gradient(180deg,rgba(20,28,37,.95),rgba(13,18,24,.96)); color: #f6f8fb; box-shadow: 0 1px 0 rgba(255,255,255,.055), 0 18px 48px rgba(0,0,0,.36); font: 14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; } .ds-dashboard-card span { display: block; color: #748195; font-size: 11px; text-transform: uppercase; } .ds-dashboard-card strong { display: block; margin-top: 6px; font: 720 22px/1.15 ui-monospace,\"SF Mono\",Menlo,monospace; }"
+    },
+    {
+      "name": "Sessions Instrument Tabs",
+      "kind": "nav",
+      "refersTo": "segmented-active",
+      "description": "The cyan-selected route-local panel switcher for a selected session.",
+      "html": "<nav class=\"ds-session-tabs\"><button class=\"ds-session-tab ds-session-tab-on\">Run</button><button class=\"ds-session-tab\">Activity</button><button class=\"ds-session-tab\">Tools</button></nav>",
+      "css": ".ds-session-tabs { display: flex; gap: 3px; width: max-content; border: 1px solid rgba(0,188,235,.18); border-radius: 8px; padding: 3px; background: rgba(7,12,17,.72); } .ds-session-tab { border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: #a8b3c1; font: 700 12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; cursor: pointer; } .ds-session-tab:hover { background: rgba(0,188,235,.08); color: #f6f8fb; } .ds-session-tab:focus-visible { outline: 2px solid #00bceb; outline-offset: 2px; } .ds-session-tab-on { background: linear-gradient(135deg,#00bceb,#1ba0e1); color: #062430; box-shadow: 0 6px 18px rgba(0,188,235,.15); }"
+    },
+    {
+      "name": "Session Instrument Card",
+      "kind": "card",
+      "refersTo": "session-instrument-card",
+      "description": "A selectable live-run plate with task identity and aligned cost, context, and speed readouts.",
+      "html": "<button class=\"ds-session-card\"><span class=\"ds-session-runtime\">Codex · GPT-5.6</span><strong class=\"ds-session-title\">Refine Sessions dashboard</strong><span class=\"ds-session-project\">token-meter</span><span class=\"ds-session-metrics\"><span><small>Cost</small><b>$2.84</b></span><span><small>Context</small><b>62%</b></span><span><small>Speed</small><b>48 t/s</b></span></span></button>",
+      "css": ".ds-session-card { display: flex; flex-direction: column; width: 390px; min-height: 226px; padding: 19px 20px 16px; border: 1px solid rgba(0,188,235,.16); border-radius: 8px; background: radial-gradient(circle at 92% 8%,rgba(127,219,242,.1),transparent 28%), radial-gradient(circle at 8% 100%,rgba(199,167,255,.07),transparent 34%), linear-gradient(145deg,rgba(23,33,43,.98),rgba(9,15,21,.99)); color: #f6f8fb; text-align: left; box-shadow: 0 1px 0 rgba(255,255,255,.045),0 10px 28px rgba(0,0,0,.22); cursor: pointer; transition: transform .18s cubic-bezier(.16,1,.3,1), border-color .18s, box-shadow .18s; } .ds-session-card:hover { transform: translateY(-3px); border-color: #00bceb; box-shadow: 0 18px 38px rgba(0,0,0,.3); } .ds-session-card:focus-visible { outline: 2px solid #00bceb; outline-offset: 3px; } .ds-session-runtime { color: #748195; font: 700 12px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; } .ds-session-title { max-width: 300px; margin-top: 22px; font: 610 22px/1.2 \"Tektur Local\",\"Avenir Next\",-apple-system,BlinkMacSystemFont,sans-serif; letter-spacing: -.025em; } .ds-session-project { margin-top: 6px; color: #748195; font: 11px/1.25 ui-monospace,\"SF Mono\",Menlo,monospace; } .ds-session-metrics { display: grid; grid-template-columns: repeat(3,1fr); margin-top: 22px; padding-top: 15px; border-top: 1px solid rgba(0,188,235,.13); } .ds-session-metrics > span { padding: 0 14px; border-left: 1px solid rgba(255,255,255,.08); } .ds-session-metrics > span:first-child { padding-left: 0; border-left: 0; } .ds-session-metrics small { display: block; color: #748195; font: 780 11px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; text-transform: uppercase; letter-spacing: .04em; } .ds-session-metrics b { display: block; margin-top: 7px; font: 720 18px/1.15 ui-monospace,\"SF Mono\",Menlo,monospace; }"
+    },
+    {
+      "name": "Spectrum Status Instrument",
+      "kind": "custom",
+      "refersTo": "session-status-instrument",
+      "description": "The signature session-detail gauge pairing estimated cost with redundant context-pressure evidence.",
+      "html": "<section class=\"ds-spectrum-status\" style=\"--ds-pressure:62%\"><span class=\"ds-spectrum-state\">Live</span><strong class=\"ds-spectrum-cost\">$2.84</strong><span class=\"ds-spectrum-note\">Estimated local trace cost</span><span class=\"ds-spectrum-pressure\"><span>Context pressure</span><b>62%</b></span><span class=\"ds-spectrum-bar\"><i></i></span></section>",
+      "css": ".ds-spectrum-status { --ds-pressure: 62%; position: relative; isolation: isolate; width: 300px; min-height: 230px; overflow: hidden; padding: 18px; border: 1px solid rgba(0,188,235,.24); border-radius: 8px; background: radial-gradient(circle at 96% 5%,rgba(127,219,242,.16),transparent 34%), radial-gradient(circle at 8% 100%,rgba(199,167,255,.1),transparent 40%), linear-gradient(145deg,rgba(23,33,43,.99),rgba(8,14,20,.99)); color: #f6f8fb; box-shadow: 0 1px 0 rgba(255,255,255,.045),0 10px 28px rgba(0,0,0,.22); font: 14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Inter,system-ui,sans-serif; } .ds-spectrum-status:before { content: \"\"; position: absolute; z-index: -1; right: -58px; bottom: -72px; width: 184px; height: 184px; border: 1px solid rgba(0,188,235,.34); border-radius: 50%; background: linear-gradient(to top,transparent 0 calc(var(--ds-pressure) - 1px),rgba(127,219,242,.9) calc(var(--ds-pressure) - 1px) calc(var(--ds-pressure) + 1px),transparent calc(var(--ds-pressure) + 1px)), linear-gradient(to top,rgba(0,188,235,.34) 0 var(--ds-pressure),rgba(0,188,235,.025) var(--ds-pressure) 100%), radial-gradient(circle at 38% 30%,rgba(127,219,242,.22),rgba(27,160,225,.06) 44%,rgba(199,167,255,.04) 62%,transparent 72%); box-shadow: 0 24px 58px rgba(0,96,132,.22); } .ds-spectrum-state { display: block; color: #66d990; font-size: 11px; font-weight: 820; text-transform: uppercase; } .ds-spectrum-cost { display: block; margin-top: 12px; color: #7fdbf2; font: 730 44px/1.02 ui-monospace,\"SF Mono\",Menlo,monospace; letter-spacing: -.02em; } .ds-spectrum-note { display: block; margin-top: 6px; color: #a8b3c1; font-size: 12px; } .ds-spectrum-pressure { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 13px; border-top: 1px solid rgba(0,188,235,.14); color: #a8b3c1; font-size: 11.5px; } .ds-spectrum-pressure b { color: #f6f8fb; font-family: ui-monospace,\"SF Mono\",Menlo,monospace; } .ds-spectrum-bar { display: block; height: 8px; margin-top: 7px; overflow: hidden; border: 1px solid rgba(0,188,235,.2); border-radius: 6px; background: rgba(5,9,13,.72); } .ds-spectrum-bar i { display: block; width: var(--ds-pressure); height: 100%; border-radius: inherit; background: linear-gradient(90deg,#00bceb,#1ba0e1 58%,#7fdbf2); transition: width .24s ease; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Spectrum Instrument Field",
+    "overview": "Token Meter is a dense, local operator dashboard. Its shared Spectrum Instrument Field uses near-black layers, off-white type, cyan measurement signals, compact controls, and restrained depth. Every top-level route uses the same spectrum header, card, field, button, table, and active-state primitives. Per-route atmospheric blends vary within the original palette, while Sessions keeps the unique data-bearing context horizon and live-run instrument cards.",
+    "keyCharacteristics": [
+      "Dense, factual dark-mode operation with tabular numeric readouts.",
+      "Cyan, blue, and sky are shared Token Meter signals expressed through reusable page, header, card, control, and active-state gradients.",
+      "Every route shares one header geometry and component language; only atmospheric emphasis and task-specific composition vary.",
+      "Sessions uses a data-bearing context horizon rather than an ornamental dial.",
+      "Provider colors remain small identity signals inside the shared system.",
+      "Motion is brief, stateful, and removed when reduced motion is requested."
+    ],
+    "rules": [
+      { "name": "The Shared Spectrum Rule", "body": "Page atmosphere, headers, cards, controls, active states, and focus treatments come from shared spectrum tokens. Routes may tune only the atmospheric blend; they must not fork these primitives.", "section": "colors" },
+      { "name": "The Evidence Color Rule", "body": "Provider and semantic colors identify source or state in small, explicit signals. Atmospheric violet or orange never overrides warning, danger, or provider identity.", "section": "colors" },
+      { "name": "The Task Leads Rule", "body": "Session detail replaces a generic page title with the actual task name; provider, project, model, and controls remain subordinate.", "section": "typography" },
+      { "name": "The Measured Numbers Rule", "body": "Cost, context, speed, times, and identifiers use the mono stack and tabular numerals so values align while updating.", "section": "typography" },
+      { "name": "The Orientation Rule", "body": "Overview and detail share the same layered header, task naming, cyan context signal, and instrument grammar so opening a run feels like focusing the same instrument rather than entering a different product.", "section": "layout" },
+      { "name": "The Operational Depth Rule", "body": "Shared depth comes from soft shadows and restrained gradients. Do not add ornamental layers that look measurable but carry no evidence.", "section": "elevation" },
+      { "name": "The Data-Bearing Geometry Rule", "body": "Circular geometry is reserved for the live context horizon or other evidence-backed visualizations; session cards remain rounded operational surfaces without a decorative dial.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do change shared spectrum tokens and primitives when a treatment should move across every route.",
+      "Do lead Sessions with the task name and the three decision readouts: cost, context, and speed.",
+      "Do use layered radial, linear, and conic gradients with restrained violet and orange accents across the dashboard.",
+      "Do preserve semantic and provider colors as small, factual signals.",
+      "Do collapse grids and remove nonessential decoration at the implemented 900px, 700px, and 520px breakpoints.",
+      "Do disable decorative motion under `prefers-reduced-motion` and retain visible keyboard focus."
+    ],
+    "donts": [
+      "Don't fork page headers, cards, controls, or active states into route-specific copies.",
+      "Don't turn Sessions into interchangeable dark cards with generic headings.",
+      "Don't add a provider-colored left rail, Japanese notation, calibration ticks, a card dial, or a route-specific dot field to Sessions.",
+      "Don't let atmospheric violet or orange replace semantic danger, warning, live-state, or provider identity colors.",
+      "Don't add hosted imagery, decorative assets, or typography that weakens Token Meter's local-only, evidence-first operation."
+    ]
+  }
+}

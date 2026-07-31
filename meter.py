@@ -3,7 +3,7 @@
 Token Meter - a live cost and efficiency instrument for Claude, Codex, and Cursor.
 
 Tails local agent logs, parses each execution as it lands, and serves a
-localhost dashboard with Current and Global views. Stdlib only. Trace analysis
+localhost dashboard with Sessions and aggregate history views. Stdlib only. Trace analysis
 stays local; the optional menu-bar quota view makes read-only account-usage
 requests to the signed-in Claude, Codex, and Cursor provider services.
 
@@ -99,6 +99,7 @@ MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
 MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
 MAX_CUSTOM_MODEL_PRICES = 100
+MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
 BUDGET_PROVIDERS = ("claude", "codex", "cursor")
@@ -122,11 +123,34 @@ CLAUDE_PRICE = {
 # Public OpenAI API pricing, per 1M tokens. Codex subscription accounting can
 # differ by plan, so the UI labels OpenAI/Codex costs as API-rate estimates.
 OPENAI_PRICE = {
-    # GPT-5.6 Sol / flagship pricing. Terra and Luna use lower rates.
+    # GPT-5.6 cache writes are 1.25x uncached input. The unsuffixed alias uses Sol.
     "gpt-5.6": {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.50},
+    "gpt-5.6-sol": {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.50},
+    "gpt-5.6-terra": {"input": 2.0, "output": 12.0, "cache_write": 2.50, "cache_read": 0.20},
+    "gpt-5.6-luna": {"input": 0.20, "output": 1.20, "cache_write": 0.25, "cache_read": 0.02},
     "gpt-5.5": {"input": 5.0, "output": 30.0, "cache_write": 0.0, "cache_read": 0.50},
     "gpt-5.4": {"input": 2.50, "output": 15.0, "cache_write": 0.0, "cache_read": 0.25},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "cache_write": 0.0, "cache_read": 0.075},
+}
+GPT_56_PRICE_UPDATE_AT = 1_785_456_000  # 2026-07-31T00:00:00Z
+GPT_56_LONG_CONTEXT_TOKENS = 272_000
+_GPT_56_PRE_UPDATE_PRICE = {
+    "input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.50,
+}
+# Price periods reproduce the exact table behavior Token Meter used before a
+# published update. New periods can then change current estimates without
+# rewriting historical sessions when their usage events are parsed again.
+BUILTIN_MODEL_PRICE_HISTORY = {
+    "codex": {
+        "gpt-5.6-terra": (
+            (None, _GPT_56_PRE_UPDATE_PRICE),
+            (GPT_56_PRICE_UPDATE_AT, OPENAI_PRICE["gpt-5.6-terra"]),
+        ),
+        "gpt-5.6-luna": (
+            (None, _GPT_56_PRE_UPDATE_PRICE),
+            (GPT_56_PRICE_UPDATE_AT, OPENAI_PRICE["gpt-5.6-luna"]),
+        ),
+    },
 }
 CURSOR_PRICE = {
     # Cursor's first-party Composer 2.5 rates. The persisted model configuration
@@ -177,14 +201,21 @@ _xsess = {
     "internal_rows": (), "project_model_stats": {},
 }
 _XSESS_TTL = 15.0
-_XSESS_LIVE_REFRESH_S = 2.0
+_XSESS_LIVE_REFRESH_S = 1.0
+CURRENT_SESSION_MAX_AGE_S = 30 * 60
+CURRENT_SESSION_WORKING_S = 90
+CURRENT_SESSION_LIMIT = 8
+CURRENT_SESSION_CONTEXT_SAMPLES = 32
+SESSION_STATE_CACHE_LIMIT = 32
 MODEL_PROJECT_OPTION_LIMIT = 500
 _summary_cache = {}
+_session_state_cache = {}
+_session_state_cache_lock = threading.Lock()
 _codex_meta_cache = {}
 _claude_cwd_cache = {}
 _source_metadata_lock = threading.Lock()
 _model_pricing_cache = {
-    "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
+    "path": None, "mtime_ns": None, "histories": {}, "effective": {},
 }
 _cursor_request_cache = {}
 _quota_cache = {}
@@ -598,6 +629,59 @@ def builtin_model_price_tables():
     }
 
 
+def _price_timestamp(value):
+    """Normalize an event timestamp; ``None`` intentionally means current pricing."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        value = float(value)
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        return parse_iso(value.strip())
+    return None
+
+
+def _model_price_period_key(provider, at=None, histories=None):
+    """Return the bounded cache bucket containing one event timestamp."""
+    timestamp = _price_timestamp(at)
+    if timestamp is None:
+        return "current"
+    cutovers = {
+        effective_from
+        for periods in BUILTIN_MODEL_PRICE_HISTORY.get(provider, {}).values()
+        for effective_from, _prices in periods
+        if effective_from is not None
+    }
+    for periods in (histories or {}).get(provider, {}).values():
+        cutovers.update(
+            revision["effective_from"]
+            for revision in periods
+            if revision["effective_from"] is not None
+        )
+    return max((value for value in cutovers if value <= timestamp), default=0)
+
+
+def builtin_model_price_table(provider, at=None):
+    """Return built-in prices effective for one usage-event timestamp."""
+    table = {
+        model: dict(prices)
+        for model, prices in builtin_model_price_tables()[provider].items()
+    }
+    timestamp = _price_timestamp(at)
+    if timestamp is None:
+        return table
+    for model, periods in BUILTIN_MODEL_PRICE_HISTORY.get(provider, {}).items():
+        selected = None
+        for effective_from, prices in periods:
+            if effective_from is None or timestamp >= effective_from:
+                selected = prices
+        if selected is not None:
+            table[model] = dict(selected)
+    return table
+
+
 def _model_pricing_mtime_ns(path):
     try:
         return os.stat(path).st_mtime_ns
@@ -605,17 +689,63 @@ def _model_pricing_mtime_ns(path):
         return None
 
 
-def _load_model_price_overrides(path=None):
-    """Load validated user pricing with an mtime cache for hot cost paths."""
+def _normalize_model_price_revision(raw, builtin):
+    if not isinstance(raw, dict):
+        raise ValueError("Model price period must be an object.")
+    effective_from = raw.get("effective_from")
+    if effective_from is not None:
+        if isinstance(effective_from, bool) or not isinstance(effective_from, (int, float)):
+            raise ValueError("Model price effective time must be a Unix timestamp.")
+        effective_from = float(effective_from)
+        if not math.isfinite(effective_from) or effective_from < 0:
+            raise ValueError("Model price effective time must be a Unix timestamp.")
+    actions = sum(("prices" in raw, raw.get("use_builtin") is True,
+                   raw.get("inactive") is True))
+    if actions != 1:
+        raise ValueError("Model price period must contain exactly one action.")
+    revision = {"effective_from": effective_from}
+    if "prices" in raw:
+        revision["prices"] = normalize_model_price(raw["prices"])
+    elif raw.get("use_builtin") is True:
+        if not builtin:
+            raise ValueError("Only bundled models can resume built-in pricing.")
+        revision["use_builtin"] = True
+    else:
+        if builtin:
+            raise ValueError("Bundled models cannot be retired.")
+        revision["inactive"] = True
+    return revision
+
+
+def _normalize_model_price_history(raw, builtin):
+    """Normalize a legacy timeless price or a bounded revision timeline."""
+    if isinstance(raw, dict) and all(field in raw for field in MODEL_PRICE_FIELDS):
+        return [{"effective_from": None, "prices": normalize_model_price(raw)}]
+    if not isinstance(raw, list) or len(raw) > MAX_MODEL_PRICE_PERIODS:
+        raise ValueError("Model price history is invalid or too long.")
+    by_effective = {}
+    for item in raw:
+        revision = _normalize_model_price_revision(item, builtin)
+        by_effective[revision["effective_from"]] = revision
+    return sorted(
+        by_effective.values(),
+        key=lambda revision: (-1 if revision["effective_from"] is None
+                              else revision["effective_from"]),
+    )
+
+
+def _load_model_price_histories(path=None):
+    """Load validated price timelines with an mtime cache for hot cost paths."""
     path = path or TOKEN_METER_SETTINGS
     mtime_ns = _model_pricing_mtime_ns(path)
     if (_model_pricing_cache["path"] == path
             and _model_pricing_cache["mtime_ns"] == mtime_ns):
-        return _model_pricing_cache["overrides"]
+        return _model_pricing_cache["histories"]
 
     settings = load_json(path, {})
     raw = settings.get("model_pricing") if isinstance(settings, dict) else {}
-    overrides = {provider: {} for provider in MODEL_PRICE_PROVIDERS}
+    histories = {provider: {} for provider in MODEL_PRICE_PROVIDERS}
+    custom_models = set()
     if isinstance(raw, dict):
         for raw_provider, rows in raw.items():
             try:
@@ -627,45 +757,99 @@ def _load_model_price_overrides(path=None):
             for raw_model, prices in rows.items():
                 try:
                     model = normalize_model_price_id(raw_model)
-                    overrides[provider][model] = normalize_model_price(prices)
+                    builtin = model in builtin_model_price_tables()[provider]
+                    periods = _normalize_model_price_history(prices, builtin)
+                    if periods:
+                        custom_key = (provider, model)
+                        if (not builtin and custom_key not in custom_models
+                                and len(custom_models) >= MAX_CUSTOM_MODEL_PRICES):
+                            continue
+                        histories[provider][model] = periods
+                        if not builtin:
+                            custom_models.add(custom_key)
                 except ValueError:
                     continue
     _model_pricing_cache.update({
         "path": path,
         "mtime_ns": mtime_ns,
-        "overrides": overrides,
+        "histories": histories,
         "effective": {},
     })
-    return overrides
+    return histories
 
 
-def effective_model_price_table(provider, path=None):
+def _model_price_revision_at(periods, at=None):
+    timestamp = _price_timestamp(at)
+    if timestamp is None:
+        timestamp = time.time()
+    selected = None
+    for revision in periods or ():
+        effective_from = revision["effective_from"]
+        if effective_from is None or effective_from <= timestamp:
+            selected = revision
+        else:
+            break
+    return selected
+
+
+def _same_model_price_action(left, right):
+    if not left or not right:
+        return False
+    for key in ("prices", "use_builtin", "inactive"):
+        if key in left or key in right:
+            return left.get(key) == right.get(key)
+    return False
+
+
+def _last_model_price(periods):
+    for revision in reversed(periods or ()):
+        if "prices" in revision:
+            return revision["prices"]
+    return None
+
+
+def effective_model_price_table(provider, path=None, at=None):
     provider = normalize_model_price_provider(provider)
-    _load_model_price_overrides(path)
-    cached = _model_pricing_cache["effective"].get(provider)
+    histories = _load_model_price_histories(path)
+    cache_key = (provider, _model_price_period_key(provider, at, histories))
+    cached = _model_pricing_cache["effective"].get(cache_key)
     if cached is not None:
         return cached
-    table = {
-        model: dict(prices)
-        for model, prices in builtin_model_price_tables()[provider].items()
-    }
-    table.update(_load_model_price_overrides(path).get(provider) or {})
-    _model_pricing_cache["effective"][provider] = table
+    table = builtin_model_price_table(provider, at)
+    for model, periods in histories[provider].items():
+        revision = _model_price_revision_at(periods, at)
+        if not revision or revision.get("use_builtin") is True:
+            continue
+        if revision.get("inactive") is True:
+            table.pop(model, None)
+        else:
+            table[model] = dict(revision["prices"])
+    _model_pricing_cache["effective"][cache_key] = table
     return table
 
 
 def model_pricing_settings(path=None):
-    """Return built-in prices plus durable user overrides for the Settings UI."""
+    """Return current prices and sanitized timeline metadata for Settings."""
     path = path or TOKEN_METER_SETTINGS
-    overrides = _load_model_price_overrides(path)
+    histories = _load_model_price_histories(path)
     rows = []
     labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor"}
     for provider in MODEL_PRICE_PROVIDERS:
         builtins = builtin_model_price_tables()[provider]
-        for model in sorted(set(builtins) | set(overrides[provider])):
+        effective = effective_model_price_table(provider, path)
+        for model in sorted(set(builtins) | set(histories[provider])):
             builtin = model in builtins
-            overridden = model in overrides[provider]
-            prices = (overrides[provider].get(model) or builtins[model])
+            periods = histories[provider].get(model) or []
+            revision = _model_price_revision_at(periods)
+            overridden = bool(revision and "prices" in revision and builtin)
+            active = builtin or bool(revision and "prices" in revision)
+            prices = effective.get(model) or _last_model_price(periods) or ZERO_PRICE
+            if not builtin and not active:
+                source = "retired"
+            elif builtin and not overridden:
+                source = "built-in"
+            else:
+                source = "override" if builtin else "custom"
             rows.append({
                 "provider": provider,
                 "provider_label": labels[provider],
@@ -674,7 +858,10 @@ def model_pricing_settings(path=None):
                 "builtin": builtin,
                 "overridden": overridden,
                 "custom": not builtin,
-                "source": "custom" if not builtin else ("override" if overridden else "built-in"),
+                "active": active,
+                "source": source,
+                "effective_from": revision.get("effective_from") if revision else None,
+                "periods": len(periods),
             })
     return {
         "models": rows,
@@ -683,43 +870,93 @@ def model_pricing_settings(path=None):
         "overrides": sum(
             1 for row in rows if row["builtin"] and row["overridden"]
         ),
-        "custom_models": sum(1 for row in rows if row["custom"]),
+        "custom_models": sum(1 for row in rows if row["custom"] and row["active"]),
+        "retired_custom_models": sum(
+            1 for row in rows if row["custom"] and not row["active"]
+        ),
         "max_custom_models": MAX_CUSTOM_MODEL_PRICES,
     }
 
 
-def set_model_price(provider, model, prices=None, remove=False, path=None):
-    """Persist one model price, or restore/remove it when ``remove`` is true."""
+def set_model_price(provider, model, prices=None, remove=False, path=None,
+                    apply_to_all_history=False, effective_from=None):
+    """Start one price period, or deliberately replace its complete history."""
     path = path or TOKEN_METER_SETTINGS
     try:
         provider = normalize_model_price_provider(provider)
         model = normalize_model_price_id(model)
         normalized = None if remove else normalize_model_price(prices)
+        if not isinstance(apply_to_all_history, bool):
+            raise ValueError("Apply to all history must be true or false.")
+        if effective_from is not None:
+            if isinstance(effective_from, bool) or not isinstance(effective_from, (int, float)):
+                raise ValueError("Model price effective time must be a Unix timestamp.")
+            effective_from = float(effective_from)
+            if not math.isfinite(effective_from) or effective_from < 0:
+                raise ValueError("Model price effective time must be a Unix timestamp.")
+            if effective_from > time.time() + 300:
+                raise ValueError("Model price effective time cannot be in the future.")
+        if apply_to_all_history and effective_from is not None:
+            raise ValueError("Choose either an effective time or all history, not both.")
     except ValueError as error:
         return {"ok": False, "error": str(error)}
 
-    overrides = copy.deepcopy(_load_model_price_overrides(path))
+    histories = copy.deepcopy(_load_model_price_histories(path))
+    builtin = builtin_model_price_tables()[provider].get(model)
+    periods = histories[provider].get(model) or []
+    changed = False
+    applied_from = None if apply_to_all_history else (
+        effective_from if effective_from is not None else time.time()
+    )
+    if apply_to_all_history and (remove or (builtin is not None and builtin == normalized)):
+        changed = histories[provider].pop(model, None) is not None
+    elif apply_to_all_history:
+        replacement = [{"effective_from": None, "prices": normalized}]
+        changed = periods != replacement
+        histories[provider][model] = replacement
+    else:
+        if remove:
+            action = ({"use_builtin": True} if builtin is not None else {"inactive": True})
+        elif builtin is not None and builtin == normalized:
+            action = {"use_builtin": True}
+        else:
+            action = {"prices": normalized}
+        current = _model_price_revision_at(periods, applied_from)
+        if current is None:
+            current = ({"use_builtin": True} if builtin is not None else {"inactive": True})
+        if not _same_model_price_action(current, action):
+            replacement = {"effective_from": applied_from, **action}
+            by_effective = {item["effective_from"]: item for item in periods}
+            by_effective[applied_from] = replacement
+            updated = sorted(
+                by_effective.values(),
+                key=lambda revision: (-1 if revision["effective_from"] is None
+                                      else revision["effective_from"]),
+            )
+            if len(updated) > MAX_MODEL_PRICE_PERIODS:
+                return {
+                    "ok": False,
+                    "error": f"Use at most {MAX_MODEL_PRICE_PERIODS} saved periods per model.",
+                }
+            histories[provider][model] = updated
+            changed = True
+
     custom_count = sum(
         1
-        for item_provider, rows in overrides.items()
+        for item_provider, rows in histories.items()
         for item_model in rows
         if item_model not in builtin_model_price_tables()[item_provider]
     )
-    builtin = builtin_model_price_tables()[provider].get(model)
-    changed = False
-    if remove:
-        changed = overrides[provider].pop(model, None) is not None
-    elif builtin == normalized:
-        changed = overrides[provider].pop(model, None) is not None
-    else:
-        is_new_custom = builtin is None and model not in overrides[provider]
-        if is_new_custom and custom_count >= MAX_CUSTOM_MODEL_PRICES:
+    if custom_count > MAX_CUSTOM_MODEL_PRICES:
+        if builtin is None and model not in _load_model_price_histories(path)[provider]:
             return {
                 "ok": False,
                 "error": f"Use at most {MAX_CUSTOM_MODEL_PRICES} custom model prices.",
             }
-        changed = overrides[provider].get(model) != normalized
-        overrides[provider][model] = normalized
+        return {
+            "ok": False,
+            "error": f"Remove an archived custom model before adding another; the limit is {MAX_CUSTOM_MODEL_PRICES}.",
+        }
 
     settings = load_json(path, {})
     if not isinstance(settings, dict):
@@ -729,7 +966,7 @@ def set_model_price(provider, model, prices=None, remove=False, path=None):
             item_model: rows[item_model]
             for item_model in sorted(rows)
         }
-        for item_provider, rows in overrides.items()
+        for item_provider, rows in histories.items()
         if rows
     }
     if stored:
@@ -738,11 +975,11 @@ def set_model_price(provider, model, prices=None, remove=False, path=None):
         settings.pop("model_pricing", None)
     try:
         atomic_write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
-    except OSError as error:
-        return {"ok": False, "error": f"Token Meter could not save settings: {error}"}
+    except OSError:
+        return {"ok": False, "error": "Token Meter could not save settings."}
 
     _model_pricing_cache.update({
-        "path": None, "mtime_ns": None, "overrides": {}, "effective": {},
+        "path": None, "mtime_ns": None, "histories": {}, "effective": {},
     })
     return {
         "ok": True,
@@ -750,6 +987,12 @@ def set_model_price(provider, model, prices=None, remove=False, path=None):
         "provider": provider,
         "model": model,
         "removed": bool(remove),
+        "apply_to_all_history": apply_to_all_history,
+        "effective_from": applied_from,
+        "effective_scope": (
+            "all_history" if apply_to_all_history else
+            ("selected_time" if effective_from is not None else "now")
+        ),
         "model_pricing": model_pricing_settings(path),
     }
 
@@ -2109,6 +2352,8 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
                 "error_code": "trash_failed"}
 
     _summary_cache.pop(path, None)
+    with _session_state_cache_lock:
+        _session_state_cache.pop(path, None)
     _xsess["data"], _xsess["at"] = None, 0.0
     return {
         "ok": True,
@@ -2162,23 +2407,24 @@ def cursor_price_variant(composer, model):
     return ""
 
 
-def price_for(model, provider="claude", variant=None):
+def price_for(model, provider="claude", variant=None, at=None):
+    """Return the configured price effective for one usage event."""
     if provider == "cursor":
         compact = str(model or "").replace(" ", "-").lower()
-        cursor_table = effective_model_price_table("cursor")
+        cursor_table = effective_model_price_table("cursor", at=at)
         if compact.startswith("composer-2.5"):
             price = _matching_price(f"composer-2.5-{variant or ''}", cursor_table)
             return (price or dict(ZERO_PRICE)), True
         price = (
             _matching_price(model, cursor_table)
-            or _matching_price(model, effective_model_price_table("codex"))
-            or _matching_price(model, effective_model_price_table("claude"))
+            or _matching_price(model, effective_model_price_table("codex", at=at))
+            or _matching_price(model, effective_model_price_table("claude", at=at))
         )
         return (price or dict(ZERO_PRICE)), True
     if provider not in ("claude", "codex"):
         return dict(ZERO_PRICE), True
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
-    table = effective_model_price_table(provider)
+    table = effective_model_price_table(provider, at=at)
     default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL
     price = _matching_price(model, table)
     if price:
@@ -2186,13 +2432,34 @@ def price_for(model, provider="claude", variant=None):
     return table[default], True
 
 
-def cost_of(u, model, provider="claude", variant=None):
-    p, _ = price_for(model, provider, variant)
+def _price_multipliers(u, model, provider, at=None):
+    """Return current published long-context multipliers without repricing history."""
+    timestamp = _price_timestamp(at)
+    if timestamp is not None and timestamp < GPT_56_PRICE_UPDATE_AT:
+        return 1.0, 1.0
+    compact = str(model or "").replace(" ", "-").lower()
+    if provider not in ("codex", "cursor") or not compact.startswith("gpt-5.6"):
+        return 1.0, 1.0
+    input_tokens = (
+        int(u.get("input_tokens", 0) or 0)
+        + int(u.get("cache_creation_input_tokens", 0) or 0)
+        + int(u.get("cache_read_input_tokens", 0) or 0)
+    )
+    if input_tokens > GPT_56_LONG_CONTEXT_TOKENS:
+        return 2.0, 1.5
+    return 1.0, 1.0
+
+
+def cost_of(u, model, provider="claude", variant=None, at=None):
+    p, _ = price_for(model, provider, variant, at=at)
+    input_multiplier, output_multiplier = _price_multipliers(u, model, provider, at)
     return {
-        "input": u.get("input_tokens", 0) * p["input"] / 1e6,
-        "cache_write": u.get("cache_creation_input_tokens", 0) * p["cache_write"] / 1e6,
-        "cache_read": u.get("cache_read_input_tokens", 0) * p["cache_read"] / 1e6,
-        "output": u.get("output_tokens", 0) * p["output"] / 1e6,
+        "input": u.get("input_tokens", 0) * p["input"] * input_multiplier / 1e6,
+        "cache_write": (u.get("cache_creation_input_tokens", 0)
+                        * p["cache_write"] * input_multiplier / 1e6),
+        "cache_read": (u.get("cache_read_input_tokens", 0)
+                       * p["cache_read"] * input_multiplier / 1e6),
+        "output": u.get("output_tokens", 0) * p["output"] * output_multiplier / 1e6,
     }
 
 
@@ -3712,11 +3979,13 @@ def recompute_cursor(source):
         output_tokens = assistant_tokens + reasoning_tokens
         model_calls = cursor_model_call_count(bubbles)
         variant = cursor_price_variant(composer, model)
-        price, _ = price_for(model, "cursor", variant)
+        pricing_at = end_ts or start_ts
+        price, _ = price_for(model, "cursor", variant, at=pricing_at)
         pricing_supported = any(float(value or 0) > 0 for value in price.values())
         usage = {"input_tokens": context_tokens, "output_tokens": output_tokens}
         cost_available = bool(context_tokens and pricing_supported)
-        cost_breakdown = cost_of(usage, model, "cursor", variant) if cost_available else dict(ZERO_PRICE)
+        cost_breakdown = (cost_of(usage, model, "cursor", variant, at=pricing_at)
+                          if cost_available else dict(ZERO_PRICE))
         execution_cost = sum(cost_breakdown.values())
         tools = []
         reasoning_ms = 0.0
@@ -3999,6 +4268,50 @@ def recompute(source):
     return None
 
 
+def session_state_signature(source):
+    """Return a bounded detailed-state cache key for one discovered session."""
+    if not source:
+        return None
+    path = str(source.get("path") or "")
+    return (
+        str(source.get("provider") or ""),
+        str(source.get("id") or ""),
+        path,
+        float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
+        file_signature(path),
+    )
+
+
+def cached_session_state(source):
+    """Recompute detailed state only when the selected session evidence changes."""
+    if not source:
+        return None
+    signature = session_state_signature(source)
+    cache_key = str(source.get("path") or source.get("id") or "")
+    with _session_state_cache_lock:
+        cached = _session_state_cache.get(cache_key)
+        if cached and cached.get("signature") == signature:
+            return copy.deepcopy(cached.get("state"))
+
+    state = recompute(source)
+    if state is None:
+        return None
+    with _session_state_cache_lock:
+        _session_state_cache[cache_key] = {
+            "signature": signature,
+            "state": copy.deepcopy(state),
+            "at": time.time(),
+        }
+        if len(_session_state_cache) > SESSION_STATE_CACHE_LIMIT:
+            oldest = sorted(
+                _session_state_cache,
+                key=lambda key: _session_state_cache[key].get("at") or 0,
+            )[:len(_session_state_cache) - SESSION_STATE_CACHE_LIMIT]
+            for key in oldest:
+                _session_state_cache.pop(key, None)
+    return copy.deepcopy(state)
+
+
 def recompute_claude(source):
     path = source["path"]
     objs = load(path)
@@ -4043,8 +4356,8 @@ def recompute_claude(source):
         user_input = user_prompt_preview(pending_user_texts)
         pending_user_texts = []
 
-        c = cost_of(usage, model, "claude")
-        _, approx = price_for(model, "claude")
+        c = cost_of(usage, model, "claude", at=ts)
+        _, approx = price_for(model, "claude", at=ts)
         approx_cost = approx_cost or approx
         tc = sum(c.values())
         for key in cost:
@@ -4083,7 +4396,7 @@ def recompute_claude(source):
         if has_think:
             think_turns += 1
             think_out += out_tok
-            think_cost += out_tok * price_for(model, "claude")[0]["output"] / 1e6
+            think_cost += out_tok * price_for(model, "claude", at=ts)[0]["output"] / 1e6
             trace.append(trace_event(ts, "reasoning", "Reasoning", f"thinking turn #{idx}", idx,
                                      tokens=out_tok, cost=think_cost, severity="reasoning",
                                      model=model, output_tokens=out_tok))
@@ -4187,7 +4500,7 @@ def recompute_claude(source):
     analyses = analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_tok, model_cost,
                               tool_data, side_cost, side_turns, completed)
     insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
-                              "claude", primary_model, approx_cost)
+                              "claude", primary_model, approx_cost, executions)
 
     wait_samples = claude_wait_samples(objs)
     state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
@@ -4431,8 +4744,8 @@ def recompute_codex(source):
             context_window = info.get("model_context_window") or context_window or pending.get("context_window")
             usage = codex_usage(raw)
             idx = len(series) + 1
-            c = cost_of(usage, model, "codex")
-            _, missing_price = price_for(model, "codex")
+            c = cost_of(usage, model, "codex", at=ts)
+            _, missing_price = price_for(model, "codex", at=ts)
             approx_cost = approx_cost or missing_price
             tc = sum(c.values())
             for key in cost:
@@ -4541,15 +4854,19 @@ def recompute_codex(source):
         "coordination": sum(e["tokens"]["output"] for e in coord_execs),
     }
     primary_model = max(model_tok, key=model_tok.get) if model_tok else model
-    p, _ = price_for(primary_model, "codex")
-    think_cost = reasoning_tokens * p["output"] / 1e6
+    think_cost = sum(
+        float((execution.get("cost_breakdown") or {}).get("output") or 0)
+        * int(execution.get("reasoning_tokens") or 0)
+        / max(1, int((execution.get("tokens") or {}).get("output") or 0))
+        for execution in executions
+    )
     analyses = analysis_block(tot, total_cost, reasoning_tokens, sum(1 for e in executions if e["reasoning_tokens"]),
                               think_cost, model_tok, model_cost, tool_data, coord_cost,
                               len(coord_execs), completed or len(executions))
     cache_in = tot["cache_read"] + tot["cache_write"]
     cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
     insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
-                              "codex", primary_model, True)
+                              "codex", primary_model, True, executions)
 
     source = dict(source)
     source["project"] = meta_cwd or source.get("project")
@@ -4791,7 +5108,28 @@ def enrich_insights(insights, executions, tool_data, context_window, context_lat
     return normalize_insights(out)
 
 
-def cache_savings(tot, provider, model):
+def cache_savings(tot, provider, model, executions=None):
+    if executions:
+        saved = 0.0
+        for execution in executions:
+            tokens = execution.get("tokens") or {}
+            cache_read = int(tokens.get("cache_read", 0) or 0)
+            if not cache_read:
+                continue
+            execution_model = execution.get("model") or model
+            variant = execution.get("pricing_variant")
+            at = execution.get("ts") or None
+            usage = {
+                "input_tokens": int(tokens.get("fresh_input", 0) or 0),
+                "cache_creation_input_tokens": int(tokens.get("cache_write", 0) or 0),
+                "cache_read_input_tokens": cache_read,
+                "output_tokens": int(tokens.get("output", 0) or 0),
+            }
+            p, _ = price_for(execution_model, provider, variant, at=at)
+            input_multiplier, _ = _price_multipliers(usage, execution_model, provider, at)
+            saved += (cache_read * max(0, p["input"] - p["cache_read"])
+                      * input_multiplier / 1e6)
+        return saved
     p, _ = price_for(model, provider)
     return tot["cache_read"] * max(0, p["input"] - p["cache_read"]) / 1e6
 
@@ -4815,7 +5153,7 @@ def cache_block(tot, cost, executions, provider, model):
         "input_total": input_total,
         "hit_ratio": (read / cached) if cached else 0.0,
         "input_share": (cached / input_total) if input_total else 0.0,
-        "saved": cache_savings(tot, provider, model),
+        "saved": cache_savings(tot, provider, model, executions),
         "cost": (cost.get("cache_read", 0.0) or 0.0) + (cost.get("cache_write", 0.0) or 0.0),
         "read_cost": cost.get("cache_read", 0.0) or 0.0,
         "write_cost": cost.get("cache_write", 0.0) or 0.0,
@@ -4829,7 +5167,8 @@ def cache_block(tot, cost, executions, provider, model):
     }
 
 
-def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, provider, model, cost_approx):
+def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, provider, model,
+                   cost_approx, executions=None):
     out = []
     if total_cost <= 0:
         return out
@@ -4846,7 +5185,7 @@ def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an, pro
         priority=22 if top_kind == "warn" else 46,
     ))
 
-    saved = cache_savings(tot, provider, model)
+    saved = cache_savings(tot, provider, model, executions)
     fresh = int(tot.get("input", 0) or 0)
     read = int(tot.get("cache_read", 0) or 0)
     write = int(tot.get("cache_write", 0) or 0)
@@ -5086,12 +5425,22 @@ def claude_summary(source, objs):
     input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = False
+    latest_context = 0
+    context_samples = []
+    primary_model = source.get("model") or DEFAULT_CLAUDE_MODEL
     for rec in msgs:
         usage = rec["usage"]
         if not usage:
             continue
-        c = sum(cost_of(usage, rec["model"], "claude").values())
-        _, missing = price_for(rec["model"], "claude")
+        primary_model = rec["model"] or primary_model
+        latest_context = (
+            int(usage.get("input_tokens") or 0)
+            + int(usage.get("cache_read_input_tokens") or 0)
+            + int(usage.get("cache_creation_input_tokens") or 0)
+        )
+        context_samples.append(latest_context)
+        c = sum(cost_of(usage, rec["model"], "claude", at=rec["ts"]).values())
+        _, missing = price_for(rec["model"], "claude", at=rec["ts"])
         approx = approx or missing
         toks = usage_tokens(usage)
         cost += c
@@ -5124,6 +5473,15 @@ def claude_summary(source, objs):
     row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
+    row["primary_model"] = primary_model
+    row["context"] = {
+        "latest": latest_context,
+        "window": None,
+        "latest_pct": None,
+        "estimated": False,
+    }
+    row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+    row["terminal"] = bool(msgs and msgs[-1].get("stop_reason") == "end_turn")
     signal_rollups, signal_events = analyze_language_signals(
         "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
     )
@@ -5134,6 +5492,7 @@ def claude_summary(source, objs):
 
 def codex_summary(source, objs):
     model = source.get("model") or DEFAULT_OPENAI_MODEL
+    reasoning_effort = ""
     cost = 0.0
     tokens = 0
     turns = 0
@@ -5145,18 +5504,35 @@ def codex_summary(source, objs):
     input_tokens = output_tokens = 0
     day_cost = defaultdict(float)
     approx = True
+    context_window = 0
+    latest_context = 0
+    context_samples = []
+    terminal = False
 
     for obj in objs:
         payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
         if obj.get("type") == "turn_context":
             model = payload.get("model") or model
+            effort = payload.get("effort")
+            if isinstance(effort, (str, int, float)) and str(effort).strip():
+                reasoning_effort = compact_text(str(effort).strip().lower(), 20)
+        if payload.get("type") == "task_started":
+            context_window = int(payload.get("model_context_window") or context_window or 0)
+            terminal = False
+        elif payload.get("type") == "task_complete":
+            terminal = True
         if payload.get("type") != "token_count":
             continue
-        raw = ((payload.get("info") or {}).get("last_token_usage") or {})
+        info = payload.get("info") or {}
+        raw = (info.get("last_token_usage") or {})
         if not raw:
             continue
+        context_window = int(info.get("model_context_window") or context_window or 0)
         usage = codex_usage(raw)
-        c = sum(cost_of(usage, model, "codex").values())
+        latest_context = int(usage.get("input_tokens") or 0) + int(usage.get("cache_read_input_tokens") or 0)
+        context_samples.append(latest_context)
+        ts = parse_iso(obj.get("timestamp", ""))
+        c = sum(cost_of(usage, model, "codex", at=ts).values())
         toks = usage_tokens(usage)
         turns += 1
         cost += c
@@ -5165,7 +5541,6 @@ def codex_summary(source, objs):
         model_cost[model] += c
         model_tok[model] += toks
         input_count, output_count = add_model_summary(model_stats, model, usage, c)
-        ts = parse_iso(obj.get("timestamp", ""))
         add_model_daily(model_daily, model, usage, c, ts)
         input_tokens += input_count
         output_tokens += output_count
@@ -5187,6 +5562,16 @@ def codex_summary(source, objs):
     row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                       execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
                       list(model_daily.values()), performance, wait_samples)
+    row["primary_model"] = model
+    row["reasoning_effort"] = reasoning_effort
+    row["context"] = {
+        "latest": latest_context,
+        "window": context_window or None,
+        "latest_pct": (latest_context / context_window) if context_window else None,
+        "estimated": False,
+    }
+    row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+    row["terminal"] = terminal
     signal_rollups, signal_events = analyze_language_signals(
         "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
     )
@@ -5206,7 +5591,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
     wait_samples = wait_samples or []
     availability = availability or metric_availability(source.get("provider"))
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
-    return {
+    row = {
         "id": source["id"],
         "path": source["path"],
         "provider": source["provider"],
@@ -5216,6 +5601,8 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "desktop_session_id": source.get("desktop_session_id"),
         "project": source.get("project") or "",
         "title": title or source.get("title") or "(untitled log)",
+        "session_name": compact_text(str(source.get("title") or ""), 90),
+        "reasoning_effort": compact_text(str(source.get("reasoning_effort") or ""), 20),
         "cost": cost,
         "cost_approx": bool(approx),
         "availability": availability,
@@ -5361,6 +5748,15 @@ def cursor_summary(source, objs=None):
             calls.append({**tool, "ts": execution.get("ts") or 0})
     row["_tool_evidence"] = summarize_tool_evidence(calls)
     row["context"] = state.get("context") or {}
+    row["_context_samples"] = [
+        int(execution.get("context_tokens") or
+            (execution.get("tokens") or {}).get("input") or 0)
+        for execution in executions[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+        if int(execution.get("context_tokens") or
+               (execution.get("tokens") or {}).get("input") or 0) > 0
+    ]
+    row["primary_model"] = state.get("primary_model") or source.get("model") or "unknown"
+    row["terminal"] = False
     row["tool_calls"] = int((state.get("tools") or {}).get("total_calls") or 0)
     row["tool_errors"] = int((state.get("tools") or {}).get("total_errors") or 0)
     return row
@@ -5383,6 +5779,94 @@ def session_summary(source):
                           {}, {}, {}, False, availability=metric_availability("unknown"))
     _summary_cache[source["path"]] = {"mtime": mtime, "row": row}
     return row
+
+
+def current_session_summaries(rows, now=None, max_age_s=CURRENT_SESSION_MAX_AGE_S,
+                              limit=CURRENT_SESSION_LIMIT):
+    """Return recent card-safe summaries without trace paths or prompt-derived titles."""
+    now = float(time.time() if now is None else now)
+    result = []
+    for row in sorted(rows or [], key=lambda item: -float(item.get("mtime") or 0)):
+        mtime = float(row.get("mtime") or 0)
+        idle_s = max(0, int(now - mtime))
+        if not mtime or idle_s > max_age_s:
+            continue
+        context = row.get("context") if isinstance(row.get("context"), dict) else {}
+        window = int(context.get("window") or 0) or None
+        latest = int(context.get("latest") or 0)
+        latest_pct = context.get("latest_pct")
+        if latest_pct is None and window:
+            latest_pct = latest / window
+        context_samples = []
+        for value in (row.get("_context_samples") or []):
+            try:
+                numeric = int(value)
+            except (TypeError, ValueError):
+                continue
+            if numeric >= 0:
+                context_samples.append(numeric)
+        if not context_samples and latest:
+            context_samples.append(latest)
+        context_samples = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+        provider = str(row.get("provider") or "unknown")
+        project = str(row.get("project") or "").strip().rstrip("/\\")
+        project = project.replace("\\", "/").rsplit("/", 1)[-1] if project else "No project"
+        project = compact_text(project or "No project", 52)
+        if idle_s > CURRENT_SESSION_WORKING_S:
+            activity_state = "recent"
+        elif row.get("terminal"):
+            activity_state = "waiting"
+        else:
+            activity_state = "working"
+        models = [compact_text(str(model), 80) for model in (row.get("models") or [])[:4]]
+        primary_model = compact_text(
+            str(row.get("primary_model") or (models[0] if models else "unknown")),
+            80,
+        )
+        availability = row.get("availability") if isinstance(row.get("availability"), dict) else {}
+        throughput = row.get("throughput") if isinstance(row.get("throughput"), dict) else {}
+        result.append({
+            "id": str(row.get("id") or "")[:240],
+            "provider": provider,
+            "client": str(row.get("client") or provider)[:80],
+            "runtime": compact_text(str(row.get("runtime") or row.get("label") or provider), 40),
+            "label": compact_text(str(row.get("label") or provider), 40),
+            "session_name": compact_text(str(row.get("session_name") or ""), 90),
+            "project": project,
+            "short_id": str(row.get("id") or "")[:8],
+            "primary_model": primary_model,
+            "reasoning_effort": compact_text(str(row.get("reasoning_effort") or ""), 20),
+            "models": models,
+            "cost": float(row.get("cost") or 0),
+            "cost_approx": bool(row.get("cost_approx")),
+            "availability": {
+                "cost": availability.get("cost") is not False,
+                "context": availability.get("context") is not False,
+                "throughput": bool(throughput.get("available")),
+            },
+            "usage_basis": str(row.get("usage_basis") or
+                               (row.get("provenance") or {}).get("usage_basis") or "unavailable"),
+            "context": {
+                "latest": latest,
+                "window": window,
+                "latest_pct": latest_pct,
+                "estimated": bool(context.get("estimated")),
+                "samples": context_samples,
+            },
+            "throughput": {
+                "available": bool(throughput.get("available")),
+                "output_tps": float(throughput.get("output_tps") or 0),
+                "basis": str(throughput.get("basis") or "unavailable"),
+            },
+            "token_estimate": bool(row.get("token_estimate")),
+            "turns": int(row.get("turns") or 0),
+            "mtime": mtime,
+            "idle_s": idle_s,
+            "activity_state": activity_state,
+        })
+        if len(result) >= max(0, int(limit)):
+            break
+    return result
 
 
 def global_tool_waste(session_rows):
@@ -6155,7 +6639,7 @@ def agent_access_client_status(client, launcher=None, runner=None, which=None, c
         "configured": configured,
         "connected": connected,
         "conflict": conflict,
-        "status": "Connected" if connected else ("Needs attention" if conflict else
+        "status": "Connected" if connected else ("Existing entry differs from this install" if conflict else
                   ("Ready to connect" if cli_path else "Client not found")),
         "connect_command": agent_access_command_display(add_command),
         "disconnect_command": agent_access_command_display(remove_command),
@@ -6185,7 +6669,7 @@ def agent_access_status(**kwargs):
     }
 
 
-def set_agent_access(client, enabled, runner=None, status_getter=None):
+def set_agent_access(client, enabled, repair=False, runner=None, status_getter=None):
     client = str(client or "").strip().lower()
     if client not in ("codex", "claude") or enabled not in (True, False):
         return {"ok": False, "error": "A supported client and explicit connection state are required."}
@@ -6198,34 +6682,46 @@ def set_agent_access(client, enabled, runner=None, status_getter=None):
         return {"ok": False, "error": "The Token Meter MCP launcher is not executable. Reinstall Token Meter."}
     if enabled and before.get("connected"):
         return {"ok": True, "changed": False, "client": before, "restart_required": False}
-    if before.get("conflict"):
+    repairing = bool(enabled and repair is True and before.get("conflict"))
+    if before.get("conflict") and not repairing:
         return {"ok": False, "conflict": True,
-                "error": "A different tokenmeter MCP entry already exists. Remove or rename it before connecting Token Meter."}
+                "error": "The existing tokenmeter MCP entry differs from this install. Confirm repair to replace only that entry."}
     if not enabled and not before.get("configured"):
         return {"ok": True, "changed": False, "client": before, "restart_required": False}
     cli_path = agent_client_executable(client)
-    command = agent_access_command(client, enabled, cli_path=cli_path)
-    try:
-        completed = runner(command, capture_output=True, text=True, timeout=45, check=False,
-                           env=agent_client_environment(cli_path))
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "The agent client timed out while changing the connection."}
-    except OSError:
-        return {"ok": False, "error": "The agent client could not change the connection."}
-    if completed.returncode != 0:
-        label = before.get("label") or client
-        detail = agent_cli_error_detail(completed)
-        message = f"{label} rejected the connection change."
-        if detail:
-            message = f"{message} {detail}"
-        return {"ok": False, "error": message}
+    commands = []
+    if repairing:
+        commands.append(("remove the existing tokenmeter entry",
+                         agent_access_command(client, False, cli_path=cli_path)))
+    commands.append(("save the Token Meter connection",
+                     agent_access_command(client, enabled, cli_path=cli_path)))
+    for description, command in commands:
+        try:
+            completed = runner(command, capture_output=True, text=True, timeout=45, check=False,
+                               env=agent_client_environment(cli_path))
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "conflict": repairing,
+                    "error": f"The agent client timed out while trying to {description}."}
+        except OSError:
+            return {"ok": False, "conflict": repairing,
+                    "error": f"The agent client could not {description}."}
+        if completed.returncode != 0:
+            label = before.get("label") or client
+            detail = agent_cli_error_detail(completed)
+            message = f"{label} could not {description}."
+            if detail:
+                message = f"{message} {detail}"
+            return {"ok": False, "conflict": repairing, "error": message}
     after = status_getter(client)
     verified = bool(after.get("connected")) if enabled else not bool(after.get("configured"))
     if not verified:
         return {"ok": False, "error": "The connection command completed, but the saved configuration could not be verified."}
     return {
-        "ok": True, "changed": True, "client": after, "restart_required": True,
-        "message": f"{after.get('label') or client} {'connected' if enabled else 'disconnected'}. Start a new agent session.",
+        "ok": True, "changed": True, "repaired": repairing, "client": after,
+        "restart_required": True,
+        "message": (f"{after.get('label') or client} connection repaired. Start a new agent session."
+                    if repairing else
+                    f"{after.get('label') or client} {'connected' if enabled else 'disconnected'}. Start a new agent session."),
     }
 
 
@@ -7448,6 +7944,7 @@ def cross_session(sources=None):
     data = {
         "generated_at": int(now),
         "sessions": sessions[:60],
+        "current_sessions": current_session_summaries(internal_rows, now=now),
         "model_mix": mm,
         "trend": trend,
         "total_cost": total,
@@ -7595,6 +8092,27 @@ def source_mtime_signature(sources):
         for source in (sources or [])
         if source.get("path")
     ))
+
+
+def source_identity_signature(sources):
+    """Track session membership independently from ordinary log updates."""
+    return tuple(sorted(
+        (str(source.get("provider") or ""),
+         str(source.get("id") or ""),
+         str(source.get("path") or ""))
+        for source in (sources or [])
+        if source.get("id") or source.get("path")
+    ))
+
+
+def cross_session_refresh_due(dirty, membership_changed, now, last_refresh):
+    """Refresh membership immediately while throttling ordinary log updates."""
+    return bool(
+        dirty and (
+            membership_changed
+            or now - last_refresh >= _XSESS_LIVE_REFRESH_S
+        )
+    )
 
 
 def refresh_cross_session_state(state=None, builder=None, publisher=None):
@@ -9157,6 +9675,7 @@ def menubar_state(session_id=None):
 def watcher():
     cur, last_sig = None, None
     last_sources_sig = None
+    last_source_identities = None
     cross_dirty = False
     last_cross_refresh = 0.0
     while True:
@@ -9164,9 +9683,14 @@ def watcher():
         publish_source_inventory(sources)
         nf = max(sources, key=lambda source: source["mtime"]) if sources else None
         sources_sig = source_mtime_signature(sources)
+        source_identities = source_identity_signature(sources)
+        membership_changed = source_identities != last_source_identities
         if sources_sig != last_sources_sig:
             cross_dirty = True
             last_sources_sig = sources_sig
+        if membership_changed:
+            cross_dirty = True
+            last_source_identities = source_identities
         if nf and (not cur or nf["path"] != cur["path"]):
             cur, last_sig = nf, None
         elif nf and cur and nf["path"] == cur["path"]:
@@ -9191,7 +9715,8 @@ def watcher():
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
         now = time.monotonic()
-        if cross_dirty and now - last_cross_refresh >= _XSESS_LIVE_REFRESH_S:
+        if cross_session_refresh_due(
+                cross_dirty, membership_changed, now, last_cross_refresh):
             cross = refresh_cross_session_state(
                 updated_state or STATE,
                 builder=lambda: cross_session(sources=sources),
@@ -9245,6 +9770,17 @@ def page_path():
 
 def is_dashboard_page_path(req_path):
     return req_path == "/" or bool(re.fullmatch(r"/sessions/[^/]{1,240}/?", req_path or ""))
+
+
+def dashboard_asset_path(req_path):
+    """Resolve the one bundled dashboard font without exposing arbitrary files."""
+    if req_path != "/assets/fonts/Tektur-Variable.ttf":
+        return None
+    dashboard = page_path()
+    if not dashboard:
+        return None
+    path = os.path.join(os.path.dirname(dashboard), "assets", "fonts", "Tektur-Variable.ttf")
+    return path if os.path.isfile(path) else None
 
 
 def missing_page_html():
@@ -9321,6 +9857,12 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(os.path.getsize(path) if path else len(body)))
             self.end_headers()
+        elif dashboard_asset_path(req_path):
+            path = dashboard_asset_path(req_path)
+            self.send_response(200)
+            self.send_header("Content-Type", "font/ttf")
+            self.send_header("Content-Length", str(os.path.getsize(path)))
+            self.end_headers()
         else:
             self.send_error(404)
 
@@ -9388,6 +9930,8 @@ class H(BaseHTTPRequestHandler):
                 payload.get("model"),
                 payload.get("prices"),
                 remove=payload.get("remove") is True,
+                apply_to_all_history=payload.get("apply_to_all_history") is True,
+                effective_from=payload.get("effective_from"),
             )
             if result.get("ok"):
                 _summary_cache.clear()
@@ -9431,7 +9975,8 @@ class H(BaseHTTPRequestHandler):
                        status=202 if result.get("ok") else 409)
             return
         if req_path == "/agent-access/toggle":
-            result = set_agent_access(payload.get("client"), payload.get("enabled"))
+            result = set_agent_access(payload.get("client"), payload.get("enabled"),
+                                      repair=payload.get("repair") is True)
             status = 200 if result.get("ok") else (409 if result.get("conflict") else 400)
             self._send(json.dumps(result), "application/json", status=status)
             return
@@ -9474,13 +10019,24 @@ class H(BaseHTTPRequestHandler):
                 self._send(open(path, encoding="utf-8").read())
             else:
                 self._send(missing_page_html(), status=503)
+        elif dashboard_asset_path(req_path):
+            with open(dashboard_asset_path(req_path), "rb") as asset:
+                self._send(asset.read(), "font/ttf")
         elif req_path == "/session":
-            sid = (parse_qs(parsed.query).get("id") or [""])[0]
+            query = parse_qs(parsed.query)
+            sid = (query.get("id") or [""])[0]
+            live = (query.get("live") or [""])[0] == "1"
             source = find_session(sid)
-            st = recompute(source) if source else None
+            st = cached_session_state(source) if source else None
             if st:
-                attach_cross_session(st)
-                st["ended"] = True
+                cross = cross_session()
+                attach_cross_session(st, cross)
+                current_ids = {
+                    str(row.get("id") or "")
+                    for row in (cross.get("current_sessions") or [])
+                }
+                st["ended"] = not live or str((st.get("source") or {}).get("id") or "") not in current_ids
+                st["selected_live"] = live
                 if st.get("timing"):
                     st["timing"]["end_label"] = "Last activity"
             self._send(json.dumps(st or {}), "application/json")

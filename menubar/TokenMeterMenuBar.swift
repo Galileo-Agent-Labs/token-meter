@@ -2,7 +2,7 @@ import Cocoa
 import Foundation
 
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
-private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#summary")!
+private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#sessions")!
 private let tokenMeterBudgetSettingsURL = URL(string: "http://127.0.0.1:8722/#settings-budgets")!
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
 private let selectedTabDefaultsKey = "TokenMeterSelectedTab"
@@ -1427,7 +1427,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openDashboard() {
-        openDashboardPanel("summary")
+        if pinnedSessionID?.isEmpty == false {
+            openDashboardPanel("summary")
+        } else {
+            openDashboardPanel("sessions", includePinnedSession: false)
+        }
     }
 
     @objc private func openDailyBrief() {

@@ -2906,6 +2906,125 @@ class MenubarSourceTests(unittest.TestCase):
         )
 
 
+class TrayLogicTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        tray_path = Path(meter.__file__).with_name("menubar").joinpath("token_meter_tray.py")
+        spec = importlib.util.spec_from_file_location("token_meter_tray", tray_path)
+        cls.tray = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.tray)
+
+    def test_dashboard_url_opens_sessions_unless_pinned(self):
+        self.assertEqual(
+            self.tray.dashboard_url("#sessions", pinned_session=None, include_pinned_session=False),
+            "http://127.0.0.1:8722/#sessions",
+        )
+        self.assertEqual(
+            self.tray.dashboard_url("#summary", pinned_session="abc"),
+            "http://127.0.0.1:8722/sessions/abc#summary",
+        )
+
+    def test_tray_status_title_uses_selected_metrics_and_budget_warning(self):
+        state = {
+            "availability": {"cost": True, "throughput": True, "cache": True, "tokens": True},
+            "source": {"label": "Claude", "token_estimate": False},
+            "total_cost": 1.25,
+            "model": "claude-test",
+            "context": {"latest_pct": 0.42},
+            "throughput": {"available": True, "output_tps": 12.3},
+        }
+        providers = [{
+            "id": "claude",
+            "label": "Claude",
+            "status": "ok",
+            "stale": False,
+            "windows": [{"id": "weekly", "kind": "weekly", "label": "Weekly", "used_percent": 88}],
+        }]
+        budget = {
+            "configured": True,
+            "percent": 110,
+            "spend": 11,
+            "budget": 10,
+            "month": "2026-07",
+            "lower_bound": False,
+            "scopes": [{
+                "id": "overall", "label": "Overall", "spend": 11, "budget": 10, "percent": 110,
+            }],
+        }
+        title = self.tray.tray_status_title(
+            state, {"cost", "speed", "limits"}, providers, budget,
+        )
+        self.assertTrue(title.startswith("⚠︎ "))
+        self.assertIn("$1.25", title)
+        self.assertIn("12.3 tok/s", title)
+        self.assertIn("Claude 88% · weekly", title)
+
+    def test_budget_notifications_fire_on_threshold_crossing(self):
+        budget = {
+            "configured": True,
+            "month": "2026-07",
+            "percent": 0.85,
+            "spend": 85,
+            "budget": 100,
+            "lower_bound": False,
+            "native_notifications": True,
+            "thresholds": [80, 90, 100],
+            "scopes": [{
+                "id": "overall", "label": "Overall", "spend": 85, "budget": 100, "percent": 85,
+            }],
+        }
+        settings = dict(self.tray.DEFAULT_STATE)
+        settings["budget_notification_states"] = {
+            "overall": {
+                "month": "2026-07",
+                "last_percent": 75,
+                "fired_thresholds": [],
+            },
+        }
+        first = self.tray.evaluate_budget_notifications(budget, settings)
+        second = self.tray.evaluate_budget_notifications(budget, settings)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0][0], "Overall monthly budget reached 80%")
+        self.assertEqual(second, [])
+
+
+class TraySourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = (
+            Path(meter.__file__).with_name("menubar").joinpath("token_meter_tray.py").read_text()
+        )
+
+    def test_linux_tray_matches_native_dashboard_routing_and_actions(self):
+        for marker in (
+            "def open_dashboard(self):",
+            'self.open_url("#sessions", include_pinned_session=False)',
+            'self.open_url("#summary")',
+            "Open Budget Settings",
+            "#settings-budgets",
+            "Model Prices",
+            "#model-pricing",
+        ):
+            self.assertIn(marker, self.source)
+
+    def test_linux_tray_exposes_tabs_title_metrics_and_notifications(self):
+        for marker in (
+            '("overview", "All")',
+            '("claude", "Claude")',
+            "Menu bar title",
+            "Quota notifications",
+            "Warn at",
+            "evaluate_quota_notifications",
+            "evaluate_budget_notifications",
+            '["notify-send", title, body]',
+            "Output speed:",
+            "Monthly budget:",
+            "Most constrained:",
+        ):
+            self.assertIn(marker, self.source)
+
+
 class ProviderQuotaTests(unittest.TestCase):
     def tearDown(self):
         meter.reset_provider_quota_cache()
@@ -3917,6 +4036,9 @@ class InstallationTests(unittest.TestCase):
         self.assertNotIn("self.indicator.set_menu(menu)", tray)
         self.assertIn("Recent sessions", tray)
         self.assertIn("Provider limits", tray)
+        self.assertIn("Open Budget Settings", tray)
+        self.assertIn("Menu bar title", tray)
+        self.assertIn("def open_dashboard(self):", tray)
 
     def test_linux_runtime_uses_xdg_desktop_and_trash_paths(self):
         if not meter.IS_LINUX:

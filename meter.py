@@ -9742,6 +9742,17 @@ def is_dashboard_page_path(req_path):
     return req_path == "/" or bool(re.fullmatch(r"/sessions/[^/]{1,240}/?", req_path or ""))
 
 
+def dashboard_asset_path(req_path):
+    """Resolve the one bundled dashboard font without exposing arbitrary files."""
+    if req_path != "/assets/fonts/Tektur-Variable.ttf":
+        return None
+    dashboard = page_path()
+    if not dashboard:
+        return None
+    path = os.path.join(os.path.dirname(dashboard), "assets", "fonts", "Tektur-Variable.ttf")
+    return path if os.path.isfile(path) else None
+
+
 def missing_page_html():
     candidates = "\n".join(
         f"<li><code>{html.escape(path)}</code></li>" for path in PAGE_CANDIDATES
@@ -9815,6 +9826,12 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200 if path else 503)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(os.path.getsize(path) if path else len(body)))
+            self.end_headers()
+        elif dashboard_asset_path(req_path):
+            path = dashboard_asset_path(req_path)
+            self.send_response(200)
+            self.send_header("Content-Type", "font/ttf")
+            self.send_header("Content-Length", str(os.path.getsize(path)))
             self.end_headers()
         else:
             self.send_error(404)
@@ -9972,6 +9989,9 @@ class H(BaseHTTPRequestHandler):
                 self._send(open(path, encoding="utf-8").read())
             else:
                 self._send(missing_page_html(), status=503)
+        elif dashboard_asset_path(req_path):
+            with open(dashboard_asset_path(req_path), "rb") as asset:
+                self._send(asset.read(), "font/ttf")
         elif req_path == "/session":
             query = parse_qs(parsed.query)
             sid = (query.get("id") or [""])[0]

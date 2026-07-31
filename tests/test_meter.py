@@ -1500,6 +1500,22 @@ class SessionRouteTests(unittest.TestCase):
         self.assertFalse(meter.is_dashboard_page_path("/sessions/"))
         self.assertFalse(meter.is_dashboard_page_path("/sessions/one/two"))
 
+    def test_dashboard_serves_only_the_bundled_display_font(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            page = root / "page.html"
+            font = root / "assets" / "fonts" / "Tektur-Variable.ttf"
+            font.parent.mkdir(parents=True)
+            page.write_text("dashboard")
+            font.write_bytes(b"font")
+            with mock.patch.object(meter, "page_path", return_value=str(page)):
+                self.assertEqual(
+                    meter.dashboard_asset_path("/assets/fonts/Tektur-Variable.ttf"),
+                    str(font),
+                )
+                self.assertIsNone(meter.dashboard_asset_path("/assets/fonts/OFL-Tektur.txt"))
+                self.assertIsNone(meter.dashboard_asset_path("/assets/../meter.py"))
+
 
 class SessionDeleteTests(unittest.TestCase):
     def test_moves_only_exact_discovered_jsonl_to_trash(self):
@@ -2547,7 +2563,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.",
             'class="currentSessionsCount fieldtip"',
             "Sessions with activity in the last 30 minutes.",
-            "`${count} · 30m`",
+            "`${count} active`",
             "Working",
             "Waiting",
             "Recent",
@@ -2609,6 +2625,84 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertNotIn("currentSessionContextCaption", self.page)
         self.assertNotIn("currentSessionContextGuide", self.page)
+
+    def test_sessions_use_the_distilled_token_meter_spectrum_system(self):
+        for marker in (
+            "shared-spectrum-system-v1",
+            "session-spectrum-field-v2",
+            "THESIS: Sessions are live instruments",
+            "<body class=spectrumApp>",
+            "--spectrum-cyan:#00bceb",
+            "--spectrum-blue:#1ba0e1",
+            "--spectrum-sky:#7fdbf2",
+            "--spectrum-violet:#c7a7ff",
+            "--spectrum-orange:#ffb457",
+            "body.sessionRoute{",
+            "--session-cyan:var(--spectrum-cyan)",
+            'class="previewHead spectrumPageHead"',
+            'class="previewHeadCopy spectrumPageHeadCopy"',
+            ".spectrumPageHead:before",
+            ".currentSessionCard:before{content:none}",
+            ".currentSessionCard.activity-working",
+            ".currentSessionGrip",
+            "#view-session.sessionDetail .previewStatus:before",
+            "@media(prefers-reduced-motion:reduce)",
+            "document.body.classList.toggle('sessionRoute',t==='session');",
+            "$('view-session').classList.toggle('sessionOverview',overview);",
+            "$('view-session').classList.toggle('sessionDetail',!overview);",
+            "$('session-page-title').textContent=overview?'Sessions':sessionDisplayName(CURRENT);",
+            "function sessionDisplayName(s)",
+            "activity-${activity}",
+            "<svg class=currentSessionGrip",
+            'font-family:"Tektur Local"',
+            'src:url("/assets/fonts/Tektur-Variable.ttf")',
+            "--context-pressure",
+            ".style.setProperty('--context-pressure'",
+            "`${count} active`",
+            "concept-roll seed a5c0fdde",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("id=current-eyebrow", self.page)
+        self.assertNotIn("miraiVerticalNote", self.page)
+        self.assertNotIn("miraiGaugeScale", self.page)
+        self.assertNotIn("直近30分", self.page)
+        self.assertNotIn("稼働状況", self.page)
+        self.assertNotIn("session-solar-field-v1", self.page)
+
+    def test_top_level_views_share_the_spectrum_design_primitives(self):
+        for marker in (
+            "shared-spectrum-system-v1",
+            "body.spectrumApp .card{",
+            "body.spectrumApp .tbtn{",
+            "body.spectrumApp .tab.on,body.spectrumApp .seg button.on",
+            "body.spectrumApp :is(input:not([type=checkbox]):not([type=range]),select,textarea,.modelPicker>summary)",
+            "--spectrum-page:radial-gradient",
+            "--spectrum-card:radial-gradient",
+            "--spectrum-control:linear-gradient",
+            "--spectrum-active:linear-gradient",
+            '<div class="previewHead spectrumPageHead">',
+            "<div class=spectrumPageHead>",
+            '<div class="modelHead spectrumPageHead">',
+            '<div class="dailyHead spectrumPageHead">',
+            '<div class="learnHead spectrumPageHead">',
+            '<div class="learnHead settingsPageHead spectrumPageHead">',
+            "Review local tool, MCP, and skill evidence before changing optional capability groups.",
+            "<span class=spectrumPageMeta id=g-hint>recent activity</span>",
+            "body.spectrumApp .top .tabs{min-width:0;max-width:100%;overflow-x:auto",
+            "class=dailyNavIcon",
+            "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr))",
+        ):
+            self.assertIn(marker, self.page)
+        for marker in (
+            "data-settings-target=budget-settings><span>01",
+            "data-settings-target=agent-access><span>02",
+            "data-settings-target=model-pricing-settings><span>03",
+            "data-settings-target=frustration-settings><span>04",
+            "data-settings-target=update-settings><span>05",
+            "&#8249;",
+            "&#8250;",
+        ):
+            self.assertNotIn(marker, self.page)
 
     def test_sessions_is_default_new_cards_lead_and_known_cards_keep_manual_order(self):
         for marker in (
@@ -3727,6 +3821,7 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('launchctl print "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('"$INSTALL_ROOT/meter.py"', script)
         self.assertIn('"$INSTALL_ROOT/scripts/run-menubar"', script)
+        self.assertIn('ditto "$SOURCE_ROOT/assets" "$INSTALL_ROOT/assets"', script)
         self.assertIn(
             'printf \'%s\\n\' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"',
             script,

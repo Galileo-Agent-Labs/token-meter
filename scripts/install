@@ -108,6 +108,7 @@ for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
 done
 ditto "$SOURCE_ROOT/menubar" "$INSTALL_ROOT/menubar"
 ditto "$SOURCE_ROOT/scripts" "$INSTALL_ROOT/scripts"
+ditto "$SOURCE_ROOT/assets" "$INSTALL_ROOT/assets"
 chmod 755 "$INSTALL_ROOT"/scripts/*
 
 commit="$(git -C "$SOURCE_ROOT" rev-parse --short HEAD 2>/dev/null || true)"

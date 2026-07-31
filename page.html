@@ -197,6 +197,114 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:520px){.previewTabs{width:100%;overflow-x:auto}.previewStartStrip{grid-template-columns:1fr;gap:4px}.previewAttentionHead{align-items:flex-start;flex-direction:column}.previewAttention .previewActions{margin-top:7px}.previewTokenSlot .legend{gap:8px}}
 @media(max-width:700px){.currentSessionGrid{grid-template-columns:1fr;gap:9px}.currentSessionCard{min-height:184px;padding:14px 15px 12px}.currentSessionIdentity{margin-top:12px}.currentSessionIdentity h3{font-size:17px}.currentSessionMetrics{gap:7px;margin-top:12px;padding-top:10px}.currentSessionMetric b,.currentSessionMetric b.mono{font-size:15px;letter-spacing:-.025em}.currentSessionFoot{padding-top:10px}.currentSessionContextValue{gap:5px}.currentSessionContextSpark{min-width:24px;max-width:58px;height:17px}.currentSessionCard.dropBefore{box-shadow:inset 0 4px 0 var(--harness),var(--shadow)}.currentSessionCard.dropAfter{box-shadow:inset 0 -4px 0 var(--harness),var(--shadow)}}
 @media(max-width:700px){.currentSessionMetric b,.currentSessionMetric b.mono{font-size:16.5px}.currentSessionContextSpark{height:19px}}
+/* shared-spectrum-system-v1 */
+@font-face{font-family:"Tektur Local";src:url("/assets/fonts/Tektur-Variable.ttf") format("truetype");font-style:normal;font-weight:400 900;font-stretch:75% 100%;font-display:swap}
+:root{
+ --spectrum-ink:#07090c;--spectrum-panel:#111820;--spectrum-panel-raised:#17212b;
+ --spectrum-cyan:#00bceb;--spectrum-blue:#1ba0e1;--spectrum-sky:#7fdbf2;--spectrum-violet:#c7a7ff;--spectrum-orange:#ffb457;
+ --spectrum-border:rgba(0,188,235,.16);--spectrum-border-strong:rgba(0,188,235,.3);
+ --spectrum-page:radial-gradient(circle at 14% -8%,rgba(0,188,235,.14),transparent 34%),radial-gradient(circle at 88% 6%,rgba(199,167,255,.08),transparent 28%),linear-gradient(180deg,#06080b 0%,#0b1118 48%,#07090c 100%);
+ --spectrum-card:radial-gradient(circle at 94% 4%,rgba(127,219,242,.075),transparent 30%),radial-gradient(circle at 5% 100%,rgba(199,167,255,.045),transparent 34%),linear-gradient(145deg,rgba(20,29,38,.98),rgba(9,14,20,.99));
+ --spectrum-control:linear-gradient(145deg,rgba(21,31,40,.94),rgba(10,16,22,.96));
+ --spectrum-active:linear-gradient(135deg,var(--spectrum-cyan),var(--spectrum-blue) 56%,var(--spectrum-sky));
+ --spectrum-ease:cubic-bezier(.16,1,.3,1);--spectrum-shadow:0 1px 0 rgba(255,255,255,.04),0 12px 30px rgba(0,0,0,.24);
+}
+body.spectrumApp{
+ --view-spectrum-a:rgba(0,188,235,.42);--view-spectrum-b:rgba(199,167,255,.26);--view-spectrum-c:rgba(255,180,87,.2);
+ --view-haze-a:rgba(127,219,242,.21);--view-haze-b:rgba(199,167,255,.14);
+ background:var(--spectrum-page);
+}
+body.spectrumApp:before{content:none}
+body.spectrumApp .top{background:linear-gradient(180deg,#07090c,#081018);border-bottom-color:var(--spectrum-border);backdrop-filter:none}
+body.spectrumApp .top .brand{flex:0 0 auto}
+body.spectrumApp .top .tabs{min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none}
+body.spectrumApp .top .tabs::-webkit-scrollbar{display:none}
+body.spectrumApp .tab.on,body.spectrumApp .seg button.on{background:var(--spectrum-active);color:#062430;box-shadow:0 7px 20px rgba(0,188,235,.16)}
+body.spectrumApp .tab:hover:not(.on),body.spectrumApp .seg button:hover:not(.on){background:rgba(0,188,235,.07);color:var(--fg)}
+body.spectrumApp .card{border-color:var(--spectrum-border);background:var(--spectrum-card);box-shadow:var(--spectrum-shadow)}
+body.spectrumApp .card:hover{border-color:var(--spectrum-border-strong)}
+body.spectrumApp .tbtn{border-color:rgba(0,188,235,.24);background:linear-gradient(145deg,rgba(0,188,235,.16),rgba(27,160,225,.07));transition:border-color .16s,background .16s,transform .16s}
+body.spectrumApp .tbtn:hover:not(:disabled){border-color:rgba(127,219,242,.58);background:linear-gradient(145deg,rgba(0,188,235,.23),rgba(27,160,225,.1));transform:translateY(-1px)}
+body.spectrumApp :is(input:not([type=checkbox]):not([type=range]),select,textarea,.modelPicker>summary){border-color:rgba(0,188,235,.18);background:var(--spectrum-control)}
+body.spectrumApp :is(input:not([type=checkbox]):not([type=range]),select,textarea,.modelPicker>summary):focus{outline:none;border-color:var(--spectrum-cyan);box-shadow:0 0 0 3px rgba(0,188,235,.12)}
+body.spectrumApp :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--spectrum-cyan);outline-offset:2px}
+body.spectrumApp .meter{background:none;color:var(--spectrum-sky);-webkit-background-clip:initial;background-clip:initial}
+body.spectrumApp .tbl th,body.spectrumApp .modelTableWrap .tbl th,body.spectrumApp .capTableWrap .tbl th,body.spectrumApp .toolsScroll .tbl th{background:rgba(9,16,22,.98)}
+.spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px;align-items:flex-end;justify-content:space-between;gap:24px;margin:0 0 16px;padding:24px 30px;overflow:hidden;border:1px solid rgba(0,188,235,.24);border-radius:8px;background:radial-gradient(circle at 74% 12%,var(--view-haze-a),transparent 26%),radial-gradient(circle at 94% 80%,var(--view-haze-b),transparent 31%),linear-gradient(115deg,rgba(23,33,43,.98),rgba(10,18,25,.98) 48%,rgba(10,43,56,.94) 78%,rgba(20,17,36,.94))}
+.spectrumPageHead:before{content:"";position:absolute;z-index:-1;right:clamp(32px,8vw,104px);top:-156px;width:340px;height:340px;border-radius:50%;background:conic-gradient(from 212deg,var(--view-spectrum-a),rgba(27,160,225,.06) 28%,var(--view-spectrum-b) 58%,var(--view-spectrum-c) 78%,var(--view-spectrum-a)),radial-gradient(circle at 38% 32%,rgba(127,219,242,.64),rgba(0,188,235,.16) 38%,transparent 68%);box-shadow:0 24px 72px rgba(0,109,146,.24);animation:spectrumFieldReveal .68s var(--spectrum-ease) both}
+@keyframes spectrumFieldReveal{from{clip-path:inset(78% 0 0);opacity:.45}to{clip-path:inset(0);opacity:1}}
+.spectrumPageHeadCopy{position:relative;z-index:1;max-width:min(760px,72%);min-width:0}
+.spectrumPageHead h1{max-width:22ch;margin:0;color:var(--fg);font-family:"Tektur Local","Avenir Next Condensed",-apple-system,BlinkMacSystemFont,sans-serif;font-size:clamp(36px,4.2vw,54px);font-stretch:88%;font-weight:610;line-height:.98;letter-spacing:-.035em;text-wrap:balance}
+.spectrumPageHead p{max-width:62ch;margin:10px 0 0;color:var(--dim);font-size:13px}
+.spectrumPageMeta{display:block;margin-top:10px;color:var(--dim);font-size:12px}
+.dailyNavIcon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.spectrumPageHead> :not(.spectrumPageHeadCopy){position:relative;z-index:2}
+#view-logs{--view-spectrum-a:rgba(0,188,235,.46);--view-spectrum-b:rgba(127,219,242,.22);--view-spectrum-c:rgba(199,167,255,.17)}
+#view-daily{--view-spectrum-a:rgba(127,219,242,.42);--view-spectrum-b:rgba(255,180,87,.22);--view-spectrum-c:rgba(0,188,235,.22)}
+#view-models{--view-spectrum-a:rgba(199,167,255,.38);--view-spectrum-b:rgba(0,188,235,.26);--view-spectrum-c:rgba(127,219,242,.2)}
+#view-capabilities{--view-spectrum-a:rgba(0,188,235,.44);--view-spectrum-b:rgba(199,167,255,.28);--view-spectrum-c:rgba(27,160,225,.22)}
+#view-learn{--view-spectrum-a:rgba(127,219,242,.4);--view-spectrum-b:rgba(0,188,235,.24);--view-spectrum-c:rgba(255,180,87,.2)}
+#view-settings{--view-spectrum-a:rgba(199,167,255,.36);--view-spectrum-b:rgba(27,160,225,.25);--view-spectrum-c:rgba(0,188,235,.22)}
+body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr));background:var(--spectrum-card)}
+body.spectrumApp .settingsMap button{grid-template-columns:1fr;border-left:1px solid var(--line);border-radius:0}
+body.spectrumApp :is(.sessionStart,.ins,.insightLead .action,.ins .action,.toast,.capReview,.agentDiscovery,.frustrationNotice,.previewStartStrip,.modelScopeStatus){border-left-width:1px}
+@media(max-width:900px){.spectrumPageHead{min-height:126px;align-items:flex-start;flex-direction:column;padding:22px 24px}.spectrumPageHeadCopy{max-width:78%}.spectrumPageHead:before{right:56px;top:-178px}body.spectrumApp .settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}body.spectrumApp .settingsMapIntro{grid-column:1/-1}}
+@media(max-width:520px){.spectrumPageHead{min-height:116px;padding:19px 18px}.spectrumPageHeadCopy{max-width:88%}.spectrumPageHead h1{font-size:30px;line-height:1.02}.spectrumPageHead p{font-size:12px}.spectrumPageHead:before{right:-32px;top:-126px;width:220px;height:220px}body.spectrumApp .settingsMap{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.spectrumPageHead:before{animation:none}body.spectrumApp .tbtn{transition:none}}
+/* session-spectrum-field-v2 */
+body.sessionRoute{--session-cyan:var(--spectrum-cyan);--session-blue:var(--spectrum-blue);--session-sky:var(--spectrum-sky);--session-violet:var(--spectrum-violet);--session-orange:var(--spectrum-orange)}
+body.sessionRoute #view-session .previewTabs{position:relative;z-index:2;border-color:rgba(0,188,235,.18);background:rgba(7,12,17,.72)}
+body.sessionRoute #view-session .previewTabs button.on{background:linear-gradient(135deg,var(--session-cyan),var(--session-blue));color:#062430;box-shadow:0 6px 18px rgba(0,188,235,.15)}
+body.sessionRoute #view-session .previewTabs button:hover:not(.on){background:rgba(0,188,235,.08);color:var(--fg)}
+body.sessionRoute #view-session .currentSessionsHead{justify-content:flex-end;margin:-4px 0 8px;padding:0 2px}
+body.sessionRoute #view-session .currentSessionsCount{color:var(--faint);font-size:11px;letter-spacing:.02em}
+body.sessionRoute #view-session .currentSessionGrid{gap:12px}
+body.sessionRoute #view-session .currentSessionCard{min-height:226px;padding:19px 20px 16px;border-color:rgba(0,188,235,.16);border-radius:8px;background:radial-gradient(circle at 92% 8%,rgba(127,219,242,.1),transparent 28%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.07),transparent 34%),linear-gradient(145deg,rgba(23,33,43,.98),rgba(9,15,21,.99));box-shadow:var(--shadow-soft);transition:transform .18s cubic-bezier(.16,1,.3,1),border-color .18s,box-shadow .18s,opacity .18s}
+body.sessionRoute #view-session .currentSessionCard:before{content:none}
+body.sessionRoute #view-session .currentSessionCard.activity-working{border-color:rgba(0,188,235,.42);background:radial-gradient(circle at 88% 4%,rgba(0,188,235,.18),transparent 34%),linear-gradient(135deg,rgba(17,45,58,.98),rgba(10,19,27,.99) 56%,rgba(14,15,27,.99))}
+body.sessionRoute #view-session .currentSessionCard:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--harness) 72%,var(--session-cyan));box-shadow:0 18px 38px rgba(0,0,0,.3)}
+body.sessionRoute #view-session .currentSessionCard:focus-visible{outline:2px solid var(--session-cyan);outline-offset:3px;border-color:var(--session-cyan);box-shadow:none}
+body.sessionRoute #view-session .currentSessionIdentity{position:relative;z-index:1;margin-top:22px}
+body.sessionRoute #view-session .currentSessionIdentity h3{font-family:"Tektur Local","Avenir Next",-apple-system,BlinkMacSystemFont,sans-serif;font-size:22px;font-stretch:91%;font-weight:610;letter-spacing:-.025em}
+body.sessionRoute #view-session .currentSessionIdentity p{margin-top:6px;color:var(--faint);font-size:11px}
+body.sessionRoute #view-session .currentSessionMetrics{gap:0;margin-top:22px;padding-top:15px;border-top:1px solid rgba(0,188,235,.13)}
+body.sessionRoute #view-session .currentSessionMetric{padding:0 14px;border-left:1px solid rgba(255,255,255,.08)}
+body.sessionRoute #view-session .currentSessionMetric:first-child{padding-left:0;border-left:0}
+body.sessionRoute #view-session .currentSessionMetric span{color:var(--faint);font-size:11px;letter-spacing:.04em}
+body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{margin-top:7px;color:var(--fg);font-size:clamp(17px,1.45vw,20px);font-weight:720}
+body.sessionRoute #view-session .currentSessionContextSpark{--context-tone:var(--session-cyan);max-width:98px;height:24px}
+body.sessionRoute #view-session .currentSessionContextBaseline{stroke:rgba(0,188,235,.12)}
+body.sessionRoute #view-session .currentSessionContextBar{fill:var(--session-cyan);opacity:.52}
+body.sessionRoute #view-session .currentSessionGrip{width:12px;height:16px;fill:var(--session-cyan);opacity:.7}
+body.sessionRoute #view-session .currentSessionsEmpty{border-color:rgba(0,188,235,.18);border-radius:8px;background:linear-gradient(145deg,rgba(23,33,43,.95),rgba(9,15,21,.98))}
+body.sessionRoute #view-session.sessionDetail .previewHead{min-height:152px}
+body.sessionRoute #view-session.sessionDetail .previewRunMeta{gap:7px;margin-bottom:10px;padding:0 2px}
+body.sessionRoute #view-session.sessionDetail .previewRunMeta .badge,body.sessionRoute #view-session.sessionDetail .previewRunMeta .repo,body.sessionRoute #view-session.sessionDetail .previewRunMeta .pill,body.sessionRoute #view-session.sessionDetail .unpin,body.sessionRoute #view-session.sessionDetail .sessionDelete{background:rgba(17,24,32,.86)}
+body.sessionRoute #view-session.sessionDetail .previewStartStrip{border-color:rgba(0,188,235,.18);background:linear-gradient(100deg,rgba(0,188,235,.11),rgba(23,33,43,.92) 46%,rgba(199,167,255,.05));box-shadow:none}
+body.sessionRoute #view-session.sessionDetail .previewStartLabel{color:var(--session-sky);font-size:11px}
+body.sessionRoute #view-session.sessionDetail .previewRunGrid{gap:14px}
+body.sessionRoute #view-session.sessionDetail .previewChartSlot #session-chart-module>.card{border-color:rgba(0,188,235,.15);border-radius:8px;background:radial-gradient(circle at 100% 0,rgba(0,188,235,.07),transparent 28%),linear-gradient(160deg,rgba(17,24,32,.98),rgba(7,11,15,.98));box-shadow:none}
+body.sessionRoute #view-session.sessionDetail .previewChartSlot .chart{border-color:rgba(255,255,255,.07);border-radius:6px;background:linear-gradient(180deg,rgba(5,9,13,.72),rgba(4,7,10,.5))}
+body.sessionRoute #view-session.sessionDetail .previewStatus{--context-pressure:0%;isolation:isolate;padding:18px;border-color:rgba(0,188,235,.24);border-radius:8px;background:radial-gradient(circle at 96% 5%,rgba(127,219,242,.16),transparent 34%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.1),transparent 40%),linear-gradient(145deg,rgba(23,33,43,.99),rgba(8,14,20,.99));box-shadow:var(--shadow-soft)}
+body.sessionRoute #view-session.sessionDetail .previewStatus:before{content:"";position:absolute;z-index:-1;inset:auto -58px -72px auto;width:184px;height:184px;overflow:hidden;border:1px solid rgba(0,188,235,.34);border-radius:50%;background:linear-gradient(to top,transparent 0 calc(var(--context-pressure) - 1px),rgba(127,219,242,.9) calc(var(--context-pressure) - 1px) calc(var(--context-pressure) + 1px),transparent calc(var(--context-pressure) + 1px) 100%),linear-gradient(to top,rgba(0,188,235,.34) 0 var(--context-pressure),rgba(0,188,235,.025) var(--context-pressure) 100%),radial-gradient(circle at 38% 30%,rgba(127,219,242,.22),rgba(27,160,225,.06) 44%,rgba(199,167,255,.04) 62%,transparent 72%);box-shadow:0 24px 58px rgba(0,96,132,.22);transition:background .24s ease}
+body.sessionRoute #view-session.sessionDetail .previewStatus>*{position:relative;z-index:1}
+body.sessionRoute #view-session.sessionDetail .previewState{color:var(--good);font-size:11px}
+body.sessionRoute #view-session.sessionDetail .previewCost{color:var(--session-sky);font-size:clamp(34px,3vw,44px);font-weight:730;letter-spacing:-.02em;white-space:nowrap}
+body.sessionRoute #view-session.sessionDetail .previewCostNote{color:var(--dim)}
+body.sessionRoute #view-session.sessionDetail .previewPressure{border-top-color:rgba(0,188,235,.14)}
+body.sessionRoute #view-session.sessionDetail .previewPressureHead{color:var(--dim)}
+body.sessionRoute #view-session.sessionDetail .previewPressureBar{height:8px;border-color:rgba(0,188,235,.2);border-radius:6px;background:rgba(5,9,13,.72)}
+body.sessionRoute #view-session.sessionDetail .previewPressureBar i{border-radius:inherit;background:linear-gradient(90deg,var(--session-cyan),var(--session-blue) 58%,var(--session-sky))}
+body.sessionRoute #view-session.sessionDetail .previewTimes{border-top-color:rgba(0,188,235,.12)}
+body.sessionRoute #view-session.sessionDetail .previewTimes span{color:var(--faint);font-size:10px}
+body.sessionRoute #view-session.sessionDetail .previewTimes b{overflow:visible;white-space:normal;line-height:1.35}
+body.sessionRoute #view-session.sessionDetail .previewRunBudgetSlot .sessionBudget{border-color:rgba(0,188,235,.14);border-radius:8px;background:linear-gradient(145deg,rgba(17,24,32,.96),rgba(8,13,18,.98));box-shadow:none}
+body.sessionRoute #view-session.sessionDetail .previewTokenSlot .bar{border-color:rgba(0,188,235,.16);background:rgba(5,9,13,.7)}
+body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:var(--session-sky);text-shadow:none}
+@media(max-width:900px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:126px}body.sessionRoute #view-session .previewTabs{align-self:stretch}}
+@media(max-width:700px){body.sessionRoute #view-session .currentSessionMetric{padding:0 8px}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}}
+@media(max-width:520px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .previewTabs{width:100%;overflow-x:auto}body.sessionRoute #view-session .previewTabs button{padding:9px 11px}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
+@media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}}
 .workloadCell strong{display:block;color:var(--fg);font-size:13px}.workloadCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px;white-space:nowrap}
 .modelKpi:hover,.modelKpi:focus-within{z-index:50}.modelKpi:nth-child(n+4) .fieldtip:after{left:auto;right:0}.modelHelp:before{content:"i";display:inline-grid;place-items:center;width:13px;height:13px;margin-right:5px;border:1px solid currentColor;border-radius:50%;font:800 9px/1 ui-monospace,"SF Mono",Menlo,monospace;opacity:.72}.modelCoverage.fieldtip{display:block}.modelCoverage.fieldtip:after{bottom:auto;top:calc(100% + 7px)}
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}
@@ -220,7 +328,15 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .learnOnboarding{padding:16px;border:1px solid rgba(0,188,235,.25);border-radius:9px;background:rgba(0,188,235,.045)}.learnOnboarding .learnSectionHead{align-items:center}.learnShortcutGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.learnShortcut{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--dim);font-size:11px}.learnShortcut kbd{min-width:42px;border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:2px 6px;color:var(--fg);font:750 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;text-align:center;white-space:nowrap}
 @media(max-width:900px){.onboardingChecklist{grid-template-columns:repeat(3,minmax(0,1fr))}.learnShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.onboardingCard{padding:13px}.onboardingHead{display:grid;grid-template-columns:1fr}.onboardingHeadActions{justify-content:space-between}.onboardingNext{grid-template-columns:1fr}.onboardingNext .tbtn{justify-self:start}.onboardingChecklist,.learnShortcutGrid{grid-template-columns:1fr}.onboardingCard.collapsed .onboardingHead{grid-template-columns:minmax(0,1fr) auto;align-items:center}.onboardingCard.collapsed .onboardingHeadActions{justify-content:end}.onboardingCard.collapsed .onboardingCount{display:none}.commandCoach{align-items:stretch;flex-direction:column;padding:9px 12px}.commandCoach .tbtn{width:100%}.onboardingLesson{padding:18px}.onboardingLesson h2{font-size:20px}.onboardingLessonFoot{align-items:flex-start;flex-direction:column}.onboardingLessonFoot .tbtn{width:100%}}
-</style></head><body>
+</style></head><body class=spectrumApp>
+<!--
+THESIS: Sessions are live instruments, not a generic grid of dark cards.
+OWN-WORLD: Token Meter ink, cyan and sky light, restrained violet and orange accents, Tektur display type, and layered operational gradients.
+STORY: Find the active run, read cost, context, and speed, then open one task and follow its evidence without losing orientation.
+FIRST VIEWPORT: A layered spectrum header leads into a two-column instrument grid; detail replaces the generic title with the task and pairs its main chart with a luminous cost-and-context gauge.
+FORM: Spectrum Instrument Field — user-pinned Neo-Mirai, 1 of 1 grounded forms; concept-roll seed a5c0fdde; returned to Token Meter's original palette.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
 <div class=wrap>
  <div class=top>
   <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div> Token Meter</div>
@@ -446,11 +562,10 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
    <span class=msg id=current-budget-warning-msg></span>
    <button class=tbtn id=current-budget-settings type=button>Open budget settings</button>
   </div>
-  <div class=previewHead>
-   <div class=previewHeadCopy>
-    <div class=previewEyebrow id=current-eyebrow><span>Local</span> Recent activity</div>
+  <div class="previewHead spectrumPageHead">
+   <div class="previewHeadCopy spectrumPageHeadCopy">
     <h1 class=fieldtip id=session-page-title tabindex=0 aria-description="Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder." data-tip="Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.">Sessions</h1>
-    <p id=current-description></p>
+    <p id=current-description>Live traces from the last 30 minutes.</p>
    </div>
    <div class="seg previewTabs" id=current-tabs aria-label="Session views" data-current-detail>
     <button data-current-panel=run>Run</button>
@@ -553,7 +668,12 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
  </div>
 
 	 <div class=view id=view-logs>
-	  <div class=section-h><h2><span class=fieldtip tabindex=0 title="Local AI app logs discovered on this machine. Each log can contain many executions." data-tip="Local AI app logs discovered on this machine. Each log can contain many executions.">Logs</span></h2><span class=hint id=g-hint>recent activity</span></div>
+	  <div class=spectrumPageHead>
+	   <div class=spectrumPageHeadCopy>
+	    <h1 class=fieldtip tabindex=0 aria-description="Local AI app logs discovered on this machine. Each log can contain many executions." data-tip="Local AI app logs discovered on this machine. Each log can contain many executions.">Logs</h1>
+	    <span class=spectrumPageMeta id=g-hint>recent activity</span>
+	   </div>
+	  </div>
 	  <div class="globalControls logsToolbar">
 	   <label class="filterControl logSearchControl"><span>Search</span><input class=searchbox id=g-search type=search placeholder="Title, project, or model"></label>
 	   <label class=filterControl><span>App</span><select class=filterSelect id=g-app aria-label="App filter"><option value="">All apps</option></select></label>
@@ -586,8 +706,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-models>
-	  <div class=modelHead>
-	   <div><h1 class=fieldtip tabindex=0 aria-description="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty." data-tip="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty.">Model performance</h1></div>
+	  <div class="modelHead spectrumPageHead">
+	   <div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty." data-tip="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty.">Model performance</h1></div>
 	   <div class=modelControls>
 	    <label class=filterControl><span>Project</span><select class=filterSelect id=m-project aria-label="Model performance project filter"><option value="">All projects</option></select></label>
 	    <div class=filterControl><span>Models</span><details class=modelPicker id=m-model-picker><summary aria-label="Choose models to compare"><span id=m-model-summary>All models</span></summary><div class=modelPickerMenu id=m-model-options role=group aria-label="Models to compare"></div></details></div>
@@ -636,9 +756,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-daily>
-	  <div class=dailyHead>
-	   <div><h1 class=fieldtip tabindex=0 aria-description="What changed, what drove spend, and what deserves attention." data-tip="What changed, what drove spend, and what deserves attention.">Daily brief</h1></div>
-	   <div class=dailyPicker><button class=iconBtn id=d-older type=button title="Older day" aria-label="Older day">&#8249;</button><select id=d-day-select aria-label="Summary day"></select><button class=iconBtn id=d-newer type=button title="Newer day" aria-label="Newer day">&#8250;</button></div>
+	  <div class="dailyHead spectrumPageHead">
+	   <div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="What changed, what drove spend, and what deserves attention." data-tip="What changed, what drove spend, and what deserves attention.">Daily brief</h1></div>
+	   <div class=dailyPicker><button class=iconBtn id=d-older type=button title="Older day" aria-label="Older day"><svg class=dailyNavIcon viewBox="0 0 20 20" aria-hidden=true><path d="m12.5 5-5 5 5 5"/></svg></button><select id=d-day-select aria-label="Summary day"></select><button class=iconBtn id=d-newer type=button title="Newer day" aria-label="Newer day"><svg class=dailyNavIcon viewBox="0 0 20 20" aria-hidden=true><path d="m7.5 5 5 5-5 5"/></svg></button></div>
 	  </div>
 	  <div class=dailyOverview>
 	   <div class="card dailySpendCard">
@@ -670,7 +790,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-learn>
-	  <div class=learnHead><h1 class=fieldtip tabindex=0 aria-description="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading." data-tip="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading.">Learn</h1></div>
+	  <div class="learnHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading." data-tip="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading.">Learn</h1></div></div>
 	  <section class="learnSection learnOnboarding"><div class=learnSectionHead><div><h2>First five minutes</h2><div class=subline id=learn-onboarding-status>0 of 7 complete · progress stays in this browser.</div></div><button class=tbtn id=learn-onboarding-action type=button>Resume onboarding</button></div><div class=learnShortcutGrid aria-label="Command palette shortcuts">
 	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Open the command palette from anywhere." data-tip="Open the command palette from anywhere."><kbd>&#8984;K</kbd><span>Command palette</span></div>
 	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Move through matching commands." data-tip="Move through matching commands."><kbd>&uarr; &darr;</kbd><span>Move</span></div>
@@ -688,6 +808,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-capabilities>
+  <div class=spectrumPageHead>
+   <div class=spectrumPageHeadCopy>
+    <h1 class=fieldtip tabindex=0 aria-description="Review local tool, MCP, and skill evidence before changing optional capability groups." data-tip="Review local tool, MCP, and skill evidence before changing optional capability groups.">Tools</h1>
+   </div>
+  </div>
   <div class=capHero>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Enabled user-installed skill packs eligible for review. MCP servers, default tools, standalone skills, and runtime packs are read-only or excluded." data-tip="Enabled user-installed skill packs eligible for review. MCP servers, default tools, standalone skills, and runtime packs are read-only or excluded.">Optional groups enabled</div><div class="meter mono" id=c-opt-enabled>0</div><div class=subline id=c-opt-enabled-note></div></div>
    <div class="card pad"><div class="label fieldtip" tabindex=0 title="Removable capability groups used at least once across the scanned local logs. Any child tool or skill activation marks the whole group used." data-tip="Removable capability groups used at least once across the scanned local logs. Any child tool or skill activation marks the whole group used.">Used across scanned logs</div><div class="meter mono" id=c-opt-used>0/0</div><div class=capStatBar id=c-opt-used-bar role=progressbar aria-label="Optional groups used across scanned logs" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=subline id=c-opt-used-note></div></div>
@@ -709,15 +834,15 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 	 </div>
 
 	 <div class=view id=view-settings>
-	  <div class="learnHead settingsPageHead"><h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls. Session-specific budgets and alerts remain inside each session." data-tip="Machine-wide controls. Session-specific budgets and alerts remain inside each session.">Settings</h1></div>
+	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls. Session-specific budgets and alerts remain inside each session." data-tip="Machine-wide controls. Session-specific budgets and alerts remain inside each session.">Settings</h1></div></div>
   <div class=settingsPageLayout>
    <nav class="card settingsMap" aria-label="Settings sections">
     <div class=settingsMapIntro><h2>Sections</h2></div>
-    <button type=button data-settings-target=budget-settings><span>01</span><span><b>Monthly budget</b></span></button>
-    <button type=button data-settings-target=agent-access><span>02</span><span><b>Agent connection</b></span></button>
-    <button type=button data-settings-target=model-pricing-settings><span>03</span><span><b>Model pricing</b></span></button>
-    <button type=button data-settings-target=frustration-settings><span>04</span><span><b>Language signals</b></span></button>
-    <button type=button data-settings-target=update-settings><span>05</span><span><b>Software updates</b></span></button>
+    <button type=button data-settings-target=budget-settings><b>Monthly budget</b></button>
+    <button type=button data-settings-target=agent-access><b>Agent connection</b></button>
+    <button type=button data-settings-target=model-pricing-settings><b>Model pricing</b></button>
+    <button type=button data-settings-target=frustration-settings><b>Language signals</b></button>
+    <button type=button data-settings-target=update-settings><b>Software updates</b></button>
    </nav>
    <div class=settingsPageContent>
    <section class=settingsBudgetSection id=budget-settings>
@@ -1251,13 +1376,14 @@ function showCurrentPanel(panel){
   localStorage.setItem('tm_session_panel',sessionPanel);
  }
  const overview=panel==='sessions';
+ $('view-session').classList.toggle('sessionOverview',overview);
+ $('view-session').classList.toggle('sessionDetail',!overview);
  document.querySelectorAll('[data-current-detail]').forEach(element=>element.classList.toggle('currentOverviewHidden',overview));
- $('current-eyebrow').innerHTML=overview?'<span>Local</span> Recent activity':'<span>Selected</span> Session detail';
- $('session-page-title').textContent=overview?'Sessions':'Session';
+ $('session-page-title').textContent=overview?'Sessions':sessionDisplayName(CURRENT);
  const pageHelp=overview?'Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.':'Review this session.';
  $('session-page-title').setAttribute('aria-description',pageHelp);
  $('session-page-title').dataset.tip=pageHelp;
- $('current-description').textContent=overview?'':'Review this session.';
+ $('current-description').textContent=overview?'Live traces from the last 30 minutes.':(pinned?'Pinned local run · live evidence updates every two seconds.':'Live local run · evidence updates as the trace changes.');
  [...$('current-tabs').querySelectorAll('button')].forEach(button=>button.classList.toggle('on',button.dataset.currentPanel===panel));
  CURRENT_PANEL_KEYS.forEach(key=>$(`preview-surface-${key}`).classList.toggle('on',key===panel));
  restoreCurrentModules();
@@ -1276,6 +1402,7 @@ function showCurrentPanel(panel){
 
 function showTab(t){
  if(t!=='session')restoreCurrentModules();
+ document.body.classList.toggle('sessionRoute',t==='session');
  $('tab-session').classList.toggle('on',t==='session');
 	 $('tab-logs').classList.toggle('on',t==='logs');
 	 $('tab-models').classList.toggle('on',t==='models');
@@ -2914,6 +3041,15 @@ function sessionStartMessage(s){
  return String(event?.detail||'').trim();
 }
 
+function sessionDisplayName(s){
+ const id=stateSessionId(s),rows=[...(s?.xsession?.current_sessions||[]),...(s?.xsession?.sessions||[])];
+ const row=rows.find(item=>String(item?.id||'')===String(id||''));
+ const name=String(row?.session_name||row?.title||'').trim();
+ if(name)return name;
+ const start=sessionStartMessage(s);
+ return start&&start.length<=88?start:'Session';
+}
+
 function renderCurrentRun(s){
  const source=s.source||{},throughput=s.throughput||{},wait=s.wait_time||{},context=s.context||{},tools=s.tools||{},cache=s.cache||{},timing=s.timing||{};
  const costAvailable=metricAvailable(s,'cost'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput');
@@ -2928,6 +3064,7 @@ function renderCurrentRun(s){
  $('preview-cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
  $('preview-cost-note').textContent=alert.msg?alert.msg:(costAvailable&&Number.isFinite(cap)?`${money(Math.max(0,cap-(s.total_cost||0)))} before the ${money(cap)} session cap`:source.pricing_note||'Cost evidence unavailable.');
  $('preview-status-card').classList.toggle('warn',!!alert.msg);
+ $('preview-status-card').style.setProperty('--context-pressure',`${context.window?Math.round(contextPct*100):0}%`);
  $('preview-context-pct').textContent=context.window?pct(contextPct):'--';
  $('preview-context-bar').setAttribute('aria-valuenow',String(Math.round(contextPct*100)));
  $('preview-context-bar').querySelector('i').style.width=`${Math.round(contextPct*100)}%`;
@@ -3928,7 +4065,7 @@ function renderCurrentSessions(state=LATEST){
  }
  const rows=orderedCurrentSessionRows(sourceRows),count=rows.length;
  const focusedId=document.activeElement?.closest?.('[data-current-session-id]')?.dataset.currentSessionId||'';
- $('current-session-count-label').textContent=`${count} · 30m`;
+ $('current-session-count-label').textContent=`${count} active`;
  if(currentSessionDragId)return;
  $('current-session-grid').innerHTML=count?rows.map(row=>{
   const provider=['claude','codex','cursor','gemini'].includes(row.provider)?row.provider:'cursor';
@@ -3947,7 +4084,7 @@ function renderCurrentSessions(state=LATEST){
   const speed=speedAvailable?`${speedFmt(throughput.output_tps)} tok/s${row.token_estimate?' est':''}`:'--';
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
-  return `<button class="card currentSessionCard provider-${provider}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime title="${esc(runtimeLine)}"><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3 title="${esc(sessionName)}">${esc(sessionName)}</h3><p title="${esc(row.project||'No project')}">${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono title="${esc(context+contextNote)}">${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><b aria-hidden=true>⠿</b> ${currentSessionAge(row)}</span></div></button>`;
+  return `<button class="card currentSessionCard provider-${provider} activity-${activity}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime title="${esc(runtimeLine)}"><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3 title="${esc(sessionName)}">${esc(sessionName)}</h3><p title="${esc(row.project||'No project')}">${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono title="${esc(context+contextNote)}">${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):'<section class="card currentSessionsEmpty"><h3>No recent sessions</h3><p>Start Claude, Codex, or Cursor to see one here.</p></section>';
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }

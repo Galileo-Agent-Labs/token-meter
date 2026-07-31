@@ -9,12 +9,12 @@ turns them into one live dashboard.
 
 | Area | What you get |
 | --- | --- |
-| **Follow a live run** | Count tokens, estimate cost, context usage, wait time, response speed, tool calls, and alerts update while an agent is working. Pin a session when you want to keep following it. |
+| **Follow a live run** | Open Sessions, choose a card, and follow tokens, estimated cost, context usage, wait time, response speed, tool calls, and budget alerts while an agent is working. |
 | **Understand past usage** | Search runs from Claude, Codex, and Cursor together. Filter by project or time, review daily trends, and see what is driving cost and delays. |
 | **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
-| **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in Current and the menu bar. |
+| **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in session detail and the menu bar. |
 | **Install updates explicitly** | Check the configured Git upstream once per hour by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
@@ -71,15 +71,15 @@ This foreground workflow is separate from the persistent installer above.
 
 ## Visual Tour
 
-### 1. Follow The Current Run
+### 1. Open A Session
 
-Start on **Current** while an agent is working. The top cards show estimated
-cost, prompt-to-response wait, context, input, output, and output speed. Expand
-**Usage details** when you need thinking tokens, tool-result volume, cache
-behavior, efficiency metrics, or the execution profile.
+Start on **Sessions** and choose a recent card. Inside that session, **Run**
+shows estimated cost, prompt-to-response wait, context, input, output, and
+output speed. Use **Activity**, **Tools**, **Insights**, and **Alerts** when you
+need the underlying evidence or controls.
 
 <p align="center">
-  <img src="images/dashboard.png" alt="Token Meter Current view with live cost, token, context, and execution metrics" width="900">
+  <img src="images/dashboard.png" alt="Token Meter session detail with live cost, token, context, and execution metrics" width="900">
 </p>
 
 ### 2. Find Expensive Or Noisy Logs
@@ -130,7 +130,7 @@ The same view contains the complete monthly budget experience: individual
 Claude/Codex/Cursor budgets that default to $1,000 each and are added into one
 machine-wide total, month-to-date spend, runtime progress, projections after
 three active spend days, up to 12 calendar months of history, and alert
-thresholds. A runtime-specific overrun remains visible in Current and as a red
+thresholds. A runtime-specific overrun remains visible in session detail and as a red
 warning symbol in the menu bar even when the combined total is still on track. When trace
 coverage is partial, spend is labeled “at least” and remaining budget is not
 presented as guaranteed headroom. Settings also holds model pricing and the
@@ -142,7 +142,7 @@ Start a new agent session after connecting the MCP.
   <img src="images/mcp.png" alt="Token Meter Settings view for connecting read-only access from Codex and Claude Code" width="900">
 </p>
 
-Per-session caps remain directly available in **Current → Summary** as a slider
+Per-session caps remain directly available in **Session → Run** as a slider
 with an exact dollar field.
 
 ### 6. Keep The Live Signal In The Menu Bar
@@ -173,9 +173,10 @@ observation establishes a baseline and never sends a catch-up notification.
 ### A Good First Five Minutes
 
 1. Install or start Token Meter, then begin a Claude, Codex, or Cursor task.
-2. Confirm **Current** follows the run and check cost plus context pressure.
-3. Set a session budget in **Current → Summary**, and configure spike or browser
-   notifications under **Current → Alerts**.
+2. Open **Sessions**, choose a card, and check cost plus context pressure in
+   **Run**.
+3. Set a session budget in **Run**, and configure browser budget notifications
+   under **Alerts**.
 4. Review or change the default $1,000 Claude, Codex, and Cursor monthly budgets
    in **Settings → Monthly budget**; their sum becomes the machine-wide limit.
 5. Connect Codex or Claude Code from **Settings** if you want on-demand answers
@@ -312,7 +313,7 @@ Claude Desktop metadata contains the Desktop title, project directory, model,
 and a `cliSessionId`. Token Meter joins that id to the authoritative Claude
 trace under `~/.claude/projects`, so Desktop sessions use the same validated
 cost, token, tool, and execution parser without appearing twice. They are
-labeled `Claude Desktop` in Current and Logs.
+labeled `Claude Desktop` in Sessions and Logs.
 
 Agent/Cowork sessions use Claude Desktop's selected workspace folder when the
 trace itself runs from the managed `outputs` directory. Sessions without a
@@ -345,27 +346,29 @@ Cursor session look equally recent.
 
 Logs has a dedicated top-level tab. Clicking a log opens it as a frozen view at
 `/sessions/<session-id>#summary`, so refreshing or sharing that local URL
-restores the same log. Clicking the top-level `Current` tab or `Back to live`
-always removes the session path and returns to the active newest log.
+restores the same log. Clicking the top-level `Sessions` tab or
+`Back to sessions` removes the session path and returns to the recent-session
+cards.
 
-Dashboard tabs are addressable routes. The menu bar opens `#summary` for Open
-Dashboard, `#daily` for Open Daily Brief, `#activity` for Open Trace, and
+Dashboard tabs are addressable routes. The menu bar opens `#sessions` for Open
+Dashboard when no session is pinned, `#summary` for a pinned session,
+`#daily` for Open Daily Brief, `#activity` for Open Trace, and
 `#capabilities` for Tools and `#settings-budgets` for monthly budget settings.
-Current-session panels keep their panel name in the hash. Logs use `#logs`.
-Legacy `#global*` routes redirect to Logs, while `#budgets` redirects to
-`#settings-budgets`.
+Session-detail panels keep their panel name in the hash. Logs use `#logs`.
+Legacy `#current-sessions` redirects to `#sessions`, `#global*` routes redirect
+to Logs, and `#budgets` redirects to `#settings-budgets`.
 
-The top navigation follows the review sequence **Current → Logs → Daily →
+The top navigation follows the review sequence **Sessions → Logs → Daily →
 Models → Tools → Learn → Settings**. Press **Command+K** on macOS or **Ctrl+K**
-elsewhere to search every view plus Current and Settings destinations.
-**⌥1–7** opens the seven top-level views directly; ⌥1 keeps Current's
-return-to-live behavior.
+elsewhere to search every view plus session and Settings destinations.
+**⌥1–7** opens the seven top-level views directly; ⌥1 returns to Sessions.
 
 ## What The Dashboard Shows
 
-The Current tab includes:
+The Sessions tab is a concise list of runs active in the last 30 minutes.
+Selecting a card opens that session with:
 
-- Summary: live cost, tokens, completed prompt-to-response wait, burn rate per
+- Run: live cost, tokens, completed prompt-to-response wait, burn rate per
   active minute, cache behavior, context pressure, per-execution input/output
   trajectory, per-request wait history, session tool activity, optional
   skill-pack use, and unused user-installed packs. The first screen keeps cost,
@@ -378,11 +381,12 @@ The Current tab includes:
   results, usage, coordination, and completion.
 - Tools: tool and MCP usage by namespace and execution.
 - Insights: plain-language log signals.
-- Summary: a browser-local per-session budget slider that starts at $10 for every
+- Run: a browser-local per-session budget slider that starts at $10 for every
   new session and keeps an exact dollar field for precise caps.
-- Alerts: execution-spike events and browser notifications.
+- Alerts: session and monthly budget notifications plus browser delivery
+  history.
 
-The Current header also offers Delete session. It uses the same confirmation
+The session header also offers Delete session. It uses the same confirmation
 as Logs and warns when the selected session appears to still be live.
 
 The Logs tab includes the searchable log inventory with an exact Projects
@@ -450,19 +454,37 @@ $6.25 for cache writes and $0.50 for cached input. Prices can still be edited or
 extended manually in Settings.
 Codex costs are computed from the local `OPENAI_PRICE` table and are shown as
 estimates because Codex subscription billing can differ from public API-rate
-accounting.
+accounting. The bundled GPT-5.6 family rates per million tokens are Sol (and the
+`gpt-5.6` alias) at $5 input, $0.50 cached input, and $30 output; Terra at $2,
+$0.20, and $12; and Luna at $0.20, $0.02, and $1.20. Cache writes use 1.25 times
+the uncached-input rate. GPT-5.6 requests above 272,000 input tokens use the
+published 2x input and 1.5x output multipliers.
+
+Built-in price changes are effective-dated. Token Meter prices every recorded
+usage event with the period containing that event's timestamp, so reinstalling
+after a provider price change does not rewrite older session estimates. A
+session that crosses a price cutoff can therefore contain both rates. Manual
+prices use the same period mechanism: Save, Add, Use default, and Retire start a
+new period at the server's current time by default, preserving older session
+estimates. An optional past `Effective from` time can align a manual change to a
+known provider cutoff; future times are rejected. Settings shows the active
+period beside each model. The unchecked `Apply to all history` option is the
+explicit escape hatch for replacing a model's complete price timeline and
+recalculating older estimates. Overrides saved by Token Meter versions before
+this mechanism are migrated as all-history baseline periods, so upgrading alone
+does not change their existing totals.
 
 Cursor costs are intentionally rougher local estimates. Input uses one
 trace-visible context snapshot per execution, with sparse intermediate
 checkpoints interpolated between persisted values. Output uses deduplicated
 assistant and thinking text at four characters per token. The persisted model
 and speed variant select the rate; Composer 2.5 uses its separate Standard or
-Fast rate. These values make Current, Logs, Daily, Models, MCP, and the
+Fast rate. These values make Sessions, Logs, Daily, Models, MCP, and the
 menu bar useful, but they are not a replacement for Cursor's billing dashboard.
 Cache usage, hidden reasoning, and repeated internal model-call input are not
 available locally. Token Meter therefore labels Cursor tokens, cost, and output
-pace `est`, keeps cache unavailable, and does not fire budget/spike alerts from
-the Cursor proxy.
+pace `est`, keeps cache unavailable, and does not fire budget alerts from the
+Cursor proxy.
 
 Pre-flight estimation is out of scope. Token Meter reads logs after usage is
 recorded, so it shows cost as it accrues rather than predicting the next

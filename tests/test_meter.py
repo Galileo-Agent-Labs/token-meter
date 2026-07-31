@@ -960,6 +960,59 @@ class PricingTests(unittest.TestCase):
         price, approximate = meter.price_for("gpt-5.6", "codex")
         self.assertEqual(price, {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.5})
         self.assertFalse(approximate)
+        explicit, explicit_approximate = meter.price_for("gpt-5.6-sol", "codex")
+        self.assertEqual(explicit, price)
+        self.assertFalse(explicit_approximate)
+
+    def test_gpt_5_6_current_tier_prices_match_official_model_catalog(self):
+        expected = {
+            "gpt-5.6-terra": {
+                "input": 2.0, "output": 12.0, "cache_write": 2.5, "cache_read": 0.2,
+            },
+            "gpt-5.6-luna": {
+                "input": 0.2, "output": 1.2, "cache_write": 0.25, "cache_read": 0.02,
+            },
+        }
+        for model, prices in expected.items():
+            with self.subTest(model=model):
+                actual, approximate = meter.price_for(model, "codex")
+                self.assertEqual(actual, prices)
+                self.assertFalse(approximate)
+
+    def test_gpt_5_6_price_cutover_preserves_older_session_estimates(self):
+        previous = {
+            "input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.5,
+        }
+        for model, current_input in (("gpt-5.6-terra", 2.0), ("gpt-5.6-luna", 0.2)):
+            with self.subTest(model=model):
+                old, old_approximate = meter.price_for(
+                    model, "codex", at=meter.GPT_56_PRICE_UPDATE_AT - 1,
+                )
+                current, current_approximate = meter.price_for(
+                    model, "codex", at=meter.GPT_56_PRICE_UPDATE_AT,
+                )
+                self.assertEqual(old, previous)
+                self.assertFalse(old_approximate)
+                self.assertEqual(current["input"], current_input)
+                self.assertFalse(current_approximate)
+
+    def test_gpt_5_6_long_context_multiplier_starts_at_price_cutover(self):
+        usage = {
+            "input_tokens": meter.GPT_56_LONG_CONTEXT_TOKENS + 1,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "output_tokens": 100_000,
+        }
+        old = meter.cost_of(
+            usage, "gpt-5.6-terra", "codex", at=meter.GPT_56_PRICE_UPDATE_AT - 1,
+        )
+        current = meter.cost_of(
+            usage, "gpt-5.6-terra", "codex", at=meter.GPT_56_PRICE_UPDATE_AT,
+        )
+        self.assertAlmostEqual(old["input"], usage["input_tokens"] * 5.0 / 1e6)
+        self.assertAlmostEqual(old["output"], 3.0)
+        self.assertAlmostEqual(current["input"], usage["input_tokens"] * 2.0 * 2.0 / 1e6)
+        self.assertAlmostEqual(current["output"], 1.8)
 
     def test_custom_model_price_persists_and_drives_cost_calculation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -986,6 +1039,10 @@ class PricingTests(unittest.TestCase):
             "input": 1.25, "output": 6.5, "cache_write": 0.0, "cache_read": 0.2,
         })
         self.assertIn("gpt-custom-1", saved["model_pricing"]["codex"])
+        self.assertIsInstance(saved["model_pricing"]["codex"]["gpt-custom-1"], list)
+        self.assertIsNotNone(
+            saved["model_pricing"]["codex"]["gpt-custom-1"][0]["effective_from"]
+        )
 
     def test_builtin_override_can_be_restored_without_losing_other_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -995,14 +1052,21 @@ class PricingTests(unittest.TestCase):
                 changed = meter.set_model_price(
                     "claude", "claude-sonnet-5",
                     {"input": 4, "output": 20, "cache_write": 5, "cache_read": 0.4},
+                    effective_from=100,
                 )
-                price, approximate = meter.price_for("claude-sonnet-5", "claude")
+                price, approximate = meter.price_for(
+                    "claude-sonnet-5", "claude", at=150,
+                )
                 pricing = meter.model_pricing_settings()
                 restored = meter.set_model_price(
                     "claude", "claude-sonnet-5", remove=True,
+                    effective_from=200,
                 )
                 default_price, default_approximate = meter.price_for(
-                    "claude-sonnet-5", "claude",
+                    "claude-sonnet-5", "claude", at=200,
+                )
+                historical_price, _ = meter.price_for(
+                    "claude-sonnet-5", "claude", at=150,
                 )
                 saved = json.loads(path.read_text())
         row = next(
@@ -1016,8 +1080,173 @@ class PricingTests(unittest.TestCase):
         self.assertTrue(restored["ok"])
         self.assertEqual(default_price, meter.CLAUDE_PRICE["claude-sonnet-5"])
         self.assertFalse(default_approximate)
+        self.assertEqual(historical_price["input"], 4.0)
         self.assertEqual(saved["frustration_terms"], ["damn"])
-        self.assertNotIn("model_pricing", saved)
+        periods = saved["model_pricing"]["claude"]["claude-sonnet-5"]
+        self.assertEqual(periods[0]["effective_from"], 100.0)
+        self.assertEqual(periods[1], {"effective_from": 200.0, "use_builtin": True})
+
+    def test_legacy_override_remains_all_history_and_migrates_on_next_edit(self):
+        legacy = {"input": 7, "output": 21, "cache_write": 8, "cache_read": 0.7}
+        updated = {"input": 4, "output": 12, "cache_write": 5, "cache_read": 0.4}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({
+                "model_pricing": {"codex": {"gpt-5.6-terra": legacy}},
+                "language_signal_terms": {"positive": ["great"], "friction": ["damn"]},
+            }))
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                before_migration, _ = meter.price_for("gpt-5.6-terra", "codex", at=1)
+                result = meter.set_model_price(
+                    "codex", "gpt-5.6-terra", updated, effective_from=500,
+                )
+                before_cutoff, _ = meter.price_for("gpt-5.6-terra", "codex", at=499)
+                at_cutoff, _ = meter.price_for("gpt-5.6-terra", "codex", at=500)
+                saved = json.loads(path.read_text())
+        self.assertTrue(result["ok"])
+        self.assertEqual(before_migration, {key: float(value) for key, value in legacy.items()})
+        self.assertEqual(before_cutoff, before_migration)
+        self.assertEqual(at_cutoff, {key: float(value) for key, value in updated.items()})
+        self.assertEqual(saved["language_signal_terms"]["positive"], ["great"])
+        periods = saved["model_pricing"]["codex"]["gpt-5.6-terra"]
+        self.assertIsNone(periods[0]["effective_from"])
+        self.assertEqual(periods[1]["effective_from"], 500.0)
+
+    def test_custom_model_can_be_retired_without_losing_historical_price(self):
+        prices = {"input": 1, "output": 3, "cache_write": 0, "cache_read": 0.1}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                added = meter.set_model_price(
+                    "codex", "gpt-retired", prices, effective_from=100,
+                )
+                retired = meter.set_model_price(
+                    "codex", "gpt-retired", remove=True, effective_from=200,
+                )
+                old, old_approximate = meter.price_for("gpt-retired", "codex", at=150)
+                current, current_approximate = meter.price_for("gpt-retired", "codex", at=200)
+                pricing = meter.model_pricing_settings()
+                saved = json.loads(path.read_text())
+        row = next(item for item in pricing["models"] if item["model"] == "gpt-retired")
+        self.assertTrue(added["ok"])
+        self.assertTrue(retired["ok"])
+        self.assertEqual(old, {key: float(value) for key, value in prices.items()})
+        self.assertFalse(old_approximate)
+        self.assertTrue(current_approximate)
+        self.assertNotEqual(current, old)
+        self.assertFalse(row["active"])
+        self.assertEqual(row["source"], "retired")
+        self.assertEqual(row["effective_from"], 200.0)
+        self.assertEqual(row["prices"], old)
+        self.assertEqual(pricing["retired_custom_models"], 1)
+        self.assertEqual(
+            saved["model_pricing"]["codex"]["gpt-retired"][-1],
+            {"effective_from": 200.0, "inactive": True},
+        )
+
+    def test_apply_to_all_history_is_explicit_and_replaces_timeline(self):
+        first = {"input": 1, "output": 3, "cache_write": 0, "cache_read": 0.1}
+        global_price = {"input": 2, "output": 6, "cache_write": 0, "cache_read": 0.2}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                meter.set_model_price("codex", "gpt-global", first, effective_from=100)
+                result = meter.set_model_price(
+                    "codex", "gpt-global", global_price, apply_to_all_history=True,
+                )
+                historical, approximate = meter.price_for("gpt-global", "codex", at=1)
+                saved = json.loads(path.read_text())
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["apply_to_all_history"])
+        self.assertIsNone(result["effective_from"])
+        self.assertFalse(approximate)
+        self.assertEqual(historical, {key: float(value) for key, value in global_price.items()})
+        self.assertEqual(len(saved["model_pricing"]["codex"]["gpt-global"]), 1)
+        self.assertIsNone(saved["model_pricing"]["codex"]["gpt-global"][0]["effective_from"])
+
+    def test_identical_current_price_does_not_add_redundant_period(self):
+        prices = {"input": 1, "output": 3, "cache_write": 0, "cache_read": 0.1}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            first = meter.set_model_price(
+                "codex", "gpt-idempotent", prices, path=str(path), effective_from=100,
+            )
+            repeated = meter.set_model_price(
+                "codex", "gpt-idempotent", prices, path=str(path), effective_from=200,
+            )
+            saved = json.loads(path.read_text())
+        self.assertTrue(first["changed"])
+        self.assertFalse(repeated["changed"])
+        self.assertEqual(len(saved["model_pricing"]["codex"]["gpt-idempotent"]), 1)
+
+    def test_session_cost_can_span_manual_price_periods(self):
+        usage = {
+            "input_tokens": 1_000_000,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        override = {"input": 4, "output": 20, "cache_write": 5, "cache_read": 0.4}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                meter.set_model_price(
+                    "claude", "claude-sonnet-5", override, effective_from=100,
+                )
+                before = meter.cost_of(usage, "claude-sonnet-5", "claude", at=99)
+                after = meter.cost_of(usage, "claude-sonnet-5", "claude", at=100)
+        self.assertEqual(before["input"], 2.0)
+        self.assertEqual(after["input"], 4.0)
+        self.assertEqual(before["input"] + after["input"], 6.0)
+
+    def test_oversized_manual_history_is_ignored_without_repricing_builtin(self):
+        prices = {"input": 9, "output": 9, "cache_write": 9, "cache_read": 9}
+        periods = [
+            {"effective_from": index, "prices": prices}
+            for index in range(meter.MAX_MODEL_PRICE_PERIODS + 1)
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({
+                "model_pricing": {"claude": {"claude-sonnet-5": periods}},
+            }))
+            with mock.patch.object(meter, "TOKEN_METER_SETTINGS", str(path)):
+                price, approximate = meter.price_for(
+                    "claude-sonnet-5", "claude", at=meter.MAX_MODEL_PRICE_PERIODS + 2,
+                )
+                row = next(
+                    item for item in meter.model_pricing_settings()["models"]
+                    if item["provider"] == "claude" and item["model"] == "claude-sonnet-5"
+                )
+        self.assertEqual(price, meter.CLAUDE_PRICE["claude-sonnet-5"])
+        self.assertFalse(approximate)
+        self.assertEqual(row["periods"], 0)
+
+    def test_model_pricing_http_action_forwards_bounded_scope_fields(self):
+        source = Path(meter.__file__).read_text()
+        self.assertIn(
+            'apply_to_all_history=payload.get("apply_to_all_history") is True',
+            source,
+        )
+        self.assertIn('effective_from=payload.get("effective_from")', source)
+
+    def test_future_or_conflicting_effective_scope_is_rejected(self):
+        prices = {"input": 1, "output": 3, "cache_write": 0, "cache_read": 0.1}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            future = meter.set_model_price(
+                "codex", "gpt-future", prices, path=str(path),
+                effective_from=meter.time.time() + 600,
+            )
+            conflicting = meter.set_model_price(
+                "codex", "gpt-conflict", prices, path=str(path),
+                effective_from=100, apply_to_all_history=True,
+            )
+        self.assertFalse(future["ok"])
+        self.assertIn("future", future["error"])
+        self.assertFalse(conflicting["ok"])
+        self.assertIn("either", conflicting["error"])
+        self.assertFalse(path.exists())
 
     def test_invalid_custom_model_prices_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1057,6 +1286,7 @@ class SessionSummaryStatsTests(unittest.TestCase):
                 "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
                 "usage": {"input_tokens": 100, "cache_creation_input_tokens": 20,
                           "cache_read_input_tokens": 30, "output_tokens": 10},
+                "stop_reason": "end_turn",
             },
         }]
         row = meter.claude_summary(self.source("claude"), objs)
@@ -1064,16 +1294,29 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertEqual(row["output_tokens"], 10)
         self.assertEqual(row["model_stats"][0]["model"], "claude-sonnet-4-6")
         self.assertEqual(row["model_stats"][0]["executions"], 1)
+        self.assertEqual(row["primary_model"], "claude-sonnet-4-6")
+        self.assertEqual(row["context"]["latest"], 150)
+        self.assertIsNone(row["context"]["window"])
+        self.assertEqual(row["_context_samples"], [150])
+        self.assertTrue(row["terminal"])
+        self.assertEqual(row["usage_basis"], "reported")
 
     def test_codex_summary_exposes_input_output_and_model_stats(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-02T00:00:00.000Z",
-             "payload": {"model": "gpt-5.6"}},
+             "payload": {"model": "gpt-5.6", "effort": "xhigh"}},
+            {"timestamp": "2026-07-02T00:00:00.500Z", "payload": {
+                "type": "task_started", "model_context_window": 200000,
+            }},
             {"timestamp": "2026-07-02T00:00:01.000Z", "payload": {
-                "type": "token_count", "info": {"last_token_usage": {
+                "type": "token_count", "info": {"model_context_window": 200000,
+                                                "last_token_usage": {
                     "input_tokens": 100, "cached_input_tokens": 40,
                     "output_tokens": 20, "total_tokens": 120,
                 }},
+            }},
+            {"timestamp": "2026-07-02T00:00:02.000Z", "payload": {
+                "type": "task_complete",
             }},
         ]
         row = meter.codex_summary(self.source("codex", "gpt-5.6"), objs)
@@ -1081,6 +1324,169 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertEqual(row["output_tokens"], 20)
         self.assertEqual(row["model_stats"][0]["model"], "gpt-5.6")
         self.assertEqual(row["model_stats"][0]["tokens"], 120)
+        self.assertEqual(row["primary_model"], "gpt-5.6")
+        self.assertEqual(row["reasoning_effort"], "xhigh")
+        self.assertEqual(row["session_name"], "Summary stats")
+        self.assertEqual(row["context"]["latest"], 100)
+        self.assertEqual(row["context"]["window"], 200000)
+        self.assertEqual(row["context"]["latest_pct"], 0.0005)
+        self.assertEqual(row["_context_samples"], [100])
+        self.assertTrue(row["terminal"])
+        self.assertEqual(row["usage_basis"], "reported")
+
+    def test_codex_summary_prices_each_usage_event_across_a_cutover(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-30T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6-terra"}},
+            {"timestamp": "2026-07-30T00:00:01.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100_000, "output_tokens": 100_000,
+                    "total_tokens": 200_000,
+                }},
+            }},
+            {"timestamp": "2026-07-31T00:00:00.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100_000, "output_tokens": 100_000,
+                    "total_tokens": 200_000,
+                }},
+            }},
+        ]
+        row = meter.codex_summary(self.source("codex", "gpt-5.6-terra"), objs)
+        self.assertAlmostEqual(row["cost"], 4.9)
+        self.assertEqual(len(row["_day_cost"]), 2)
+        for actual, expected in zip(sorted(row["_day_cost"].values()), (1.4, 3.5)):
+            self.assertAlmostEqual(actual, expected)
+        self.assertAlmostEqual(row["_model_cost"]["gpt-5.6-terra"], 4.9)
+
+
+class CurrentSessionSummaryTests(unittest.TestCase):
+    def row(self, session_id, mtime, **overrides):
+        row = {
+            "id": session_id,
+            "path": f"/private/traces/{session_id}.jsonl",
+            "title": f"private prompt for {session_id}",
+            "provider": "codex",
+            "client": "codex",
+            "runtime": "Codex",
+            "label": "Codex",
+            "project": "/Users/person/secret/repository",
+            "session_name": f"Session {session_id}",
+            "primary_model": "gpt-5.6",
+            "reasoning_effort": "xhigh",
+            "models": ["gpt-5.6"],
+            "cost": 1.25,
+            "cost_approx": True,
+            "availability": {"cost": True, "context": True},
+            "usage_basis": "reported",
+            "context": {
+                "latest": 50000, "window": 200000,
+                "latest_pct": 0.25, "estimated": False,
+            },
+            "_context_samples": [20000, 35000, 50000],
+            "turns": 3,
+            "mtime": mtime,
+            "terminal": False,
+            "throughput": {
+                "available": True, "output_tps": 24.5, "basis": "tool_free",
+            },
+        }
+        row.update(overrides)
+        return row
+
+    def test_filters_orders_limits_and_sanitizes_card_rows(self):
+        now = 10_000
+        rows = [
+            self.row(f"session-{index}", now - index * 10)
+            for index in range(10)
+        ]
+        rows.append(self.row("too-old", now - meter.CURRENT_SESSION_MAX_AGE_S - 1))
+        result = meter.current_session_summaries(rows, now=now)
+
+        self.assertEqual(len(result), meter.CURRENT_SESSION_LIMIT)
+        self.assertEqual(result[0]["id"], "session-0")
+        self.assertEqual(result[-1]["id"], "session-7")
+        self.assertEqual(result[0]["project"], "repository")
+        self.assertEqual(result[0]["session_name"], "Session session-0")
+        self.assertEqual(result[0]["reasoning_effort"], "xhigh")
+        self.assertEqual(result[0]["throughput"]["output_tps"], 24.5)
+        self.assertEqual(result[0]["context"]["samples"], [20000, 35000, 50000])
+        self.assertNotIn("_context_samples", result[0])
+        self.assertNotIn("path", result[0])
+        self.assertNotIn("title", result[0])
+        self.assertNotIn("private prompt", json.dumps(result))
+        self.assertNotIn("/Users/person", json.dumps(result))
+
+    def test_uses_working_waiting_and_recent_activity_states(self):
+        now = 20_000
+        rows = [
+            self.row("working", now - 10, terminal=False),
+            self.row("waiting", now - 20, terminal=True),
+            self.row("recent", now - meter.CURRENT_SESSION_WORKING_S - 1, terminal=False),
+        ]
+        result = {
+            row["id"]: row
+            for row in meter.current_session_summaries(rows, now=now)
+        }
+        self.assertEqual(result["working"]["activity_state"], "working")
+        self.assertEqual(result["waiting"]["activity_state"], "waiting")
+        self.assertEqual(result["recent"]["activity_state"], "recent")
+        self.assertEqual(result["working"]["context"]["latest_pct"], 0.25)
+
+    def test_keeps_context_tokens_without_inventing_a_window(self):
+        row = self.row(
+            "claude-session", 29_990, provider="claude", client="claude_code",
+            runtime="Claude Code", context={
+                "latest": 118000, "window": None,
+                "latest_pct": None, "estimated": False,
+            },
+        )
+        result = meter.current_session_summaries([row], now=30_000)[0]
+        self.assertEqual(result["context"]["latest"], 118000)
+        self.assertIsNone(result["context"]["window"])
+        self.assertIsNone(result["context"]["latest_pct"])
+
+    def test_context_samples_are_numeric_recent_and_bounded(self):
+        row = self.row(
+            "long-session", 39_990,
+            _context_samples=[*range(40), "invalid", -1, None],
+        )
+        result = meter.current_session_summaries([row], now=40_000)[0]
+        self.assertEqual(len(result["context"]["samples"]),
+                         meter.CURRENT_SESSION_CONTEXT_SAMPLES)
+        self.assertEqual(result["context"]["samples"], list(range(8, 40)))
+        self.assertTrue(all(isinstance(value, int)
+                            for value in result["context"]["samples"]))
+
+
+class SelectedSessionStateCacheTests(unittest.TestCase):
+    def test_reuses_unchanged_state_and_recomputes_after_trace_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            path.write_text('{"type":"session_meta"}\n')
+            source = {
+                "provider": "codex", "id": "session", "path": str(path),
+                "mtime": path.stat().st_mtime,
+            }
+            meter._session_state_cache.clear()
+            calls = []
+
+            def build(_source):
+                calls.append(len(calls) + 1)
+                return {"source": {"id": "session"}, "version": calls[-1]}
+
+            try:
+                with mock.patch.object(meter, "recompute", side_effect=build):
+                    first = meter.cached_session_state(source)
+                    first["version"] = 99
+                    second = meter.cached_session_state(source)
+                    path.write_text(path.read_text() + '{"type":"event"}\n')
+                    third = meter.cached_session_state(source)
+            finally:
+                meter._session_state_cache.clear()
+
+        self.assertEqual(calls, [1, 2])
+        self.assertEqual(second["version"], 1)
+        self.assertEqual(third["version"], 2)
 
 
 class SessionRouteTests(unittest.TestCase):
@@ -1175,6 +1581,21 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
             {"path": "/logs/background.jsonl", "mtime": 11},
         ])
         self.assertNotEqual(before, after)
+
+    def test_session_membership_bypasses_the_cross_session_refresh_throttle(self):
+        before = meter.source_identity_signature([
+            {"id": "current", "provider": "codex", "path": "/logs/current.jsonl"},
+        ])
+        after = meter.source_identity_signature([
+            {"id": "current", "provider": "codex", "path": "/logs/current.jsonl"},
+            {"id": "new", "provider": "claude", "path": "/logs/new.jsonl"},
+        ])
+
+        self.assertNotEqual(before, after)
+        self.assertTrue(meter.cross_session_refresh_due(True, True, 10.1, 10.0))
+        self.assertFalse(meter.cross_session_refresh_due(True, False, 10.1, 10.0))
+        self.assertTrue(meter.cross_session_refresh_due(True, False, 11.0, 10.0))
+        self.assertLessEqual(meter._XSESS_LIVE_REFRESH_S, 1.0)
 
     def test_cross_session_refresh_replaces_cached_snapshot_before_publish(self):
         saved_cache = dict(meter._xsess)
@@ -1307,17 +1728,26 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
 
-    def test_token_insight_notifications_only_include_operational_warnings(self):
-        self.assertIn("function isNotifiableInsight(i)", self.page)
+    def test_browser_operational_alerts_are_budget_only(self):
+        self.assertIn("function renderInsights(ins)", self.page)
+        self.assertNotIn("function isNotifiableInsight(i)", self.page)
+        self.assertNotIn("fireNotification('Token insight'", self.page)
+        self.assertNotIn("id=spike", self.page)
+        self.assertNotIn("tm_spike", self.page)
+        self.assertNotIn("s.last_turn_cost>spike", self.page)
         self.assertIn(
-            "i?.kind==='warn'&&(key==='context-high'||key==='low-yield-latest')",
+            "fireNotification('Token Meter session budget'",
             self.page,
         )
         self.assertIn(
-            "if(liveView) ins.filter(isNotifiableInsight).forEach(i=>fireNotification('Token insight'",
+            "fireNotification(isExceeded?'Token Meter budget exceeded':'Token Meter monthly budget'",
             self.page,
         )
-        self.assertNotIn("i.kind==='warn'||i.kind==='good'", self.page)
+        self.assertIn("n.title!=='Token insight'", self.page)
+        self.assertIn(
+            "String(n.body||'').startsWith('Last execution cost ')",
+            self.page,
+        )
 
     def test_monthly_budget_alerts_recover_missed_exceeded_state(self):
         for marker in (
@@ -1377,6 +1807,8 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("id=budget-slider type=range", summary)
         self.assertIn("id=budget type=number", summary)
         self.assertNotIn("id=budget type=number", alerts)
+        self.assertNotIn("id=spike", alerts)
+        self.assertIn("Only budget crossings create alerts.", alerts)
         self.assertIn(
             "Set a live-run cap without changing the machine-wide monthly budget.",
             summary,
@@ -1485,7 +1917,11 @@ class DashboardLayoutTests(unittest.TestCase):
             self.page,
         )
         self.assertIn(
-            "$('current-tabs').onclick=event=>{if(event.target.dataset.currentPanel)setHashRoute(CURRENT_PANEL_ROUTES[event.target.dataset.currentPanel]);};",
+            "const button=event.target.closest('[data-current-panel]');",
+            self.page,
+        )
+        self.assertIn(
+            "setHashRoute(CURRENT_PANEL_ROUTES[button.dataset.currentPanel]);",
             self.page,
         )
         self.assertNotIn("mountCurrentModule('preview-settings", self.page)
@@ -1613,17 +2049,29 @@ class DashboardLayoutTests(unittest.TestCase):
     def test_model_pricing_is_editable_and_supports_new_models_in_settings(self):
         for marker in (
             "id=model-pricing-settings", "id=model-pricing-rows",
+            "id=model-price-scope", "id=model-price-all-history",
+            "id=model-price-effective-from", "id=model-price-scope-note",
             "id=model-price-add-form", "id=model-price-provider",
             "id=model-price-model", "id=model-price-input",
             "id=model-price-output", "id=model-price-cache-write",
             "id=model-price-cache-read", "data-model-price-save",
             "data-model-price-remove", "function renderModelPricing",
+            "function modelPriceEffectiveFrom", "function updateModelPriceScope",
+            "function confirmModelPriceHistory",
             "function postModelPrice", "/settings/model-pricing",
-            "Save", "Use default", "Add model",
+            "apply_to_all_history", "Save from now", "Use default from now",
+            "Add from now", "Delete all history",
         ):
             self.assertIn(marker, self.page)
         self.assertIn("USD per 1 million tokens", self.page)
-        self.assertIn("recalculate current and historical cost estimates", self.page)
+        self.assertIn("Blank date means now", self.page)
+        self.assertIn("selected past time", self.page)
+        self.assertIn("older session estimates", self.page)
+        self.assertIn(".modelPriceScope.history", self.page)
+        self.assertIn("badge.hidden=!hasCustomPricing", self.page)
+        self.assertIn("source==='built-in'?'':source", self.page)
+        self.assertIn("sourceLabel?`<span class=modelPriceSource>", self.page)
+        self.assertNotIn("Built-in defaults", self.page)
         self.assertLess(
             self.page.index("id=model-pricing-settings"),
             self.page.index("id=frustration-settings"),
@@ -1679,12 +2127,49 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-daily"))
         self.assertIn("id=d-day-select", self.page)
         self.assertNotIn("id=learn-glossary", self.page)
-        self.assertIn("Recommended workflow", self.page)
+        self.assertIn("Review loop", self.page)
         self.assertIn("if(h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
+
+    def test_non_current_views_keep_visible_copy_terse(self):
+        boundaries = (
+            ("logs", "models"),
+            ("models", "daily"),
+            ("daily", "learn"),
+            ("learn", "capabilities"),
+            ("capabilities", "settings"),
+            ("settings", None),
+        )
+        for view, next_view in boundaries:
+            section = self.page.split(f"id=view-{view}", 1)[1]
+            section = section.split(
+                f"id=view-{next_view}" if next_view else "<dialog class=onboardingDialog",
+                1,
+            )[0]
+            paragraphs = [
+                re.sub(r"<[^>]+>", "", value).strip()
+                for value in re.findall(r"<p(?:\s[^>]*)?>(.*?)</p>", section, re.S)
+            ]
+            self.assertEqual(
+                [value for value in paragraphs if value],
+                [],
+                f"{view} should not carry visible explanatory paragraphs",
+            )
+            self.assertNotIn("class=foot", section)
+
+        for marker in (
+            'aria-description="Compare model runtimes on similar observed workloads.',
+            'aria-description="What changed, what drove spend',
+            'aria-description="A practical review loop',
+            'aria-description="Available tools, MCP servers, and skills',
+            'aria-description="Machine-wide controls.',
+            ".modelHead h1.fieldtip:after,.dailyHead h1.fieldtip:after,.learnHead h1.fieldtip:after,.previewHead h1.fieldtip:after{bottom:auto;",
+            "No use observed",
+        ):
+            self.assertIn(marker, self.page)
 
     def test_settings_monthly_budget_derives_total_from_runtime_budgets(self):
         for marker in (
@@ -1710,7 +2195,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "id=budget-runtime-spend-codex",
             "id=budget-runtime-spend-cursor",
             "id=budget-runtime-track-claude",
-            "id=budget-runtime-meta-claude",
             "/settings/budgets", "tm_monthly_budget_alerts",
             "Partial cost coverage: recorded spend is a lower bound.",
             "Calculated budget",
@@ -1747,10 +2231,12 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=budget-input-total", self.page)
         self.assertNotIn("Monthly total (USD)", self.page)
         self.assertNotIn("Runtime allocations cannot exceed", self.page)
+        self.assertNotIn("budget-runtime-meta-", self.page)
+        self.assertNotIn("const meta=allocated?", self.page)
         self.assertEqual(self.page.count(" id=budget-config>"), 1)
         settings = self.page[self.page.index("id=view-settings"):]
         self.assertLess(settings.index("class=budgetDetailGrid"), settings.index("id=budget-config"))
-        self.assertLess(settings.index("<h2>Monthly spend</h2>"), settings.index("id=budget-config"))
+        self.assertLess(settings.index(">Monthly spend</h2>"), settings.index("id=budget-config"))
         self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
 
     def test_software_updates_are_default_on_hourly_checks_with_an_explicit_install(self):
@@ -1958,7 +2444,6 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(self.page.index("id=view-capabilities"), self.page.index("id=view-settings"))
         self.assertLess(self.page.index("id=view-settings"), self.page.index("id=agent-access"))
         self.assertIn("setHashRoute('settings')", self.page)
-        self.assertIn("After connecting Token Meter in Settings", self.page)
         self.assertIn("tm_agent_discovery_dismissed", self.page)
         settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
             "</div>\n</div>\n<dialog class=commandPalette", 1
@@ -1972,24 +2457,39 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(settings.index("id=model-pricing-settings"),
                         settings.index("id=frustration-settings"))
 
-    def test_learn_has_user_question_starters(self):
-        self.assertIn("Should I keep this run going?", self.page)
-        self.assertIn("Why was the last phase expensive?", self.page)
-        self.assertIn("What should I change before the next phase?", self.page)
+    def test_agent_access_conflict_has_an_explicit_repair_flow(self):
+        for marker in (
+            "row.conflict?'Repair':'Connect'",
+            "const repairing=!!(enabled&&row.conflict)",
+            "Replace only the existing user-level tokenmeter entry",
+            "`${row.disconnect_command}\\n${row.connect_command}`",
+            "repair:repairing",
+            "result.repaired?'Connection repaired'",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("Resolve manually", self.page)
+        self.assertNotIn("||row.conflict", self.page[self.page.index("const disabled="):self.page.index("const detail=", self.page.index("const disabled="))])
 
-    def test_model_comparison_has_tooltips_and_learn_guidance(self):
+    def test_learn_omits_removed_model_and_agent_guidance(self):
+        for marker in (
+            "id=learn-model-guide",
+            "Compare model speed without fooling yourself",
+            "Ask your agent",
+            "Should I keep this run going?",
+            "Why was the last phase expensive?",
+            "What should I change before the next phase?",
+        ):
+            self.assertNotIn(marker, self.page)
+
+    def test_model_comparison_has_tooltips(self):
         for marker in (
             "modelHelp", "id=m-coverage", 'aria-label="Output timing coverage"',
             "same model can appear more than once",
             "A ratio above 1 favors the named faster runtime",
             "The median is primary because the average can be pulled upward",
-            "id=learn-model-guide", "Compare model speed without fooling yourself",
-            "Select two model runtimes", "Read matched pace first",
-            "Check coverage and uncertainty", "Treat tok/s as diagnostic",
-            "What matching cannot prove", "data-learn-route=models",
-            "95% confidence interval", "smaller-history coverage", "Matched pace",
+            "95% confidence interval", "Matched pace",
             "model runtime", "Observed output pace", "Typical workload",
-            "Typical wait", "semantic difficulty", "less than 30% coverage",
+            "Typical wait", "semantic difficulty",
             "The 95% confidence interval crosses 1.00",
             "$('m-coverage').setAttribute('aria-valuenow'",
             "stripNativeFieldTipTitles", "removeAttribute('title')",
@@ -2014,24 +2514,142 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
         self.assertIn("el.onclick=()=>selectSession(el.dataset.id)", self.page)
 
-    def test_active_session_opened_from_logs_follows_live_state(self):
+    def test_selected_session_stays_pinned_while_other_live_state_changes(self):
         self.assertIn("function followLatestSession", self.page)
+        self.assertIn("function refreshSelectedSession", self.page)
+        self.assertIn("encodeURIComponent(id)+'&live=1'", self.page)
+        self.assertLess(
+            self.page.index("selectedPollId=''"),
+            self.page.index("applyLocationRoute();"),
+        )
+        self.assertIn("const SELECTED_SESSION_POLL_MS=2000", self.page)
         self.assertIn(
-            "if(LATEST&&id===stateSessionId(LATEST)){\n"
-            "  return Promise.resolve(followLatestSession({\n"
-            "   updateUrl:true,replace:updateUrl?replace:true,show",
+            "setInterval(()=>refreshSelectedSession({show:true}),SELECTED_SESSION_POLL_MS)",
             self.page,
         )
-        self.assertIn(
-            "if(pinned&&pinned===stateSessionId(LATEST)){\n"
-            "  followLatestSession({updateUrl:true,replace:true,show:false,preservePanel:true});",
-            self.page,
-        )
+        self.assertIn("pinned=id;\n if(show)applyHashRoute();\n return refreshSelectedSession", self.page)
         self.assertIn(
             "const sessionSurfaceActive=$('view-session').classList.contains('on');\n"
-            " if(!pinned&&sessionSurfaceActive)renderSession(LATEST);",
+            " if(!pinned&&sessionSurfaceActive&&currentPanel!=='sessions')renderSession(LATEST);",
             self.page,
         )
+        self.assertNotIn("if(LATEST&&id===stateSessionId(LATEST))", self.page)
+        self.assertNotIn("if(pinned&&pinned===stateSessionId(LATEST))", self.page)
+
+    def test_sessions_overview_is_bounded_routed_and_accessible(self):
+        for marker in (
+            "id=preview-surface-sessions",
+            "id=current-session-grid",
+            "function renderCurrentSessions",
+            "function openCurrentSessions",
+            "'/#sessions'",
+            "data-current-session-id",
+            "Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.",
+            'class="currentSessionsCount fieldtip"',
+            "Sessions with activity in the last 30 minutes.",
+            "`${count} · 30m`",
+            "Working",
+            "Waiting",
+            "Recent",
+            "provider-claude",
+            "provider-codex",
+            "provider-cursor",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run','activity','tools','insights','alerts'];",
+                      self.page)
+        self.assertNotIn("data-current-panel=sessions", self.page)
+        self.assertIn('id=current-tabs aria-label="Session views" data-current-detail', self.page)
+        self.assertRegex(self.page, r"id=tab-session[^>]*>Sessions</button>")
+        self.assertIn("if(h==='sessions'||h==='current-sessions')", self.page)
+        self.assertIn("history.replaceState(null,'','/#sessions')", self.page)
+        self.assertIn("function currentSessionModelName", self.page)
+        self.assertIn("row.session_name||row.project||'Untitled session'", self.page)
+        self.assertIn("`${runtime} / ${model}${effort?` ${effort}`:''}`", self.page)
+        self.assertIn("<span>Speed</span>", self.page)
+        self.assertIn("speedFmt(throughput.output_tps)} tok/s", self.page)
+        self.assertIn("Back to sessions", self.page)
+        self.assertIn("$('unpin').onclick=()=>openCurrentSessions()", self.page)
+        self.assertNotIn("Reorder: drag or ⌥ + arrows", self.page)
+        self.assertNotIn("currentSessionsMoveHint", self.page)
+        self.assertNotIn("currentSessionOpen", self.page)
+        self.assertNotIn(">Open →</span>", self.page)
+
+    def test_session_cards_use_compact_readable_metrics(self):
+        for marker in (
+            ".currentSessionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}",
+            ".currentSessionGrid{gap:11px}",
+            ".currentSessionCard{min-height:190px;padding:16px 18px 14px}",
+            ".currentSessionIdentity h3{font-size:18px}",
+            ".currentSessionMetric b{margin-top:5px;font-size:17px}",
+            "font-variant-numeric:tabular-nums",
+            ".currentSessionMetric b.mono{font-size:17px}",
+            ".currentSessionMetric b,.currentSessionMetric b.mono{font-size:19px}",
+            "@media(max-width:700px){.currentSessionGrid{grid-template-columns:1fr;gap:9px}",
+            ".currentSessionCard{min-height:184px;padding:14px 15px 12px}",
+            ".currentSessionMetric b,.currentSessionMetric b.mono{font-size:15px",
+            "@media(max-width:700px){.currentSessionMetric b,.currentSessionMetric b.mono{font-size:16.5px}",
+        ):
+            self.assertIn(marker, self.page)
+
+    def test_session_cards_show_context_sparklines(self):
+        for marker in (
+            "function currentSessionContextSparkline(row)",
+            "Array.isArray(context.samples)",
+            "const plotted=samples.slice(-24)",
+            "const width=96,height=22",
+            "currentSessionContextBar",
+            "value>=.85?' high':value>=.7?' watch'",
+            "<svg class=currentSessionContextSpark",
+            "class=currentSessionContextValue",
+            "const contextSpark=currentSessionContextSparkline(row)",
+            "${contextSpark.html}",
+            "const cardDescription=`${contextSpark.summary}",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("currentSessionContextCaption", self.page)
+        self.assertNotIn("currentSessionContextGuide", self.page)
+
+    def test_sessions_is_default_new_cards_lead_and_known_cards_keep_manual_order(self):
+        for marker in (
+            "$('tab-session').onclick=openCurrentSessions",
+            "label:'Sessions'",
+            "action:'sessions',directKey:'Digit1'",
+            "setHashRoute('sessions',{replace:true,apply:false})",
+            "const CURRENT_SESSION_ORDER_KEY='tm_current_session_order_v1'",
+            "const CURRENT_SESSION_ORDER_MIGRATION_KEY='tm_current_session_newest_first_v1'",
+            "function orderedCurrentSessionRows(rows)",
+            "if(!Array.isArray(sourceRows))",
+            "function moveCurrentSessionCard(sourceId,targetId,after=false)",
+            "function moveCurrentSessionCardBy(sourceId,delta)",
+            "function focusCurrentSessionCard(id)",
+            "draggable=true",
+            "event.dataTransfer.effectAllowed='move'",
+            "currentSessionGrid.addEventListener('dragover'",
+            "currentSessionGrid.addEventListener('drop'",
+            "currentSessionGrid.addEventListener('dragend'",
+            "currentSessionGrid.addEventListener('keydown'",
+            "event.altKey",
+            "Press ⌥ and an arrow key to move.",
+            "id=current-session-order-status",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn(
+            "const known=currentSessionOrder.filter(id=>byId.has(id)),seen=new Set(known);",
+            self.page,
+        )
+        self.assertIn(
+            "const unseen=sourceIds.filter(id=>!seen.has(id));\n"
+            " let next=[...unseen,...known];",
+            self.page,
+        )
+        self.assertIn(
+            "if(currentSessionOrderNeedsNewestMigration&&sourceIds.length){\n"
+            "  const newest=sourceIds[0];\n"
+            "  next=[newest,...next.filter(id=>id!==newest)];",
+            self.page,
+        )
+        self.assertNotIn("next.push(id);seen.add(id)", self.page)
 
     def test_cursor_provenance_is_integrated_across_dashboard_views(self):
         for marker in (
@@ -2048,7 +2666,8 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_dashboard_live_updates_do_not_hold_event_stream_connections(self):
         self.assertNotIn("new EventSource('/events')", self.page)
-        self.assertIn("setInterval(refreshLiveState,2000)", self.page)
+        self.assertIn("const LIVE_STATE_POLL_MS=1000", self.page)
+        self.assertIn("setInterval(refreshLiveState,LIVE_STATE_POLL_MS)", self.page)
         self.assertIn("if(statePollBusy)return", self.page)
         source = Path(meter.__file__).read_text()
         events = source.index('elif req_path == "/events":')
@@ -2076,6 +2695,15 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('addAction("Open Daily Brief", #selector(openDailyBrief))', self.source)
         self.assertIn('@objc private func openDailyBrief()', self.source)
         self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
+
+    def test_dashboard_opens_sessions_unless_a_session_is_pinned(self):
+        self.assertIn(
+            'tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#sessions")',
+            self.source,
+        )
+        self.assertIn("if pinnedSessionID?.isEmpty == false", self.source)
+        self.assertIn('openDashboardPanel("summary")', self.source)
+        self.assertIn('openDashboardPanel("sessions", includePinnedSession: false)', self.source)
 
     def test_model_prices_setting_opens_dashboard_pricing_editor(self):
         self.assertIn('NSMenuItem(title: "Model Prices", action: #selector(openModelPrices)', self.source)
@@ -3262,6 +3890,67 @@ class AgentAccessTests(unittest.TestCase):
                 which=lambda name: f"/usr/bin/{name}")
         self.assertFalse(status["connected"])
         self.assertTrue(status["conflict"])
+        self.assertEqual(status["status"], "Existing entry differs from this install")
+
+    def test_conflicting_entry_requires_explicit_repair_confirmation(self):
+        before = {"label": "Codex", "detected": True, "available": True,
+                  "configured": True, "connected": False, "conflict": True}
+        runner = mock.Mock()
+        result = meter.set_agent_access("codex", True, runner=runner,
+                                        status_getter=lambda client: before)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["conflict"])
+        self.assertIn("Confirm repair", result["error"])
+        runner.assert_not_called()
+
+    def test_repair_replaces_only_named_entry_and_verifies_connection(self):
+        before = {"label": "Codex", "detected": True, "available": True,
+                  "configured": True, "connected": False, "conflict": True}
+        after = {**before, "configured": True, "connected": True, "conflict": False}
+        states = iter((before, after))
+        commands = []
+
+        class Completed:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def runner(argv, **kwargs):
+            commands.append(argv)
+            self.assertNotIn("shell", kwargs)
+            return Completed()
+
+        with mock.patch.object(meter, "agent_access_launcher", return_value="/tmp/token-meter-mcp"), \
+                mock.patch.object(meter, "agent_client_executable", return_value="/usr/bin/codex"):
+            result = meter.set_agent_access("codex", True, repair=True, runner=runner,
+                                            status_getter=lambda client: next(states))
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["repaired"])
+        self.assertTrue(result["restart_required"])
+        self.assertEqual(commands, [
+            ["/usr/bin/codex", "mcp", "remove", "tokenmeter"],
+            ["/usr/bin/codex", "mcp", "add", "--env", "TOKEN_METER_CALLER=codex",
+             "tokenmeter", "--", "/tmp/token-meter-mcp"],
+        ])
+
+    def test_repair_stops_when_existing_entry_cannot_be_removed(self):
+        before = {"label": "Claude Code", "detected": True, "available": True,
+                  "configured": True, "connected": False, "conflict": True}
+
+        class Completed:
+            returncode = 1
+            stdout = ""
+            stderr = "entry is locked\n"
+
+        runner = mock.Mock(return_value=Completed())
+        with mock.patch.object(meter, "agent_client_executable", return_value="/usr/bin/claude"):
+            result = meter.set_agent_access("claude", True, repair=True, runner=runner,
+                                            status_getter=lambda client: before)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["conflict"])
+        self.assertIn("remove the existing tokenmeter entry", result["error"])
+        self.assertIn("entry is locked", result["error"])
+        runner.assert_called_once()
 
     def test_connection_change_is_verified_after_cli_success(self):
         before = {"label": "Codex", "detected": True, "available": True,

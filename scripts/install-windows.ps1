@@ -255,8 +255,10 @@ Write-Utf8File (Join-Path $StagingRoot "PYTHON_WINDOWED_EXECUTABLE") ($PythonwEx
 
 $Commit = (& $Git.Source -C $SourceRoot rev-parse --short HEAD 2>$null | Out-String).Trim()
 if ($Commit) {
-    $DirtyPaths = @(& $Git.Source -C $SourceRoot status --short --untracked-files=all 2>$null) |
-        Where-Object { $_ -and $_ -notmatch '^\?\? plan\.md$' }
+    $DirtyPaths = @(
+        & $Git.Source -C $SourceRoot status --short --untracked-files=all 2>$null |
+            Where-Object { $_ -and $_ -notmatch '^\?\? plan\.md$' }
+    )
     if ($DirtyPaths.Count -gt 0) {
         $Commit = "$Commit+local"
     }

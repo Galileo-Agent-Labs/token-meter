@@ -3940,6 +3940,7 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('(Split-Path -Leaf $InstallRoot) -ne "runtime"', installer)
         self.assertIn("the runtime path contains files that do not belong to Token Meter", installer)
         self.assertIn('$InstallNonce = [Guid]::NewGuid().ToString("N")', installer)
+        self.assertIn("$DirtyPaths = @(", installer)
         self.assertIn('Write-Utf8File (Join-Path $StagingRoot "PYTHON_EXECUTABLE")', installer)
         self.assertIn('Write-Utf8File (Join-Path $StagingRoot "SOURCE_CHECKOUT")', installer)
         self.assertIn('& $StartScript -ReadinessTimeoutSeconds', installer)

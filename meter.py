@@ -36,18 +36,40 @@ import subprocess
 import statistics
 import time
 import threading
+from contextlib import closing
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
+def application_support_root(platform=None, environ=None):
+    """Return the per-user application-data root for the active desktop."""
+    platform = os.name if platform is None else platform
+    environ = os.environ if environ is None else environ
+    if platform == "nt":
+        return os.path.expanduser(environ.get("APPDATA") or "~/AppData/Roaming")
+    return os.path.expanduser("~/Library/Application Support")
+
+
+def session_trash_directory(platform=None, environ=None):
+    """Return Token Meter's recoverable deletion directory for this platform."""
+    platform = os.name if platform is None else platform
+    environ = os.environ if environ is None else environ
+    if platform == "nt":
+        root = os.path.expanduser(environ.get("LOCALAPPDATA") or "~/AppData/Local")
+        return os.path.join(root, "Token Meter", "Trash")
+    return os.path.expanduser("~/.Trash")
+
+
+APPLICATION_SUPPORT_ROOT = application_support_root()
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
 CLAUDE_DESKTOP_DATA_ROOTS = [
-    os.path.expanduser("~/Library/Application Support/Claude"),
+    os.path.join(APPLICATION_SUPPORT_ROOT, "Claude"),
     # Claude Desktop's third-party provider builds (including Bedrock-backed
     # Cowork) keep the same metadata and nested Claude trace layout here.
-    os.path.expanduser("~/Library/Application Support/Claude-3p"),
+    os.path.join(APPLICATION_SUPPORT_ROOT, "Claude-3p"),
 ]
 CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
@@ -58,10 +80,10 @@ CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_AUTH = os.path.expanduser("~/.codex/auth.json")
 CLAUDE_CREDENTIALS = os.path.expanduser("~/.claude/.credentials.json")
 CURSOR_PROJECTS = os.path.expanduser("~/.cursor/projects")
-CURSOR_STATE_DB = os.path.expanduser(
-    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+CURSOR_STATE_DB = os.path.join(
+    APPLICATION_SUPPORT_ROOT, "Cursor", "User", "globalStorage", "state.vscdb"
 )
-CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
+CURSOR_REQUEST_LOGS = os.path.join(APPLICATION_SUPPORT_ROOT, "Cursor", "logs")
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -1410,8 +1432,19 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
     if not status["available"] or not status["can_update"]:
         return {"ok": False, "error": "No safely installable update is available."}
     checkout = source_checkout_path()
-    script = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scripts", "update")
-    if not checkout or not os.path.isfile(script) or not os.access(script, os.X_OK):
+    root = os.path.dirname(os.path.realpath(__file__))
+    target_status_path = status_path or TOKEN_METER_UPDATE_STATUS
+    if os.name == "nt":
+        script = os.path.join(root, "scripts", "update-windows.ps1")
+        shell = shutil.which("pwsh") or shutil.which("powershell")
+        command = ([shell, "-NoLogo", "-NoProfile", "-WindowStyle", "Hidden", "-File",
+                    script, checkout, target_status_path] if shell else [])
+        helper_ready = bool(shell and os.path.isfile(script))
+    else:
+        script = os.path.join(root, "scripts", "update")
+        command = [script, checkout, target_status_path]
+        helper_ready = bool(os.path.isfile(script) and os.access(script, os.X_OK))
+    if not checkout or not helper_ready:
         return {"ok": False, "error": "The installed updater is unavailable."}
     started_at = int(time.time())
     _persist_update_status({
@@ -1426,14 +1459,21 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
     }, status_path)
     popen = popen or subprocess.Popen
     try:
-        popen(
-            [script, checkout, status_path or TOKEN_METER_UPDATE_STATUS],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            start_new_session=True,
-        )
+        launch_options = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "close_fds": True,
+        }
+        if os.name == "nt":
+            launch_options["creationflags"] = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
+        else:
+            launch_options["start_new_session"] = True
+        popen(command, **launch_options)
     except OSError:
         _persist_update_status({
             "phase": "failed", "error_code": "launch_failed",
@@ -1802,7 +1842,7 @@ def _cursor_json(value, default=None):
 def _cursor_db_connection(path=None):
     """Open Cursor's live database read-only while retaining WAL visibility."""
     path = os.path.abspath(os.path.expanduser(path or CURSOR_STATE_DB))
-    uri = f"file:{quote(path, safe='/')}?mode=ro"
+    uri = f"{Path(path).as_uri()}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=0.05)
     conn.execute("PRAGMA query_only = ON")
     conn.execute("PRAGMA busy_timeout = 50")
@@ -1844,7 +1884,7 @@ def cursor_metadata_index(db_path=None):
     """Return top-level Cursor Composer metadata in one read-only snapshot."""
     result = {}
     try:
-        with _cursor_db_connection(db_path) as conn:
+        with closing(_cursor_db_connection(db_path)) as conn:
             headers = conn.execute(
                 "SELECT composerId, workspaceId, createdAt, lastUpdatedAt, "
                 "isArchived, isSubagent, checkpointAt, value FROM composerHeaders"
@@ -1882,7 +1922,7 @@ def cursor_metadata_index(db_path=None):
 def cursor_snapshot(composer_id, db_path=None):
     """Read one ordered Cursor conversation, degrading cleanly on schema drift."""
     try:
-        with _cursor_db_connection(db_path) as conn:
+        with closing(_cursor_db_connection(db_path)) as conn:
             row = conn.execute(
                 "SELECT workspaceId, createdAt, lastUpdatedAt, isArchived, "
                 "isSubagent, checkpointAt, value FROM composerHeaders WHERE composerId = ?",
@@ -2306,7 +2346,7 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
         return {"ok": False, "error": "The discovered session log is not available.",
                 "error_code": "not_found"}
 
-    trash_dir = os.path.expanduser(trash_dir or "~/.Trash")
+    trash_dir = os.path.expanduser(trash_dir or session_trash_directory())
     mover = mover or shutil.move
     try:
         os.makedirs(trash_dir, exist_ok=True)
@@ -6459,21 +6499,25 @@ def capability_action_capability():
 
 
 def session_action_capability():
+    destination = "Token Meter Trash" if os.name == "nt" else "macOS Trash"
     return {
         "available": True,
         "token": _ACTION_TOKEN,
         "recoverable": True,
-        "destination": "macOS Trash",
+        "destination": destination,
     }
 
 
 def agent_access_launcher():
     root = os.path.dirname(os.path.realpath(__file__))
-    candidates = [
-        os.path.join(root, "scripts", "run-token-meter-mcp"),
-        os.path.join(root, "bin", "token-meter-mcp"),
-        "/Library/Application Support/Token Meter/bin/token-meter-mcp",
-    ]
+    if os.name == "nt":
+        candidates = [os.path.join(root, "scripts", "run-token-meter-mcp.cmd")]
+    else:
+        candidates = [
+            os.path.join(root, "scripts", "run-token-meter-mcp"),
+            os.path.join(root, "bin", "token-meter-mcp"),
+            "/Library/Application Support/Token Meter/bin/token-meter-mcp",
+        ]
     return next((path for path in candidates if os.path.isfile(path) and os.access(path, os.X_OK)), candidates[0])
 
 
@@ -6504,7 +6548,10 @@ def agent_client_environment(cli_path):
     # Keep the wrapper's directory, not the resolved script target. NVM's
     # `codex` is a symlink whose sibling `node` binary is required by env(1).
     preferred = [os.path.dirname(os.path.abspath(cli_path))] if cli_path else []
-    for value in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"):
+    platform_paths = () if os.name == "nt" else (
+        "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+    )
+    for value in platform_paths:
         if value not in preferred:
             preferred.append(value)
     env["PATH"] = os.pathsep.join(dict.fromkeys(preferred + current))
@@ -9325,7 +9372,7 @@ def load_claude_quota(now=None, opener=None):
 
 def cursor_auth_session(now=None, db_path=None):
     try:
-        with _cursor_db_connection(db_path) as conn:
+        with closing(_cursor_db_connection(db_path)) as conn:
             row = conn.execute(
                 "SELECT value FROM ItemTable WHERE key = ? LIMIT 1",
                 ("cursorAuth/accessToken",),

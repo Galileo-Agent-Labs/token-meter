@@ -3114,7 +3114,8 @@ function renderSession(s){
  const sessionActions=s.xsession?.session_actions||{}, deleteButton=$('session-delete');
  deleteButton.hidden=!source.id;
  deleteButton.disabled=!sessionActions.available;
- deleteButton.title=sessionActions.available?'Move this session log to macOS Trash.':'Session deletion is unavailable.';
+ const deleteDestination=sessionActions.destination||'Trash';
+ deleteButton.title=sessionActions.available?`Move this session log to ${deleteDestination}.`:'Session deletion is unavailable.';
  $('frozen').classList.toggle('on',frozen);
  $('live').classList.toggle('dead',frozen);
  $('livetxt').textContent=frozen?(pinned?'pinned':'frozen'):('live · '+idleLabel(s.idle_s));
@@ -3175,7 +3176,8 @@ function openSessionDeleteDialog(target,actions,returnToLogs=false,isLive=false)
  $('session-delete-sub').textContent=`${target.label||target.provider||'Session'} · ${target.project||'No project'}`;
  $('session-delete-evidence').innerHTML=`<div><b>${esc(target.title||'(untitled log)')}</b></div><div>This removes the underlying local JSONL log from Token Meter.</div>`;
  $('session-delete-id').textContent=target.id;
- $('session-delete-note').textContent=isLive?'This appears to be the live session. Stop its agent first to prevent further writes. The log will be moved to macOS Trash; provider metadata and configuration are not changed.':'The log will be moved to macOS Trash and can be recovered there. Provider metadata and configuration are not changed.';
+ const deleteDestination=actions.destination||'Trash';
+ $('session-delete-note').textContent=isLive?`This appears to be the live session. Stop its agent first to prevent further writes. The log will be moved to ${deleteDestination}; provider metadata and configuration are not changed.`:`The log will be moved to ${deleteDestination} and can be recovered there. Provider metadata and configuration are not changed.`;
  $('session-delete-confirm').disabled=false;
  $('session-delete-confirm').textContent='Move to Trash';
  $('session-delete-dialog').showModal();
@@ -4224,7 +4226,7 @@ function applyLiveState(state){
  renderCurrentSessions(LATEST);
  const sessionSurfaceActive=$('view-session').classList.contains('on');
  if(!pinned&&sessionSurfaceActive&&currentPanel!=='sessions')renderSession(LATEST);
- else if(!sessionSurfaceActive)$('livetxt').textContent='live';
+ else if(!sessionSurfaceActive||currentPanel==='sessions')$('livetxt').textContent='live';
 	 if($('view-logs').classList.contains('on'))renderLogs(LATEST.xsession);
 	 if($('view-logs').classList.contains('on')&&(!logSessionInventory||logSessionInventoryAt!==Number(LATEST.xsession?.generated_at||0)))loadLogSessions();
 	 if($('view-models').classList.contains('on')){renderActiveModelStats();renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}

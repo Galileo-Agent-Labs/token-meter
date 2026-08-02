@@ -49,8 +49,24 @@ without requiring a retry.
 It copies the runtime into `~/Library/Application Support/Token Meter/runtime`,
 so the cloned folder is not used for automatic startup.
 
-Token Meter starts its local server and menu bar widget automatically after
-installation and after future logins. Open the dashboard at:
+On Windows, install Python 3.8 or newer, clone the repository, and run the
+per-user PowerShell installer. The official ARM64 Python build can be installed
+with Winget:
+
+```powershell
+winget install --exact --id Python.Python.3.13 --architecture arm64 --scope user
+git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+pwsh -NoProfile -File .\token-meter\scripts\install-windows.ps1
+```
+
+The Windows installer stages the runtime under
+`%LOCALAPPDATA%\Token Meter\runtime`, starts the local server without a console
+window, and registers a per-user login startup entry. Windows uses the browser
+dashboard; the native AppKit menu-bar companion remains macOS-only.
+
+Token Meter starts its local server automatically after installation and after
+future logins. On macOS, it also starts the menu bar widget. Open the dashboard
+at:
 
 ```text
 http://localhost:8722
@@ -187,17 +203,18 @@ observation establishes a baseline and never sends a catch-up notification.
 ## Requirements
 
 - Python 3.8 or newer. The macOS package first tries `/usr/bin/python3`, then
-  Homebrew and user `python3` installs.
+  Homebrew and user `python3` installs. The Windows installer detects native
+  Python installs under `%LOCALAPPDATA%\Programs\Python` as well as `PATH`.
 - Claude Code CLI, Codex CLI, Claude Desktop Agent/Cowork, and/or the Codex
   desktop app if you want live log data.
-- macOS with the Swift toolchain, usually from Xcode Command Line Tools, when
-  running from source. The macOS package includes a prebuilt menu bar binary.
-- `curl`, used by the helper scripts.
+- macOS with the Swift toolchain, usually from Xcode Command Line Tools, for the
+  native menu-bar companion. The macOS package includes a prebuilt binary.
+- Git. The macOS helper scripts also use `curl`; Windows uses PowerShell's local
+  HTTP client.
 
 The web dashboard has no third-party Python packages. `meter.py` uses only the
-Python standard library. Dashboard-only mode is available for development,
-troubleshooting, and non-macOS use, but the normal experience includes the menu
-bar companion.
+Python standard library. The installed Windows experience uses the browser
+dashboard, while macOS also includes the menu-bar companion.
 
 ## Ask From Codex Or Claude
 
@@ -239,6 +256,10 @@ codex mcp add --env TOKEN_METER_CALLER=codex tokenmeter -- "$PWD/scripts/run-tok
 claude mcp add --transport stdio --scope user tokenmeter --env TOKEN_METER_CALLER=claude -- "$PWD/scripts/run-token-meter-mcp"
 ```
 
+The Windows installer stages an equivalent launcher at
+`%LOCALAPPDATA%\Token Meter\runtime\scripts\run-token-meter-mcp.cmd`; the
+dashboard's connection controls select it automatically.
+
 Remove the connections with:
 
 ```bash
@@ -257,7 +278,7 @@ updates**. Token Meter immediately fetches revision metadata from the Git
 upstream configured during installation, then checks again once per hour while
 the server is running. The installer keeps a dedicated update checkout beside
 the runtime so the background service does not need access to a development
-checkout under a macOS-protected folder such as Documents. You can disable
+checkout instead of the development clone. You can disable
 these checks at any time. Checks do not merge, pull, reinstall, or send
 telemetry.
 
@@ -279,9 +300,17 @@ either process independently if it exits. Remove both login items with:
 "$HOME/Library/Application Support/Token Meter/runtime/scripts/uninstall-launch-agent"
 ```
 
+On Windows, the installer registers the server in the current user's `Run`
+key. Remove that startup entry and stop the server while retaining the staged
+runtime with:
+
+```powershell
+& "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
+```
+
 ## Dashboard-Only Mode
 
-For development, troubleshooting, or non-macOS use, run only the local web
+For development or troubleshooting, run only the local web
 dashboard:
 
 ```bash

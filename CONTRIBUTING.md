@@ -46,7 +46,17 @@ For the full macOS experience, run the installer from your checkout:
 ./scripts/install
 ```
 
-This starts the local server and menu bar companion. Open
+On Windows, install with the per-user PowerShell workflow:
+
+```powershell
+pwsh -NoProfile -File .\scripts\install-windows.ps1
+```
+
+This stages the browser dashboard under `%LOCALAPPDATA%\Token Meter\runtime`
+and registers automatic startup for the current user. The AppKit menu-bar
+companion is macOS-only.
+
+The macOS installer starts the local server and menu bar companion. Open
 [http://localhost:8722](http://localhost:8722) and check its health with:
 
 ```bash
@@ -54,7 +64,8 @@ curl http://127.0.0.1:8722/health
 ```
 
 Rerun `./scripts/install` after source changes when you want to test the staged
-runtime. For dashboard-only development, when port 8722 is free, run:
+runtime; on Windows, rerun `install-windows.ps1`. For dashboard-only
+development, when port 8722 is free, run:
 
 ```bash
 python3 meter.py
@@ -102,6 +113,18 @@ python3 -m unittest discover -s tests -v
 bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent scripts/update
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\\s\\S]*)<\\/script>/); new Function(m[1]); console.log('js ok')"
 git diff --check
+```
+
+On Windows, run the Python commands with the installed Python executable, parse
+the PowerShell scripts, and exercise the Windows installer:
+
+```powershell
+python -m py_compile meter.py token_meter_mcp.py
+python -m unittest discover -s tests -v
+node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\s\S]*)<\/script>/); new Function(m[1]); console.log('js ok')"
+$files = 'scripts/install-windows.ps1','scripts/start-token-meter.ps1','scripts/uninstall-windows.ps1','scripts/update-windows.ps1'
+$files | ForEach-Object { $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $_),[ref]$tokens,[ref]$errors) | Out-Null; if ($errors) { throw $errors } }
+pwsh -NoProfile -File .\scripts\install-windows.ps1
 ```
 
 For menu bar changes, also run:

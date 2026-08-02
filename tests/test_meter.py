@@ -10,6 +10,21 @@ from unittest import mock
 import meter
 
 
+class PlatformPathTests(unittest.TestCase):
+    def test_application_support_root_uses_roaming_app_data_on_windows(self):
+        root = meter.application_support_root("nt", {"APPDATA": r"C:\Users\test\AppData\Roaming"})
+        self.assertEqual(root, r"C:\Users\test\AppData\Roaming")
+
+    def test_windows_deletions_use_a_private_recoverable_trash_directory(self):
+        root = meter.session_trash_directory(
+            "nt", {"LOCALAPPDATA": r"C:\Users\test\AppData\Local"}
+        )
+        self.assertEqual(
+            root,
+            os.path.join(r"C:\Users\test\AppData\Local", "Token Meter", "Trash"),
+        )
+
+
 class SourceDiscoveryCacheTests(unittest.TestCase):
     def test_codex_metadata_is_reused_until_the_trace_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -691,7 +706,7 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertFalse(unknown["ok"])
         self.assertIn(
             'elif req_path == "/model-stats":',
-            Path(meter.__file__).read_text(),
+            Path(meter.__file__).read_text(encoding="utf-8"),
         )
 
     def test_model_project_options_are_sorted_and_bounded(self):
@@ -1223,7 +1238,7 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(row["periods"], 0)
 
     def test_model_pricing_http_action_forwards_bounded_scope_fields(self):
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.__file__).read_text(encoding="utf-8")
         self.assertIn(
             'apply_to_all_history=payload.get("apply_to_all_history") is True',
             source,
@@ -1712,7 +1727,7 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
 class DashboardLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.page = Path(meter.__file__).with_name("page.html").read_text()
+        cls.page = Path(meter.__file__).with_name("page.html").read_text(encoding="utf-8")
 
     def test_current_tabs_exclude_efficiency_panel(self):
         self.assertNotIn("data-panel=efficiency", self.page)
@@ -2441,6 +2456,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("event.stopPropagation()", self.page)
         self.assertIn("X-Token-Meter-Action", self.page)
         self.assertIn("Provider metadata and configuration are not changed", self.page)
+        self.assertIn("const deleteDestination=actions.destination||'Trash';", self.page)
 
     def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
         self.assertIn("id=c-disable-unused", self.page)
@@ -2590,6 +2606,12 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("currentSessionsMoveHint", self.page)
         self.assertNotIn("currentSessionOpen", self.page)
         self.assertNotIn(">Open →</span>", self.page)
+
+    def test_loaded_sessions_overview_replaces_the_connecting_status(self):
+        self.assertIn(
+            "else if(!sessionSurfaceActive||currentPanel==='sessions')$('livetxt').textContent='live';",
+            self.page,
+        )
 
     def test_session_cards_use_compact_readable_metrics(self):
         for marker in (
@@ -2755,7 +2777,7 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
 
     def test_handler_swallows_browser_disconnects(self):
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.__file__).read_text(encoding="utf-8")
         self.assertIn("except (BrokenPipeError, ConnectionResetError):", source)
 
     def test_dashboard_live_updates_do_not_hold_event_stream_connections(self):
@@ -2763,7 +2785,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("const LIVE_STATE_POLL_MS=1000", self.page)
         self.assertIn("setInterval(refreshLiveState,LIVE_STATE_POLL_MS)", self.page)
         self.assertIn("if(statePollBusy)return", self.page)
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.__file__).read_text(encoding="utf-8")
         events = source.index('elif req_path == "/events":')
         self.assertIn("self.send_response(204)", source[events:events + 700])
 
@@ -2783,7 +2805,9 @@ class DashboardLayoutTests(unittest.TestCase):
 class MenubarSourceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = Path(meter.__file__).with_name("menubar").joinpath("TokenMeterMenuBar.swift").read_text()
+        cls.source = Path(meter.__file__).with_name("menubar").joinpath(
+            "TokenMeterMenuBar.swift"
+        ).read_text(encoding="utf-8")
 
     def test_daily_brief_action_opens_cross_session_daily_route(self):
         self.assertIn('addAction("Open Daily Brief", #selector(openDailyBrief))', self.source)
@@ -2807,7 +2831,7 @@ class MenubarSourceTests(unittest.TestCase):
     def test_output_speed_is_a_dedicated_honest_metric_row(self):
         self.assertIn('addMetricRow("Output speed", snapshot.outputSpeedLabel', self.source)
         self.assertIn('addMetricRow("Model", snapshot.model)', self.source)
-        self.assertIn('· \(outputSpeedLabel) · \(model)', self.source)
+        self.assertIn(r'· \(outputSpeedLabel) · \(model)', self.source)
         self.assertIn('formatTokenRate(rate)', self.source)
         self.assertIn('Tool execution time may be included.', self.source)
         self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
@@ -3684,7 +3708,7 @@ class SoftwareUpdateTests(unittest.TestCase):
         self.assertIn("model_pricing", stored)
 
     def test_update_watcher_preserves_terminal_install_result_for_the_dashboard(self):
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.__file__).read_text(encoding="utf-8")
         self.assertIn('if phase in {"complete", "failed"}:', source)
         self.assertIn("_update_wake.wait(UPDATE_CHECK_INTERVAL_S)", source)
 
@@ -3764,7 +3788,8 @@ class SoftwareUpdateTests(unittest.TestCase):
             popen = mock.Mock()
             with (mock.patch.object(meter, "source_checkout_path", return_value=tmp),
                   mock.patch.object(meter.os.path, "isfile", return_value=True),
-                  mock.patch.object(meter.os, "access", return_value=True)):
+                  mock.patch.object(meter.os, "access", return_value=True),
+                  mock.patch.object(meter.shutil, "which", return_value=r"C:\Program Files\PowerShell\7\pwsh.exe")):
                 result = meter.start_software_update(
                     popen=popen,
                     settings_path=str(settings_path),
@@ -3773,9 +3798,17 @@ class SoftwareUpdateTests(unittest.TestCase):
             command = popen.call_args.args[0]
             kwargs = popen.call_args.kwargs
         self.assertTrue(result["ok"])
-        self.assertTrue(command[0].endswith("/scripts/update"))
-        self.assertEqual(command[1:], [tmp, str(status_path)])
-        self.assertTrue(kwargs["start_new_session"])
+        if os.name == "nt":
+            self.assertTrue(command[0].lower().endswith("pwsh.exe"))
+            self.assertEqual(command[1:6], ["-NoLogo", "-NoProfile", "-WindowStyle", "Hidden", "-File"])
+            self.assertTrue(command[6].endswith(os.path.join("scripts", "update-windows.ps1")))
+            self.assertEqual(command[7:], [tmp, str(status_path)])
+            self.assertGreater(kwargs["creationflags"], 0)
+            self.assertNotIn("start_new_session", kwargs)
+        else:
+            self.assertTrue(command[0].endswith("/scripts/update"))
+            self.assertEqual(command[1:], [tmp, str(status_path)])
+            self.assertTrue(kwargs["start_new_session"])
         self.assertTrue(kwargs["close_fds"])
         self.assertNotIn(tmp, json.dumps(result))
 
@@ -3803,7 +3836,7 @@ class SoftwareUpdateTests(unittest.TestCase):
 class InstallationTests(unittest.TestCase):
     def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "scripts" / "install").read_text()
+        script = (root / "scripts" / "install").read_text(encoding="utf-8")
         server_start = script.index(
             '"$INSTALL_ROOT/scripts/install-launch-agent" server-only'
         )
@@ -3842,7 +3875,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_update_helper_requires_clean_fast_forward_then_reuses_installer(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "scripts" / "update").read_text()
+        script = (root / "scripts" / "update").read_text(encoding="utf-8")
         self.assertIn("git -C \"$SOURCE_ROOT\" fetch --quiet --prune --no-tags", script)
         self.assertIn("git -C \"$SOURCE_ROOT\" status --porcelain", script)
         self.assertIn("git -C \"$SOURCE_ROOT\" merge --ff-only '@{upstream}'", script)
@@ -3855,7 +3888,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_launch_agents_supervise_server_and_menu_bar_independently(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "scripts" / "install-launch-agent").read_text()
+        script = (root / "scripts" / "install-launch-agent").read_text(encoding="utf-8")
         self.assertIn('SERVER_LABEL="com.token-meter.server"', script)
         self.assertIn('MENUBAR_LABEL="com.token-meter.menubar"', script)
         self.assertIn("<string>$SERVER_PROGRAM</string>", script)
@@ -3878,7 +3911,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_foreground_launcher_waits_for_indexing_before_starting_menubar(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "scripts" / "start-token-meter").read_text()
+        script = (root / "scripts" / "start-token-meter").read_text(encoding="utf-8")
         readiness_check = script.index('"state_ready": true')
         menubar_start = script.index('exec "$ROOT/scripts/run-menubar"')
         self.assertLess(readiness_check, menubar_start)
@@ -3888,18 +3921,47 @@ class InstallationTests(unittest.TestCase):
 
     def test_uninstaller_removes_both_supervised_jobs(self):
         root = Path(__file__).resolve().parents[1]
-        script = (root / "scripts" / "uninstall-launch-agent").read_text()
+        script = (root / "scripts" / "uninstall-launch-agent").read_text(encoding="utf-8")
         self.assertIn('launchctl bootout "gui/$UID/$SERVER_LABEL"', script)
         self.assertIn('launchctl bootout "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('rm -f "$MENUBAR_PLIST" "$SERVER_PLIST"', script)
 
+    def test_windows_installer_stages_runtime_and_registers_per_user_startup(self):
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "scripts" / "install-windows.ps1").read_text(encoding="utf-8")
+        starter = (root / "scripts" / "start-token-meter.ps1").read_text(encoding="utf-8")
+        uninstaller = (root / "scripts" / "uninstall-windows.ps1").read_text(encoding="utf-8")
+        updater = (root / "scripts" / "update-windows.ps1").read_text(encoding="utf-8")
+        launcher = (root / "scripts" / "run-token-meter-mcp.cmd").read_text(encoding="utf-8")
+
+        self.assertIn('Join-Path $env:LOCALAPPDATA "Token Meter\\runtime"', installer)
+        self.assertIn("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", installer)
+        self.assertIn("Get-Command powershell.exe -CommandType Application", installer)
+        self.assertIn('(Split-Path -Leaf $InstallRoot) -ne "runtime"', installer)
+        self.assertIn("the runtime path contains files that do not belong to Token Meter", installer)
+        self.assertIn('$InstallNonce = [Guid]::NewGuid().ToString("N")', installer)
+        self.assertIn('Write-Utf8File (Join-Path $StagingRoot "PYTHON_EXECUTABLE")', installer)
+        self.assertIn('Write-Utf8File (Join-Path $StagingRoot "SOURCE_CHECKOUT")', installer)
+        self.assertIn('& $StartScript -ReadinessTimeoutSeconds', installer)
+        self.assertIn("Token Meter installation complete.", installer)
+        self.assertIn("$Health.state_ready", starter)
+        self.assertIn("$Ready = $true", starter)
+        self.assertIn("if (-not $Ready)", starter)
+        self.assertIn("A different server owns http://127.0.0.1:8722", starter)
+        self.assertIn("Remove-ItemProperty", uninstaller)
+        self.assertIn("merge --ff-only '@{upstream}'", updater)
+        self.assertIn("token_meter_mcp.py", launcher)
+
 
 class AgentAccessTests(unittest.TestCase):
     def test_client_environment_prepends_wrapper_runtime_directory(self):
-        with mock.patch.dict(meter.os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
-            env = meter.agent_client_environment("/Users/test/.nvm/versions/node/v24/bin/codex")
-        self.assertEqual(env["PATH"].split(":" )[0], "/Users/test/.nvm/versions/node/v24/bin")
-        self.assertIn("/usr/bin", env["PATH"].split(":"))
+        cli_path = "/Users/test/.nvm/versions/node/v24/bin/codex"
+        existing = os.pathsep.join(("/usr/bin", "/bin"))
+        with mock.patch.dict(meter.os.environ, {"PATH": existing}, clear=False):
+            env = meter.agent_client_environment(cli_path)
+        entries = env["PATH"].split(os.pathsep)
+        self.assertEqual(entries[0], os.path.dirname(os.path.abspath(cli_path)))
+        self.assertIn("/usr/bin", entries)
 
     def test_client_environment_keeps_symlink_directory_for_sibling_node(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3910,9 +3972,14 @@ class AgentAccessTests(unittest.TestCase):
             target = target_dir / "codex.js"
             target.write_text("#!/usr/bin/env node\n")
             wrapper = wrapper_dir / "codex"
-            wrapper.symlink_to(target)
+            try:
+                wrapper.symlink_to(target)
+            except OSError as error:
+                if os.name == "nt" and getattr(error, "winerror", None) == 1314:
+                    self.skipTest("Windows Developer Mode is required for unprivileged symlinks")
+                raise
             env = meter.agent_client_environment(str(wrapper))
-        self.assertEqual(env["PATH"].split(":")[0], str(wrapper_dir))
+        self.assertEqual(env["PATH"].split(os.pathsep)[0], str(wrapper_dir))
 
     def test_client_discovery_checks_user_bin_when_service_path_is_minimal(self):
         with tempfile.TemporaryDirectory() as tmp:

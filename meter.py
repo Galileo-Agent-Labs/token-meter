@@ -180,6 +180,9 @@ MENUBAR_CONTEXT_WATCH_PCT = 0.70
 MENUBAR_CONTEXT_INTERVENE_PCT = 0.85
 MENUBAR_COST_SPIKE = 0.50
 QUOTA_REFRESH_S = 60.0
+# Hide the console window that a provider-CLI subprocess would otherwise flash on
+# Windows every refresh cycle. Token Meter runs headless, so these are noise.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 QUOTA_STALE_S = 10 * 60.0
 QUOTA_HTTP_TIMEOUT_S = 8.0
 QUOTA_PROCESS_TIMEOUT_S = 8.0
@@ -9083,6 +9086,7 @@ def codex_app_server_rate_limits(timeout=QUOTA_PROCESS_TIMEOUT_S):
             [executable, "-s", "read-only", "-a", "untrusted", "app-server"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, bufsize=1, env=agent_client_environment(executable),
+            creationflags=_NO_WINDOW,
         )
     except OSError:
         raise QuotaUnavailable("Codex could not start its account quota service.") from None
@@ -9235,6 +9239,7 @@ def claude_auth_status(timeout=3.0):
             [executable, "auth", "status", "--json"], capture_output=True,
             text=True, timeout=timeout, check=False,
             env=agent_client_environment(executable),
+            creationflags=_NO_WINDOW,
         )
         value = json.loads(result.stdout or "{}")
         return value if isinstance(value, dict) else {}

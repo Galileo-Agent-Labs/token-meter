@@ -53,8 +53,9 @@ pwsh -NoProfile -File .\scripts\install-windows.ps1
 ```
 
 This stages the browser dashboard under `%LOCALAPPDATA%\Token Meter\runtime`
-and registers automatic startup for the current user. The AppKit menu-bar
-companion is macOS-only.
+and registers automatic startup for the server and Windows system-tray widget.
+The AppKit menu-bar companion is macOS-only; the Windows companion uses the
+built-in PowerShell and WinForms runtime.
 
 The macOS installer starts the local server and menu bar companion. Open
 [http://localhost:8722](http://localhost:8722) and check its health with:
@@ -122,8 +123,9 @@ the PowerShell scripts, and exercise the Windows installer:
 python -m py_compile meter.py token_meter_mcp.py
 python -m unittest discover -s tests -v
 node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8'); const m=html.match(/<script>([\s\S]*)<\/script>/); new Function(m[1]); console.log('js ok')"
-$files = 'scripts/install-windows.ps1','scripts/start-token-meter.ps1','scripts/uninstall-windows.ps1','scripts/update-windows.ps1'
+$files = 'scripts/install-windows.ps1','scripts/start-token-meter.ps1','scripts/run-tray.ps1','scripts/uninstall-windows.ps1','scripts/update-windows.ps1'
 $files | ForEach-Object { $tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $_),[ref]$tokens,[ref]$errors) | Out-Null; if ($errors) { throw $errors } }
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-tray.ps1 -SmokeTest
 pwsh -NoProfile -File .\scripts\install-windows.ps1
 ```
 
@@ -134,9 +136,9 @@ swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 ```
 
-For visible dashboard or menu bar changes, test the behavior in the running app
-and include a screenshot. If you cannot run a check—for example, because the
-Swift toolchain is unavailable—say so in the pull request.
+For visible dashboard, menu bar, or tray changes, test the behavior in the
+running app and include a screenshot. If you cannot run a check—for example,
+because the Swift toolchain is unavailable—say so in the pull request.
 
 ## Pull request checklist
 

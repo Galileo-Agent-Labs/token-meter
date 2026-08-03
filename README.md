@@ -61,12 +61,13 @@ pwsh -NoProfile -File .\token-meter\scripts\install-windows.ps1
 
 The Windows installer stages the runtime under
 `%LOCALAPPDATA%\Token Meter\runtime`, starts the local server without a console
-window, and registers a per-user login startup entry. Windows uses the browser
-dashboard; the native AppKit menu-bar companion remains macOS-only.
+window, starts a Windows system-tray widget, and registers one per-user login
+startup entry for both processes. The AppKit menu-bar companion remains
+macOS-only; Windows uses its own built-in `NotifyIcon` companion.
 
 Token Meter starts its local server automatically after installation and after
-future logins. On macOS, it also starts the menu bar widget. Open the dashboard
-at:
+future logins. It also starts the menu bar widget on macOS or the system-tray
+widget on Windows. Open the dashboard at:
 
 ```text
 http://localhost:8722
@@ -213,8 +214,9 @@ observation establishes a baseline and never sends a catch-up notification.
   HTTP client.
 
 The web dashboard has no third-party Python packages. `meter.py` uses only the
-Python standard library. The installed Windows experience uses the browser
-dashboard, while macOS also includes the menu-bar companion.
+Python standard library. The Windows tray uses the Windows PowerShell and
+WinForms components included with Windows; the macOS menu-bar companion uses
+AppKit.
 
 ## Ask From Codex Or Claude
 
@@ -300,9 +302,9 @@ either process independently if it exits. Remove both login items with:
 "$HOME/Library/Application Support/Token Meter/runtime/scripts/uninstall-launch-agent"
 ```
 
-On Windows, the installer registers the server in the current user's `Run`
-key. Remove that startup entry and stop the server while retaining the staged
-runtime with:
+On Windows, the installer registers a launcher for the server and tray widget in
+the current user's `Run` key. Remove that startup entry and stop both processes
+while retaining the staged runtime with:
 
 ```powershell
 & "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
@@ -317,12 +319,12 @@ dashboard:
 python3 meter.py
 ```
 
-The menu bar companion polls the local `/menubar` endpoint. Run shows compact
-status for the active log; All and the provider tabs show cached account quota
-snapshots. The Recent sessions section labels each entry as Claude, Codex, or
-Cursor, uses the session title or project as an identifier, and keeps a selected
-pin in macOS preferences. Choose `Follow Latest` to resume automatic tracking.
-The companion does not parse logs or read provider credentials directly.
+The macOS menu bar and Windows tray companions poll the local `/menubar`
+endpoint. The Windows tray tooltip shows compact estimated spend and guidance;
+its menu provides live activity, recent-session selection, dashboard deep
+links, refresh, and quit actions. The macOS companion also shows cached provider
+quota snapshots. Choose `Follow Latest` to resume automatic tracking. Neither
+companion parses logs or reads provider credentials directly.
 
 ## How It Finds Logs
 
@@ -666,8 +668,11 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |   `-- TokenMeterMenuBar.swift      # native macOS menu bar companion
 |-- scripts/
 |   |-- install                      # install the local runtime and login items
+|   |-- install-windows.ps1          # install the Windows runtime and startup
 |   |-- run-menubar                  # build and run the menu bar companion
+|   |-- run-tray.ps1                 # run the Windows system-tray companion
 |   |-- start-token-meter            # start server if needed, then menu bar
+|   |-- start-token-meter.ps1        # start Windows server and tray
 |   |-- install-launch-agent         # install server and menu login items
 |   `-- uninstall-launch-agent       # remove both macOS login items
 |-- REQUIREMENTS.md                  # product rationale and historical notes

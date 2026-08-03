@@ -3930,6 +3930,7 @@ class InstallationTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         installer = (root / "scripts" / "install-windows.ps1").read_text(encoding="utf-8")
         starter = (root / "scripts" / "start-token-meter.ps1").read_text(encoding="utf-8")
+        tray = (root / "scripts" / "run-tray.ps1").read_text(encoding="utf-8")
         uninstaller = (root / "scripts" / "uninstall-windows.ps1").read_text(encoding="utf-8")
         updater = (root / "scripts" / "update-windows.ps1").read_text(encoding="utf-8")
         launcher = (root / "scripts" / "run-token-meter-mcp.cmd").read_text(encoding="utf-8")
@@ -3940,6 +3941,8 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('(Split-Path -Leaf $InstallRoot) -ne "runtime"', installer)
         self.assertIn("the runtime path contains files that do not belong to Token Meter", installer)
         self.assertIn('$InstallNonce = [Guid]::NewGuid().ToString("N")', installer)
+        self.assertIn('"scripts\\run-tray.ps1"', installer)
+        self.assertIn("Stop-InstalledTray $InstallRoot", installer)
         self.assertIn("$DirtyPaths = @(", installer)
         self.assertIn('Write-Utf8File (Join-Path $StagingRoot "PYTHON_EXECUTABLE")', installer)
         self.assertIn('Write-Utf8File (Join-Path $StagingRoot "SOURCE_CHECKOUT")', installer)
@@ -3949,9 +3952,42 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("$Ready = $true", starter)
         self.assertIn("if (-not $Ready)", starter)
         self.assertIn("A different server owns http://127.0.0.1:8722", starter)
+        self.assertIn("Get-Command powershell.exe -CommandType Application", starter)
+        self.assertIn("$TrayStatus.ready -and $TrayStatus.connected", starter)
+        self.assertIn("System.Windows.Forms.NotifyIcon", tray)
+        self.assertIn('Invoke-RestMethod -Uri $Url -TimeoutSec 4', tray)
+        self.assertIn('"Recent sessions"', tray)
+        self.assertIn('"Quit tray widget"', tray)
         self.assertIn("Remove-ItemProperty", uninstaller)
+        self.assertIn('$ExpectedTray', uninstaller)
         self.assertIn("merge --ff-only '@{upstream}'", updater)
         self.assertIn("token_meter_mcp.py", launcher)
+
+    @unittest.skipUnless(os.name == "nt", "Windows tray smoke test")
+    def test_windows_tray_notify_icon_smoke(self):
+        root = Path(__file__).resolve().parents[1]
+        command = meter.shutil.which("powershell.exe")
+        self.assertTrue(command)
+        result = meter.subprocess.run(
+            [
+                command,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(root / "scripts" / "run-tray.ps1"),
+                "-SmokeTest",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["widget"], "NotifyIcon")
+        self.assertIn("est", payload["tooltip"])
 
 
 class AgentAccessTests(unittest.TestCase):

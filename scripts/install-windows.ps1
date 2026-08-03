@@ -59,6 +59,33 @@ function Stop-InstalledServer([string]$RuntimeRoot) {
     Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
 }
 
+function Stop-InstalledTray([string]$RuntimeRoot) {
+    $PidPath = Join-Path $RuntimeRoot "tray.pid"
+    if (-not (Test-Path -LiteralPath $PidPath -PathType Leaf)) {
+        return
+    }
+    $TrayPid = 0
+    if (-not [int]::TryParse((Get-Content -LiteralPath $PidPath -Raw).Trim(), [ref]$TrayPid)) {
+        Remove-Item -LiteralPath $PidPath -Force
+        return
+    }
+    $Process = Get-CimInstance Win32_Process -Filter "ProcessId = $TrayPid" -ErrorAction SilentlyContinue
+    if (-not $Process) {
+        Remove-Item -LiteralPath $PidPath -Force
+        return
+    }
+    $ExpectedTray = [System.IO.Path]::GetFullPath((Join-Path $RuntimeRoot "scripts\run-tray.ps1"))
+    if ([string]$Process.CommandLine -notlike "*$ExpectedTray*") {
+        Fail "the saved tray process ID belongs to a different program."
+    }
+    Stop-Process -Id $TrayPid -Force
+    try {
+        Wait-Process -Id $TrayPid -Timeout 10 -ErrorAction SilentlyContinue
+    } catch { }
+    Remove-Item -LiteralPath $PidPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $RuntimeRoot "tray.status.json") -Force -ErrorAction SilentlyContinue
+}
+
 function Copy-Directory([string]$Source, [string]$Destination) {
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     Get-ChildItem -LiteralPath $Source -Force | ForEach-Object {
@@ -149,6 +176,7 @@ $RequiredPaths = @(
     "token_meter_mcp.py",
     "scripts\install-windows.ps1",
     "scripts\start-token-meter.ps1",
+    "scripts\run-tray.ps1",
     "scripts\uninstall-windows.ps1",
     "scripts\update-windows.ps1",
     "scripts\run-token-meter-mcp.cmd"
@@ -277,6 +305,7 @@ if (Test-Path -LiteralPath $RunKey) {
 $Swapped = $false
 try {
     if (Test-Path -LiteralPath $InstallRoot) {
+        Stop-InstalledTray $InstallRoot
         Stop-InstalledServer $InstallRoot
         Move-Item -LiteralPath $InstallRoot -Destination $BackupRoot
     }
@@ -302,6 +331,19 @@ try {
         Fail "a different Token Meter installation owns port 8722."
     }
     $null = Invoke-RestMethod -Uri "http://127.0.0.1:8722/menubar" -TimeoutSec 5
+    $TrayStatusPath = Join-Path $InstallRoot "tray.status.json"
+    if (-not (Test-Path -LiteralPath $TrayStatusPath -PathType Leaf)) {
+        Fail "the Windows tray widget did not publish its status."
+    }
+    $TrayStatus = Get-Content -LiteralPath $TrayStatusPath -Raw | ConvertFrom-Json
+    if (-not $TrayStatus.ready -or -not $TrayStatus.connected) {
+        Fail "the Windows tray widget did not become ready."
+    }
+    $TrayProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$TrayStatus.pid)" -ErrorAction SilentlyContinue
+    $ExpectedTray = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot "scripts\run-tray.ps1"))
+    if (-not $TrayProcess -or [string]$TrayProcess.CommandLine -notlike "*$ExpectedTray*") {
+        Fail "the Windows tray widget process could not be verified."
+    }
     $SavedRunValue = (Get-ItemProperty -LiteralPath $RunKey -Name $RunName).$RunName
     if ($SavedRunValue -ne $StartupCommand) {
         Fail "automatic login startup could not be verified."
@@ -312,6 +354,7 @@ try {
     }
 } catch {
     if ($Swapped -and (Test-Path -LiteralPath $InstallRoot)) {
+        try { Stop-InstalledTray $InstallRoot } catch { }
         try { Stop-InstalledServer $InstallRoot } catch { }
         Remove-Item -LiteralPath $InstallRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -334,6 +377,7 @@ $PythonArchitecture = (& $PythonExe -c "import platform; print(platform.machine(
 Write-Host ""
 Write-Host "Token Meter installation complete."
 Write-Host "Dashboard: http://127.0.0.1:8722"
+Write-Host "Tray widget: running"
 Write-Host "Starts automatically after you log in."
 Write-Host "Runtime: $InstallRoot"
 Write-Host "Python: $PythonExe ($PythonArchitecture)"

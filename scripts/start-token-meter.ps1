@@ -33,6 +33,11 @@ $WindowedPythonRecord = Join-Path $RuntimeRoot "PYTHON_WINDOWED_EXECUTABLE"
 $PidPath = Join-Path $RuntimeRoot "meter.pid"
 $OutputLog = Join-Path $RuntimeRoot "meter.log"
 $ErrorLog = Join-Path $RuntimeRoot "meter.err.log"
+$TrayScript = [System.IO.Path]::GetFullPath((Join-Path $RuntimeRoot "scripts\run-tray.ps1"))
+$TrayPidPath = Join-Path $RuntimeRoot "tray.pid"
+$TrayStatusPath = Join-Path $RuntimeRoot "tray.status.json"
+$TrayOutputLog = Join-Path $RuntimeRoot "tray.log"
+$TrayErrorLog = Join-Path $RuntimeRoot "tray.err.log"
 
 if ($ReadinessTimeoutSeconds -le 0) {
     $ConfiguredTimeout = 0
@@ -122,4 +127,71 @@ do {
 
 if (-not $Ready) {
     throw "Token Meter did not finish indexing within $ReadinessTimeoutSeconds seconds."
+}
+
+if (-not (Test-Path -LiteralPath $TrayScript -PathType Leaf)) {
+    throw "Token Meter's Windows tray launcher is missing. Reinstall Token Meter."
+}
+
+$TrayProcess = $null
+if (Test-Path -LiteralPath $TrayPidPath -PathType Leaf) {
+    $SavedTrayPid = 0
+    if ([int]::TryParse((Get-Content -LiteralPath $TrayPidPath -Raw).Trim(), [ref]$SavedTrayPid)) {
+        $SavedTrayProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $SavedTrayPid" -ErrorAction SilentlyContinue
+        if ($SavedTrayProcess) {
+            if ([string]$SavedTrayProcess.CommandLine -notlike "*$TrayScript*") {
+                throw "The saved tray process ID belongs to a different program."
+            }
+            $TrayProcess = Get-Process -Id $SavedTrayPid -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not $TrayProcess) {
+        Remove-Item -LiteralPath $TrayPidPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $TrayStatusPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if (-not $TrayProcess) {
+    $PowerShellCommand = Get-Command powershell.exe -CommandType Application -ErrorAction Stop
+    $TrayProcess = Start-Process -FilePath $PowerShellCommand.Source `
+        -ArgumentList @(
+            "-NoLogo",
+            "-NoProfile",
+            "-STA",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "`"$TrayScript`""
+        ) `
+        -WorkingDirectory $RuntimeRoot `
+        -RedirectStandardOutput $TrayOutputLog `
+        -RedirectStandardError $TrayErrorLog `
+        -WindowStyle Hidden `
+        -PassThru
+}
+
+$TrayDeadline = [DateTime]::UtcNow.AddSeconds(20)
+$TrayReady = $false
+do {
+    $TrayProcess.Refresh()
+    if ($TrayProcess.HasExited) {
+        $TrayDetail = if (Test-Path -LiteralPath $TrayErrorLog -PathType Leaf) {
+            (Get-Content -LiteralPath $TrayErrorLog -Tail 20 | Out-String).Trim()
+        } else { "" }
+        throw "Token Meter's tray widget exited before becoming ready. $TrayDetail"
+    }
+    if (Test-Path -LiteralPath $TrayStatusPath -PathType Leaf) {
+        try {
+            $TrayStatus = Get-Content -LiteralPath $TrayStatusPath -Raw | ConvertFrom-Json
+            if ($TrayStatus.ready -and $TrayStatus.connected -and [int]$TrayStatus.pid -eq $TrayProcess.Id) {
+                $TrayReady = $true
+                break
+            }
+        } catch { }
+    }
+    Start-Sleep -Milliseconds 250
+} while ([DateTime]::UtcNow -lt $TrayDeadline)
+
+if (-not $TrayReady) {
+    throw "Token Meter's tray widget did not connect to the local server."
 }

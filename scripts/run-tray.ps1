@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$SmokeTest
+    [switch]$SmokeTest,
+    [string]$OpenProbePath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,16 @@ if ($env:OS -ne "Windows_NT") {
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class TokenMeterNativeIcon {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyIcon(IntPtr handle);
+}
+"@
 
 function Limit-Text([string]$Value, [int]$Maximum) {
     $Value = ([string]$Value -replace '\s+', ' ').Trim()
@@ -30,6 +41,83 @@ function Get-Value($Object, [string]$Name, $Default = $null) {
         return $Default
     }
     return $Property.Value
+}
+
+function New-TokenMeterIcon {
+    $Bitmap = New-Object System.Drawing.Bitmap(
+        32,
+        32,
+        [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+    )
+    $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
+    $Path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $Brush = $null
+    $Pen = $null
+    try {
+        $Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $Graphics.Clear([System.Drawing.Color]::Transparent)
+
+        $Path.AddArc(0, 0, 14, 14, 180, 90)
+        $Path.AddArc(18, 0, 14, 14, 270, 90)
+        $Path.AddArc(18, 18, 14, 14, 0, 90)
+        $Path.AddArc(0, 18, 14, 14, 90, 90)
+        $Path.CloseFigure()
+
+        $Bounds = New-Object System.Drawing.Rectangle(0, 0, 32, 32)
+        $Brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            $Bounds,
+            [System.Drawing.Color]::FromArgb(0, 188, 235),
+            [System.Drawing.Color]::FromArgb(127, 219, 242),
+            45.0
+        )
+        $Blend = New-Object System.Drawing.Drawing2D.ColorBlend(3)
+        $Blend.Colors = [System.Drawing.Color[]]@(
+            [System.Drawing.Color]::FromArgb(0, 188, 235),
+            [System.Drawing.Color]::FromArgb(27, 160, 225),
+            [System.Drawing.Color]::FromArgb(127, 219, 242)
+        )
+        $Blend.Positions = [single[]]@(0.0, 0.55, 1.0)
+        $Brush.InterpolationColors = $Blend
+        $Graphics.FillPath($Brush, $Path)
+
+        $Pen = New-Object System.Drawing.Pen(
+            [System.Drawing.Color]::FromArgb(6, 36, 48),
+            2.1
+        )
+        $Pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $Pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        foreach ($Line in @(
+            @(7.0, 18.0, 7.0, 15.0),
+            @(10.0, 18.0, 10.0, 11.0),
+            @(13.0, 18.0, 13.0, 14.0),
+            @(16.0, 18.0, 16.0, 8.0),
+            @(19.0, 18.0, 19.0, 14.0),
+            @(22.0, 18.0, 22.0, 11.0),
+            @(25.0, 18.0, 25.0, 15.0),
+            @(6.5, 22.5, 25.5, 22.5)
+        )) {
+            $Graphics.DrawLine(
+                $Pen,
+                [single]$Line[0],
+                [single]$Line[1],
+                [single]$Line[2],
+                [single]$Line[3]
+            )
+        }
+
+        $Handle = $Bitmap.GetHicon()
+        try {
+            return [System.Drawing.Icon]([System.Drawing.Icon]::FromHandle($Handle).Clone())
+        } finally {
+            [TokenMeterNativeIcon]::DestroyIcon($Handle) | Out-Null
+        }
+    } finally {
+        if ($Pen) { $Pen.Dispose() }
+        if ($Brush) { $Brush.Dispose() }
+        $Path.Dispose()
+        $Graphics.Dispose()
+        $Bitmap.Dispose()
+    }
 }
 
 function Format-CompactNumber($Value) {
@@ -84,33 +172,6 @@ function Format-MenuStatus($State) {
     return "`$$($Cost.ToString('0.00', [System.Globalization.CultureInfo]::InvariantCulture)) est | $Tokens tokens"
 }
 
-if ($SmokeTest) {
-    $Sample = [pscustomobject]@{
-        ok = $true
-        total_cost = 1.25
-        total_tokens = 125000
-        verdict = [pscustomobject]@{ label = "Healthy" }
-    }
-    $Probe = New-Object System.Windows.Forms.NotifyIcon
-    try {
-        $Probe.Icon = [System.Drawing.SystemIcons]::Information
-        $Probe.Text = Format-TrayText $Sample
-        $Probe.Visible = $true
-        [System.Windows.Forms.Application]::DoEvents()
-        [ordered]@{
-            ok = $Probe.Visible
-            platform = "windows"
-            widget = "NotifyIcon"
-            tooltip = $Probe.Text
-            menu_status = Format-MenuStatus $Sample
-        } | ConvertTo-Json -Compress
-    } finally {
-        $Probe.Visible = $false
-        $Probe.Dispose()
-    }
-    return
-}
-
 $RuntimeRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $PidPath = Join-Path $RuntimeRoot "tray.pid"
 $StatusPath = Join-Path $RuntimeRoot "tray.status.json"
@@ -118,6 +179,7 @@ $script:BaseUrl = "http://127.0.0.1:8722"
 $script:SelectedSessionId = ""
 $script:LastState = $null
 $script:Connected = $false
+$script:OpenProbePath = $OpenProbePath
 
 function Write-TrayStatus([bool]$Ready, [bool]$Connected) {
     $Record = [ordered]@{
@@ -136,6 +198,14 @@ function Write-TrayStatus([bool]$Ready, [bool]$Connected) {
 }
 
 function Open-TokenMeterUrl([string]$Url) {
+    if ($script:OpenProbePath) {
+        [System.IO.File]::WriteAllText(
+            $script:OpenProbePath,
+            $Url,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        return
+    }
     Start-Process -FilePath $Url | Out-Null
 }
 
@@ -145,6 +215,74 @@ function Current-DashboardUrl {
         return "$($script:BaseUrl)/sessions/$Escaped#summary"
     }
     return "$($script:BaseUrl)/#sessions"
+}
+
+function Invoke-TrayMouseClick($EventArgs) {
+    if ($EventArgs.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+        Open-TokenMeterUrl (Current-DashboardUrl)
+    }
+}
+
+if ($SmokeTest) {
+    $Sample = [pscustomobject]@{
+        ok = $true
+        total_cost = 1.25
+        total_tokens = 125000
+        verdict = [pscustomobject]@{ label = "Healthy" }
+    }
+    $OwnProbe = -not [bool]$script:OpenProbePath
+    if ($OwnProbe) {
+        $script:OpenProbePath = Join-Path $env:TEMP "token-meter-tray-click-$PID.txt"
+    }
+    Remove-Item -LiteralPath $script:OpenProbePath -Force -ErrorAction SilentlyContinue
+    $Probe = New-Object System.Windows.Forms.NotifyIcon
+    $ProbeIcon = New-TokenMeterIcon
+    $IconBitmap = $null
+    try {
+        $Probe.Icon = $ProbeIcon
+        $Probe.Text = Format-TrayText $Sample
+        $Probe.add_MouseClick({ Invoke-TrayMouseClick $_ })
+        $Probe.Visible = $true
+        [System.Windows.Forms.Application]::DoEvents()
+
+        $Click = New-Object System.Windows.Forms.MouseEventArgs(
+            [System.Windows.Forms.MouseButtons]::Left,
+            1,
+            0,
+            0,
+            0
+        )
+        $MouseClickMethod = $Probe.GetType().GetMethod(
+            "OnMouseClick",
+            [System.Reflection.BindingFlags]::Instance -bor [System.Reflection.BindingFlags]::NonPublic
+        )
+        $MouseClickMethod.Invoke($Probe, [object[]]@($Click.PSObject.BaseObject)) | Out-Null
+        $OpenedUrl = if (Test-Path -LiteralPath $script:OpenProbePath -PathType Leaf) {
+            (Get-Content -LiteralPath $script:OpenProbePath -Raw).Trim()
+        } else { "" }
+
+        $IconBitmap = $ProbeIcon.ToBitmap()
+        $BrandPixel = $IconBitmap.GetPixel(4, 4)
+        [ordered]@{
+            ok = $Probe.Visible -and $OpenedUrl -eq "$($script:BaseUrl)/#sessions"
+            platform = "windows"
+            widget = "NotifyIcon"
+            icon = "TokenMeterSpectrum"
+            icon_brand_color = $BrandPixel.B -gt 100 -and $BrandPixel.G -gt 100
+            left_click_url = $OpenedUrl
+            tooltip = $Probe.Text
+            menu_status = Format-MenuStatus $Sample
+        } | ConvertTo-Json -Compress
+    } finally {
+        $Probe.Visible = $false
+        $Probe.Dispose()
+        if ($IconBitmap) { $IconBitmap.Dispose() }
+        $ProbeIcon.Dispose()
+        if ($OwnProbe) {
+            Remove-Item -LiteralPath $script:OpenProbePath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    return
 }
 
 function Select-RecentSession($Sender) {
@@ -241,7 +379,8 @@ if (-not $CreatedNew) {
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-$script:NotifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+$script:TrayIcon = New-TokenMeterIcon
+$script:NotifyIcon.Icon = $script:TrayIcon
 $script:NotifyIcon.Text = "Token Meter - starting"
 $script:NotifyIcon.Visible = $true
 
@@ -299,7 +438,7 @@ $Quit.add_Click({ $script:Context.ExitThread() })
 $Menu.Items.Add($Quit) | Out-Null
 
 $script:NotifyIcon.ContextMenuStrip = $Menu
-$script:NotifyIcon.add_DoubleClick({ Open-TokenMeterUrl (Current-DashboardUrl) })
+$script:NotifyIcon.add_MouseClick({ Invoke-TrayMouseClick $_ })
 $Menu.add_Opening({ Invoke-TrayRefresh })
 
 $Timer = New-Object System.Windows.Forms.Timer
@@ -317,6 +456,7 @@ try {
     $Timer.Dispose()
     $script:NotifyIcon.Visible = $false
     $script:NotifyIcon.Dispose()
+    $script:TrayIcon.Dispose()
     $Menu.Dispose()
     $script:Context.Dispose()
     foreach ($Path in @($PidPath, $StatusPath)) {

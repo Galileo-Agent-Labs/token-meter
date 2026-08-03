@@ -322,9 +322,11 @@ python3 meter.py
 The macOS menu bar and Windows tray companions poll the local `/menubar`
 endpoint. The Windows tray tooltip shows compact estimated spend and guidance;
 its menu provides live activity, recent-session selection, dashboard deep
-links, refresh, and quit actions. The macOS companion also shows cached provider
-quota snapshots. Choose `Follow Latest` to resume automatic tracking. Neither
-companion parses logs or reads provider credentials directly.
+links, refresh, and quit actions. Left-click the Token Meter tray icon to open
+the dashboard; right-click it to open the tray menu. The macOS companion also
+shows cached provider quota snapshots. Choose `Follow Latest` to resume
+automatic tracking. Neither companion parses logs or reads provider credentials
+directly.
 
 ## How It Finds Logs
 

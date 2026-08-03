@@ -3955,6 +3955,10 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("Get-Command powershell.exe -CommandType Application", starter)
         self.assertIn("$TrayStatus.ready -and $TrayStatus.connected", starter)
         self.assertIn("System.Windows.Forms.NotifyIcon", tray)
+        self.assertIn("function New-TokenMeterIcon", tray)
+        self.assertNotIn("SystemIcons]::Information", tray)
+        self.assertIn(".add_MouseClick({ Invoke-TrayMouseClick $_ })", tray)
+        self.assertIn("MouseButtons]::Left", tray)
         self.assertIn('Invoke-RestMethod -Uri $Url -TimeoutSec 4', tray)
         self.assertIn('"Recent sessions"', tray)
         self.assertIn('"Quit tray widget"', tray)
@@ -3987,6 +3991,9 @@ class InstallationTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["widget"], "NotifyIcon")
+        self.assertEqual(payload["icon"], "TokenMeterSpectrum")
+        self.assertTrue(payload["icon_brand_color"])
+        self.assertEqual(payload["left_click_url"], "http://127.0.0.1:8722/#sessions")
         self.assertIn("est", payload["tooltip"])
 
 

@@ -39,7 +39,9 @@ git clone https://github.com/Galileo-Agent-Labs/token-meter.git
 ./token-meter/scripts/install
 ```
 
-The installer checks the required tools, installs the server and desktop tray
+The public installer selects the current operating system; on Linux it delegates
+to `scripts/install-linux`. The installer checks the required tools, installs the
+server and desktop tray
 startup items, waits for the local server, verifies both endpoints, prints
 `Token Meter installation complete`, and returns control to your terminal.
 It starts the server first and lets the initial local-history index finish before
@@ -673,7 +675,8 @@ The final command requires at least one supported local Claude, Codex, or Cursor
 |   |-- TokenMeterMenuBar.swift      # native macOS menu bar companion
 |   `-- token_meter_tray.py          # Linux KDE/GNOME AppIndicator tray
 |-- scripts/
-|   |-- install                      # install the local runtime and login items
+|   |-- install                      # select the OS and install the macOS runtime
+|   |-- install-linux                # install the Linux runtime and user services
 |   |-- run-menubar                  # build and run the menu bar companion
 |   |-- start-token-meter            # start server if needed, then menu bar
 |   |-- install-launch-agent         # install macOS login items

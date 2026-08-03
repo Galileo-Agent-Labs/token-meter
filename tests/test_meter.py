@@ -3957,7 +3957,7 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('remote set-url origin "$source_remote_url"', script)
         self.assertIn('"branch.$managed_branch.merge" "refs/heads/$source_branch"', script)
         self.assertIn("Token Meter installation complete.", script)
-        self.assertNotRegex(script, r"(?m)^exec ")
+        self.assertNotIn('exec "$INSTALL_ROOT/scripts/install-launch-agent"', script)
 
     def test_update_helper_requires_clean_fast_forward_then_reuses_installer(self):
         root = Path(__file__).resolve().parents[1]
@@ -4014,10 +4014,15 @@ class InstallationTests(unittest.TestCase):
 
     def test_linux_installer_uses_xdg_runtime_systemd_and_appindicator_tray(self):
         root = Path(__file__).resolve().parents[1]
-        installer = (root / "scripts" / "install").read_text()
+        entrypoint = (root / "scripts" / "install").read_text()
+        installer = (root / "scripts" / "install-linux").read_text()
         systemd = (root / "scripts" / "install-systemd-user").read_text()
         runner = (root / "scripts" / "run-menubar").read_text()
         tray = (root / "menubar" / "token_meter_tray.py").read_text()
+        self.assertIn('exec "$SOURCE_ROOT/scripts/install-linux" "$@"', entrypoint)
+        self.assertNotIn("install-systemd-user", entrypoint)
+        self.assertNotIn("launchctl", installer)
+        self.assertNotIn("install-launch-agent", installer)
         self.assertIn("XDG_DATA_HOME", installer)
         self.assertIn("install-systemd-user", installer)
         self.assertIn('"$INSTALL_ROOT/scripts/install-systemd-user" server-only', installer)

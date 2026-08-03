@@ -62,6 +62,7 @@ CURSOR_STATE_DB = os.path.expanduser(
     "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
 )
 CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
+KIRO_SESSIONS = os.path.expanduser("~/.kiro/sessions")
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -81,12 +82,12 @@ DEFAULT_POSITIVE_TERMS = [
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
-MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
+MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor", "kiro")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
-BUDGET_PROVIDERS = ("claude", "codex", "cursor")
+BUDGET_PROVIDERS = ("claude", "codex", "cursor", "kiro")
 DEFAULT_RUNTIME_BUDGET = 1_000.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
@@ -610,6 +611,7 @@ def builtin_model_price_tables():
         "claude": CLAUDE_PRICE,
         "codex": OPENAI_PRICE,
         "cursor": CURSOR_PRICE,
+        "kiro": CLAUDE_PRICE,  # Kiro uses Claude models
     }
 
 
@@ -817,7 +819,7 @@ def model_pricing_settings(path=None):
     path = path or TOKEN_METER_SETTINGS
     histories = _load_model_price_histories(path)
     rows = []
-    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor"}
+    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor", "kiro": "Kiro"}
     for provider in MODEL_PRICE_PROVIDERS:
         builtins = builtin_model_price_tables()[provider]
         effective = effective_model_price_table(provider, path)
@@ -2009,6 +2011,166 @@ def cursor_enrichment_mtime(db_path=None, log_root=None):
     return max(values, default=0)
 
 
+def kiro_session_metadata(session_dir):
+    """Read Kiro session.json metadata from a session directory."""
+    session_json_path = os.path.join(session_dir, "session.json")
+    try:
+        with open(session_json_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        "id": data.get("id") or "",
+        "title": compact_text(str(data.get("title") or ""), 90),
+        "model": data.get("modelId") or "",
+        "agent_mode": data.get("agentMode") or "vibe",
+        "autopilot": bool(data.get("autopilot")),
+        "workspace_paths": data.get("workspacePaths") or [],
+        "created_at": data.get("createdAt") or "",
+        "last_modified_at": data.get("lastModifiedAt") or "",
+    }
+
+
+# Kiro VSCode extension storage path (macOS)
+KIRO_AGENT_STORAGE = os.path.expanduser(
+    "~/Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent"
+)
+
+
+def kiro_agent_session_sources(root=None):
+    """Discover Kiro sessions from VSCode extension globalStorage."""
+    root = os.path.expanduser(root or KIRO_AGENT_STORAGE)
+    sources = []
+    if not os.path.isdir(root):
+        return sources
+    # Pattern: kiro.kiroagent/<workspace-hash>/<session-hash>/<execution-file>
+    # Each workspace hash folder contains session folders with execution JSON files
+    for workspace_dir in glob.glob(os.path.join(root, "*")):
+        if not os.path.isdir(workspace_dir) or os.path.basename(workspace_dir).startswith("."):
+            continue
+        workspace_hash = os.path.basename(workspace_dir)
+        for session_dir in glob.glob(os.path.join(workspace_dir, "*")):
+            if not os.path.isdir(session_dir):
+                continue
+            session_hash = os.path.basename(session_dir)
+            # Find all execution files in this session (they have no extension or are JSON)
+            execution_files = [
+                f for f in glob.glob(os.path.join(session_dir, "*"))
+                if os.path.isfile(f) and not f.endswith((".json", ".jsonl"))
+            ]
+            if not execution_files:
+                continue
+            # Get the most recent execution file
+            newest_file = max(execution_files, key=lambda p: safe_mtime(p))
+            mtime = safe_mtime(newest_file)
+            # Try to read execution metadata from any file
+            model = "claude-sonnet-4-6"
+            title = ""
+            project = workspace_hash
+            for exec_file in sorted(execution_files, key=lambda p: -safe_mtime(p))[:1]:
+                try:
+                    with open(exec_file, encoding="utf-8") as fh:
+                        data = json.load(fh)
+                    if isinstance(data, dict):
+                        # Extract model from the execution data
+                        input_data = data.get("input", {}).get("data", {})
+                        model_id = input_data.get("modelId") or data.get("modelId") or ""
+                        if model_id:
+                            model = model_id.replace(".", "-")
+                        # Extract workspace info for project name
+                        workspace_paths = input_data.get("workspacePaths") or []
+                        if workspace_paths:
+                            project = home_shorten(workspace_paths[0])
+                        break
+                except (FileNotFoundError, json.JSONDecodeError, OSError):
+                    continue
+            session_id = f"sess_{session_hash[:8]}-{workspace_hash[:4]}-agent"
+            sources.append({
+                "provider": "kiro",
+                "client": "kiro",
+                "label": "Kiro",
+                "runtime": "Kiro",
+                "id": session_id,
+                "session": session_hash,
+                "path": session_dir,  # Use directory as path
+                "project": project,
+                "mtime": mtime,
+                "title": title,
+                "model": model,
+                "agent_mode": "vibe",
+                "autopilot": True,
+                "workspace_hash": workspace_hash,
+                "_execution_files": execution_files,
+            })
+    return sources
+
+
+def kiro_session_sources(root=None):
+    """Discover all Kiro sessions with messages.jsonl files."""
+    root = os.path.expanduser(root or KIRO_SESSIONS)
+    sources = []
+    # Pattern: ~/.kiro/sessions/<workspace-hash>/<session-uuid>/messages.jsonl
+    for path in glob.glob(os.path.join(root, "*", "*", "messages.jsonl")):
+        session_dir = os.path.dirname(path)
+        session_id = os.path.basename(session_dir)
+        workspace_hash = os.path.basename(os.path.dirname(session_dir))
+        metadata = kiro_session_metadata(session_dir)
+        title = metadata.get("title") or ""
+        if title.lower() in ("new session", "untitled", ""):
+            title = ""
+        workspace_paths = metadata.get("workspace_paths") or []
+        project = home_shorten(workspace_paths[0]) if workspace_paths else workspace_hash
+        model = metadata.get("model") or ""
+        # Map Kiro model IDs to Claude model names (e.g., "claude-opus-4.6" -> "claude-opus-4-6")
+        if model:
+            model = model.replace(".", "-")
+        created_at = parse_iso(metadata.get("created_at"))
+        last_modified = parse_iso(metadata.get("last_modified_at"))
+        mtime = max(safe_mtime(path), float(last_modified or 0))
+        sources.append({
+            "provider": "kiro",
+            "client": "kiro",
+            "label": "Kiro",
+            "runtime": "Kiro",
+            "id": session_id,
+            "session": os.path.basename(path),
+            "path": path,
+            "project": project,
+            "mtime": mtime,
+            "title": title,
+            "model": model or "claude-sonnet-4-6",
+            "agent_mode": metadata.get("agent_mode") or "vibe",
+            "autopilot": metadata.get("autopilot", True),
+            "workspace_hash": workspace_hash,
+        })
+    # Also check for CLI sessions: ~/.kiro/sessions/cli/<session-id>.jsonl
+    for path in glob.glob(os.path.join(root, "cli", "*.jsonl")):
+        session_id = os.path.basename(path).rsplit(".", 1)[0]
+        sources.append({
+            "provider": "kiro",
+            "client": "kiro_cli",
+            "label": "Kiro CLI",
+            "runtime": "Kiro",
+            "id": session_id,
+            "session": os.path.basename(path),
+            "path": path,
+            "project": "CLI",
+            "mtime": safe_mtime(path),
+            "title": "",
+            "model": "claude-sonnet-4-6",
+            "agent_mode": "vibe",
+            "autopilot": True,
+            "workspace_hash": "cli",
+        })
+    # Also discover sessions from VSCode extension storage
+    # Only include agent sessions if not using a custom root (for test isolation)
+    if root is None or root == os.path.expanduser(KIRO_SESSIONS):
+        sources.extend(kiro_agent_session_sources())
+    return sources
+
+
 def claude_desktop_metadata_paths(root=None):
     if root:
         return glob.glob(os.path.join(root, "**", "local_*.json"), recursive=True)
@@ -2197,6 +2359,9 @@ def all_session_sources():
 
     sources.extend(cursor_sources.values())
 
+    # Discover Kiro sessions
+    sources.extend(kiro_session_sources())
+
     discovered_paths = {source.get("path") for source in sources if source.get("path")}
     with _source_metadata_lock:
         for stale_path in set(_codex_meta_cache) - discovered_paths:
@@ -2265,6 +2430,26 @@ def source_from_path(path):
             "signature_mtime": max(activity_mtime, cursor_enrichment_mtime()),
             "trace_mtime": safe_mtime(path), "title": metadata.get("title") or None,
             "model": metadata.get("model") or "unknown",
+        }
+    if path and path.startswith(os.path.expanduser("~/.kiro/")):
+        session_dir = os.path.dirname(path)
+        session_id = os.path.basename(session_dir)
+        workspace_hash = os.path.basename(os.path.dirname(session_dir))
+        metadata = kiro_session_metadata(session_dir)
+        workspace_paths = metadata.get("workspace_paths") or []
+        project = home_shorten(workspace_paths[0]) if workspace_paths else workspace_hash
+        model = metadata.get("model") or ""
+        if model:
+            model = model.replace(".", "-")
+        return {
+            "provider": "kiro", "client": "kiro", "label": "Kiro",
+            "runtime": "Kiro", "id": session_id, "session": os.path.basename(path),
+            "path": path, "project": project, "mtime": safe_mtime(path),
+            "title": metadata.get("title") or None,
+            "model": model or "claude-sonnet-4-6",
+            "agent_mode": metadata.get("agent_mode") or "vibe",
+            "autopilot": metadata.get("autopilot", True),
+            "workspace_hash": workspace_hash,
         }
     sid = os.path.basename(path).rsplit(".", 1)[0]
     trace_cwd = claude_trace_cwd(path)
@@ -4225,6 +4410,640 @@ def recompute_cursor(source):
     return state
 
 
+def kiro_visible_output(objs):
+    """Estimate tokens from Kiro message text, similar to Cursor's text-based estimation."""
+    user_chars = 0
+    assistant_chars = 0
+    tool_calls = 0
+    tool_result_chars = 0
+    for obj in objs or []:
+        if not isinstance(obj, dict):
+            continue
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else obj
+        msg_type = payload.get("type") or ""
+        if msg_type == "user":
+            content = payload.get("content") or ""
+            if isinstance(content, str):
+                user_chars += len(content)
+        elif msg_type == "assistant":
+            content = payload.get("content") or ""
+            if isinstance(content, str):
+                assistant_chars += len(content)
+        elif msg_type == "tool_call":
+            tool_calls += 1
+            args = payload.get("args")
+            if isinstance(args, dict):
+                user_chars += len(json.dumps(args, separators=(",", ":")))
+        elif msg_type == "tool_result":
+            content = payload.get("content") or ""
+            if isinstance(content, str):
+                tool_result_chars += len(content)
+    return {
+        "user_chars": user_chars,
+        "assistant_chars": assistant_chars,
+        "tool_calls": tool_calls,
+        "tool_result_chars": tool_result_chars,
+        "user_tokens": math.ceil(user_chars / CHARS_PER_TOKEN) if user_chars else 0,
+        "assistant_tokens": math.ceil(assistant_chars / CHARS_PER_TOKEN) if assistant_chars else 0,
+        "tool_result_tokens": math.ceil(tool_result_chars / CHARS_PER_TOKEN) if tool_result_chars else 0,
+    }
+
+
+def kiro_tool_identity(name):
+    """Normalize Kiro tool names to consistent identity format."""
+    name = str(name or "")
+    # Kiro tools like readFiles, runCommand, etc.
+    normalized = re.sub(r"([A-Z])", r"_\1", name).lower().strip("_")
+    display = name
+    namespace = "kiro"
+    kind = "tool"
+    # Map common Kiro tool names to standardized display names
+    tool_map = {
+        "readfiles": ("read_files", "Read Files"),
+        "readfile": ("read_file", "Read File"),
+        "runcommand": ("run_command", "Run Command"),
+        "writefile": ("write_file", "Write File"),
+        "searchfiles": ("search_files", "Search Files"),
+        "listdirectory": ("list_directory", "List Directory"),
+        "grepsearch": ("grep_search", "Grep Search"),
+        "intentclassification": ("intent_classification", "Intent Classification"),
+    }
+    lower_name = name.lower()
+    if lower_name in tool_map:
+        normalized, display = tool_map[lower_name]
+    return {
+        "name": normalized,
+        "display": display,
+        "namespace": namespace,
+        "kind": kind,
+        "raw_identity": name,
+    }
+
+
+def load_kiro_agent_executions(session_dir):
+    """Load execution files from Kiro agent storage directory."""
+    executions = []
+    if not os.path.isdir(session_dir):
+        return executions
+    for path in glob.glob(os.path.join(session_dir, "*")):
+        if not os.path.isfile(path) or path.endswith((".json", ".jsonl")):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict) and data.get("status") in ("succeed", "running", "aborted"):
+                data["_path"] = path
+                data["_mtime"] = safe_mtime(path)
+                executions.append(data)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            continue
+    return sorted(executions, key=lambda e: e.get("startTime") or 0)
+
+
+def recompute_kiro_agent(source):
+    """Build estimated usage from Kiro agent storage (directory with execution files)."""
+    session_dir = source.get("path")
+    exec_files = load_kiro_agent_executions(session_dir)
+    if not exec_files:
+        return None
+
+    model = source.get("model") or "claude-sonnet-4-6"
+    tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    model_tok, model_cost = defaultdict(int), defaultdict(float)
+    series, executions, trace = [], [], []
+    wait_samples = []
+    first_ts = last_ts = 0.0
+
+    for idx, exec_data in enumerate(exec_files):
+        exec_id = exec_data.get("executionId") or f"exec-{idx}"
+        start_time = exec_data.get("startTime")
+        end_time = exec_data.get("endTime")
+        start_ts = float(start_time) / 1000.0 if start_time else 0
+        end_ts = float(end_time) / 1000.0 if end_time else start_ts
+
+        if start_ts:
+            first_ts = min(first_ts or start_ts, start_ts)
+        if end_ts:
+            last_ts = max(last_ts, end_ts)
+
+        # Extract user input text
+        input_data = exec_data.get("input", {}).get("data", {})
+        messages = input_data.get("messages", [])
+        user_chars = 0
+        user_text = ""
+        for msg in messages:
+            if msg.get("role") == "user":
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text = item.get("text", "")
+                            user_chars += len(text)
+                            if not user_text:
+                                user_text = compact_text(text, 220)
+                elif isinstance(content, str):
+                    user_chars += len(content)
+                    if not user_text:
+                        user_text = compact_text(content, 220)
+
+        # Extract assistant text and tools from actions
+        actions = exec_data.get("actions", [])
+        assistant_chars = 0
+        tool_calls = []
+        tool_result_chars = 0
+
+        for action in actions:
+            action_type = action.get("actionType") or ""
+            if action_type == "say":
+                output = action.get("output", {})
+                if isinstance(output, dict):
+                    msg = output.get("message", "")
+                    if isinstance(msg, str):
+                        assistant_chars += len(msg)
+            elif action_type in ("readFiles", "read_files", "readFile", "read_file",
+                                 "runCommand", "run_command", "execute_bash",
+                                 "search", "grep_search", "file_search",
+                                 "fs_write", "str_replace", "create", "write"):
+                tool_input = action.get("input", {})
+                tool_output = action.get("output", {})
+                ident = kiro_tool_identity(action_type)
+                tool_call = {
+                    **ident,
+                    "id": action.get("actionId") or "",
+                    "call_id": action.get("actionId") or "",
+                    "args_chars": len(json.dumps(tool_input, separators=(",", ":"))) if tool_input else 0,
+                    "output_chars": 0,
+                    "output_tokens": 0,
+                    "result_available": action.get("actionState") == "Success",
+                    "error": action.get("actionState") == "Failed",
+                }
+                if isinstance(tool_output, dict):
+                    output_str = json.dumps(tool_output, separators=(",", ":"))
+                    tool_call["output_chars"] = len(output_str)
+                    tool_call["output_tokens"] = len(output_str) // CHARS_PER_TOKEN
+                    tool_result_chars += len(output_str)
+                tool_calls.append(tool_call)
+
+        # Calculate tokens
+        input_tokens = (user_chars + tool_result_chars) // CHARS_PER_TOKEN
+        output_tokens = assistant_chars // CHARS_PER_TOKEN
+
+        # Get pricing
+        price, _ = price_for(model, "claude", at=end_ts or start_ts)
+        pricing_supported = any(float(value or 0) > 0 for value in price.values())
+        usage = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+        cost_available = bool((input_tokens or output_tokens) and pricing_supported)
+        cost_breakdown = (cost_of(usage, model, "claude", at=end_ts or start_ts)
+                          if cost_available else dict(ZERO_PRICE))
+        execution_cost = sum(cost_breakdown.values())
+
+        # Build execution record
+        retrieval = sum(int(tool.get("output_tokens") or 0) for tool in tool_calls)
+        duration_ms = (end_ts - start_ts) * 1000 if end_ts > start_ts else None
+        execution_availability = metric_availability(
+            "kiro", cost=cost_available, tokens=bool(input_tokens or output_tokens),
+            input_tokens=bool(input_tokens), output_tokens=bool(output_tokens),
+            throughput=False, context=False, timing=bool(duration_ms),
+            tool_results=any(tool.get("result_available") for tool in tool_calls),
+        )
+
+        execution = {
+            "id": f"{source['id']}:{idx+1}",
+            "idx": idx + 1,
+            "ts": end_ts or start_ts,
+            "time": local_tm(end_ts or start_ts),
+            "model": model,
+            "tokens": {
+                "input": input_tokens, "output": output_tokens,
+                "reasoning": 0, "retrieval": retrieval,
+                "fresh_input": input_tokens, "cache": 0,
+                "cache_read": 0, "cache_write": 0,
+                "total": input_tokens + output_tokens,
+            },
+            "cost": execution_cost,
+            "cost_breakdown": cost_breakdown,
+            "tools": tool_calls,
+            "tool_count": len(tool_calls),
+            "model_calls": 1,
+            "reasoning_tokens": 0,
+            "reasoning_duration_ms": 0,
+            "context_tokens": input_tokens,
+            "context_window": 0,
+            "context_pct": None,
+            "duration_ms": duration_ms,
+            "wait_duration_ms": duration_ms,
+            "summary": (f"Execution {idx+1}: {len(tool_calls)} tools · ${execution_cost:.3f} est"
+                        if cost_available else f"Execution {idx+1}: {len(tool_calls)} tools"),
+            "user_message": user_text,
+            "user_input": user_text,
+            "availability": execution_availability,
+        }
+        executions.append(execution)
+
+        series.append({
+            "i": idx + 1,
+            "in": input_tokens,
+            "out": output_tokens,
+            "cost": execution_cost,
+            "fresh_input": input_tokens,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "think": False,
+            "tools": len(tool_calls),
+            "side": False,
+            "reasoning": 0,
+            "reasoning_ms": 0,
+            "context_pct": None,
+            "context_tokens": input_tokens,
+            "user_message": user_text,
+            "user_input": user_text,
+            "availability": execution_availability,
+        })
+
+        # Update totals
+        tot["input"] += input_tokens
+        tot["output"] += output_tokens
+        if cost_available:
+            for key in cost:
+                cost[key] += float(cost_breakdown.get(key) or 0)
+        model_tok[model] += input_tokens + output_tokens
+        model_cost[model] += execution_cost
+
+        if duration_ms:
+            wait_samples.append({
+                "provider": "kiro",
+                "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                "ts": end_ts,
+                "start_ts": start_ts,
+                "duration_s": duration_ms / 1000.0,
+                "tool_calls": len(tool_calls),
+                "output_tokens": output_tokens,
+                "context_tokens": input_tokens,
+                "model_calls": 1,
+                "timing_basis": "observed",
+            })
+
+        # Add trace events
+        if user_text:
+            trace.append(trace_event(start_ts, "user", "User message", compact_text(user_text, 84),
+                                     idx + 1, severity="start", model=model))
+        for tool in tool_calls:
+            trace.append(trace_event(
+                end_ts, "tool_call", tool["display"], tool["namespace"], idx + 1,
+                tool=tool["name"], severity="tool", model=model,
+                args_chars=tool["args_chars"], tool_kind=tool["kind"],
+            ))
+        trace.append(trace_event(
+            end_ts, "complete", "Execution complete", "",
+            idx + 1, severity="good", model=model,
+            cost=execution_cost if cost_available else None,
+        ))
+
+    if not executions:
+        return None
+
+    total_tokens = sum(tot.values())
+    total_cost = sum(cost.values())
+    tool_data = tool_summary(executions)
+    primary_model = model
+    analyses = analysis_block(
+        tot, total_cost, 0, 0, 0.0,
+        model_tok, model_cost, tool_data, 0.0, 0, len(executions),
+    )
+
+    price, _ = price_for(primary_model, "claude")
+    pricing_supported = any(float(value or 0) > 0 for value in price.values())
+    pricing_note = (
+        f"Local Kiro token estimate (visible text ÷ {CHARS_PER_TOKEN} chars/token), "
+        f"priced with Claude API rates; cache and hidden model work are excluded."
+        if pricing_supported else
+        f"Local Kiro token estimate; no configured public rate for {primary_model}."
+    )
+
+    input_available = bool(executions and all(metric_available(e, "input_tokens") for e in executions))
+    output_available = bool(executions and all(metric_available(e, "output_tokens") for e in executions))
+    cost_available = bool(executions and all(metric_available(e, "cost") for e in executions))
+    availability = metric_availability(
+        "kiro", cost=cost_available, tokens=bool(input_available or output_available),
+        input_tokens=input_available, output_tokens=output_available,
+        throughput=False, context=False, timing=bool(wait_samples),
+        tool_results=any(tool.get("result_available") for e in executions for tool in e.get("tools") or []),
+    )
+
+    biggest = max(
+        ({"cost": execution.get("cost") or 0, "idx": execution.get("idx")} for execution in executions),
+        key=lambda row: row["cost"], default=None,
+    )
+    active_s = sum(float(execution.get("duration_ms") or 0) / 1000.0 for execution in executions)
+
+    state = build_state(
+        source, tot, cost, total_tokens, total_cost, series, executions, trace,
+        {"reasoning": 0, "output": tot["output"],
+         "retrieval": tool_data["total_output_tokens"], "coordination": 0},
+        analyses, [], first_ts, last_ts,
+        (time.time() - last_ts) if last_ts else 1e9, biggest, 0, cost_available,
+        primary_model, pricing_note,
+        {"duration_s": active_s, "available": bool(active_s),
+         "reported_executions": 0, "observed_executions": len(executions),
+         "execution_count": len(executions), "basis": "observed"},
+        wait_samples, availability=availability,
+    )
+    state["throughput"] = {"available": False}
+    state["token_estimate"] = True
+    state["estimation"] = {
+        "basis": f"visible message text ÷ {CHARS_PER_TOKEN} chars/token",
+        "input": "user text + tool results estimate",
+        "output": "assistant text estimate",
+        "excluded": ["cache accounting", "hidden reasoning", "system prompts", "internal model context"],
+    }
+    state["context"] = {"latest": 0, "window": 0, "pct": None, "breakdown": [], "estimated": True}
+    state["kiro_info"] = {
+        "agent_mode": source.get("agent_mode") or "vibe",
+        "autopilot": source.get("autopilot", True),
+        "workspace_hash": source.get("workspace_hash") or "",
+        "storage_type": "agent",
+    }
+    return state
+
+
+def recompute_kiro(source):
+    """Build estimated usage from Kiro's messages.jsonl using text-based token estimation."""
+    path = source.get("path")
+
+    # Check if this is a directory (new agent storage format) or a file (old JSONL format)
+    if os.path.isdir(path):
+        return recompute_kiro_agent(source)
+
+    objs = load(path)
+    if not objs:
+        return None
+        return None
+
+    model = source.get("model") or "claude-sonnet-4-6"
+    tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    model_tok, model_cost = defaultdict(int), defaultdict(float)
+    series, executions, trace = [], [], []
+    wait_samples, performance_samples = [], []
+    first_ts = last_ts = 0.0
+    execution_groups = []
+    current_group = None
+
+    # Group messages by execution (turn_start to next turn_start or end)
+    for obj in objs:
+        if not isinstance(obj, dict):
+            continue
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else obj
+        msg_type = payload.get("type") or ""
+        ts = parse_iso(obj.get("timestamp"))
+
+        if msg_type == "user":
+            # Start new execution group on user message
+            if current_group and current_group.get("messages"):
+                execution_groups.append(current_group)
+            current_group = {
+                "start_ts": ts,
+                "end_ts": ts,
+                "messages": [obj],
+                "user_text": payload.get("content") or "",
+                "model": model,
+            }
+        elif msg_type == "turn_start":
+            execution_id = payload.get("executionId") or ""
+            if current_group:
+                current_group["execution_id"] = execution_id
+        elif current_group is not None:
+            current_group["messages"].append(obj)
+            if ts:
+                current_group["end_ts"] = max(current_group.get("end_ts") or 0, ts)
+
+    if current_group and current_group.get("messages"):
+        execution_groups.append(current_group)
+
+    if not execution_groups:
+        return None
+
+    for position, group in enumerate(execution_groups):
+        idx = position + 1
+        start_ts = float(group.get("start_ts") or 0)
+        end_ts = float(group.get("end_ts") or start_ts)
+        user_text = compact_text(str(group.get("user_text") or ""), 220)
+        messages = group.get("messages") or []
+
+        # Calculate visible output from this execution
+        visible = kiro_visible_output(messages)
+        user_tokens = int(visible["user_tokens"])
+        assistant_tokens = int(visible["assistant_tokens"])
+        tool_result_tokens = int(visible["tool_result_tokens"])
+
+        # Input tokens = user input + tool results (context fed to model)
+        input_tokens = user_tokens + tool_result_tokens
+        # Output tokens = assistant response
+        output_tokens = assistant_tokens
+
+        # Get pricing (Kiro uses Claude models, so use claude provider pricing)
+        price, _ = price_for(model, "claude", at=end_ts or start_ts)
+        pricing_supported = any(float(value or 0) > 0 for value in price.values())
+        usage = {"input_tokens": input_tokens, "output_tokens": output_tokens}
+        cost_available = bool((input_tokens or output_tokens) and pricing_supported)
+        cost_breakdown = (cost_of(usage, model, "claude", at=end_ts or start_ts)
+                          if cost_available else dict(ZERO_PRICE))
+        execution_cost = sum(cost_breakdown.values())
+
+        # Extract tools from messages
+        tools = []
+        assistant_text = ""
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else msg
+            msg_type = payload.get("type") or ""
+            msg_ts = parse_iso(msg.get("timestamp")) or end_ts
+
+            if msg_type == "tool_call":
+                tool_name = payload.get("toolName") or ""
+                ident = kiro_tool_identity(tool_name)
+                arguments = payload.get("args") or {}
+                tool_call_id = payload.get("toolCallId") or ""
+                tool = {
+                    **ident,
+                    "id": tool_call_id,
+                    "call_id": tool_call_id,
+                    "args_chars": len(json.dumps(arguments, separators=(",", ":"))) if arguments else 0,
+                    "args_fingerprint": argument_fingerprint(arguments),
+                    "output_chars": 0,
+                    "output_tokens": 0,
+                    "result_available": False,
+                    "error": False,
+                    "skills": skill_names_from_value(arguments),
+                }
+                tools.append(tool)
+                trace.append(trace_event(
+                    msg_ts, "tool_call", ident["display"], ident["namespace"], idx,
+                    tool=ident["name"], severity="tool", model=model,
+                    args_chars=tool["args_chars"], tool_kind=ident["kind"],
+                ))
+            elif msg_type == "tool_result":
+                tool_call_id = payload.get("toolCallId") or ""
+                content = payload.get("content") or ""
+                success = payload.get("success", True)
+                output_chars = len(content) if isinstance(content, str) else 0
+                # Find matching tool and update it
+                for tool in tools:
+                    if tool.get("call_id") == tool_call_id:
+                        tool["output_chars"] = output_chars
+                        tool["output_tokens"] = output_chars // CHARS_PER_TOKEN
+                        tool["result_available"] = True
+                        tool["error"] = not success
+                        break
+                trace.append(trace_event(
+                    msg_ts, "tool_result", "Tool Result",
+                    f"~{output_chars // CHARS_PER_TOKEN:,} returned tokens" if output_chars else "Tool completed",
+                    idx, tokens=output_chars // CHARS_PER_TOKEN,
+                    severity="warn" if not success else "retrieval", model=model,
+                    output_chars=output_chars, retrieval_tokens=output_chars // CHARS_PER_TOKEN,
+                    error=not success,
+                ))
+            elif msg_type == "assistant":
+                content = payload.get("content") or ""
+                if isinstance(content, str) and content.strip():
+                    assistant_text = compact_text(content, 84)
+                    trace.append(trace_event(msg_ts, "message", "Assistant message", assistant_text,
+                                             idx, model=model))
+
+        if user_text:
+            trace.insert(len(trace) - len(tools) * 2 - (1 if assistant_text else 0),
+                         trace_event(start_ts, "user", "User message", compact_text(user_text, 84),
+                                     idx, severity="start", model=model))
+
+        trace.append(trace_event(
+            end_ts, "complete", "Execution complete", "",
+            idx, severity="good", model=model,
+            cost=execution_cost if cost_available else None,
+        ))
+
+        retrieval = sum(int(tool.get("output_tokens") or 0) for tool in tools)
+        token_available = bool(input_tokens or output_tokens)
+        execution_availability = metric_availability(
+            "kiro", cost=cost_available, tokens=token_available,
+            input_tokens=bool(input_tokens), output_tokens=bool(output_tokens),
+            throughput=False, context=False, timing=bool(end_ts > start_ts),
+            tool_results=any(tool.get("result_available") for tool in tools),
+        )
+        series.append({
+            "i": idx, "in": input_tokens, "out": output_tokens, "cost": execution_cost,
+            "fresh_input": input_tokens, "cache": 0, "cache_read": 0, "cache_write": 0,
+            "think": False, "tools": len(tools), "side": False,
+            "reasoning": 0, "reasoning_ms": 0,
+            "context_pct": None, "context_tokens": input_tokens,
+            "user_message": user_text, "user_input": user_text,
+            "availability": execution_availability,
+        })
+        duration_ms = (end_ts - start_ts) * 1000 if end_ts > start_ts else None
+        execution = {
+            "id": f"{source['id']}:{idx}", "idx": idx, "ts": end_ts or start_ts,
+            "time": local_tm(end_ts or start_ts), "model": model,
+            "tokens": {"input": input_tokens, "output": output_tokens,
+                       "reasoning": 0, "retrieval": retrieval,
+                       "fresh_input": input_tokens, "cache": 0, "cache_read": 0,
+                       "cache_write": 0, "total": input_tokens + output_tokens},
+            "cost": execution_cost, "cost_breakdown": cost_breakdown, "tools": tools,
+            "tool_count": len(tools), "model_calls": 1,
+            "reasoning_tokens": 0, "reasoning_duration_ms": 0,
+            "context_tokens": input_tokens, "context_window": 0,
+            "context_pct": None, "duration_ms": duration_ms,
+            "wait_duration_ms": duration_ms,
+            "summary": (f"Execution {idx}: {len(tools)} tools · ${execution_cost:.3f} est"
+                        if cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable"),
+            "user_message": user_text, "user_input": user_text,
+            "availability": execution_availability,
+        }
+        executions.append(execution)
+        tot["input"] += input_tokens
+        tot["output"] += output_tokens
+        if cost_available:
+            for key in cost:
+                cost[key] += float(cost_breakdown.get(key) or 0)
+        model_tok[model] += input_tokens + output_tokens
+        model_cost[model] += execution_cost
+        if duration_ms:
+            wait_samples.append({
+                "provider": "kiro", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                "ts": end_ts, "start_ts": start_ts, "duration_s": duration_ms / 1000.0,
+                "tool_calls": len(tools), "output_tokens": output_tokens,
+                "context_tokens": input_tokens, "model_calls": 1,
+                "timing_basis": "observed",
+            })
+        if start_ts:
+            first_ts = min(first_ts or start_ts, start_ts)
+        if end_ts:
+            last_ts = max(last_ts, end_ts)
+
+    total_tokens = sum(tot.values())
+    total_cost = sum(cost.values())
+    tool_data = tool_summary(executions)
+    model_names = [execution.get("model") or "unknown" for execution in executions]
+    primary_model = max(set(model_names), key=model_names.count) if model_names else model
+    analyses = analysis_block(
+        tot, total_cost, 0, 0, 0.0,
+        model_tok, model_cost, tool_data, 0.0, 0, len(executions),
+    )
+    source = dict(source)
+    price, _ = price_for(primary_model, "claude")
+    pricing_supported = any(float(value or 0) > 0 for value in price.values())
+    pricing_note = (
+        f"Local Kiro token estimate (visible text ÷ {CHARS_PER_TOKEN} chars/token), "
+        f"priced with Claude API rates; cache and hidden model work are excluded."
+        if pricing_supported else
+        f"Local Kiro token estimate; no configured public rate for {primary_model}."
+    )
+    input_available = bool(executions and all(metric_available(e, "input_tokens") for e in executions))
+    output_available = bool(executions and all(metric_available(e, "output_tokens") for e in executions))
+    cost_available = bool(executions and all(metric_available(e, "cost") for e in executions))
+    availability = metric_availability(
+        "kiro", cost=cost_available, tokens=bool(input_available or output_available),
+        input_tokens=input_available, output_tokens=output_available,
+        throughput=False, context=False, timing=bool(wait_samples),
+        tool_results=any(tool.get("result_available") for e in executions for tool in e.get("tools") or []),
+    )
+    biggest = max(
+        ({"cost": execution.get("cost") or 0, "idx": execution.get("idx")} for execution in executions),
+        key=lambda row: row["cost"], default=None,
+    )
+    active_s = sum(float(execution.get("duration_ms") or 0) / 1000.0 for execution in executions)
+    state = build_state(
+        source, tot, cost, total_tokens, total_cost, series, executions, trace,
+        {"reasoning": 0, "output": tot["output"],
+         "retrieval": tool_data["total_output_tokens"], "coordination": 0},
+        analyses, [], first_ts, last_ts,
+        (time.time() - last_ts) if last_ts else 1e9, biggest, 0, cost_available,
+        primary_model, pricing_note,
+        {"duration_s": active_s, "available": bool(active_s),
+         "reported_executions": 0, "observed_executions": len(executions),
+         "execution_count": len(executions), "basis": "observed"},
+        wait_samples, availability=availability,
+    )
+    state["throughput"] = {"available": False}
+    state["token_estimate"] = True
+    state["estimation"] = {
+        "basis": f"visible message text ÷ {CHARS_PER_TOKEN} chars/token",
+        "input": "user text + tool results estimate",
+        "output": "assistant text estimate",
+        "excluded": ["cache accounting", "hidden reasoning", "system prompts", "internal model context"],
+    }
+    state["context"] = {"latest": 0, "window": 0, "pct": None, "breakdown": [], "estimated": True}
+    state["kiro_info"] = {
+        "agent_mode": source.get("agent_mode") or "vibe",
+        "autopilot": source.get("autopilot", True),
+        "workspace_hash": source.get("workspace_hash") or "",
+    }
+    return state
+
+
 def recompute(source):
     if isinstance(source, str):
         source = source_from_path(source)
@@ -4236,6 +5055,8 @@ def recompute(source):
         return recompute_claude(source)
     if source["provider"] == "cursor":
         return recompute_cursor(source)
+    if source["provider"] == "kiro":
+        return recompute_kiro(source)
     return None
 
 
@@ -5733,21 +6554,129 @@ def cursor_summary(source, objs=None):
     return row
 
 
+def kiro_summary(source, objs=None):
+    """Build a cross-session Kiro row from text-based token estimation."""
+    state = recompute_kiro(source)
+    if not state:
+        availability = metric_availability("kiro")
+        return summary_row(
+            source, source.get("title"), 0.0, 0, 0, set(), None, None,
+            {}, {}, {}, False, availability=availability,
+        )
+    executions = state.get("executions") or []
+    availability = state.get("availability") or metric_availability("kiro")
+    model_stats = {}
+    model_daily = {}
+    model_cost = defaultdict(float)
+    model_tok = defaultdict(int)
+    day_cost = defaultdict(float)
+    performance_samples = []
+    wait_samples = []
+    for execution in executions:
+        model = execution.get("model") or "unknown"
+        token_data = execution.get("tokens") or {}
+        input_tokens = int(token_data.get("input") or 0)
+        output_tokens = int(token_data.get("output") or 0)
+        execution_cost = float(execution.get("cost") or 0)
+        stats = model_stats.setdefault(model, {
+            "cost": 0.0, "tokens": 0, "input_tokens": 0,
+            "output_tokens": 0, "executions": 0, "availability": availability,
+        })
+        stats["cost"] += execution_cost
+        stats["tokens"] += input_tokens + output_tokens
+        stats["input_tokens"] += input_tokens
+        stats["output_tokens"] += output_tokens
+        stats["executions"] += 1
+        model_cost[model] += execution_cost
+        model_tok[model] += input_tokens + output_tokens
+        ts = float(execution.get("ts") or 0)
+        if ts:
+            day = time.strftime("%Y-%m-%d", time.localtime(ts))
+            day_cost[day] += execution_cost
+            daily = model_daily.setdefault((model, day), {
+                "model": model, "day": day, "cost": 0.0,
+                "input_tokens": 0, "output_tokens": 0, "executions": 0,
+                "availability": availability,
+            })
+            daily["cost"] += execution_cost
+            daily["input_tokens"] += input_tokens
+            daily["output_tokens"] += output_tokens
+            daily["executions"] += 1
+    for sample in (state.get("wait_time") or {}).get("samples") or []:
+        ts = float(sample.get("ts") or 0)
+        wait_samples.append({
+            **sample,
+            "provider": "kiro",
+            "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+        })
+    first_ts = float((state.get("timing") or {}).get("start_ts") or 0) or None
+    last_ts = float((state.get("timing") or {}).get("end_ts") or 0) or None
+    active = {
+        "duration_s": float((state.get("timing") or {}).get("duration_s") or 0),
+        "available": bool((state.get("timing") or {}).get("duration_available")),
+        "basis": (state.get("timing") or {}).get("duration_basis") or "unavailable",
+    }
+    row = summary_row(
+        source, source.get("title"), float(state.get("total_cost") or 0),
+        int(state.get("total_tokens") or 0), len(executions), set(model_stats),
+        first_ts, last_ts, model_cost, model_tok, day_cost, bool(state.get("cost_approx")), active,
+        int((state.get("tokens") or {}).get("input") or 0),
+        int((state.get("tokens") or {}).get("output") or 0),
+        model_stats, list(model_daily.values()), performance_samples, wait_samples,
+        availability,
+    )
+    row["token_estimate"] = bool(state.get("token_estimate"))
+    row["provenance"] = usage_provenance([row])
+    row["usage_basis"] = row["provenance"]["usage_basis"]
+    turns = []
+    for execution in executions:
+        ts = float(execution.get("ts") or 0)
+        turns.append({
+            "ts": ts,
+            "text": execution.get("user_input") or "",
+            "model": execution.get("model") or "unknown",
+        })
+    signal_rollups, signal_events = analyze_language_signal_turns(turns)
+    attach_language_signals(row, signal_rollups, signal_events)
+    calls = []
+    for execution in executions:
+        for tool in execution.get("tools") or []:
+            calls.append({**tool, "ts": execution.get("ts") or 0})
+    row["_tool_evidence"] = summarize_tool_evidence(calls)
+    row["context"] = state.get("context") or {}
+    row["_context_samples"] = [
+        int(execution.get("context_tokens") or
+            (execution.get("tokens") or {}).get("input") or 0)
+        for execution in executions[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+        if int(execution.get("context_tokens") or
+               (execution.get("tokens") or {}).get("input") or 0) > 0
+    ]
+    row["primary_model"] = state.get("primary_model") or source.get("model") or "unknown"
+    row["terminal"] = False
+    row["tool_calls"] = int((state.get("tools") or {}).get("total_calls") or 0)
+    row["tool_errors"] = int((state.get("tools") or {}).get("total_errors") or 0)
+    return row
+
+
 def session_summary(source):
     cached = _summary_cache.get(source["path"])
     mtime = source.get("signature_mtime") or source.get("mtime") or safe_mtime(source["path"])
     if cached and cached.get("mtime") == mtime:
         return cached["row"]
-    objs = load(source["path"])
-    if source["provider"] == "codex":
-        row = codex_summary(source, objs)
-    elif source["provider"] == "claude":
-        row = claude_summary(source, objs)
-    elif source["provider"] == "cursor":
-        row = cursor_summary(source, objs)
+    # Kiro agent sessions use directories, not files - handle specially
+    if source["provider"] == "kiro":
+        row = kiro_summary(source, None)  # kiro_summary handles loading internally
     else:
-        row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
-                          {}, {}, {}, False, availability=metric_availability("unknown"))
+        objs = load(source["path"])
+        if source["provider"] == "codex":
+            row = codex_summary(source, objs)
+        elif source["provider"] == "claude":
+            row = claude_summary(source, objs)
+        elif source["provider"] == "cursor":
+            row = cursor_summary(source, objs)
+        else:
+            row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
+                              {}, {}, {}, False, availability=metric_availability("unknown"))
     _summary_cache[source["path"]] = {"mtime": mtime, "row": row}
     return row
 

@@ -86,6 +86,7 @@ enum MenuTab: String, CaseIterable {
     case claude
     case codex
     case cursor
+    case kiro
 
     var title: String {
         switch self {
@@ -94,6 +95,7 @@ enum MenuTab: String, CaseIterable {
         case .claude: return "Claude"
         case .codex: return "Codex"
         case .cursor: return "Cursor"
+        case .kiro: return "Kiro"
         }
     }
 }
@@ -340,6 +342,7 @@ struct RecentSession {
         switch provider.lowercased() {
         case "codex": return "Codex"
         case "cursor": return "Cursor"
+        case "kiro": return "Kiro"
         default: return "Claude"
         }
     }
@@ -366,6 +369,7 @@ struct RecentSession {
         switch provider.lowercased() {
         case "codex": return "terminal"
         case "cursor": return "cursorarrow"
+        case "kiro": return "keyboard"
         default: return "sparkles"
         }
     }
@@ -816,7 +820,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addRunMenu()
         case .overview:
             addOverviewMenu()
-        case .claude, .codex, .cursor:
+        case .claude, .codex, .cursor, .kiro:
             addProviderMenu(selectedTab.rawValue)
         }
 

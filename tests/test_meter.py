@@ -148,6 +148,7 @@ class CursorTraceTests(unittest.TestCase):
                     mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
                     mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
                     mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
+                    mock.patch.object(meter, "KIRO_SESSIONS", str(root / "no-kiro")), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}):
                 sources = meter.all_session_sources()
             self.assertEqual({row["id"] for row in sources}, {"older", "newer"})
@@ -4256,7 +4257,7 @@ class MonthlyBudgetTests(unittest.TestCase):
                 "native_notifications": True,
             }, str(path))
             result = meter.set_budget_settings({
-                "allocations": {"claude": 50, "codex": 30, "cursor": 0},
+                "allocations": {"claude": 50, "codex": 30, "cursor": 0, "kiro": 0},
                 "thresholds": [75, 90, 100],
                 "native_notifications": False,
             }, str(path))
@@ -4266,7 +4267,7 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(stored["budgets"]["monthly_total"], 80)
         self.assertEqual(
             stored["budgets"]["allocations"],
-            {"claude": 50, "codex": 30, "cursor": 0},
+            {"claude": 50, "codex": 30, "cursor": 0, "kiro": 0},
         )
         self.assertIn("model_pricing", stored)
 
@@ -4283,20 +4284,20 @@ class MonthlyBudgetTests(unittest.TestCase):
             path.write_text(json.dumps({"budgets": legacy}))
             loaded = meter.budget_settings(str(path))
             saved = meter.set_budget_settings({
-                "allocations": {"claude": 0, "codex": 1490, "cursor": 0},
+                "allocations": {"claude": 0, "codex": 1490, "cursor": 0, "kiro": 0},
                 "thresholds": [80, 90, 100],
                 "native_notifications": True,
             }, str(path))
-        self.assertEqual(loaded["monthly_total"], 3000)
+        self.assertEqual(loaded["monthly_total"], 4000)  # 4 providers x 1000 default
         self.assertEqual(
             loaded["allocations"],
-            {"claude": 1000, "codex": 1000, "cursor": 1000},
+            {"claude": 1000, "codex": 1000, "cursor": 1000, "kiro": 1000},
         )
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["budgets"]["monthly_total"], 1490)
         self.assertEqual(
             saved["budgets"]["allocations"],
-            {"claude": 0, "codex": 1490, "cursor": 0},
+            {"claude": 0, "codex": 1490, "cursor": 0, "kiro": 0},
         )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
@@ -4347,7 +4348,7 @@ class MonthlyBudgetTests(unittest.TestCase):
             },
         }]
         status = meter.monthly_budget_status(months, {
-            "allocations": {"claude": 50, "codex": 30, "cursor": 0},
+            "allocations": {"claude": 50, "codex": 30, "cursor": 0, "kiro": 0},
             "thresholds": [50, 80, 100],
             "native_notifications": True,
         }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
@@ -4372,7 +4373,7 @@ class MonthlyBudgetTests(unittest.TestCase):
             "provenance": {"estimated_sessions": 0},
         }]
         status = meter.monthly_budget_status(months, {
-            "allocations": {"claude": 1000, "codex": 1490, "cursor": 1000},
+            "allocations": {"claude": 1000, "codex": 1490, "cursor": 1000, "kiro": 1000},
             "thresholds": [80, 90, 100],
             "native_notifications": True,
         }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
@@ -4384,6 +4385,142 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(status["exceeded_runtimes"][0]["over_by"], 11)
         codex = next(row for row in status["runtimes"] if row["provider"] == "codex")
         self.assertTrue(codex["exceeded"])
+
+
+class KiroTraceTests(unittest.TestCase):
+    def source(self, path="/tmp/kiro-session/messages.jsonl", session_id="kiro-session"):
+        return {
+            "provider": "kiro", "client": "kiro", "label": "Kiro",
+            "runtime": "Kiro", "id": session_id,
+            "session": Path(path).name, "path": path, "project": "/repo",
+            "mtime": 1, "title": "Kiro session", "model": "claude-sonnet-4-6",
+            "agent_mode": "vibe", "autopilot": True, "workspace_hash": "abc123",
+        }
+
+    def test_kiro_visible_output_estimates_tokens_from_text(self):
+        objs = [
+            {"payload": {"type": "user", "content": "Hello world"}},
+            {"payload": {"type": "assistant", "content": "Hi there, how can I help?"}},
+            {"payload": {"type": "tool_call", "toolName": "readFile", "args": {"path": "/test.py"}}},
+            {"payload": {"type": "tool_result", "content": "file contents here"}},
+        ]
+        visible = meter.kiro_visible_output(objs)
+        self.assertGreater(visible["user_chars"], 0)
+        self.assertGreater(visible["assistant_chars"], 0)
+        self.assertEqual(visible["tool_calls"], 1)
+        self.assertGreater(visible["tool_result_chars"], 0)
+        self.assertEqual(visible["user_tokens"], (visible["user_chars"] + 3) // 4)
+        self.assertEqual(visible["assistant_tokens"], (visible["assistant_chars"] + 3) // 4)
+
+    def test_kiro_tool_identity_normalizes_names(self):
+        ident = meter.kiro_tool_identity("readFiles")
+        self.assertEqual(ident["name"], "read_files")
+        self.assertEqual(ident["display"], "Read Files")
+        self.assertEqual(ident["namespace"], "kiro")
+        self.assertEqual(ident["kind"], "tool")
+
+        ident2 = meter.kiro_tool_identity("runCommand")
+        self.assertEqual(ident2["name"], "run_command")
+        self.assertEqual(ident2["display"], "Run Command")
+
+    def test_kiro_recompute_produces_estimated_usage(self):
+        messages = [
+            {"id": "msg-1", "timestamp": "2026-07-15T10:00:00.000Z",
+             "payload": {"type": "user", "content": "Hello, can you help me?"}},
+            {"id": "turn-1", "timestamp": "2026-07-15T10:00:00.000Z",
+             "payload": {"type": "turn_start", "executionId": "exec-1"}},
+            {"id": "tool-1-call", "timestamp": "2026-07-15T10:00:05.000Z",
+             "payload": {"type": "tool_call", "toolCallId": "tool-1",
+                         "toolName": "readFile", "args": {"path": "/test.py"},
+                         "status": "completed", "kind": "read", "executionId": "exec-1"}},
+            {"id": "tool-1-result", "timestamp": "2026-07-15T10:00:05.500Z",
+             "payload": {"type": "tool_result", "toolCallId": "tool-1",
+                         "content": "def test(): pass", "success": True,
+                         "durationMs": 500, "executionId": "exec-1"}},
+            {"id": "msg-2", "timestamp": "2026-07-15T10:00:10.000Z",
+             "payload": {"type": "assistant", "content": "I found the test file.",
+                         "executionId": "exec-1"}},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = Path(tmp) / "workspace-hash" / "session-id"
+            session_dir.mkdir(parents=True)
+            messages_path = session_dir / "messages.jsonl"
+            messages_path.write_text("\n".join(json.dumps(m) for m in messages) + "\n")
+            source = self.source(str(messages_path), "session-id")
+            with mock.patch.object(meter, "load", return_value=messages):
+                state = meter.recompute_kiro(source)
+
+        self.assertIsNotNone(state)
+        self.assertEqual(state["provider"], "kiro")
+        self.assertEqual(state["turns"], 1)
+        self.assertTrue(state["token_estimate"])
+        self.assertIn("estimation", state)
+        self.assertEqual(state["estimation"]["basis"], f"visible message text ÷ {meter.CHARS_PER_TOKEN} chars/token")
+        self.assertTrue(state["availability"]["cost"])
+        self.assertTrue(state["availability"]["tokens"])
+        self.assertEqual(len(state["executions"]), 1)
+        self.assertEqual(state["executions"][0]["tool_count"], 1)
+        self.assertEqual(state["executions"][0]["tools"][0]["name"], "read_file")
+        self.assertTrue(state["executions"][0]["tools"][0]["result_available"])
+        self.assertIn("kiro_info", state)
+        self.assertEqual(state["kiro_info"]["agent_mode"], "vibe")
+
+    def test_kiro_session_discovery_finds_workspace_sessions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            session_dir = root / "workspace-abc" / "session-123"
+            session_dir.mkdir(parents=True)
+            workspace_path = os.path.expanduser("~/project")
+            (session_dir / "session.json").write_text(json.dumps({
+                "schemaVersion": "1.0.0",
+                "id": "session-123",
+                "title": "Test Session",
+                "agentMode": "spec",
+                "workspacePaths": [workspace_path],
+                "modelId": "claude-opus-4.6",
+                "autopilot": True,
+            }))
+            (session_dir / "messages.jsonl").write_text(
+                json.dumps({"payload": {"type": "user", "content": "test"}}) + "\n"
+            )
+            sources = meter.kiro_session_sources(str(root))
+
+        self.assertEqual(len(sources), 1)
+        source = sources[0]
+        self.assertEqual(source["provider"], "kiro")
+        self.assertEqual(source["id"], "session-123")
+        self.assertEqual(source["title"], "Test Session")
+        self.assertEqual(source["model"], "claude-opus-4-6")
+        self.assertEqual(source["agent_mode"], "spec")
+        self.assertEqual(source["project"], "~/project")
+
+    def test_kiro_session_metadata_reads_session_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = Path(tmp)
+            (session_dir / "session.json").write_text(json.dumps({
+                "schemaVersion": "1.0.0",
+                "id": "meta-test",
+                "title": "My Session",
+                "agentMode": "vibe",
+                "workspacePaths": ["/path/to/workspace"],
+                "modelId": "claude-haiku-4.5",
+                "autopilot": False,
+            }))
+            metadata = meter.kiro_session_metadata(str(session_dir))
+
+        self.assertEqual(metadata["id"], "meta-test")
+        self.assertEqual(metadata["title"], "My Session")
+        self.assertEqual(metadata["model"], "claude-haiku-4.5")
+        self.assertEqual(metadata["agent_mode"], "vibe")
+        self.assertFalse(metadata["autopilot"])
+        self.assertEqual(metadata["workspace_paths"], ["/path/to/workspace"])
+
+    def test_kiro_provider_uses_claude_pricing(self):
+        # Kiro uses Claude models, so pricing should match Claude
+        price, approximate = meter.price_for("claude-sonnet-4-6", "claude")
+        self.assertEqual(price["input"], 3.0)
+        self.assertEqual(price["output"], 15.0)
+        self.assertFalse(approximate)
 
 
 if __name__ == "__main__":

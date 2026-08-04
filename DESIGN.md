@@ -166,11 +166,11 @@ The palette is one cool Token Meter system. Cyan-to-sky is the common action and
 
 ## Layout
 
-The global dashboard sits in a centered 1320px container with 24px horizontal padding and a sticky top bar. Its default rhythm is built from 8px, 12px, 16px, and 24px intervals. Each top-level route opens with the same responsive spectrum field header; route-specific controls can occupy its trailing edge.
+The global dashboard pairs a centered content field of up to 1320px with a sticky 184px left navigation rail. The outer shell expands to preserve the content field rather than subtracting the rail from it. Its default rhythm is built from 8px, 12px, 16px, and 24px intervals. Each top-level route opens with the same responsive spectrum field header; route-specific controls can occupy its trailing edge.
 
 Sessions opens with one layered spectrum field header, then a two-column instrument grid with a 12px gap. At 700px and below the grid becomes one column. On detail, the working chart and decision instrument form an asymmetric two-column layout; it narrows at 1120px and becomes a single column at 900px. Supporting KPIs form an attached ledger: three columns below 1120px and two columns below 520px.
 
-At 520px, shared header padding tightens, the spectrum geometry scales down, and trailing controls stack below the title. In Sessions, task titles clamp to two lines, the metric ledger wraps its third readout across the full width, and tabs scroll horizontally.
+The rail keeps frequent monitoring routes near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At intermediate widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. At 760px and below the two navigation groups merge into one sticky, horizontally scrollable top strip so the working content keeps the full viewport width. At 520px, shared header padding tightens, the spectrum geometry scales down, and trailing controls stack below the title. In Sessions, task titles clamp to two lines, the metric ledger wraps its third readout across the full width, and route-local tabs scroll horizontally.
 
 ### Named Rules
 
@@ -227,7 +227,7 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 
 ### Navigation
 
-Global top-level navigation remains compact and preserves the product order. Top-level and route-local segmented controls share the same active gradient, hover, and focus treatments. At narrow widths the Sessions panel row scrolls horizontally rather than wrapping or hiding destinations.
+Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Logs, Daily, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. Top-level and route-local segmented controls share the same active gradient, hover, and focus treatments. The rail keeps labels at wide widths, contracts to icons at intermediate widths, and becomes a horizontally scrollable top strip at narrow widths; destinations never wrap or disappear.
 
 ### Session Instrument Card
 

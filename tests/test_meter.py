@@ -1764,6 +1764,15 @@ class DashboardLayoutTests(unittest.TestCase):
             "String(n.body||'').startsWith('Last execution cost ')",
             self.page,
         )
+        settings = self.page[self.page.index("id=view-settings"):]
+        rail = self.page[self.page.index("<div class=top aria-label="):self.page.index("<div id=session-depot")]
+        for marker in (
+            "class=budgetBrowserAlerts", "class=budgetBrowserAlertsCopy",
+            "Browser delivery", "id=notify role=switch",
+            'aria-label="Toggle browser budget alerts"',
+        ):
+            self.assertIn(marker, settings)
+        self.assertNotIn("id=notify", rail)
 
     def test_monthly_budget_alerts_recover_missed_exceeded_state(self):
         for marker in (
@@ -1946,7 +1955,7 @@ class DashboardLayoutTests(unittest.TestCase):
         for marker in ("id=tab-models", "id=view-models", "id=m-speed", "id=m-chart",
                        "id=m-table", "renderModelStats", "aggregateModelDays"):
             self.assertIn(marker, self.page)
-        self.assertRegex(self.page, r"id=tab-models[^>]*>Models</button>")
+        self.assertRegex(self.page, r"id=tab-models[^>]*>.*?<span class=tabLabel>Models</span>")
         self.assertIn("$('tab-models').onclick=()=>setHashRoute('models')", self.page)
         self.assertIn("if(h==='models'||h==='frustration')", self.page)
         self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
@@ -2108,7 +2117,7 @@ class DashboardLayoutTests(unittest.TestCase):
     def test_tools_and_skills_uses_removable_groups_and_review_filter(self):
         for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-mcp-observed"):
             self.assertIn(marker, self.page)
-        self.assertRegex(self.page, r"id=tab-capabilities[^>]*>Tools</button>")
+        self.assertRegex(self.page, r"id=tab-capabilities[^>]*>.*?<span class=tabLabel>Tools</span>")
         self.assertIn("data-cstate=review", self.page)
         self.assertIn("They remain read-only in Token Meter", self.page)
 
@@ -2181,7 +2190,7 @@ class DashboardLayoutTests(unittest.TestCase):
             'aria-description="What changed, what drove spend',
             'aria-description="A practical review loop',
             'aria-description="Available tools, MCP servers, and skills',
-            'aria-description="Machine-wide controls.',
+            'aria-description="Machine-wide controls, including monthly budgets',
             ".modelHead h1.fieldtip:after,.dailyHead h1.fieldtip:after,.learnHead h1.fieldtip:after,.previewHead h1.fieldtip:after{bottom:auto;",
             "No use observed",
         ):
@@ -2318,7 +2327,7 @@ class DashboardLayoutTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.page)
 
-    def test_top_navigation_and_command_palette_share_the_same_workflow_order(self):
+    def test_primary_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
             "tab-session", "tab-logs", "tab-daily", "tab-models",
             "tab-capabilities", "tab-learn", "tab-settings",
@@ -2326,16 +2335,26 @@ class DashboardLayoutTests(unittest.TestCase):
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
-            "id=command-trigger", "id=command-palette", "id=command-search",
+            "id=command-palette", "id=command-search",
             "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
             "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
             "event.key==='Enter'",
-            "aria-keyshortcuts=\"Meta+K Control+K\"",
+            "class=tabs aria-label=\"Primary navigation\"",
+            "button.dataset.label} · Shortcut: Option+${index+1}",
+            "button.setAttribute('aria-current','page')",
         ):
             self.assertIn(marker, self.page)
         self.assertIn("if(command.latest)goToLatestSession()", self.page)
         self.assertIn("else setHashRoute(command.route)", self.page)
         self.assertNotIn("shortcut:'⌥", self.page)
+        self.assertNotIn("id=command-trigger", self.page)
+        self.assertNotIn("Local evidence", self.page)
+        self.assertNotIn("class=pulse", self.page)
+        self.assertNotIn("@keyframes p{", self.page)
+        self.assertNotIn("id=live", self.page)
+        self.assertNotIn("id=livetxt", self.page)
+        self.assertNotIn("$('live')", self.page)
+        self.assertNotIn("$('livetxt')", self.page)
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
 
@@ -2406,9 +2425,14 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_logs_support_app_project_and_time_range_filters(self):
         for marker in ("id=g-app", "id=g-project", "id=g-time", "App filter",
-                       "Projects filter", "Time range filter", "id=g-active-filters",
+                       "Projects filter", "Time range filter", "class=logsToolbarStatus", "id=g-active-filters",
                        "id=g-clear", "id=lf-cost", "id=lf-input", "id=lf-output", "id=lf-models"):
             self.assertIn(marker, self.page)
+        clear_wrapper = re.search(r"<div class=filterClear>(.*?)</div>", self.page)
+        self.assertIsNotNone(clear_wrapper)
+        self.assertIn("id=g-clear", clear_wrapper.group(1))
+        self.assertNotIn("id=g-count", clear_wrapper.group(1))
+        self.assertLess(self.page.index("id=g-clear"), self.page.index("id=g-sort"))
         for value in ("value=24h", "value=7d", "value=30d", "value=90d"):
             self.assertIn(value, self.page)
         self.assertIn("globalApp&&appFilterGroup(s)!==globalApp", self.page)
@@ -2425,7 +2449,32 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("globalSearch='';globalApp='';globalProject='';globalTime='all'", self.page)
         self.assertIn("['tm_global_search','tm_global_app','tm_global_project','tm_global_time']", self.page)
         self.assertIn("fetch('/logs',{cache:'no-store'})", self.page)
-        self.assertIn("logSessionInventory?logSessionInventory:(xs.sessions||[])", self.page)
+        self.assertIn("logSessionInventory?mergeLogSessionInventory(logSessionInventory,xs.sessions)", self.page)
+
+    def test_logs_live_updates_preserve_mounted_rows(self):
+        for marker in (
+            "const logHtmlCache=new WeakMap()",
+            "function setLogText(element,value)",
+            "function setLogAttribute(element,name,value)",
+            "function setLogHtml(element,html)",
+            "function logRowRenderKey(s,active)",
+            "function reconcileLogRows(sessions,maxCost)",
+            "function mergeLogSessionInventory(inventory,liveSessions)",
+            "(liveSessions||[]).forEach(row=>rows.set(String(row.id),row))",
+            "const existing=new Map([...root.children]",
+            "if(row.className!==className)row.className=className",
+            "if(row.getAttribute('aria-label')!==ariaLabel)",
+            "if(row._logRenderKey!==renderKey)",
+            "else root.insertBefore(row,cursor)",
+            "reconcileLogRows(sessions,maxCost)",
+            "$('slist').onclick=event=>",
+            "$('slist').onkeydown=event=>",
+            "const inventoryStale=!logSessionInventory",
+            "if(inventoryStale)loadLogSessions()",
+            "else renderLogs(LATEST.xsession)",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("$('slist').innerHTML=sessions.length?sessions.map", self.page)
 
     def test_current_and_logs_share_the_defined_app_badge_helper(self):
         self.assertIn("const appBadgeClass=session=>", self.page)
@@ -2528,7 +2577,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("Tool results need attention", self.page)
         self.assertNotIn("function openDailySession", self.page)
         self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
-        self.assertIn("el.onclick=()=>selectSession(el.dataset.id)", self.page)
+        self.assertIn("if(row)selectSession(row.dataset.id)", self.page)
 
     def test_selected_session_stays_pinned_while_other_live_state_changes(self):
         self.assertIn("function followLatestSession", self.page)
@@ -2576,7 +2625,7 @@ class DashboardLayoutTests(unittest.TestCase):
                       self.page)
         self.assertNotIn("data-current-panel=sessions", self.page)
         self.assertIn('id=current-tabs aria-label="Session views" data-current-detail', self.page)
-        self.assertRegex(self.page, r"id=tab-session[^>]*>Sessions</button>")
+        self.assertRegex(self.page, r"id=tab-session[^>]*>.*?<span class=tabLabel>Sessions</span>")
         self.assertIn("if(h==='sessions'||h==='current-sessions')", self.page)
         self.assertIn("history.replaceState(null,'','/#sessions')", self.page)
         self.assertIn("function currentSessionModelName", self.page)
@@ -2688,7 +2737,20 @@ class DashboardLayoutTests(unittest.TestCase):
             '<div class="learnHead settingsPageHead spectrumPageHead">',
             "Review local tool, MCP, and skill evidence before changing optional capability groups.",
             "<span class=spectrumPageMeta id=g-hint>recent activity</span>",
-            "body.spectrumApp .top .tabs{min-width:0;max-width:100%;overflow-x:auto",
+            "vertical-navigation-rail-v1",
+            "body.spectrumApp .wrap{--navigation-rail-width:184px",
+            "grid-template-columns:var(--navigation-rail-width) minmax(0,1320px)",
+            "body.spectrumApp .top{grid-column:1;grid-row:1;position:sticky",
+            "body.spectrumApp .top .tabs{display:flex;min-width:0;max-width:100%;overflow:visible;flex:1;flex-direction:column",
+            "body.spectrumApp .top .tab{display:grid;width:100%;min-height:42px",
+            "class=tabIcon",
+            "class=navPrimary",
+            "class=navSecondary",
+            ".navPrimary,.navSecondary{display:flex;flex-direction:column;gap:4px}.navSecondary{margin-top:auto",
+            "@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px",
+            "@media(max-width:760px){body.spectrumApp .wrap{display:block",
+            "body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row",
+            ".navPrimary,.navSecondary{display:contents}",
             "class=dailyNavIcon",
             "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr))",
         ):

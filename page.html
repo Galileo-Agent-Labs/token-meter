@@ -45,10 +45,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .top .tabs{min-width:0;overflow-x:auto;scrollbar-width:none}.top .tabs::-webkit-scrollbar{display:none}
 .commandTrigger{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(17,24,32,.86);border-radius:8px;padding:6px 8px;color:var(--dim);font:inherit;font-size:12px;font-weight:720;cursor:pointer;white-space:nowrap;box-shadow:var(--inset)}.commandTrigger:hover{border-color:var(--line2);color:var(--fg);background:rgba(255,255,255,.07)}.commandTrigger svg{width:14px;height:14px;stroke:currentColor}.commandTrigger kbd{border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:1px 5px;color:var(--fg);font:700 10.5px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:0 1px 0 rgba(255,255,255,.08)}
 .spacer{flex:1}
-.live,.notify,.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:rgba(17,24,32,.86);border-radius:999px;padding:6px 10px;font-size:12px;color:var(--dim);white-space:nowrap;box-shadow:var(--inset)}
-.pulse{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(102,217,144,.38);animation:p 2s infinite}
-.live.dead .pulse{background:var(--faint);animation:none}
-@keyframes p{0%{box-shadow:0 0 0 0 rgba(102,217,144,.38)}70%{box-shadow:0 0 0 7px rgba(102,217,144,0)}100%{box-shadow:0 0 0 0 rgba(102,217,144,0)}}
+.notify,.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:rgba(17,24,32,.86);border-radius:999px;padding:6px 10px;font-size:12px;color:var(--dim);white-space:nowrap;box-shadow:var(--inset)}
 .notify{cursor:pointer;user-select:none}
 .sw{width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,.13);position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .sw:after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .16s;box-shadow:0 2px 6px rgba(0,0,0,.32)}
@@ -168,6 +165,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .currentOverviewHidden{display:none!important}.currentSessionsHead{display:flex;align-items:center;gap:12px;margin:0 0 12px}.currentSessionsCount{color:var(--faint);font:720 11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.currentSessionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.currentSessionCard{--harness:#dfe5ec;appearance:none;display:flex;flex-direction:column;width:100%;min-width:0;min-height:218px;overflow:hidden;padding:20px 21px 17px;border:1px solid color-mix(in srgb,var(--harness) 48%,var(--line));border-radius:12px;background:linear-gradient(160deg,rgba(23,33,43,.98),rgba(11,16,22,.98));box-shadow:var(--shadow-soft);color:var(--fg);font:inherit;text-align:left;cursor:grab;transition:transform .16s,border-color .16s,box-shadow .16s,opacity .16s}.currentSessionCard:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--harness);box-shadow:0 0 18px color-mix(in srgb,var(--harness) 55%,transparent)}.currentSessionCard:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--harness) 78%,var(--line));box-shadow:0 14px 30px rgba(0,0,0,.34)}.currentSessionCard:focus-visible{outline:0;border-color:var(--harness);box-shadow:0 0 0 3px color-mix(in srgb,var(--harness) 20%,transparent),var(--shadow)}.currentSessionCard.dragging{opacity:.42;cursor:grabbing;transform:scale(.99)}.currentSessionCard.dropBefore{box-shadow:inset 4px 0 0 var(--harness),var(--shadow)}.currentSessionCard.dropAfter{box-shadow:inset -4px 0 0 var(--harness),var(--shadow)}.currentSessionCard.provider-claude{--harness:#f59b45}.currentSessionCard.provider-codex{--harness:#b08cff}.currentSessionCard.provider-cursor{--harness:#e7edf4}.currentSessionCard.provider-gemini{--harness:#69a7ff}.currentSessionTop{display:flex;align-items:center;justify-content:space-between;gap:12px}.currentSessionRuntime{display:inline-flex;align-items:center;gap:8px;min-width:0;color:var(--harness);font-size:12px;font-weight:820;letter-spacing:.012em}.currentSessionRuntime:before{content:"";width:7px;height:7px;flex:0 0 auto;border-radius:2px;background:currentColor;box-shadow:0 0 10px currentColor}.currentSessionRuntime span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.currentSessionStatus{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;color:var(--faint);font-size:11px;font-weight:750}.currentSessionStatus:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}.currentSessionStatus.working{color:var(--good)}.currentSessionStatus.working:before{box-shadow:0 0 9px currentColor}.currentSessionStatus.waiting{color:var(--warn)}.currentSessionStatus.recent{color:var(--faint)}.currentSessionIdentity{margin-top:19px;min-width:0}.currentSessionIdentity h3{margin:0;font-size:19px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.currentSessionIdentity p{margin:5px 0 0;color:var(--faint);font:11px/1.25 ui-monospace,"SF Mono",Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.currentSessionMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px;padding-top:17px;border-top:1px solid var(--line)}.currentSessionMetric{min-width:0}.currentSessionMetric span{display:block;color:var(--faint);font-size:10px;font-weight:780;text-transform:uppercase;letter-spacing:.045em}.currentSessionMetric b{display:block;margin-top:6px;font-size:18px;line-height:1.15;font-weight:830;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.currentSessionMetric b.mono{font-size:18px;letter-spacing:-.015em}.currentSessionFoot{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:17px;color:var(--faint);font-size:11px}.currentSessionMove{display:inline-flex;align-items:center;gap:5px}.currentSessionMove b{color:var(--harness);font-size:13px;letter-spacing:-2px}.currentSessionOrderStatus{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.currentSessionsEmpty{padding:32px 20px;text-align:center}.currentSessionsEmpty h3{font-size:17px;margin:0}.currentSessionsEmpty p{margin:5px auto 0;color:var(--dim);font-size:12px}
 .budgetDashboard{display:block}.budgetLead{overflow:hidden;background:linear-gradient(145deg,rgba(22,35,46,.98),rgba(12,17,23,.98))}.budgetLead:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent 78%)}.budgetLead h2,.budgetConfig h2{font-size:17px;margin:4px 0 0}.budgetLeadHeadActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.budgetLeadBody{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(440px,.92fr);gap:18px;align-items:stretch;margin-top:14px}.budgetSpend{margin:0;display:flex;flex-direction:column;justify-content:center}.budgetSpendValue{font-size:clamp(40px,4.6vw,54px);font-weight:860;line-height:1;letter-spacing:-1.5px;margin-top:5px}.budgetState{display:inline-flex;align-items:center;gap:7px}.budgetState:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.budgetState.on_track{color:var(--good);border-color:rgba(102,217,144,.32);background:rgba(102,217,144,.07)}.budgetState.warning{color:var(--warn);border-color:rgba(255,180,87,.34);background:rgba(255,180,87,.07)}.budgetState.over{color:var(--bad);border-color:rgba(255,111,111,.36);background:rgba(255,111,111,.08)}.budgetProgress{position:relative;height:10px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.035);overflow:hidden;margin-top:13px}.budgetProgress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--orange));border-radius:999px;transition:width .2s}.budgetProgress.warn>i{background:linear-gradient(90deg,var(--warn),var(--bad))}.budgetProgressMarkers{position:absolute;inset:0;pointer-events:none}.budgetProgressMarkers span{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.58);box-shadow:0 0 0 1px rgba(0,0,0,.18);transform:translateX(-1px)}.budgetReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0;padding:0}.budgetReadouts>div{min-width:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);box-shadow:var(--inset)}.budgetReadouts .v{font-size:19px;font-weight:830;margin-top:3px;overflow-wrap:anywhere}.budgetReadouts .v.warn{color:var(--warn)}.budgetDetailGrid{display:grid;grid-template-columns:minmax(0,1.28fr) minmax(340px,.72fr);gap:12px;margin-top:12px;align-items:stretch}.budgetHistory,.budgetRuntimeCard{min-width:0;overflow:hidden;padding:15px 17px}.budgetRuntimeList{display:grid;margin-top:7px}.budgetRuntime{--provider-color:var(--accent);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;padding:8px 0;border-top:1px solid var(--line)}.budgetRuntime:first-child{border-top:0;padding-top:2px}.budgetRuntimeName{display:flex;align-items:center;gap:8px;font-weight:790}.budgetRuntimeName:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--provider-color);box-shadow:0 0 9px var(--provider-color)}.budgetRuntimeValue{display:flex;align-items:baseline;justify-content:flex-end;gap:7px}.budgetRuntimeValue b{font-weight:820}.budgetRuntimeValue small{color:var(--faint);font-size:9.5px;font-weight:650}.budgetRuntimeTrack{grid-column:1/-1;height:5px;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden}.budgetRuntimeTrack i{display:block;height:100%;border-radius:inherit;background:var(--provider-color)}.budgetConfig{min-width:0;margin-top:12px;transition:border-color .18s ease,box-shadow .18s ease}.budgetConfig.attention{border-color:rgba(0,188,235,.62);box-shadow:0 0 0 3px rgba(0,188,235,.13),var(--shadow-soft)}.budgetConfigHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.budgetConfigHead .subline{margin-top:3px}.budgetConfigBadge{color:var(--dim);font-size:11px;white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:4px 8px;background:rgba(255,255,255,.03)}.budgetForm{display:grid;grid-template-columns:minmax(300px,.75fr) minmax(440px,1.15fr) auto;gap:14px;margin-top:12px;align-items:end}.budgetFormGroup{min-width:0;margin:0;padding:0;border:0}.budgetFormGroup legend{width:100%;padding:0 0 7px;border-bottom:1px solid var(--line);color:var(--dim);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}.budgetCoreFields,.budgetAllocationFields{display:grid;gap:8px;margin-top:8px}.budgetCoreFields{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetAllocationFields{grid-template-columns:repeat(3,minmax(0,1fr))}.budgetForm label{display:grid;gap:4px}.budgetForm label span{font-size:9.5px;text-transform:uppercase;color:var(--faint);font-weight:780}.budgetForm input[type=number],.budgetForm input[type=text]{width:100%;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:7px 9px;font:12px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.budgetForm input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.budgetNotify{grid-column:1/-1;display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;gap:7px;color:var(--dim);font-size:11.5px}.budgetNotify span{font-size:11.5px!important;text-transform:none!important;font-weight:650!important}.budgetActions{display:grid;align-content:end;justify-items:start;gap:6px;min-width:128px;padding:0;border:0}.budgetActions .tbtn{white-space:nowrap}.budgetActions .settingsStatus{font-size:10px;line-height:1.25}.budgetBars{margin-top:8px;overflow-x:auto;padding-bottom:2px;scrollbar-color:var(--line2) transparent}.budgetChartInner{min-width:max(520px,100%)}.budgetPlot{position:relative;display:grid;grid-template-columns:repeat(var(--months),minmax(48px,1fr));gap:10px;height:142px;padding:24px 8px 0;border-bottom:1px solid var(--line2)}.budgetTarget{position:absolute;left:8px;right:8px;bottom:var(--target-height);z-index:2;border-top:1px dashed rgba(255,180,87,.62);pointer-events:none}.budgetTarget span{position:absolute;right:0;bottom:4px;padding:2px 5px;border-radius:4px;background:rgba(12,17,23,.88);color:var(--warn);font-size:9.5px;white-space:nowrap}.budgetBar{--bar-height:2%;position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;min-width:0}.budgetBar i{display:block;width:min(40px,66%);height:var(--bar-height);min-height:2px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--orange),var(--accent));border:1px solid rgba(0,188,235,.35);box-shadow:0 -7px 18px rgba(0,188,235,.08)}.budgetBar.current i{background:linear-gradient(180deg,#dff8ff,var(--accent));border-color:rgba(223,248,255,.72);box-shadow:0 -8px 20px rgba(0,188,235,.2)}.budgetBar b{position:absolute;bottom:min(calc(var(--bar-height) + 5px),calc(100% - 15px));font-size:10px;color:var(--dim);white-space:nowrap}.budgetAxis{display:grid;grid-template-columns:repeat(var(--months),minmax(48px,1fr));gap:10px;padding:6px 8px 0}.budgetAxis span{text-align:center;font-size:10px;color:var(--faint);white-space:nowrap}.budgetAxis span.current{color:var(--fg);font-weight:790}.budgetCoverage{margin-top:7px;color:var(--dim);font-size:11px}.budgetCoverage.warn{color:var(--warn)}
 .budgetDetailGrid{grid-template-columns:minmax(0,1.1fr) minmax(430px,.9fr);align-items:start}.budgetDetailGrid .budgetConfig{margin-top:0}.budgetRuntimeCard .budgetConfigBadge{display:none}.budgetForm.budgetInlineForm{grid-template-columns:1fr;gap:11px;margin-top:12px;align-items:stretch}.budgetInlineForm .budgetCoreFields{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetInlineForm .budgetActions{display:flex;align-items:center;justify-content:flex-start;gap:8px;min-width:0;padding-top:9px;border-top:1px solid var(--line)}.budgetInlineForm .budgetRuntimeList{grid-template-columns:1fr;gap:0;margin-top:0}.budgetRuntimeHead{display:grid;grid-template-columns:minmax(90px,.6fr) minmax(135px,1fr) minmax(100px,.8fr);gap:12px;padding:7px 0;color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.budgetRuntime{grid-template-columns:minmax(90px,.6fr) minmax(135px,1fr) minmax(100px,.8fr);grid-template-areas:"name value input";gap:4px 12px;align-items:center;padding:9px 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}.budgetRuntime:first-child{border-top:1px solid var(--line);padding-top:9px}.budgetRuntimeName{grid-area:name}.budgetRuntimeValue{grid-area:value;align-self:start;display:flex;gap:6px;justify-content:flex-start;justify-items:start}.budgetRuntimeTrack{grid-area:value;grid-column:auto;align-self:end;height:3px;transform:translateY(2px)}.budgetRuntimeInput{grid-area:input;align-self:center;display:grid;gap:4px}.budgetRuntimeInput span{display:none;font-size:9.5px;text-transform:uppercase;color:var(--faint);font-weight:780}
+.budgetBrowserAlerts{display:flex;grid-column:1/-1;align-items:center;justify-content:space-between;gap:14px;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);box-shadow:var(--inset)}.budgetBrowserAlertsCopy{display:grid;gap:2px;min-width:0}.budgetBrowserAlertsCopy b{font-size:11.5px}.budgetBrowserAlertsCopy span{color:var(--faint);font-size:10.5px;line-height:1.35}.budgetBrowserAlerts .notify{flex:0 0 auto;justify-content:space-between;min-width:132px;min-height:36px;border-radius:8px;font:inherit}.budgetBrowserAlerts .notify:focus-visible{outline:2px solid var(--spectrum-cyan);outline-offset:2px}
 .budgetSpendSummary{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(170px,.65fr);gap:20px;align-items:end}.budgetSpendLimit{min-width:0;padding-left:18px;border-left:1px solid var(--line)}.budgetSpendBudget{font-size:clamp(27px,3.1vw,36px);font-weight:850;line-height:1.05;letter-spacing:-.8px;margin-top:5px}.budgetLeadBody .budgetReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetInlineForm .budgetCoreFields{grid-template-columns:1fr}
 @media(min-width:901px){.budgetDetailGrid{align-items:stretch}.budgetHistory{display:flex;flex-direction:column;height:100%}.budgetHistory .budgetBars{flex:1;display:flex}.budgetHistory .budgetChartInner{flex:1;display:grid;grid-template-rows:minmax(142px,1fr) auto}.budgetHistory .budgetPlot{height:auto}}
 .settingsPricing{grid-column:1/-1}.settingsPricing .agentAccessBadge[hidden]{display:none}.modelPriceScope{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025)}.modelPriceScope label{display:inline-flex;align-items:center;gap:7px;color:var(--fg);font-size:12px;font-weight:780}.modelPriceScope input{accent-color:var(--warn)}.modelPriceScope .modelPriceEffective{margin-left:auto}.modelPriceEffective span{color:var(--faint);font-size:10px;text-transform:uppercase}.modelPriceEffective input{width:190px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:6px 7px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace;color-scheme:dark}.modelPriceEffective input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.modelPriceEffective input:disabled{opacity:.45}.modelPriceScope>span{flex:1 1 320px;color:var(--dim);font-size:11.5px}.modelPriceScope.history{border-color:rgba(255,180,87,.48);background:rgba(255,180,87,.07)}.modelPriceScope.history>span{color:var(--warn)}.modelPriceTableWrap{overflow:auto;margin-top:13px;border:1px solid var(--line);border-radius:8px}.modelPriceTable{min-width:1030px}.modelPriceTable th{white-space:nowrap}.modelPriceTable td{vertical-align:middle}.modelPriceModel{display:grid;gap:3px;min-width:205px}.modelPriceModel code{font-size:11.5px;color:var(--fg)}.modelPriceSource{font-size:10px;color:var(--faint);text-transform:capitalize}.modelPriceInput{width:90px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:6px 7px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceInput:focus,.modelPriceAdd input:focus,.modelPriceAdd select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.modelPriceActions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}.modelPriceActions .tbtn{padding:5px 7px;font-size:10.5px}.modelPriceActions .tbtn:disabled{opacity:.42;cursor:not-allowed}.modelPriceAdd{display:grid;grid-template-columns:150px minmax(180px,1.4fr) repeat(4,minmax(105px,.65fr)) auto;gap:8px;align-items:end;margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}.modelPriceAdd label{display:grid;gap:5px;min-width:0}.modelPriceAdd label span{font-size:9.5px;text-transform:uppercase;color:var(--faint);font-weight:780}.modelPriceAdd input,.modelPriceAdd select{width:100%;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:7px 8px;font:11px/1.2 ui-monospace,"SF Mono",Menlo,monospace}.modelPriceAdd select{font-family:inherit}.modelPriceAdd .tbtn{height:31px;white-space:nowrap}.modelPricingEmpty{padding:18px;text-align:center;color:var(--faint)}
@@ -188,12 +186,13 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
 @media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.budgetForm{grid-template-columns:1fr}.budgetAllocationFields{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.frustrationBreakdown,.budgetDashboard,.budgetDetailGrid{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
+@media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.toolsgrid,.notifygrid,.insightBoard,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.frustrationBreakdown,.budgetDashboard,.budgetDetailGrid{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.toolsgrid{height:auto;min-height:0}.toolsgrid>.card{height:min(440px,70vh)}.insights{grid-template-columns:1fr}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.tracebox:before{left:84px}.traceitem{grid-template-columns:68px 18px minmax(0,1fr)}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
 @media(max-width:900px){.previewHead{align-items:flex-start;flex-direction:column}.previewRunGrid,.previewBrief{grid-template-columns:1fr}.settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}.settingsMapIntro{grid-column:1/-1;padding:2px 2px 7px}.settingsMap button{border:1px solid var(--line);border-radius:7px;padding:8px}.previewChartSlot .chart{height:250px}.previewKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .live{grid-column:2;justify-self:end}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
+@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.insightCounts,.modelControls{grid-template-columns:1fr}.toolhead{grid-template-columns:1fr}.toolhead .seg{justify-content:flex-start}.execRow .head{grid-template-columns:1fr}.execMeta{text-align:left}.insightLead{min-height:0}.insightLead .title{font-size:20px}.ins{grid-template-columns:30px minmax(0,1fr)}.ins .meta{grid-column:2;justify-self:start}.tracebox:before{left:78px}.traceitem{grid-template-columns:62px 18px minmax(0,1fr)}.traceitem .tm{font-size:10.5px}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
 @media(max-width:520px){.previewHead h1{font-size:24px}.previewRunMeta{flex-wrap:wrap}.previewRunMeta .repo{max-width:100%;width:100%}.previewChartSlot #session-chart-module>.card{min-height:0}.previewChartSlot .chart{height:226px}.previewChartSlot .chartbar{align-items:flex-start}.previewChartSlot .chartbar .label{width:100%;margin:0}.previewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.previewKpi{min-height:82px;padding:10px}.previewKpi .v{font-size:17px}.previewCost{font-size:34px}.budgetReadouts,.budgetForm,.settingsMap,.settingsSignalGrid{grid-template-columns:1fr}.budgetCoreFields,.budgetAllocationFields{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetAllocationFields label:last-child{grid-column:1/-1}.budgetReadouts>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 8px;padding:10px 11px}.budgetReadouts .v{margin-top:0}.budgetReadouts .subline{grid-column:1/-1}.budgetLeadHeadActions{justify-content:flex-start;margin-top:10px}.learnSectionHead .budgetLeadHeadActions .tbtn{margin-top:0}.budgetConfigHead{display:block}.budgetConfigBadge{display:inline-block;margin-top:9px}.budgetActions .settingsStatus{width:auto}.budgetRuntimeValue{display:grid;gap:1px;justify-items:end}.budgetChartInner{min-width:440px}.settingsMap button{width:100%;margin:0}.settingsPageContent>.card{padding:13px}.settingsPageContent .modelPriceTableWrap{margin-left:-5px;margin-right:-5px}}
 @media(max-width:520px){.budgetRuntimeHead{display:none}.budgetRuntime{grid-template-columns:minmax(0,1fr) minmax(100px,108px);grid-template-areas:"name input" "value input";padding:9px 0}.budgetRuntime:first-child{padding-top:9px}.budgetRuntimeValue{justify-items:start}.budgetRuntimeInput span{display:block}}
 @media(max-width:520px){.budgetSpendSummary{grid-template-columns:minmax(0,1.15fr) minmax(108px,.85fr);gap:12px}.budgetSpendLimit{padding-left:12px}.budgetSpendValue{font-size:clamp(32px,10vw,42px)}.budgetSpendBudget{font-size:23px}.budgetLeadBody .budgetReadouts{grid-template-columns:1fr}}
+@media(max-width:520px){.budgetBrowserAlerts{align-items:stretch;flex-direction:column}.budgetBrowserAlerts .notify{width:100%}}
 @media(max-width:520px){.previewTabs{width:100%;overflow-x:auto}.previewStartStrip{grid-template-columns:1fr;gap:4px}.previewAttentionHead{align-items:flex-start;flex-direction:column}.previewAttention .previewActions{margin-top:7px}.previewTokenSlot .legend{gap:8px}}
 @media(max-width:700px){.currentSessionGrid{grid-template-columns:1fr;gap:9px}.currentSessionCard{min-height:184px;padding:14px 15px 12px}.currentSessionIdentity{margin-top:12px}.currentSessionIdentity h3{font-size:17px}.currentSessionMetrics{gap:7px;margin-top:12px;padding-top:10px}.currentSessionMetric b,.currentSessionMetric b.mono{font-size:15px;letter-spacing:-.025em}.currentSessionFoot{padding-top:10px}.currentSessionContextValue{gap:5px}.currentSessionContextSpark{min-width:24px;max-width:58px;height:17px}.currentSessionCard.dropBefore{box-shadow:inset 0 4px 0 var(--harness),var(--shadow)}.currentSessionCard.dropAfter{box-shadow:inset 0 -4px 0 var(--harness),var(--shadow)}}
 @media(max-width:700px){.currentSessionMetric b,.currentSessionMetric b.mono{font-size:16.5px}.currentSessionContextSpark{height:19px}}
@@ -215,10 +214,23 @@ body.spectrumApp{
  background:var(--spectrum-page);
 }
 body.spectrumApp:before{content:none}
-body.spectrumApp .top{background:linear-gradient(180deg,#07090c,#081018);border-bottom-color:var(--spectrum-border);backdrop-filter:none}
-body.spectrumApp .top .brand{flex:0 0 auto}
-body.spectrumApp .top .tabs{min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none}
+/* vertical-navigation-rail-v1 */
+body.spectrumApp .wrap{--navigation-rail-width:184px;display:grid;grid-template-columns:var(--navigation-rail-width) minmax(0,1320px);column-gap:20px;align-items:start;width:100%;max-width:1532px}
+body.spectrumApp .wrap>:not(.top){grid-column:2;min-width:0}
+body.spectrumApp .top{grid-column:1;grid-row:1;position:sticky;top:18px;z-index:20;display:flex;height:calc(100vh - 36px);min-height:520px;align-items:stretch;flex-direction:column;gap:12px;margin:0;padding:12px;border:1px solid var(--spectrum-border);border-radius:10px;background:radial-gradient(circle at 36% 4%,rgba(0,188,235,.11),transparent 28%),linear-gradient(180deg,rgba(12,20,27,.98),rgba(7,12,17,.99));box-shadow:var(--spectrum-shadow);backdrop-filter:none}
+body.spectrumApp .top .brand{flex:0 0 auto;min-width:0;padding:3px 2px 0}
+.brandCopy{display:grid;min-width:0;line-height:1.1}.brandName{overflow:hidden;text-overflow:ellipsis}
+body.spectrumApp .top .tabs{display:flex;min-width:0;max-width:100%;overflow:visible;flex:1;flex-direction:column;gap:4px;padding:10px 0 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;scrollbar-width:none}
 body.spectrumApp .top .tabs::-webkit-scrollbar{display:none}
+.navPrimary,.navSecondary{display:flex;flex-direction:column;gap:4px}.navSecondary{margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+body.spectrumApp .top .tab{display:grid;width:100%;min-height:42px;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 10px;text-align:left}
+.tabIcon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis}.tabShortcut{color:var(--faint);font:720 10px/1 ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+body.spectrumApp .top .tab.on .tabShortcut{color:rgba(6,36,48,.66)}
+body.spectrumApp .top>.spacer{display:none}
+@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px;column-gap:16px;padding-right:18px;padding-left:18px}body.spectrumApp .top{padding:10px 8px}body.spectrumApp .top .brand{justify-content:center;padding-right:0;padding-left:0}.brandCopy,.tabLabel,.tabShortcut{display:none}body.spectrumApp .top .tab{display:grid;grid-template-columns:1fr;place-items:center;padding:9px}}
+@media(max-width:760px){body.spectrumApp .wrap{display:block;max-width:1320px;padding:12px 14px 64px}body.spectrumApp .wrap>:not(.top){min-width:0}body.spectrumApp .top{position:sticky;top:0;display:grid;height:auto;min-height:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 14px;padding:8px 0 10px;border:0;border-bottom:1px solid var(--spectrum-border);border-radius:0;background:linear-gradient(180deg,#07090c,#081018);box-shadow:none}body.spectrumApp .top .brand{grid-column:1;grid-row:1;justify-content:flex-start;padding:0}.brandCopy{display:grid}body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row;gap:3px;padding:8px 0 0;border-top:1px solid var(--line)}.navPrimary,.navSecondary{display:contents}body.spectrumApp .top .tab{display:flex;width:auto;min-height:38px;grid-template-columns:none;gap:7px;padding:8px 11px;white-space:nowrap}.tabLabel{display:inline}.tabShortcut{display:none}}
+@media(max-width:520px){.brandName{font-size:14px}}
 body.spectrumApp .tab.on,body.spectrumApp .seg button.on{background:var(--spectrum-active);color:#062430;box-shadow:0 7px 20px rgba(0,188,235,.16)}
 body.spectrumApp .tab:hover:not(.on),body.spectrumApp .seg button:hover:not(.on){background:rgba(0,188,235,.07);color:var(--fg)}
 body.spectrumApp .card{border-color:var(--spectrum-border);background:var(--spectrum-card);box-shadow:var(--spectrum-shadow)}
@@ -310,9 +322,9 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}
 @media(max-width:520px){.learnSectionHead{display:block}.learnSectionHead .tbtn{margin-top:10px}}
 .globalControls.logsToolbar{grid-template-columns:minmax(260px,1.25fr) repeat(3,minmax(145px,.62fr)) minmax(160px,.55fr);padding:14px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,rgba(20,28,37,.8),rgba(13,18,24,.78));box-shadow:var(--shadow-soft)}
-.logsToolbar .filterSort{grid-column:1/5}.logsToolbar .filterClear{grid-column:5;grid-row:2;align-self:end;min-width:0}.logsToolbar .filterCount{min-height:18px;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.3}.logsToolbar .searchbox,.logsToolbar .filterSelect{height:40px;background:rgba(7,9,12,.58)}.logsSummary .logStat .v{font-size:clamp(18px,1.6vw,23px)}.activeFilters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-3px 0 12px;padding:0 2px;color:var(--faint);font-size:11px}.activeFilters[hidden]{display:none}.activeFilters>span{font-weight:760;text-transform:uppercase}.activeFilters button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(0,188,235,.26);border-radius:999px;background:rgba(0,188,235,.08);color:var(--dim);padding:4px 8px;font:inherit;cursor:pointer}.activeFilters button:hover,.activeFilters button:focus-visible{border-color:rgba(0,188,235,.55);color:var(--fg);outline:none}.activeFilters button b{color:var(--orange3);font-size:14px;line-height:1}.srow:focus-visible{outline:0;border-color:rgba(0,188,235,.7);box-shadow:0 0 0 3px rgba(0,188,235,.13),var(--shadow-soft)}.badge.app{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.badge.app:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.badge.chatgpt{color:#d5dce5;border-color:rgba(213,220,229,.3);background:rgba(213,220,229,.08)}
-@media(max-width:1120px) and (min-width:901px){.globalControls.logsToolbar{grid-template-columns:minmax(240px,1fr) repeat(2,minmax(150px,.7fr));}.logsToolbar .logSearchControl{grid-column:1/3}.logsToolbar .filterSort{grid-column:1/3}.logsToolbar .filterClear{grid-column:3;grid-row:3}}
-@media(max-width:900px){.globalControls.logsToolbar{grid-template-columns:1fr 1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1/-1}.logsToolbar .filterClear{grid-column:1/-1;grid-row:auto}.logsToolbar .filterCount{text-align:left}}
+.logsToolbar .filterSort{grid-column:1/-1}.logsToolbar .filterClear{align-self:end;min-width:0}.logsToolbar .clearFilters,.logsToolbar .searchbox,.logsToolbar .filterSelect{height:40px}.logsToolbar .searchbox,.logsToolbar .filterSelect{background:rgba(7,9,12,.58)}.logsToolbarStatus{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;min-height:18px;margin:-3px 0 12px;padding:0 2px}.logsToolbarStatus .filterCount{grid-column:2;max-width:min(560px,50vw);white-space:normal;overflow-wrap:anywhere;line-height:1.3}.logsSummary .logStat .v{font-size:clamp(18px,1.6vw,23px)}.activeFilters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0;color:var(--faint);font-size:11px}.activeFilters[hidden]{display:none}.activeFilters>span{font-weight:760;text-transform:uppercase}.activeFilters button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(0,188,235,.26);border-radius:999px;background:rgba(0,188,235,.08);color:var(--dim);padding:4px 8px;font:inherit;cursor:pointer}.activeFilters button:hover,.activeFilters button:focus-visible{border-color:rgba(0,188,235,.55);color:var(--fg);outline:none}.activeFilters button b{color:var(--orange3);font-size:14px;line-height:1}.srow:focus-visible{outline:0;border-color:rgba(0,188,235,.7);box-shadow:0 0 0 3px rgba(0,188,235,.13),var(--shadow-soft)}.badge.app{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.badge.app:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.badge.chatgpt{color:#d5dce5;border-color:rgba(213,220,229,.3);background:rgba(213,220,229,.08)}
+@media(max-width:1120px) and (min-width:901px){.globalControls.logsToolbar{grid-template-columns:minmax(240px,1fr) repeat(2,minmax(150px,.7fr));}.logsToolbar .logSearchControl{grid-column:1/3}.logsToolbar .filterSort{grid-column:1/-1}}
+@media(max-width:900px){.globalControls.logsToolbar{grid-template-columns:1fr 1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1/-1}.logsToolbarStatus{grid-template-columns:1fr;gap:7px}.logsToolbarStatus .filterCount{grid-column:1;max-width:none;text-align:left}}
 @media(max-width:520px){.globalControls.logsToolbar{grid-template-columns:1fr}.logsToolbar .logSearchControl,.logsToolbar .filterSort{grid-column:1}.srow{padding:11px 10px;gap:9px}.badge.app{font-size:10px}}
 @media(max-width:520px){.sessionBudgetHead,.sessionBudgetMeta{align-items:flex-start;flex-direction:column}.sessionBudgetHead{gap:9px}.sessionBudgetExact{width:100%;justify-content:space-between}.sessionBudgetExact input{width:96px}.sessionBudgetTrack{grid-template-columns:44px minmax(0,1fr) 54px;gap:7px}.sessionBudgetMeta{gap:3px}}
 .modelHead>div:first-child{min-width:0}.modelControls{grid-template-columns:minmax(150px,210px) minmax(200px,280px) minmax(130px,160px)}.modelScopeStatus{margin:-6px 0 10px;padding:7px 10px;border-left:2px solid var(--accent);border-radius:0 6px 6px 0;background:rgba(0,188,235,.055);color:var(--dim);font-size:11px}.modelScopeStatus.warn{border-left-color:var(--warn);background:rgba(255,180,87,.055);color:var(--warn)}.modelScopeStatus:empty{display:none}.modelTrendControls #m-metric{white-space:nowrap}.modelChartTip{max-width:min(620px,calc(100% - 16px))}.modelTipMetrics{grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}
@@ -338,21 +350,22 @@ FORM: Spectrum Instrument Field — user-pinned Neo-Mirai, 1 of 1 grounded forms
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 -->
 <div class=wrap>
- <div class=top>
-  <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div> Token Meter</div>
-	  <div class=tabs>
-	   <button class="tab on" id=tab-session aria-keyshortcuts="Alt+1" title="Shortcut: Option+1">Sessions</button>
-	   <button class=tab id=tab-logs aria-keyshortcuts="Alt+2" title="Shortcut: Option+2">Logs</button>
-	   <button class=tab id=tab-daily aria-keyshortcuts="Alt+3" title="Shortcut: Option+3">Daily</button>
-	   <button class=tab id=tab-models aria-keyshortcuts="Alt+4" title="Shortcut: Option+4">Models</button>
-	   <button class=tab id=tab-capabilities aria-keyshortcuts="Alt+5" title="Shortcut: Option+5">Tools</button>
-	   <button class=tab id=tab-learn aria-keyshortcuts="Alt+6" title="Shortcut: Option+6">Learn</button>
-	   <button class=tab id=tab-settings aria-keyshortcuts="Alt+7" title="Shortcut: Option+7">Settings</button>
-	  </div>
+ <div class=top aria-label="Token Meter navigation">
+  <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div><span class=brandCopy><span class=brandName>Token Meter</span></span></div>
+	  <nav class=tabs aria-label="Primary navigation">
+	   <div class=navPrimary>
+	   <button class="tab on" id=tab-session data-label=Sessions aria-label=Sessions aria-keyshortcuts="Alt+1" title="Sessions · Shortcut: Option+1"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h16M4 12h16M4 17h16"/><path d="M7 5v4M14 10v4M18 15v4"/></svg><span class=tabLabel>Sessions</span><span class=tabShortcut aria-hidden=true>1</span></button>
+	   <button class=tab id=tab-logs data-label=Logs aria-label=Logs aria-keyshortcuts="Alt+2" title="Logs · Shortcut: Option+2"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M6 4h9l3 3v13H6z"/><path d="M15 4v4h4M9 12h6M9 16h6"/></svg><span class=tabLabel>Logs</span><span class=tabShortcut aria-hidden=true>2</span></button>
+	   <button class=tab id=tab-daily data-label=Daily aria-label=Daily aria-keyshortcuts="Alt+3" title="Daily · Shortcut: Option+3"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16M8 13h3M8 17h7"/></svg><span class=tabLabel>Daily</span><span class=tabShortcut aria-hidden=true>3</span></button>
+	   <button class=tab id=tab-models data-label=Models aria-label=Models aria-keyshortcuts="Alt+4" title="Models · Shortcut: Option+4"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 18l5-5 4 2 7-8"/><path d="M16 7h4v4M4 20h16"/></svg><span class=tabLabel>Models</span><span class=tabShortcut aria-hidden=true>4</span></button>
+	   <button class=tab id=tab-capabilities data-label=Tools aria-label=Tools aria-keyshortcuts="Alt+5" title="Tools · Shortcut: Option+5"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M14 6a4 4 0 0 0-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-3 3-3-3z"/></svg><span class=tabLabel>Tools</span><span class=tabShortcut aria-hidden=true>5</span></button>
+	   </div>
+	   <div class=navSecondary>
+	   <button class=tab id=tab-learn data-label=Learn aria-label=Learn aria-keyshortcuts="Alt+6" title="Learn · Shortcut: Option+6"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22zM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"/></svg><span class=tabLabel>Learn</span><span class=tabShortcut aria-hidden=true>6</span></button>
+	   <button class=tab id=tab-settings data-label=Settings aria-label=Settings aria-keyshortcuts="Alt+7" title="Settings · Shortcut: Option+7"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h10M18 7h2M4 17h3M11 17h9M14 4v6M7 14v6"/></svg><span class=tabLabel>Settings</span><span class=tabShortcut aria-hidden=true>7</span></button>
+	   </div>
+	  </nav>
   <div class=spacer></div>
-  <button class=commandTrigger id=command-trigger type=button aria-label="Open command palette" aria-haspopup=dialog aria-controls=command-palette aria-keyshortcuts="Meta+K Control+K" title="Open command palette"><svg viewBox="0 0 24 24" fill=none stroke-width=2 stroke-linecap=round aria-hidden=true><circle cx=11 cy=11 r=7></circle><path d="m20 20-4-4"></path></svg><kbd id=command-key>&#8984;K</kbd></button>
-  <div class=live id=live><span class=pulse></span><span id=livetxt>connecting</span></div>
-  <div class=notify id=notify><span class=sw></span><span id=notifytxt>Notify</span></div>
  </div>
 
  <div id=session-depot hidden>
@@ -679,6 +692,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   <label class=filterControl><span>App</span><select class=filterSelect id=g-app aria-label="App filter"><option value="">All apps</option></select></label>
 	   <label class=filterControl><span>Projects</span><select class=filterSelect id=g-project aria-label="Projects filter"><option value="">All projects</option></select></label>
 	   <label class=filterControl><span>Time range</span><select class=filterSelect id=g-time aria-label="Time range filter"><option value=all>Any time</option><option value=24h>Last 24 hours</option><option value=7d>Last 7 days</option><option value=30d>Last 30 days</option><option value=90d>Last 90 days</option></select></label>
+	   <div class=filterClear><button class="tbtn clearFilters" id=g-clear type=button title="Clear search, app, project, and time filters.">Clear filters</button></div>
    <div class="filterControl filterSort"><span>Sort</span><div class="seg sortseg" id=g-sort>
      <button data-gsort=recent title="Newest activity first.">Recent</button>
      <button data-gsort=cost title="Highest cost first.">Cost</button>
@@ -686,9 +700,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	    <button data-gsort=executions title="Most executions first.">Execs</button>
 	    <button data-gsort=wait title="Most cumulative prompt-to-response wait first.">Wait</button>
     </div></div>
-	   <div class=filterClear><button class="tbtn clearFilters" id=g-clear type=button title="Clear search, app, project, and time filters.">Clear filters</button><div class="globalMeta filterCount" id=g-count></div></div>
 	  </div>
-	  <div class=activeFilters id=g-active-filters hidden aria-live=polite></div>
+	  <div class=logsToolbarStatus><div class=activeFilters id=g-active-filters hidden aria-live=polite></div><div class="globalMeta filterCount" id=g-count></div></div>
 	  <div class=logsSummary id=logs-summary>
    <div class=logKpis>
     <div class="card logStat"><div class=label>Filtered cost</div><div class="v mono" id=lf-cost>$0</div><div class=subline id=lf-cost-note></div></div>
@@ -834,7 +847,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-settings>
-	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls. Session-specific budgets and alerts remain inside each session." data-tip="Machine-wide controls. Session-specific budgets and alerts remain inside each session.">Settings</h1></div></div>
+	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls, including monthly budgets and browser budget alerts. Session caps remain inside each session." data-tip="Machine-wide controls, including monthly budgets and browser budget alerts. Session caps remain inside each session.">Settings</h1></div></div>
   <div class=settingsPageLayout>
    <nav class="card settingsMap" aria-label="Settings sections">
     <div class=settingsMapIntro><h2>Sections</h2></div>
@@ -879,6 +892,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	       <div class=budgetCoreFields>
 	        <label><span>Alert at (%)</span><input id=budget-input-thresholds type=text value="80, 90, 100" required></label>
 	        <label class=budgetNotify><input id=budget-input-notifications type=checkbox checked><span>Notify when a threshold is crossed</span></label>
+	        <div class=budgetBrowserAlerts><div class=budgetBrowserAlertsCopy><b>Browser delivery</b><span>Allow this dashboard to show budget-crossing notifications.</span></div><div class=notify id=notify role=switch tabindex=0 aria-checked=false aria-label="Toggle browser budget alerts" title="Toggle browser budget alerts"><span id=notifytxt>Budget alerts</span><span class=sw></span></div></div>
 	       </div>
 	      </fieldset>
 	      <fieldset class="budgetFormGroup budgetRuntimeFields">
@@ -1302,9 +1316,7 @@ function runNavigationCommand(command,{source='palette'}={}){
  if(command.latest)goToLatestSession();
  else setHashRoute(command.route);
 }
-$('command-key').textContent='⌘K';
-[...document.querySelectorAll('.top .tab[aria-keyshortcuts]')].forEach((button,index)=>button.title=`Shortcut: Option+${index+1}`);
-$('command-trigger').onclick=openCommandPalette;
+[...document.querySelectorAll('.top .tab[aria-keyshortcuts]')].forEach((button,index)=>button.title=`${button.dataset.label} · Shortcut: Option+${index+1}`);
 $('command-coach-done').onclick=closeCommandPalette;
 $('command-search').addEventListener('input',event=>renderCommandPalette(event.target.value));
 $('command-list').onclick=event=>{const item=event.target.closest('[data-command-index]');if(item)runNavigationCommand(visibleCommands[Number(item.dataset.commandIndex)]);};
@@ -1417,6 +1429,10 @@ function showTab(t){
  $('view-capabilities').classList.toggle('on',t==='capabilities');
  $('view-learn').classList.toggle('on',t==='learn');
  $('view-settings').classList.toggle('on',t==='settings');
+ [...document.querySelectorAll('.top .tab')].forEach(button=>{
+  if(button.id===`tab-${t}`)button.setAttribute('aria-current','page');
+  else button.removeAttribute('aria-current');
+ });
  if(t==='logs')setTimeout(loadLogSessions,0);
  const activeTop=$(`tab-${t}`);
  if(activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'nearest'}));
@@ -2161,6 +2177,7 @@ function paintNotify(){
   localStorage.setItem('tm_notify','0');
  }
  $('notify').classList.toggle('on',notifyOn);
+ $('notify').setAttribute('aria-checked',String(notifyOn));
  browserReason=browserBlockReason();
  $('notifytxt').textContent=notifyOn?'Budget alerts':(!canNotify?'Unavailable':(Notification.permission==='denied'?'Blocked':'Budget alerts'));
  if(notifyOn) setNotifyState('Browser notifications ready.');
@@ -2232,6 +2249,7 @@ $('notify').onclick=()=>{
  if(Notification.permission==='denied'){ paintNotify(); pushAppNotice('Browser notifications blocked','Enable notifications in browser or system settings, then toggle again.','warn',{sticky:true,status:'Browser notifications blocked'}); return; }
  requestNotify('enable');
 };
+$('notify').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();$('notify').click();}};
 paintNotify();
 renderNotifyLog();
 $('notify-test').onclick=()=>{
@@ -2352,7 +2370,25 @@ if(['claude_code','claude_desktop'].includes(globalApp)){
 }
 let globalProject=localStorage.getItem('tm_global_project')||'';
 let globalTime=localStorage.getItem('tm_global_time')||'all';
-let logSessionInventory=null,logSessionInventoryAt=0,logSessionsRequest=null;
+let logSessionInventory=null,logSessionInventoryAt=0,logSessionsRequest=null,renderedLogSessions=new Map(),renderedLogActions={};
+const logHtmlCache=new WeakMap();
+function setLogText(element,value){
+ value=String(value??'');
+ if(element.textContent!==value)element.textContent=value;
+}
+function setLogAttribute(element,name,value){
+ value=String(value??'');
+ if(element.getAttribute(name)!==value)element.setAttribute(name,value);
+}
+function setLogHtml(element,html){
+ if(logHtmlCache.get(element)===html)return;
+ element.innerHTML=html;
+ logHtmlCache.set(element,html);
+}
+function setLogSelectOptions(element,html,value){
+ setLogHtml(element,html);
+ if(element.value!==value)element.value=value;
+}
 async function loadLogSessions(){
  if(logSessionsRequest)return logSessionsRequest;
  logSessionsRequest=fetch('/logs',{cache:'no-store'}).then(response=>{
@@ -2502,7 +2538,8 @@ function paintGlobalSort(){
 $('g-search').value=globalSearch;
 $('g-time').value=globalTime;
 function paintGlobalFilters(){
- $('g-clear').disabled=!(globalSearch.trim()||globalApp||globalProject||globalTime!=='all');
+ const disabled=!(globalSearch.trim()||globalApp||globalProject||globalTime!=='all');
+ if($('g-clear').disabled!==disabled)$('g-clear').disabled=disabled;
 }
 $('g-search').addEventListener('input',e=>{ globalSearch=e.target.value; localStorage.setItem('tm_global_search',globalSearch); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
 $('g-app').addEventListener('change',e=>{ globalApp=e.target.value; localStorage.setItem('tm_global_app',globalApp); paintGlobalFilters(); if(LATEST) renderLogs(LATEST.xsession); });
@@ -3116,8 +3153,6 @@ function renderSession(s){
  deleteButton.disabled=!sessionActions.available;
  deleteButton.title=sessionActions.available?'Move this session log to macOS Trash.':'Session deletion is unavailable.';
  $('frozen').classList.toggle('on',frozen);
- $('live').classList.toggle('dead',frozen);
- $('livetxt').textContent=frozen?(pinned?'pinned':'frozen'):('live · '+idleLabel(s.idle_s));
  const costAvailable=metricAvailable(s,'cost'),tokensAvailable=metricAvailable(s,'tokens'),inputAvailable=metricAvailable(s,'input_tokens'),outputAvailable=metricAvailable(s,'output_tokens'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput'),cursorEstimate=s.provider==='cursor';
  $('cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
  const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
@@ -3824,11 +3859,67 @@ function renderFrustration(signals,sessions){
  renderFrustrationSettings(signals);
 }
 
+function logRowRenderKey(s,active){
+ return JSON.stringify([active,s.client,s.provider,s.label,s.title,s.project,s.last,s.start,s.wait_time,s.turns,s.cost,s.availability,s.models,s.tokens,s.provenance,s.usage_basis,s.token_estimate,s.throughput,s.cost_approx]);
+}
+function logRowContent(s){
+ const rowCost=metricAvailable(s,'cost'),rowTokens=metricAvailable(s,'tokens'),localEstimate=hasLocalEstimate(s),avg=rowCost&&s.turns?money((s.cost||0)/s.turns)+estimateSuffix(s):'--';
+ const wait=s.wait_time||{},waitText=wait.available?`${waitFmt(wait.total_s)} wait · ${waitFmt(wait.avg_s)} avg`:'wait unavailable';
+ const modelText=(s.models||[]).join(', ')||'--',throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
+ return `<div><span class="badge app ${appBadgeClass(s)}">${esc(s.label||s.provider)}</span></div>
+  <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i></i></div></div>
+  <div class="badge models">${esc(modelText)}</div>
+  <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
+  <div class=smetrics><div class="c mono">${rowCost?money(s.cost)+(s.cost_approx?' est':''):'--'}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div><button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button></div>`;
+}
+function reconcileLogRows(sessions,maxCost){
+ const root=$('slist');
+ if(!sessions.length){
+  setLogHtml(root,'<div class="ins empty">No logs match the selected filters</div>');
+  return;
+ }
+ logHtmlCache.delete(root);
+ const existing=new Map([...root.children].filter(row=>row.dataset.id).map(row=>[row.dataset.id,row]));
+ const desired=new Set();
+ let cursor=root.firstElementChild;
+ sessions.forEach(s=>{
+  const id=String(s.id),active=pinned?s.id===pinned:Boolean(LATEST&&s.id===stateSessionId(LATEST));
+  desired.add(id);
+  let row=existing.get(id);
+  if(!row){
+   row=document.createElement('div');
+   row.dataset.id=id;
+   row.setAttribute('role','button');
+   row.tabIndex=0;
+  }
+  const renderKey=logRowRenderKey(s,active),restoreDeleteFocus=document.activeElement?.dataset.deleteSession===id;
+  const className=`srow${active?' active':''}`,ariaLabel=`Open ${s.title}`;
+  if(row.className!==className)row.className=className;
+  if(row.getAttribute('aria-label')!==ariaLabel)row.setAttribute('aria-label',ariaLabel);
+  if(row._logRenderKey!==renderKey){
+   row.innerHTML=logRowContent(s);
+   row._logRenderKey=renderKey;
+   if(restoreDeleteFocus)requestAnimationFrame(()=>row.querySelector('[data-delete-session]')?.focus({preventScroll:true}));
+  }
+  const bar=row.querySelector('.sbar i'),width=metricAvailable(s,'cost')?Math.max(2,100*(s.cost||0)/maxCost):0,widthValue=`${width}%`;
+  if(bar&&bar.style.width!==widthValue)bar.style.width=widthValue;
+  if(row===cursor)cursor=cursor.nextElementSibling;
+  else root.insertBefore(row,cursor);
+ });
+ [...root.children].forEach(row=>{if(!desired.has(row.dataset.id||''))row.remove();});
+}
+function mergeLogSessionInventory(inventory,liveSessions){
+ const rows=new Map((inventory||[]).map(row=>[String(row.id),row]));
+ (liveSessions||[]).forEach(row=>rows.set(String(row.id),row));
+ return [...rows.values()];
+}
 function renderLogs(xs){
  if(!xs)return;
  const generatedAt=Number(xs.generated_at||0);
- $('g-hint').textContent=generatedAt?`live · updated ${new Date(generatedAt*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'recent activity';
- const all=$('view-logs').classList.contains('on')&&logSessionInventory?logSessionInventory:(xs.sessions||[]);
+ setLogText($('g-hint'),generatedAt?`live · updated ${new Date(generatedAt*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:'recent activity');
+ const all=$('view-logs').classList.contains('on')&&logSessionInventory?mergeLogSessionInventory(logSessionInventory,xs.sessions):xs.sessions||[];
+ renderedLogSessions=new Map(all.map(row=>[String(row.id),row]));
+ renderedLogActions=xs.session_actions||{};
  const apps=[...new Map(all.map(session=>[
   appFilterGroup(session),
   appFilterLabel(session),
@@ -3837,15 +3928,13 @@ function renderLogs(xs){
   globalApp='';
   localStorage.removeItem('tm_global_app');
  }
- $('g-app').innerHTML='<option value="">All apps</option>'+apps.map(app=>`<option value="${esc(app.id)}">${esc(app.label)}</option>`).join('');
- $('g-app').value=globalApp;
+ setLogSelectOptions($('g-app'),'<option value="">All apps</option>'+apps.map(app=>`<option value="${esc(app.id)}">${esc(app.label)}</option>`).join(''),globalApp);
  const projects=[...new Set(all.map(s=>s.project||'No project'))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
  if(globalProject&&!projects.includes(globalProject)){
   globalProject='';
   localStorage.removeItem('tm_global_project');
  }
- $('g-project').innerHTML='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
- $('g-project').value=globalProject;
+ setLogSelectOptions($('g-project'),'<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join(''),globalProject);
  paintGlobalFilters();
  const timeLabels={'24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days','90d':'Last 90 days'};
  const appLabel=apps.find(app=>app.id===globalApp)?.label||globalApp;
@@ -3855,10 +3944,11 @@ function renderLogs(xs){
   globalProject&&['project',`Project: ${globalProject}`],
   globalTime!=='all'&&['time',timeLabels[globalTime]||globalTime],
  ].filter(Boolean);
- $('g-active-filters').hidden=!activeFilters.length;
- $('g-active-filters').innerHTML=activeFilters.length
+ const hideActiveFilters=!activeFilters.length;
+ if($('g-active-filters').hidden!==hideActiveFilters)$('g-active-filters').hidden=hideActiveFilters;
+ setLogHtml($('g-active-filters'),activeFilters.length
   ? `<span>Filtered by</span>${activeFilters.map(([key,label])=>`<button type=button data-clear-log-filter="${key}" title="Remove ${esc(label)} filter">${esc(label)}<b aria-hidden=true>×</b></button>`).join('')}`
-  : '';
+  : '');
  const q=globalSearch.trim().toLowerCase();
  const rangeSeconds={all:0,'24h':86400,'7d':604800,'30d':2592000,'90d':7776000}[globalTime]||0;
  const rangeStart=rangeSeconds?Date.now()/1000-rangeSeconds:0;
@@ -3878,33 +3968,27 @@ function renderLogs(xs){
  };
  sessions=sessions.slice().sort(sorters[globalSort]||sorters.recent);
  const shownCost=sessions.reduce((a,b)=>a+(b.cost||0),0),localEstimates=sessions.filter(row=>hasLocalEstimate(row)&&metricAvailable(row,'cost')).length;
-	 $('g-count').textContent=`${f(sessions.length)} of ${f(all.length)} logs · ${money(shownCost)}${sessions.some(row=>!metricAvailable(row,'cost'))?' covered spend · partial':''}${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`;
+	 setLogText($('g-count'),`${f(sessions.length)} of ${f(all.length)} logs · ${money(shownCost)}${sessions.some(row=>!metricAvailable(row,'cost'))?' covered spend · partial':''}${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`);
  const maxCost=Math.max(.001,...sessions.map(s=>s.cost||0));
- $('slist').innerHTML=sessions.length?sessions.map(s=>{
-  const active=pinned?s.id===pinned:(LATEST&&s.id===stateSessionId(LATEST));
-	  const rowCost=metricAvailable(s,'cost'),rowTokens=metricAvailable(s,'tokens'),localEstimate=hasLocalEstimate(s),avg=rowCost&&s.turns?money((s.cost||0)/s.turns)+estimateSuffix(s):'--';
-	  const wait=s.wait_time||{},waitText=wait.available?`${waitFmt(wait.total_s)} wait · ${waitFmt(wait.avg_s)} avg`:'wait unavailable';
-  const modelText=(s.models||[]).join(', ')||'--';
-	  const throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
-	  return `<div class="srow${active?' active':''}" data-id="${esc(s.id)}" role=button tabindex=0 aria-label="Open ${esc(s.title)}">
-	   <div><span class="badge app ${appBadgeClass(s)}">${esc(s.label||s.provider)}</span></div>
-	   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i style="width:${rowCost?Math.max(2,100*(s.cost||0)/maxCost):0}%"></i></div></div>
-   <div class="badge models">${esc(modelText)}</div>
-   <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
-   <div class=smetrics><div class="c mono">${rowCost?money(s.cost)+(s.cost_approx?' est':''):'--'}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div><button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button></div></div>`;
- }).join(''):'<div class="ins empty">No logs match the selected filters</div>';
- [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onclick=()=>selectSession(el.dataset.id));
- [...$('slist').querySelectorAll('[data-id]')].forEach(el=>el.onkeydown=event=>{
-  if(!['Enter',' '].includes(event.key)||event.target.closest('button'))return;
-  event.preventDefault();
-  selectSession(el.dataset.id);
- });
- [...$('slist').querySelectorAll('[data-delete-session]')].forEach(button=>button.onclick=event=>{
-  event.stopPropagation();
-  const row=all.find(item=>String(item.id)===button.dataset.deleteSession);
-  if(row)openSessionDeleteDialog(row,xs.session_actions||{},true,Boolean(LATEST&&row.id===stateSessionId(LATEST)));
- });
+ reconcileLogRows(sessions,maxCost);
 }
+$('slist').onclick=event=>{
+ const button=event.target.closest('[data-delete-session]');
+ if(button){
+  event.stopPropagation();
+  const row=renderedLogSessions.get(button.dataset.deleteSession);
+  if(row)openSessionDeleteDialog(row,renderedLogActions,true,Boolean(LATEST&&row.id===stateSessionId(LATEST)));
+  return;
+ }
+ const row=event.target.closest('[data-id]');
+ if(row)selectSession(row.dataset.id);
+};
+$('slist').onkeydown=event=>{
+ const row=event.target.closest('[data-id]');
+ if(!row||!['Enter',' '].includes(event.key)||event.target.closest('button'))return;
+ event.preventDefault();
+ selectSession(row.dataset.id);
+};
 function renderLogStats(sessions){
 	 const localEstimates=sessions.filter(row=>hasLocalEstimate(row)&&metricAvailable(row,'cost')).length;
 	 const totals=sessions.reduce((sum,row)=>{
@@ -3914,14 +3998,14 @@ function renderLogStats(sessions){
  const costPartial=totals.costCovered<sessions.length,tokenPartial=totals.tokenCovered<sessions.length;
  const filteredEstimateSuffix=localEstimates?(localEstimates===totals.costCovered?' est':' incl. est'):'';
  const filteredCostEstimateSuffix=localEstimates===totals.costCovered&&totals.costCovered?' est':'';
- $('lf-cost').textContent=totals.costCovered?money(totals.cost)+(costPartial?' partial':'')+filteredCostEstimateSuffix:'--';
- $('lf-cost-note').textContent=sessions.length?(totals.costCovered?`${f(totals.costCovered)} of ${f(sessions.length)} cost-covered logs · ${money(totals.cost/totals.costCovered)}/covered log${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`:'cost unavailable for matching logs'):'no matching logs';
- $('lf-input').textContent=totals.tokenCovered?compactNumber(totals.input)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--';$('lf-input').title=totals.tokenCovered?f(totals.input)+' reported or locally estimated input/context tokens':'input evidence unavailable';
- $('lf-output').textContent=totals.tokenCovered?compactNumber(totals.output)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--';$('lf-output').title=totals.tokenCovered?f(totals.output)+' reported or locally estimated output tokens':'output evidence unavailable';
-	 $('lf-executions').textContent=f(totals.executions);
-	 $('lf-executions-note').textContent=sessions.length?`${(totals.executions/sessions.length).toFixed(1)} average / log`:'no matching executions';
-	 $('lf-wait').textContent=totals.waitSamples?waitFmt(totals.wait):'--';
-	 $('lf-wait-note').textContent=totals.waitSamples?`${waitFmt(totals.wait/totals.waitSamples)} average · ${f(totals.waitSamples)} timed ${countWord(totals.waitSamples,'request')}`:'no completed wait timing in filtered logs';
+ setLogText($('lf-cost'),totals.costCovered?money(totals.cost)+(costPartial?' partial':'')+filteredCostEstimateSuffix:'--');
+ setLogText($('lf-cost-note'),sessions.length?(totals.costCovered?`${f(totals.costCovered)} of ${f(sessions.length)} cost-covered logs · ${money(totals.cost/totals.costCovered)}/covered log${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`:'cost unavailable for matching logs'):'no matching logs');
+ setLogText($('lf-input'),totals.tokenCovered?compactNumber(totals.input)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--');setLogAttribute($('lf-input'),'title',totals.tokenCovered?f(totals.input)+' reported or locally estimated input/context tokens':'input evidence unavailable');
+ setLogText($('lf-output'),totals.tokenCovered?compactNumber(totals.output)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--');setLogAttribute($('lf-output'),'title',totals.tokenCovered?f(totals.output)+' reported or locally estimated output tokens':'output evidence unavailable');
+	 setLogText($('lf-executions'),f(totals.executions));
+	 setLogText($('lf-executions-note'),sessions.length?`${(totals.executions/sessions.length).toFixed(1)} average / log`:'no matching executions');
+	 setLogText($('lf-wait'),totals.waitSamples?waitFmt(totals.wait):'--');
+	 setLogText($('lf-wait-note'),totals.waitSamples?`${waitFmt(totals.wait/totals.waitSamples)} average · ${f(totals.waitSamples)} timed ${countWord(totals.waitSamples,'request')}`:'no completed wait timing in filtered logs');
  const models=new Map();
  sessions.forEach(session=>{
   let rows=session.model_stats||[];
@@ -3932,8 +4016,8 @@ function renderLogStats(sessions){
   });
  });
  const ranked=[...models.values()].sort((a,b)=>b.cost-a.cost||b.tokens-a.tokens||a.model.localeCompare(b.model));
- $('lf-model-count').textContent=`${f(ranked.length)} ${countWord(ranked.length,'model')}`;
- $('lf-models').innerHTML=ranked.length?ranked.slice(0,4).map(row=>`<div class=logModelRow><div><div class=logModelName title="${esc(row.model)} · ${esc(row.runtime)}">${esc(row.model)} · ${esc(row.runtime)}</div><div class=logModelMeta>${f(row.logs)} ${countWord(row.logs,'log')} · ${f(row.executions)} execs · ${row.tokenCovered?compactNumber(row.input)+' in · '+compactNumber(row.output)+' out'+(row.estimated?' · includes local est':''):'token evidence unavailable'}</div></div><div class=logModelValue><b class=mono>${row.costCovered?money(row.cost)+(row.estimated?' est':''):'--'}</b><span>${row.costCovered?pct(totals.cost?row.cost/totals.cost:0)+' of covered cost':'billing unavailable'}</span></div></div>`).join('')+(ranked.length>4?`<div class=logModelEmpty>+${f(ranked.length-4)} more ${countWord(ranked.length-4,'model runtime')}</div>`:''):'<div class=logModelEmpty>No model data for these filters</div>';
+ setLogText($('lf-model-count'),`${f(ranked.length)} ${countWord(ranked.length,'model')}`);
+ setLogHtml($('lf-models'),ranked.length?ranked.slice(0,4).map(row=>`<div class=logModelRow><div><div class=logModelName title="${esc(row.model)} · ${esc(row.runtime)}">${esc(row.model)} · ${esc(row.runtime)}</div><div class=logModelMeta>${f(row.logs)} ${countWord(row.logs,'log')} · ${f(row.executions)} execs · ${row.tokenCovered?compactNumber(row.input)+' in · '+compactNumber(row.output)+' out'+(row.estimated?' · includes local est':''):'token evidence unavailable'}</div></div><div class=logModelValue><b class=mono>${row.costCovered?money(row.cost)+(row.estimated?' est':''):'--'}</b><span>${row.costCovered?pct(totals.cost?row.cost/totals.cost:0)+' of covered cost':'billing unavailable'}</span></div></div>`).join('')+(ranked.length>4?`<div class=logModelEmpty>+${f(ranked.length-4)} more ${countWord(ranked.length-4,'model runtime')}</div>`:''):'<div class=logModelEmpty>No model data for these filters</div>');
 }
 
 function currentSessionAge(row){
@@ -4178,8 +4262,6 @@ async function refreshSelectedSession({show=true,notifyOnError=false}={}){
   return state;
  }catch(error){
   if(request!==sessionRequest||pinned!==id)return null;
-  $('live').classList.add('dead');
-  $('livetxt').textContent='selected session reconnecting';
   if(notifyOnError){
    pinned=null;
    CURRENT=LATEST;
@@ -4220,13 +4302,15 @@ let statePollBusy=false;
 const LIVE_STATE_POLL_MS=1000;
 const SELECTED_SESSION_POLL_MS=2000;
 function applyLiveState(state){
- LATEST=state;$('live').classList.remove('dead');
+ LATEST=state;
  renderCurrentSessions(LATEST);
  const sessionSurfaceActive=$('view-session').classList.contains('on');
  if(!pinned&&sessionSurfaceActive&&currentPanel!=='sessions')renderSession(LATEST);
- else if(!sessionSurfaceActive)$('livetxt').textContent='live';
-	 if($('view-logs').classList.contains('on'))renderLogs(LATEST.xsession);
-	 if($('view-logs').classList.contains('on')&&(!logSessionInventory||logSessionInventoryAt!==Number(LATEST.xsession?.generated_at||0)))loadLogSessions();
+	 if($('view-logs').classList.contains('on')){
+	  const inventoryStale=!logSessionInventory||logSessionInventoryAt!==Number(LATEST.xsession?.generated_at||0);
+	  if(inventoryStale)loadLogSessions();
+	  else renderLogs(LATEST.xsession);
+	 }
 	 if($('view-models').classList.contains('on')){renderActiveModelStats();renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}
 	 if($('view-daily').classList.contains('on'))renderDaily(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
@@ -4239,7 +4323,7 @@ async function refreshLiveState(){
   const response=await fetch('/state',{cache:'no-store'});
   if(!response.ok)throw new Error(`State request failed (${response.status}).`);
   applyLiveState(await response.json());
- }catch(error){$('live').classList.add('dead');$('livetxt').textContent='reconnecting';}
+ }catch(error){}
  finally{statePollBusy=false;}
 }
 setInterval(refreshLiveState,LIVE_STATE_POLL_MS);

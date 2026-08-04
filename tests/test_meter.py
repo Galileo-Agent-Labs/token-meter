@@ -2640,6 +2640,32 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("currentSessionOpen", self.page)
         self.assertNotIn(">Open →</span>", self.page)
 
+    def test_sessions_overview_shows_exact_day_spend_summary_and_tokenomics_link(self):
+        for marker in (
+            'class=currentDaySummary aria-label="Today\'s usage summary"',
+            "id=current-day-spend",
+            "id=current-day-sessions",
+            "id=current-day-vs-yesterday",
+            "Spend today",
+            "Sessions today",
+            "Vs yesterday",
+            "function renderCurrentDaySummary(xs)",
+            "if(!Array.isArray(xs?.daily))",
+            "const todayKey=localDayKey(),yesterdayDate=new Date()",
+            "days.find(row=>row.day===todayKey)",
+            "days.find(row=>row.day===yesterdayKey)",
+            "if(todayPartial)comparisonNote='Withheld for partial coverage'",
+            "else if(yesterdayPartial)comparisonNote='Withheld · yesterday is partial'",
+            'href="https://www.google.com/search?q=site%3Asplunk.com+tokenomics"',
+            'target=_blank rel="noopener noreferrer"',
+            ">Learn Tokenomics<",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertLess(self.page.index("class=currentDaySummary"), self.page.index("id=current-session-grid"))
+        self.assertIn("renderCurrentDaySummary(state?.xsession);", self.page)
+        self.assertIn(".currentDayReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.page)
+        self.assertIn(".currentDayMetric:nth-child(3){grid-column:1/-1", self.page)
+
     def test_session_cards_use_compact_readable_metrics(self):
         for marker in (
             ".currentSessionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}",

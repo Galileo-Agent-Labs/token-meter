@@ -268,6 +268,15 @@ body.sessionRoute{--session-cyan:var(--spectrum-cyan);--session-blue:var(--spect
 body.sessionRoute #view-session .previewTabs{position:relative;z-index:2;border-color:rgba(0,188,235,.18);background:rgba(7,12,17,.72)}
 body.sessionRoute #view-session .previewTabs button.on{background:linear-gradient(135deg,var(--session-cyan),var(--session-blue));color:#062430;box-shadow:0 6px 18px rgba(0,188,235,.15)}
 body.sessionRoute #view-session .previewTabs button:hover:not(.on){background:rgba(0,188,235,.08);color:var(--fg)}
+body.sessionRoute #view-session .currentDaySummary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:18px;margin:0 0 10px;padding:11px 13px;border-top:1px solid rgba(0,188,235,.16);border-bottom:1px solid rgba(0,188,235,.13);background:linear-gradient(90deg,rgba(0,188,235,.055),rgba(127,219,242,.025) 62%,rgba(199,167,255,.035))}
+body.sessionRoute #view-session .currentDayReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+body.sessionRoute #view-session .currentDayMetric{min-width:0;padding:0 17px;border-left:1px solid rgba(255,255,255,.08)}
+body.sessionRoute #view-session .currentDayMetric:first-child{padding-left:0;border-left:0}
+body.sessionRoute #view-session .currentDayMetricLabel{display:block;color:var(--faint);font-size:11px;font-weight:780;letter-spacing:.045em;text-transform:uppercase}
+body.sessionRoute #view-session .currentDayMetricValue{display:block;margin-top:3px;color:var(--fg);font-size:18px;font-weight:740;line-height:1.15;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+body.sessionRoute #view-session .currentDayMetricNote{display:block;margin-top:3px;color:var(--faint);font-size:11px;line-height:1.3;overflow-wrap:anywhere}
+body.sessionRoute #view-session .currentDayLearn{align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;text-decoration:none;white-space:nowrap}
+body.sessionRoute #view-session .currentDayLearnIcon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 body.sessionRoute #view-session .currentSessionsHead{justify-content:flex-end;margin:-4px 0 8px;padding:0 2px}
 body.sessionRoute #view-session .currentSessionsCount{color:var(--faint);font-size:11px;letter-spacing:.02em}
 body.sessionRoute #view-session .currentSessionGrid{gap:12px}
@@ -315,7 +324,7 @@ body.sessionRoute #view-session.sessionDetail .previewTokenSlot .bar{border-colo
 body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:var(--session-sky);text-shadow:none}
 @media(max-width:900px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:126px}body.sessionRoute #view-session .previewTabs{align-self:stretch}}
 @media(max-width:700px){body.sessionRoute #view-session .currentSessionMetric{padding:0 8px}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}}
-@media(max-width:520px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .previewTabs{width:100%;overflow-x:auto}body.sessionRoute #view-session .previewTabs button{padding:9px 11px}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
+@media(max-width:520px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .previewTabs{width:100%;overflow-x:auto}body.sessionRoute #view-session .previewTabs button{padding:9px 11px}body.sessionRoute #view-session .currentDaySummary{grid-template-columns:1fr;gap:10px;padding:11px 12px}body.sessionRoute #view-session .currentDayReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}body.sessionRoute #view-session .currentDayMetric{padding:0 10px}body.sessionRoute #view-session .currentDayMetric:nth-child(3){grid-column:1/-1;margin-top:9px;padding:9px 10px 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentDayLearn{width:100%}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
 @media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}}
 .workloadCell strong{display:block;color:var(--fg);font-size:13px}.workloadCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px;white-space:nowrap}
 .modelKpi:hover,.modelKpi:focus-within{z-index:50}.modelKpi:nth-child(n+4) .fieldtip:after{left:auto;right:0}.modelHelp:before{content:"i";display:inline-grid;place-items:center;width:13px;height:13px;margin-right:5px;border:1px solid currentColor;border-radius:50%;font:800 9px/1 ui-monospace,"SF Mono",Menlo,monospace;opacity:.72}.modelCoverage.fieldtip{display:block}.modelCoverage.fieldtip:after{bottom:auto;top:calc(100% + 7px)}
@@ -590,6 +599,14 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </div>
 
   <div class=previewSurface id=preview-surface-sessions>
+   <section class=currentDaySummary aria-label="Today's usage summary">
+    <div class=currentDayReadouts>
+     <div class=currentDayMetric><span class=currentDayMetricLabel>Spend today</span><strong class="currentDayMetricValue mono" id=current-day-spend>--</strong><small class=currentDayMetricNote id=current-day-spend-note>Waiting for dated cost evidence</small></div>
+     <div class=currentDayMetric><span class=currentDayMetricLabel>Sessions today</span><strong class="currentDayMetricValue mono" id=current-day-sessions>--</strong><small class=currentDayMetricNote id=current-day-sessions-note>Waiting for activity</small></div>
+     <div class=currentDayMetric><span class=currentDayMetricLabel>Vs yesterday</span><strong class="currentDayMetricValue mono" id=current-day-vs-yesterday>--</strong><small class=currentDayMetricNote id=current-day-vs-yesterday-note>Waiting for comparison</small></div>
+    </div>
+    <a class="tbtn currentDayLearn" href="https://www.google.com/search?q=site%3Asplunk.com+tokenomics" target=_blank rel="noopener noreferrer" aria-label="Learn Tokenomics from Splunk search results (opens in a new tab)">Learn Tokenomics<svg class=currentDayLearnIcon viewBox="0 0 16 16" aria-hidden=true><path d="M8.5 3.5h4v4M12.5 3.5l-6 6"/><path d="M10.5 8.5v4h-7v-7h4"/></svg></a>
+   </section>
    <div class=currentSessionsHead>
     <span class="currentSessionsCount fieldtip" id=current-session-count-label tabindex=0 aria-description="Sessions with activity in the last 30 minutes." data-tip="Sessions with activity in the last 30 minutes.">Waiting</span>
    </div>
@@ -4141,7 +4158,39 @@ function focusCurrentSessionCard(id){
   .find(item=>item.dataset.currentSessionId===String(id));
  card?.focus();
 }
+function renderCurrentDaySummary(xs){
+ if(!Array.isArray(xs?.daily)){
+  $('current-day-spend').textContent='--';$('current-day-spend-note').textContent='Waiting for dated cost evidence';
+  $('current-day-sessions').textContent='--';$('current-day-sessions-note').textContent='Waiting for activity';
+  $('current-day-vs-yesterday').textContent='--';$('current-day-vs-yesterday-note').textContent='Waiting for comparison';
+  return;
+ }
+ const days=xs.daily;
+ const todayKey=localDayKey(),yesterdayDate=new Date();
+ yesterdayDate.setHours(12,0,0,0);
+ yesterdayDate.setDate(yesterdayDate.getDate()-1);
+ const yesterdayKey=localDayKey(yesterdayDate);
+ const today=days.find(row=>row.day===todayKey),yesterday=days.find(row=>row.day===yesterdayKey);
+ const todayCostAvailable=Boolean(today)&&metricAvailable(today,'cost'),todayPartial=Boolean(today)&&metricPartial(today,'cost');
+ const yesterdayCostAvailable=Boolean(yesterday)&&metricAvailable(yesterday,'cost'),yesterdayPartial=Boolean(yesterday)&&metricPartial(yesterday,'cost');
+ $('current-day-spend').textContent=todayCostAvailable?money(today.cost)+estimateSuffix(today):'--';
+ $('current-day-spend-note').textContent=!today?'No recorded activity today':!todayCostAvailable?'Cost unavailable':todayPartial?'Partial billing coverage':hasLocalEstimate(today)?'API-equivalent estimate · includes local estimates':'API-equivalent estimate';
+ const todaySessions=Number(today?.sessions||0),yesterdaySessions=Number(yesterday?.sessions||0),sessionDelta=todaySessions-yesterdaySessions;
+ $('current-day-sessions').textContent=f(todaySessions);
+ $('current-day-sessions-note').textContent=!today?(yesterday?`${f(yesterdaySessions)} yesterday · none recorded today`:'No recorded sessions today'):yesterday?`${f(yesterdaySessions)} yesterday${sessionDelta?` · ${f(Math.abs(sessionDelta))} ${countWord(Math.abs(sessionDelta),'session')} ${sessionDelta>0?'more':'fewer'}`:' · unchanged'}`:'No recorded sessions yesterday';
+ let comparison='--',comparisonNote='No recorded activity today';
+ if(today&&todayCostAvailable){
+  if(todayPartial)comparisonNote='Withheld for partial coverage';
+  else if(!yesterday){comparison=Number(today.cost||0)?'New':'0%';comparisonNote='No recorded spend yesterday';}
+  else if(!yesterdayCostAvailable)comparisonNote='Yesterday cost unavailable';
+  else if(yesterdayPartial)comparisonNote='Withheld · yesterday is partial';
+  else{comparison=dailyDeltaLabel(today.cost,yesterday.cost);comparisonNote=`vs ${money(yesterday.cost)}${estimateSuffix(yesterday)} yesterday`;}
+ }
+ $('current-day-vs-yesterday').textContent=comparison;
+ $('current-day-vs-yesterday-note').textContent=comparisonNote;
+}
 function renderCurrentSessions(state=LATEST){
+ renderCurrentDaySummary(state?.xsession);
  const sourceRows=state?.xsession?.current_sessions;
  if(!Array.isArray(sourceRows)){
   $('current-session-count-label').textContent='Waiting';

@@ -168,6 +168,7 @@ LOW_YIELD_INPUT_TOKENS = 60000
 TOOL_OVERSIZED_TOKENS = 8000
 PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,180}$")
 SKILL_PATH_RE = re.compile(r"(?:^|[/\\])([^/\\\s'\"]+)[/\\]SKILL\.md(?:\b|$)", re.IGNORECASE)
+SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,179}$")
 DATA_URL_RE = re.compile(r"data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+")
 BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512,})(")')
 
@@ -3594,13 +3595,20 @@ def argument_fingerprint(value):
     return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16] if text else ""
 
 
-def skill_names_from_value(value):
-    """Infer skill activations only when a trace argument references SKILL.md."""
+def skill_names_from_value(value, tool_name=""):
+    """Infer path-based loads and explicit native Skill-tool activations."""
     try:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError):
         text = str(value or "")
-    return sorted(set(match.group(1) for match in SKILL_PATH_RE.finditer(text)))
+    names = {match.group(1) for match in SKILL_PATH_RE.finditer(text)}
+    tool_leaf = str(tool_name or "").rsplit(".", 1)[-1].casefold()
+    direct = value.get("skill") if tool_leaf == "skill" and isinstance(value, dict) else None
+    if isinstance(direct, str):
+        direct = direct.strip()
+        if SKILL_NAME_RE.fullmatch(direct):
+            names.add(direct.rsplit(":", 1)[-1])
+    return sorted(names)
 
 
 def claude_tool_results(objs):
@@ -4004,7 +4012,7 @@ def recompute_cursor(source):
                     "output_tokens": output_chars // CHARS_PER_TOKEN,
                     "result_available": result_present,
                     "error": errored,
-                    "skills": skill_names_from_value(arguments),
+                    "skills": skill_names_from_value(arguments, tool_data.get("name")),
                 }
                 tools.append(tool)
                 trace.append(trace_event(
@@ -4041,7 +4049,7 @@ def recompute_cursor(source):
                         "args_fingerprint": argument_fingerprint(arguments),
                         "output_chars": 0, "output_tokens": 0,
                         "result_available": False, "error": False,
-                        "skills": skill_names_from_value(arguments),
+                        "skills": skill_names_from_value(arguments, block.get("name")),
                     }
                     tools.append(tool)
                     trace.append(trace_event(ts, "tool_call", ident["display"], ident["namespace"],
@@ -4360,7 +4368,7 @@ def recompute_claude(source):
                 "output_chars": out_chars,
                 "output_tokens": out_chars // CHARS_PER_TOKEN,
                 "error": bool(result_errors.get(tid)),
-                "skills": skill_names_from_value(block.get("input")),
+                "skills": skill_names_from_value(block.get("input"), block.get("name")),
             }
             tools.append(tool)
 
@@ -4658,7 +4666,7 @@ def recompute_codex(source):
                 "output_chars": 0,
                 "output_tokens": 0,
                 "error": False,
-                "skills": skill_names_from_value(arguments),
+                "skills": skill_names_from_value(arguments, name),
             }
             pending["calls"][call_id] = tool
             call_map[call_id] = tool
@@ -5340,7 +5348,7 @@ def claude_tool_call_evidence(objs, msgs=None):
                 "error": bool(result_errors.get(tid)),
                 "ts": result_ts.get(tid) or rec.get("ts") or 0,
                 "args_fingerprint": argument_fingerprint(block.get("input")),
-                "skills": skill_names_from_value(block.get("input")),
+                "skills": skill_names_from_value(block.get("input"), block.get("name")),
             })
     return calls
 
@@ -5361,7 +5369,7 @@ def codex_tool_call_evidence(objs):
                     **tool_identity(name), "output_chars": 0, "output_tokens": 0,
                     "error": False, "ts": ts,
                     "args_fingerprint": argument_fingerprint(arguments),
-                    "skills": skill_names_from_value(arguments),
+                    "skills": skill_names_from_value(arguments, name),
                 }
                 order.append(call_id)
             continue

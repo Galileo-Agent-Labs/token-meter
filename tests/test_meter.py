@@ -3829,6 +3829,43 @@ class ToolEvidenceTests(unittest.TestCase):
         value = {"cmd": "sed -n '1,80p' /tmp/skills/execution-plan/SKILL.md"}
         self.assertEqual(meter.skill_names_from_value(value), ["execution-plan"])
 
+    def test_native_skill_tool_input_records_the_invoked_skill(self):
+        value = {"skill": "documentation-skills:sharepoint-docs", "args": "find the policy"}
+        self.assertEqual(
+            meter.skill_names_from_value(value, "Skill"),
+            ["sharepoint-docs"],
+        )
+        self.assertEqual(meter.skill_names_from_value(value, "OtherTool"), [])
+
+    def test_native_claude_skill_call_excludes_its_pack_from_review_candidates(self):
+        objs = [{
+            "type": "assistant", "timestamp": "2026-08-05T00:00:00Z",
+            "message": {
+                "id": "message-1", "content": [{
+                    "type": "tool_use", "id": "tool-1", "name": "Skill",
+                    "input": {"skill": "sharepoint-docs"},
+                }],
+            },
+        }]
+        calls = meter.claude_tool_call_evidence(objs)
+        evidence = meter.summarize_tool_evidence(calls)
+        waste = meter.global_tool_waste([{
+            "id": "claude-session", "provider": "claude", "runtime": "Claude",
+            "project": "/repo", "_tool_evidence": evidence,
+        }])
+        usage = next(row for row in waste["skills"] if row["name"] == "sharepoint-docs")
+        groups = meter.capability_control_groups([], [{
+            "id": "sharepoint-docs", "name": "sharepoint-docs", "runtime": "Claude",
+            "plugin_id": "documentation-skills@skills-marketplace", "mutable": True,
+            "enabled": True, "reviewable": True, "used": bool(usage),
+            "activations": usage["activations"], "last_used": usage["last_used"],
+        }])
+        summary = meter.optional_capability_summary(groups)
+
+        self.assertEqual(calls[0]["skills"], ["sharepoint-docs"])
+        self.assertEqual(summary["used"], 1)
+        self.assertEqual(summary["review_candidates"], [])
+
     def test_token_meter_diagnostics_are_accounted_but_never_recommended_for_cleanup(self):
         calls = [{**meter.tool_identity("mcp__tokenmeter__check"), "output_tokens": 50000,
                   "ts": 100, "args_fingerprint": "one", "error": False}]

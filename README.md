@@ -35,7 +35,7 @@ machine.
 On macOS, clone the repository and run its installer:
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+git clone https://github.com/splunk/token-meter.git
 ./token-meter/scripts/install
 ```
 
@@ -572,7 +572,7 @@ Token Meter serves the UI from `page.html`. Use a full repository clone and run
 from the clone:
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+git clone https://github.com/splunk/token-meter.git
 ./token-meter/scripts/install
 ```
 

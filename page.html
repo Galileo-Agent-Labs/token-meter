@@ -107,11 +107,8 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px;color:var(--dim)}.dot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
 .fieldtip{position:relative;display:inline-flex;align-items:center;cursor:help;outline:none}
 .fieldtip:focus-visible{color:var(--fg)}
-.fieldtip:after{content:attr(data-tip);position:absolute;left:0;bottom:calc(100% + 9px);z-index:12;display:none;width:max-content;max-width:min(320px,calc(100vw - 40px));white-space:normal;border:1px solid rgba(0,188,235,.42);border-radius:8px;background:linear-gradient(180deg,rgba(6,8,11,.98),rgba(15,21,28,.98));box-shadow:0 14px 32px rgba(0,0,0,.46);padding:8px 10px;color:var(--dim);font-size:12px;line-height:1.35;text-transform:none;font-weight:560}
-.section-h .fieldtip:after{bottom:auto;top:calc(100% + 9px);z-index:30}
-.modelHead h1.fieldtip:after,.dailyHead h1.fieldtip:after,.learnHead h1.fieldtip:after,.previewHead h1.fieldtip:after{bottom:auto;top:calc(100% + 9px);z-index:40}
-.overview .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}
-.fieldtip:hover:after,.fieldtip:focus:after{display:block}
+#fieldtip-popup{position:fixed;left:0;top:0;z-index:1000;box-sizing:border-box;width:min(320px,calc(100vw - 24px));pointer-events:none;border:1px solid rgba(0,188,235,.42);border-radius:8px;background:linear-gradient(180deg,rgba(6,8,11,.98),rgba(15,21,28,.98));box-shadow:0 14px 32px rgba(0,0,0,.46);padding:8px 10px;color:var(--dim);font-size:12px;line-height:1.35;font-weight:560;overflow-wrap:anywhere}
+#fieldtip-popup[hidden]{display:none}
 .tracebox{position:relative;max-height:380px;overflow:auto;padding:8px 4px 8px 0;scrollbar-color:var(--line2) transparent}
 .tracebox:before{content:"";position:absolute;top:10px;bottom:10px;left:104px;width:1px;background:linear-gradient(180deg,transparent,var(--line2),transparent)}
 .traceitem{display:grid;grid-template-columns:88px 22px minmax(0,1fr);gap:8px;align-items:start;padding:8px 8px 8px 0;margin:1px 0;border:1px solid transparent;border-radius:8px;animation:enter .22s ease;min-width:0}
@@ -349,6 +346,7 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 .learnOnboarding{padding:16px;border:1px solid rgba(0,188,235,.25);border-radius:9px;background:rgba(0,188,235,.045)}.learnOnboarding .learnSectionHead{align-items:center}.learnShortcutGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.learnShortcut{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--dim);font-size:11px}.learnShortcut kbd{min-width:42px;border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:2px 6px;color:var(--fg);font:750 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;text-align:center;white-space:nowrap}
 @media(max-width:900px){.onboardingChecklist{grid-template-columns:repeat(3,minmax(0,1fr))}.learnShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.onboardingCard{padding:13px}.onboardingHead{display:grid;grid-template-columns:1fr}.onboardingHeadActions{justify-content:space-between}.onboardingNext{grid-template-columns:1fr}.onboardingNext .tbtn{justify-self:start}.onboardingChecklist,.learnShortcutGrid{grid-template-columns:1fr}.onboardingCard.collapsed .onboardingHead{grid-template-columns:minmax(0,1fr) auto;align-items:center}.onboardingCard.collapsed .onboardingHeadActions{justify-content:end}.onboardingCard.collapsed .onboardingCount{display:none}.commandCoach{align-items:stretch;flex-direction:column;padding:9px 12px}.commandCoach .tbtn{width:100%}.onboardingLesson{padding:18px}.onboardingLesson h2{font-size:20px}.onboardingLessonFoot{align-items:flex-start;flex-direction:column}.onboardingLessonFoot .tbtn{width:100%}}
+.modelHead.spectrumPageHead{overflow:visible;z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}
 </style></head><body class=spectrumApp>
 <!--
 THESIS: Sessions are live instruments, not a generic grid of dark cards.
@@ -586,7 +584,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </div>
   <div class="previewHead spectrumPageHead">
    <div class="previewHeadCopy spectrumPageHeadCopy">
-    <h1 class=fieldtip id=session-page-title tabindex=0 aria-description="Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder." data-tip="Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.">Sessions</h1>
+    <h1 id=session-page-title>Sessions</h1>
     <p id=current-description>Live traces from the last 30 minutes.</p>
    </div>
    <div class="seg previewTabs" id=current-tabs aria-label="Session views" data-current-detail>
@@ -608,7 +606,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <a class="tbtn currentDayLearn" href="https://www.google.com/search?q=site%3Asplunk.com+tokenomics" target=_blank rel="noopener noreferrer" aria-label="Learn Tokenomics from Splunk search results (opens in a new tab)">Learn Tokenomics<svg class=currentDayLearnIcon viewBox="0 0 16 16" aria-hidden=true><path d="M8.5 3.5h4v4M12.5 3.5l-6 6"/><path d="M10.5 8.5v4h-7v-7h4"/></svg></a>
    </section>
    <div class=currentSessionsHead>
-    <span class="currentSessionsCount fieldtip" id=current-session-count-label tabindex=0 aria-description="Sessions with activity in the last 30 minutes." data-tip="Sessions with activity in the last 30 minutes.">Waiting</span>
+    <span class=currentSessionsCount id=current-session-count-label>Waiting</span>
    </div>
    <div class=currentSessionGrid id=current-session-grid aria-label="Recent sessions. Drag cards or use Option and arrow keys to reorder."></div>
    <div class=currentSessionOrderStatus id=current-session-order-status role=status aria-live=polite></div>
@@ -646,7 +644,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </div>
   <section class="card previewStartStrip" data-current-detail>
    <div class=previewStartLabel>Started with</div>
-   <div class="previewStartText fieldtip" id=preview-start tabindex=0 data-tip="No user message captured.">No user message captured.</div>
+   <div class=previewStartText id=preview-start>No user message captured.</div>
   </section>
   <div class="previewSurface on" id=preview-surface-run>
   <div class=previewRunGrid>
@@ -670,16 +668,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </div>
   <div class=previewTokenSlot id=preview-token-split-slot></div>
   <div class=previewKpis aria-label="Live run metrics">
-   <div class="card previewKpi fieldtip previewSpeed" tabindex=0 title="Observed model output divided by attributable generation time. Tool-free timing is preferred; coverage explains how much output has usable timing." data-tip="Observed model output divided by attributable generation time. Tool-free timing is preferred; coverage explains how much output has usable timing."><div class=label>Output speed</div><div class="v mono" id=preview-speed>--</div><div class=sm id=preview-speed-note>timing evidence</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Cumulative wall-clock time from prompts to completed responses. Reasoning and tool use count; gaps waiting for the next user prompt do not." data-tip="Cumulative wall-clock time from prompts to completed responses. Reasoning and tool use count; gaps waiting for the next user prompt do not."><div class=label>Wait time</div><div class="v mono" id=preview-wait>--</div><div class=sm id=preview-wait-note>prompt to completion</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Input or context tokens in the latest execution, shown against the model's known context window." data-tip="Input or context tokens in the latest execution, shown against the model's known context window."><div class=label>Context</div><div class="v mono" id=preview-context>--</div><div class=sm id=preview-context-note>latest execution</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Trace-observed model response cycles in this run. One user request can contain several executions." data-tip="Trace-observed model response cycles in this run. One user request can contain several executions."><div class=label>Executions</div><div class="v mono" id=preview-executions>0</div><div class=sm id=preview-executions-note>model turns</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Tool invocations observed in this run, including built-in and MCP tools." data-tip="Tool invocations observed in this run, including built-in and MCP tools."><div class=label>Tool calls</div><div class="v mono" id=preview-tools>0</div><div class=sm id=preview-tools-note>observed activity</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Approximate tokens returned by tool results, estimated from captured result size rather than provider billing usage." data-tip="Approximate tokens returned by tool results, estimated from captured result size rather than provider billing usage."><div class=label>Tool-result tokens</div><div class="v mono" id=preview-tool-results>--</div><div class=sm id=preview-tool-results-note>estimated returned text</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Share of input tokens served from or written to provider prompt cache instead of sent as fresh input." data-tip="Share of input tokens served from or written to provider prompt cache instead of sent as fresh input."><div class=label>Cache rate</div><div class="v mono" id=preview-cache-rate>--</div><div class=sm id=preview-cache-rate-note>input served from cache</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated spend avoided by cache reads compared with charging the same tokens at the normal input rate." data-tip="Estimated spend avoided by cache reads compared with charging the same tokens at the normal input rate."><div class=label>Cache saved</div><div class="v mono" id=preview-cache-saved>--</div><div class=sm id=preview-cache-saved-note>estimated avoided spend</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once." data-tip="Estimated spend per active execution minute. Idle gaps are excluded and overlapping execution windows are counted once."><div class=label>Burn / minute</div><div class="v mono" id=preview-burn>--</div><div class=sm id=preview-burn-note>while the run is active</div></div>
-   <div class="card previewKpi fieldtip" tabindex=0 title="Estimated run cost divided by trace-observed completed tasks. It is unavailable when billing or completion evidence is missing." data-tip="Estimated run cost divided by trace-observed completed tasks. It is unavailable when billing or completion evidence is missing."><div class=label>Cost / task</div><div class="v mono" id=preview-cost-task>--</div><div class=sm id=preview-cost-task-note>accepted-task estimate</div></div>
+   <div class="card previewKpi previewSpeed"><div class=label>Output speed</div><div class="v mono" id=preview-speed>--</div><div class=sm id=preview-speed-note>timing evidence</div></div>
+   <div class="card previewKpi"><div class=label>Wait time</div><div class="v mono" id=preview-wait>--</div><div class=sm id=preview-wait-note>prompt to completion</div></div>
+   <div class="card previewKpi"><div class=label>Context</div><div class="v mono" id=preview-context>--</div><div class=sm id=preview-context-note>latest execution</div></div>
+   <div class="card previewKpi"><div class=label>Executions</div><div class="v mono" id=preview-executions>0</div><div class=sm id=preview-executions-note>model turns</div></div>
+   <div class="card previewKpi"><div class=label>Tool calls</div><div class="v mono" id=preview-tools>0</div><div class=sm id=preview-tools-note>observed activity</div></div>
+   <div class="card previewKpi"><div class=label>Tool-result tokens</div><div class="v mono" id=preview-tool-results>--</div><div class=sm id=preview-tool-results-note>estimated returned text</div></div>
+   <div class="card previewKpi"><div class=label>Cache rate</div><div class="v mono" id=preview-cache-rate>--</div><div class=sm id=preview-cache-rate-note>input served from cache</div></div>
+   <div class="card previewKpi"><div class=label>Cache saved</div><div class="v mono" id=preview-cache-saved>--</div><div class=sm id=preview-cache-saved-note>estimated avoided spend</div></div>
+   <div class="card previewKpi"><div class=label>Burn / minute</div><div class="v mono" id=preview-burn>--</div><div class=sm id=preview-burn-note>while the run is active</div></div>
+   <div class="card previewKpi"><div class=label>Cost / task</div><div class="v mono" id=preview-cost-task>--</div><div class=sm id=preview-cost-task-note>accepted-task estimate</div></div>
   </div>
   <div class=foot>Live session evidence · local-only · run preferences stay in this browser</div>
   </div>
@@ -700,7 +698,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 <div class=view id=view-logs>
 	  <div class=spectrumPageHead>
 	   <div class=spectrumPageHeadCopy>
-	    <h1 class=fieldtip tabindex=0 aria-description="Local AI app logs discovered on this machine. Each log can contain many executions." data-tip="Local AI app logs discovered on this machine. Each log can contain many executions.">Logs</h1>
+    <h1>Logs</h1>
 	    <span class=spectrumPageMeta id=g-hint>recent activity</span>
 	   </div>
 	  </div>
@@ -737,7 +735,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 	 <div class=view id=view-models>
 	  <div class="modelHead spectrumPageHead">
-	   <div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty." data-tip="Compare model runtimes on similar observed workloads. Matched pace controls for context, output, cache, model calls, and tools; it does not claim identical semantic difficulty.">Model performance</h1></div>
+	   <div class=spectrumPageHeadCopy><h1>Model performance</h1></div>
 	   <div class=modelControls>
 	    <label class=filterControl><span>Project</span><select class=filterSelect id=m-project aria-label="Model performance project filter"><option value="">All projects</option></select></label>
 	    <div class=filterControl><span>Models</span><details class=modelPicker id=m-model-picker><summary aria-label="Choose models to compare"><span id=m-model-summary>All models</span></summary><div class=modelPickerMenu id=m-model-options role=group aria-label="Models to compare"></div></details></div>
@@ -774,30 +772,30 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 aria-description="Repeated configured terms count separately." data-tip="Repeated configured terms count separately.">Term hits</div><div class="v mono" id=f-matches>0</div></div>
 	  </div>
 	  <div class="card frustrationTrendCard">
-	   <div class=modelTrendHead><div><h2 class=fieldtip tabindex=0 aria-description="User-turn volume, matched utterances, and match rate over time." data-tip="User-turn volume, matched utterances, and match rate over time.">Signal over time</h2><p id=f-trend-note></p></div><div class=signalTrendControls><div class=frustrationLegend><span><i style="background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)"></i>user turns</span><span><i style="background:var(--warn)"></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
+	   <div class=modelTrendHead><div><h2>Signal over time</h2><p id=f-trend-note></p></div><div class=signalTrendControls><div class=frustrationLegend><span><i style="background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)"></i>user turns</span><span><i style="background:var(--warn)"></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
 	   <div class=modelChartWrap><svg class="modelChart frustrationChart" id=f-chart viewBox="0 0 1040 286" preserveAspectRatio=none role=img aria-label="Language-signal rate and matched user utterances over time"></svg><div class=modelChartTip id=f-chart-tip></div></div>
 	  </div>
 	  <div class=frustrationBreakdown>
-	   <section class="card signalPanel modelPanel"><div class=signalPanelHead><div><h2 class=fieldtip tabindex=0 aria-description="Model runtimes ranked by phrase-match rate and matched user turns." data-tip="Model runtimes ranked by phrase-match rate and matched user turns.">Models</h2></div></div><div class=signalRankList id=f-models></div></section>
-	   <section class="card signalPanel termPanel"><div class=signalPanelHead><div><h2 class=fieldtip tabindex=0 aria-description="Observed configured phrase hits in this window." data-tip="Observed configured phrase hits in this window.">Terms</h2></div><button class=tbtn id=f-add-terms type=button aria-label="Add more terms">Add terms</button></div><div class=signalRankList id=f-terms></div></section>
-	   <section class="card signalPanel chatPanel"><div class=signalPanelHead><div><h2 class=fieldtip tabindex=0 aria-description="Chats ranked by phrase-match rate." data-tip="Chats ranked by phrase-match rate.">Chats</h2><p id=f-chat-summary></p></div><div class=seg id=f-chat-mode><button data-fchat=affected>Matched</button><button data-fchat=all>All</button></div></div><div class=chatSignalList id=f-chats></div></section>
+	   <section class="card signalPanel modelPanel"><div class=signalPanelHead><div><h2>Models</h2></div></div><div class=signalRankList id=f-models></div></section>
+	   <section class="card signalPanel termPanel"><div class=signalPanelHead><div><h2>Terms</h2></div><button class=tbtn id=f-add-terms type=button aria-label="Add more terms">Add terms</button></div><div class=signalRankList id=f-terms></div></section>
+	   <section class="card signalPanel chatPanel"><div class=signalPanelHead><div><h2>Chats</h2><p id=f-chat-summary></p></div><div class=seg id=f-chat-mode><button data-fchat=affected>Matched</button><button data-fchat=all>All</button></div></div><div class=chatSignalList id=f-chats></div></section>
 	  </div>
 	 </section>
 	 </div>
 
 	 <div class=view id=view-daily>
 	  <div class="dailyHead spectrumPageHead">
-	   <div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="What changed, what drove spend, and what deserves attention." data-tip="What changed, what drove spend, and what deserves attention.">Daily brief</h1></div>
+	   <div class=spectrumPageHeadCopy><h1>Daily brief</h1></div>
 	   <div class=dailyPicker><button class=iconBtn id=d-older type=button title="Older day" aria-label="Older day"><svg class=dailyNavIcon viewBox="0 0 20 20" aria-hidden=true><path d="m12.5 5-5 5 5 5"/></svg></button><select id=d-day-select aria-label="Summary day"></select><button class=iconBtn id=d-newer type=button title="Newer day" aria-label="Newer day"><svg class=dailyNavIcon viewBox="0 0 20 20" aria-hidden=true><path d="m7.5 5 5 5-5 5"/></svg></button></div>
 	  </div>
 	  <div class=dailyOverview>
 	   <div class="card dailySpendCard">
-	    <div class=dailySpendTop><div><div class="label fieldtip" tabindex=0 aria-description="API-equivalent estimated cost for this local day." data-tip="API-equivalent estimated cost for this local day.">Estimated spend</div><div class="dailySpendValue mono" id=d-cost>$0</div></div><div class=dailyDelta id=d-spend-delta>Building baseline</div></div>
+	    <div class=dailySpendTop><div><div class=label>Estimated spend</div><div class="dailySpendValue mono" id=d-cost>$0</div></div><div class=dailyDelta id=d-spend-delta>Building baseline</div></div>
 	    <div class=dailyMetrics>
-	     <div class=dailyMetric><div class="label fieldtip" tabindex=0 aria-description="Logs with activity attributed to this local day." data-tip="Logs with activity attributed to this local day.">Active logs</div><div class="v mono" id=d-logs>0</div></div>
-	     <div class=dailyMetric><div class="label fieldtip" tabindex=0 aria-description="Distinct workspaces active on this local day." data-tip="Distinct workspaces active on this local day.">Projects</div><div class="v mono" id=d-projects>0</div></div>
-	     <div class=dailyMetric><div class="label fieldtip" tabindex=0 aria-description="Estimated spend divided by active logs." data-tip="Estimated spend divided by active logs.">Average / log</div><div class="v mono" id=d-avg-log>$0</div></div>
-	     <div class=dailyMetric><div class="label fieldtip" tabindex=0 title="Cumulative prompt-to-completed-response wall-clock wait for requests completed on this day." data-tip="Cumulative prompt-to-completed-response wall-clock wait for requests completed on this day.">Wait time</div><div class="v mono" id=d-wait>--</div><div class=subline id=d-wait-note>completed requests</div></div>
+	     <div class=dailyMetric><div class=label>Active logs</div><div class="v mono" id=d-logs>0</div></div>
+	     <div class=dailyMetric><div class=label>Projects</div><div class="v mono" id=d-projects>0</div></div>
+	     <div class=dailyMetric><div class=label>Average / log</div><div class="v mono" id=d-avg-log>$0</div></div>
+	     <div class=dailyMetric><div class=label>Wait time</div><div class="v mono" id=d-wait>--</div><div class=subline id=d-wait-note>completed requests</div></div>
 	    </div>
 	   </div>
 	   <div class="card dailyReadout">
@@ -810,22 +808,22 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   </div>
 	  </div>
 	  <div class="card dailyTrendCard">
-	   <div class=dailySectionHead><div><h2 class=fieldtip id=d-trend-title tabindex=0 aria-description="Select a day to inspect it. Wait shows completed prompt-to-response time by day." data-tip="Select a day to inspect it. Wait shows completed prompt-to-response time by day.">Spend trend</h2><p id=d-trend-sub></p></div><div class=dailyTrendControls><div class=seg id=d-trend-mode><button data-daily-trend=spend>Spend</button><button data-daily-trend=wait>Wait</button></div><div class=globalMeta id=d-trend-note></div></div></div>
+	   <div class=dailySectionHead><div><h2 id=d-trend-title>Spend trend</h2><p id=d-trend-sub></p></div><div class=dailyTrendControls><div class=seg id=d-trend-mode><button data-daily-trend=spend>Spend</button><button data-daily-trend=wait>Wait</button></div><div class=globalMeta id=d-trend-note></div></div></div>
 	   <div class=dailyTrend id=d-trend aria-label="Daily spend history"></div>
 	  </div>
 	  <div class=dailyGrid>
-	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2 class=fieldtip tabindex=0 aria-description="Where the day’s covered spend came from." data-tip="Where the day’s covered spend came from.">Highest-cost logs</h2></div><span id=d-session-count></span></div><div class=dailySessions id=d-sessions></div></div>
-	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2 class=fieldtip tabindex=0 aria-description="Share of daily covered spend by runtime." data-tip="Share of daily covered spend by runtime.">Runtime split</h2></div></div><div class=dailyProviders id=d-providers></div></div>
+	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2>Highest-cost logs</h2></div><span id=d-session-count></span></div><div class=dailySessions id=d-sessions></div></div>
+	   <div class="card dailyPanel"><div class=dailyPanelHead><div><h2>Runtime split</h2></div></div><div class=dailyProviders id=d-providers></div></div>
 	  </div>
 	 </div>
 
 	 <div class=view id=view-learn>
-	  <div class="learnHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading." data-tip="A practical review loop for controlling spend, wait time, context pressure, and unnecessary capability loading.">Learn</h1></div></div>
+	  <div class="learnHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1>Learn</h1></div></div>
 	  <section class="learnSection learnOnboarding"><div class=learnSectionHead><div><h2>First five minutes</h2><div class=subline id=learn-onboarding-status>0 of 7 complete · progress stays in this browser.</div></div><button class=tbtn id=learn-onboarding-action type=button>Resume onboarding</button></div><div class=learnShortcutGrid aria-label="Command palette shortcuts">
-	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Open the command palette from anywhere." data-tip="Open the command palette from anywhere."><kbd>&#8984;K</kbd><span>Command palette</span></div>
-	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Move through matching commands." data-tip="Move through matching commands."><kbd>&uarr; &darr;</kbd><span>Move</span></div>
-	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Open the selected destination." data-tip="Open the selected destination."><kbd>&crarr;</kbd><span>Open</span></div>
-	   <div class="learnShortcut fieldtip" tabindex=0 aria-description="Jump directly to a top-level view." data-tip="Jump directly to a top-level view."><kbd>&#8997;1&ndash;7</kbd><span>Switch views</span></div>
+	   <div class=learnShortcut><kbd>&#8984;K</kbd><span>Command palette</span></div>
+	   <div class=learnShortcut><kbd>&uarr; &darr;</kbd><span>Move</span></div>
+	   <div class=learnShortcut><kbd>&crarr;</kbd><span>Open</span></div>
+	   <div class=learnShortcut><kbd>&#8997;1&ndash;7</kbd><span>Switch views</span></div>
 	  </div></section>
 	  <section class=learnSection><h2>Review loop</h2><div class=learnSteps>
 	   <div class=learnStep><div class=num>1</div><div><h3 class=fieldtip tabindex=0 aria-description="Choose a recent session, then check estimated spend, wait time, context use, cache behavior, and the latest execution." data-tip="Choose a recent session, then check estimated spend, wait time, context use, cache behavior, and the latest execution.">Session run</h3></div><button class=tbtn data-learn-route=sessions>Open Sessions</button></div>
@@ -840,7 +838,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 <div class=view id=view-capabilities>
   <div class=spectrumPageHead>
    <div class=spectrumPageHeadCopy>
-    <h1 class=fieldtip tabindex=0 aria-description="Review local tool, MCP, and skill evidence before changing optional capability groups." data-tip="Review local tool, MCP, and skill evidence before changing optional capability groups.">Tools</h1>
+    <h1>Tools</h1>
    </div>
   </div>
   <div class=capHero>
@@ -853,7 +851,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	  <div class=capCharts>
 	   <div class="card pad"><div class="label fieldtip" tabindex=0 title="Evidence for every runtime-reported definition, including default and read-only tools. This chart explains prompt composition but is not itself a removal recommendation." data-tip="Evidence for every runtime-reported definition, including default and read-only tools. This chart explains prompt composition but is not itself a removal recommendation.">Catalog load</div><div class=subline><span class=fieldtip tabindex=0 title="Useful eager: schema loaded up front and called. Unused eager: schema loaded up front but not called. Deferred: schema kept out of the initial prompt. Default/read-only entries remain included here for evidence." data-tip="Useful eager: schema loaded up front and called. Unused eager: schema loaded up front but not called. Deferred: schema kept out of the initial prompt. Default/read-only entries remain included here for evidence.">useful eager · unused eager · deferred</span></div><div class=defBar id=c-def-chart></div><div class=legend id=c-def-legend></div><div class=subline id=c-def-note></div></div>
 	  </div>
-	  <div class=section-h><h2 class=fieldtip tabindex=0 aria-description="Available tools, MCP servers, and skills from local traces and configuration." data-tip="Available tools, MCP servers, and skills from local traces and configuration.">Inventory</h2><span class=hint id=c-count>trace + config</span><span class=capSource id=c-claude-status></span></div>
+	  <div class=section-h><h2>Inventory</h2><span class=hint id=c-count>trace + config</span><span class=capSource id=c-claude-status></span></div>
   <div class=capFilters>
    <input class=searchbox id=c-search type=search placeholder="Search tools, MCPs, skills, runtime, source">
    <div class="seg sortseg" id=c-type-filter><button data-ctype=all>All</button><button data-ctype=tool>Tools</button><button data-ctype=mcp>MCPs</button><button data-ctype=skill>Skills</button></div>
@@ -864,7 +862,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-settings>
-	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls, including monthly budgets and browser budget alerts. Session caps remain inside each session." data-tip="Machine-wide controls, including monthly budgets and browser budget alerts. Session caps remain inside each session.">Settings</h1></div></div>
+	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1>Settings</h1></div></div>
   <div class=settingsPageLayout>
    <nav class="card settingsMap" aria-label="Settings sections">
     <div class=settingsMapIntro><h2>Sections</h2></div>
@@ -1050,6 +1048,50 @@ function stripNativeFieldTipTitles(root=document){
  root.querySelectorAll('.fieldtip[title]').forEach(el=>{if(!el.hasAttribute('aria-description'))el.setAttribute('aria-description',el.getAttribute('title'));el.removeAttribute('title');});
 }
 stripNativeFieldTipTitles();
+function initFieldTipPopup(){
+ const popup=document.createElement('div');
+ popup.id='fieldtip-popup';popup.setAttribute('role','tooltip');popup.hidden=true;document.body.append(popup);
+ let activeFieldTip=null,positionFrame=0;
+ const fieldTipTarget=node=>node instanceof Element?node.closest('.fieldtip[data-tip]'):null;
+ const hideFieldTip=target=>{
+  if(target&&activeFieldTip!==target)return;
+  activeFieldTip=null;popup.hidden=true;
+ };
+ const positionFieldTip=()=>{
+  positionFrame=0;
+  const target=activeFieldTip,tip=target?.getAttribute('data-tip')?.trim();
+  if(!target||!target.isConnected||!tip){hideFieldTip();return;}
+  popup.textContent=tip;popup.hidden=false;
+  const rect=target.getBoundingClientRect(),margin=12,gap=8,width=popup.offsetWidth,height=popup.offsetHeight;
+  const maxLeft=Math.max(margin,window.innerWidth-margin-width),maxTop=Math.max(margin,window.innerHeight-margin-height);
+  const left=Math.max(margin,Math.min(rect.left,maxLeft)),below=rect.bottom+gap,above=rect.top-gap-height;
+  const top=Math.max(margin,Math.min(below+height<=window.innerHeight-margin||above<margin?below:above,maxTop));
+  popup.style.left=`${left}px`;popup.style.top=`${top}px`;
+ };
+ const scheduleFieldTipPosition=()=>{
+  if(positionFrame)cancelAnimationFrame(positionFrame);
+  positionFrame=requestAnimationFrame(positionFieldTip);
+ };
+ document.addEventListener('pointerover',event=>{
+  const target=fieldTipTarget(event.target);
+  if(target&&!target.contains(event.relatedTarget)){activeFieldTip=target;scheduleFieldTipPosition();}
+ });
+ document.addEventListener('pointerout',event=>{
+  const target=fieldTipTarget(event.target);
+  if(target&&!target.contains(event.relatedTarget))hideFieldTip(target);
+ });
+ document.addEventListener('focusin',event=>{
+  const target=fieldTipTarget(event.target);
+  if(target){activeFieldTip=target;scheduleFieldTipPosition();}
+ });
+ document.addEventListener('focusout',event=>{
+  const target=fieldTipTarget(event.target);
+  if(target&&!target.contains(event.relatedTarget))hideFieldTip(target);
+ });
+ window.addEventListener('resize',scheduleFieldTipPosition);
+ window.addEventListener('scroll',scheduleFieldTipPosition,true);
+}
+initFieldTipPopup();
 const f=n=>Math.round(n||0).toLocaleString();
 const compactNumber=n=>{n=Number(n)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a>=1e10?0:1).replace(/\.0$/,'')+'B';if(a>=1e6)return (n/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'M';if(a>=1e3)return (n/1e3).toFixed(a>=1e4?0:1).replace(/\.0$/,'')+'K';return f(n);};
 const money=n=>'$'+(Math.abs(n||0)>=1?(n||0).toFixed(2):(n||0).toFixed(3));
@@ -2474,12 +2516,19 @@ function paintModelProjects(stats){
   modelProject='';modelFilters=loadModelFilters('');
   localStorage.removeItem('tm_model_project');
  }
- $('m-project').innerHTML='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
- $('m-project').value=modelProject;
- $('m-project').title=stats?.projects_truncated?'Showing the first 500 discovered projects.':'';
+ const projectSelect=$('m-project'),projectOptions='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
+ setLogSelectOptions(projectSelect,projectOptions,modelProject);
+ const projectTitle=stats?.projects_truncated?'Showing the first 500 discovered projects.':'';
+ if(projectSelect.title!==projectTitle)projectSelect.title=projectTitle;
+}
+function setModelProjectLoading(loading){
+ const projectSelect=$('m-project');
+ if(loading)projectSelect.setAttribute('aria-busy','true');
+ else projectSelect.removeAttribute('aria-busy');
 }
 function commitModelStats(stats,scope,generation){
  activeModelStats=stats;activeModelScope=scope;activeModelGeneration=generation;
+ setModelProjectLoading(false);
  $('m-project-status').textContent='';$('m-project-status').classList.remove('warn');
  renderModelStats(stats);
 }
@@ -2489,15 +2538,16 @@ async function renderActiveModelStats(){
  paintModelProjects(machine);
  if(!modelProject){
   modelProjectRequest++;modelProjectLoadingKey='';
+  setModelProjectLoading(false);
   commitModelStats(machine,'',generation);
   return;
  }
  const project=modelProject,key=`${generation}\n${project}`,cached=modelProjectCache.get(key);
  if(cached){commitModelStats(cached,project,generation);return;}
  if(modelProjectLoadingKey===key)return;
- const previous=activeModelStats?` · showing ${modelScopeLabel(activeModelScope)} until ready`:'';
- $('m-project-status').textContent=`Loading ${project}${previous}`;
+ $('m-project-status').textContent='';
  $('m-project-status').classList.remove('warn');
+ setModelProjectLoading(true);
  modelProjectLoadingKey=key;
  const request=++modelProjectRequest;
  try{
@@ -2514,7 +2564,7 @@ async function renderActiveModelStats(){
   $('m-project-status').textContent=`Could not load ${project}${activeModelStats?` · still showing ${modelScopeLabel(activeModelScope)}`:''}`;
   $('m-project-status').classList.add('warn');
  }finally{
-  if(modelProjectLoadingKey===key)modelProjectLoadingKey='';
+  if(modelProjectLoadingKey===key){modelProjectLoadingKey='';setModelProjectLoading(false);}
  }
 }
 function rerenderActiveModelStats(){
@@ -2538,6 +2588,17 @@ $('m-model-options').addEventListener('change',event=>{
 });
 $('m-model-picker').addEventListener('keydown',event=>{if(event.key==='Escape')$('m-model-picker').removeAttribute('open');});
 document.addEventListener('pointerdown',event=>{const picker=$('m-model-picker');if(picker.open&&!picker.contains(event.target))picker.removeAttribute('open');});
+function positionModelPickerMenu(){
+ const picker=$('m-model-picker'),menu=$('m-model-options');
+ if(!picker.open){picker.classList.remove('opensUp');menu.style.maxHeight='';return;}
+ const trigger=picker.querySelector('summary'),rect=trigger.getBoundingClientRect(),margin=12;
+ const above=Math.max(0,rect.top-margin),below=Math.max(0,window.innerHeight-rect.bottom-margin),preferred=Math.min(360,menu.scrollHeight||360);
+ const opensUp=below<preferred&&above>below,available=opensUp?above:below;
+ picker.classList.toggle('opensUp',opensUp);
+ menu.style.maxHeight=`${Math.min(360,available)}px`;
+}
+$('m-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionModelPickerMenu));
+window.addEventListener('resize',()=>{if($('m-model-picker').open)positionModelPickerMenu();});
 $('m-range').addEventListener('change',e=>{modelRange=e.target.value;localStorage.setItem('tm_model_range',modelRange);if(LATEST)rerenderActiveModelStats();});
 $('m-metric').onclick=event=>{const metric=event.target.dataset.modelMetric;if(!metric)return;modelTrendMetric=metric;localStorage.setItem('tm_model_trend_metric',metric);if(LATEST)rerenderActiveModelStats();};
 $('f-range').value=frustrationRange;
@@ -3762,7 +3823,9 @@ function renderModelStats(stats){
  const allModels=(stats.models||[]).map(row=>({...row,id:row.id||row.model,runtime:row.runtime||(row.providers||[]).join(' + ')||'unknown runtime'})),names=allModels.map(row=>row.id).sort((a,b)=>a.localeCompare(b));
  modelFilters=migrateModelRuntimeFilters(modelFilters,allModels);saveActiveModelFilters();
  const allSelected=!modelFilters.length,selected=allModels.filter(row=>allSelected||modelFilters.includes(row.id)),cutoff=modelRange==='all'?'':dateKeyAgo(Number(modelRange)-1),options=allModels.slice().sort((a,b)=>modelRuntimeLabel(a).localeCompare(modelRuntimeLabel(b)));
- $('m-model-options').innerHTML=`<label class="modelOption all"><input type=checkbox data-model-choice=all ${allSelected?'checked':''}><span>All model runtimes</span></label>`+options.map(row=>`<label class=modelOption title="${esc(modelRuntimeLabel(row))}"><input type=checkbox data-model-choice=model value="${esc(row.id)}" ${modelFilters.includes(row.id)?'checked':''}><span>${esc(modelRuntimeLabel(row))}</span></label>`).join('');
+ const modelPickerOptions=`<label class="modelOption all"><input type=checkbox data-model-choice=all ${allSelected?'checked':''}><span>All model runtimes</span></label>`+options.map(row=>`<label class=modelOption title="${esc(modelRuntimeLabel(row))}"><input type=checkbox data-model-choice=model value="${esc(row.id)}" ${modelFilters.includes(row.id)?'checked':''}><span>${esc(modelRuntimeLabel(row))}</span></label>`).join('');
+ setLogHtml($('m-model-options'),modelPickerOptions);
+ if($('m-model-picker').open)requestAnimationFrame(positionModelPickerMenu);
  const selectionLabel=allSelected?'All model runtimes':selected.length===1?modelRuntimeLabel(selected[0]):`${selected.length} model runtimes selected`;$('m-model-summary').textContent=selectionLabel;$('m-model-summary').title=allSelected?'All model runtimes':selected.map(modelRuntimeLabel).join(', ');$('m-range').value=modelRange;
 	 const observed=mergeModelDays(selected,cutoff),chart=buildModelTrend(selected,cutoff,modelRange,names),total=aggregateModelDays(observed);
 	 const totalTokensAvailable=metricAvailable(total,'tokens'),totalCostAvailable=metricAvailable(total,'cost'),tokenPartial=metricPartial(total,'tokens'),costPartial=metricPartial(total,'cost'),hasCursorEstimate=selected.some(hasLocalEstimate);
@@ -4199,8 +4262,9 @@ function renderCurrentSessions(state=LATEST){
  const rows=orderedCurrentSessionRows(sourceRows),count=rows.length;
  const focusedId=document.activeElement?.closest?.('[data-current-session-id]')?.dataset.currentSessionId||'';
  $('current-session-count-label').textContent=`${count} active`;
- if(currentSessionDragId)return;
- $('current-session-grid').innerHTML=count?rows.map(row=>{
+ const currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');
+ if(currentSessionDragId||interactingCurrentSessionCard)return;
+ currentGrid.innerHTML=count?rows.map(row=>{
   const provider=['claude','codex','cursor','gemini'].includes(row.provider)?row.provider:'cursor';
   const activity=['working','waiting','recent'].includes(row.activity_state)?row.activity_state:'recent';
   const activityLabel={working:'Working',waiting:'Waiting',recent:'Recent'}[activity];
@@ -4208,7 +4272,6 @@ function renderCurrentSessions(state=LATEST){
   const estimate=row.cost_approx||['local_estimate','mixed'].includes(row.usage_basis);
   const cost=costAvailable?money(row.cost)+(estimate?' est':''):'--';
   const context=currentSessionContext(row);
-  const contextNote=row.context?.window?` of ${compactNumber(row.context.window)}`:(row.context?.latest?' tokens':' unavailable');
   const runtime=row.runtime||row.label||provider,model=currentSessionModelName(row.primary_model);
   const effort=String(row.reasoning_effort||'').trim().replaceAll('_',' ');
   const runtimeLine=`${runtime} / ${model}${effort?` ${effort}`:''}`;
@@ -4217,7 +4280,7 @@ function renderCurrentSessions(state=LATEST){
   const speed=speedAvailable?`${speedFmt(throughput.output_tps)} tok/s${row.token_estimate?' est':''}`:'--';
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
-  return `<button class="card currentSessionCard provider-${provider} activity-${activity}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime title="${esc(runtimeLine)}"><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3 title="${esc(sessionName)}">${esc(sessionName)}</h3><p title="${esc(row.project||'No project')}">${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono title="${esc(context+contextNote)}">${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+  return `<button class="card currentSessionCard provider-${provider} activity-${activity}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):'<section class="card currentSessionsEmpty"><h3>No recent sessions</h3><p>Start Claude, Codex, or Cursor to see one here.</p></section>';
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }

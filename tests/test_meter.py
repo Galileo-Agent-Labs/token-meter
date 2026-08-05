@@ -1897,7 +1897,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("Open original Current", current)
         self.assertNotIn("Experimental", current)
         self.assertNotIn("Current preview", current)
-        self.assertEqual(current.count("card previewKpi fieldtip"), 10)
+        self.assertNotIn("previewKpi fieldtip", current)
         self.assertLess(current.index("id=preview-start"), current.index("id=preview-run-chart-slot"))
         self.assertLess(
             current.index("id=preview-run-chart-slot"),
@@ -1998,6 +1998,36 @@ class DashboardLayoutTests(unittest.TestCase):
             "$('m-trend-title').textContent=modelTrendMetric==='wait'",
             self.page,
         )
+
+    def test_model_filter_menus_stay_stable_during_live_refreshes(self):
+        for marker in (
+            "setLogSelectOptions(projectSelect,projectOptions,modelProject)",
+            "setLogHtml($('m-model-options'),modelPickerOptions)",
+            "function positionModelPickerMenu()",
+            "picker.classList.toggle('opensUp',opensUp)",
+            "$('m-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionModelPickerMenu))",
+            ".modelHead.spectrumPageHead{overflow:visible;z-index:2}",
+            ".modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}",
+        ):
+            self.assertIn(marker, self.page)
+
+    def test_model_project_background_refresh_does_not_shift_the_page(self):
+        for marker in (
+            "function setModelProjectLoading(loading)",
+            "projectSelect.setAttribute('aria-busy','true')",
+            "setModelProjectLoading(false);",
+            "$('m-project-status').textContent='';",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("Loading ${project}", self.page)
+
+    def test_session_card_hover_preserves_the_live_card_node(self):
+        for marker in (
+            "currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');",
+            "if(currentSessionDragId||interactingCurrentSessionCard)return;",
+            "body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}",
+        ):
+            self.assertIn(marker, self.page)
 
     def test_model_trend_hover_panel_is_scrollable_and_pointer_stable(self):
         model_trend = self.page.split("function drawModelTrend(chart){", 1)[1].split(
@@ -2121,10 +2151,18 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("data-cstate=review", self.page)
         self.assertIn("They remain read-only in Token Meter", self.page)
 
-    def test_capability_card_tooltips_are_not_clipped(self):
-        self.assertIn(".capHero .pad{padding:13px 15px;overflow:visible}", self.page)
-        self.assertIn(".capHero .card:hover,.capHero .card:focus-within{z-index:50}", self.page)
-        self.assertIn(".capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}", self.page)
+    def test_fieldtips_are_portaled_and_viewport_bound(self):
+        for marker in (
+            "#fieldtip-popup{position:fixed",
+            "function initFieldTipPopup()",
+            "popup.setAttribute('role','tooltip')",
+            "const maxLeft=Math.max(margin,window.innerWidth-margin-width)",
+            "below+height<=window.innerHeight-margin||above<margin?below:above",
+            "document.addEventListener('pointerover'",
+            "window.addEventListener('scroll',scheduleFieldTipPosition,true)",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("content:attr(data-tip)", self.page)
 
     def test_skill_pack_changes_confirm_exact_control_and_use_verified_state(self):
         self.assertIn("id=cap-dialog", self.page)
@@ -2186,12 +2224,11 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertNotIn("class=foot", section)
 
         for marker in (
-            'aria-description="Compare model runtimes on similar observed workloads.',
-            'aria-description="What changed, what drove spend',
-            'aria-description="A practical review loop',
-            'aria-description="Available tools, MCP servers, and skills',
-            'aria-description="Machine-wide controls, including monthly budgets',
-            ".modelHead h1.fieldtip:after,.dailyHead h1.fieldtip:after,.learnHead h1.fieldtip:after,.previewHead h1.fieldtip:after{bottom:auto;",
+            'aria-description="Observed model output divided by attributable timing.',
+            'aria-description="Track configured positive and friction phrases',
+            'aria-description="Set a budget for each runtime',
+            'aria-description="Give Codex and Claude read-only, on-demand access',
+            "#fieldtip-popup{position:fixed",
             "No use observed",
         ):
             self.assertIn(marker, self.page)
@@ -2374,8 +2411,9 @@ class DashboardLayoutTests(unittest.TestCase):
             "Closing this lesson marks the step complete",
             "id=command-coach", "id=command-coach-done",
             "Close it when you are done; no command is required",
-            "Open the command palette from anywhere",
-            "Jump directly to a top-level view",
+            "class=learnShortcut",
+            "Command palette",
+            "Switch views",
         ):
             self.assertIn(marker, self.page)
         steps = self.page.split("const ONBOARDING_STEPS=[", 1)[1].split(
@@ -2609,9 +2647,8 @@ class DashboardLayoutTests(unittest.TestCase):
             "function openCurrentSessions",
             "'/#sessions'",
             "data-current-session-id",
-            "Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.",
-            'class="currentSessionsCount fieldtip"',
-            "Sessions with activity in the last 30 minutes.",
+            '<h1 id=session-page-title>Sessions</h1>',
+            'class=currentSessionsCount id=current-session-count-label',
             "`${count} active`",
             "Working",
             "Waiting",
@@ -2701,6 +2738,50 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("currentSessionContextCaption", self.page)
         self.assertNotIn("currentSessionContextGuide", self.page)
 
+    def test_session_cards_do_not_have_native_hover_tooltips(self):
+        session_cards = self.page.split("function renderCurrentSessions(state=LATEST){", 1)[1].split(
+            "const currentSessionGrid=$('current-session-grid');", 1
+        )[0]
+        for marker in (
+            'class=currentSessionRuntime title=',
+            '<h3 title=',
+            '<p title=',
+            '<b class=mono title=',
+            "const contextNote=",
+        ):
+            self.assertNotIn(marker, session_cards)
+        self.assertIn('aria-description="${esc(cardDescription)}"', session_cards)
+
+    def test_redundant_hover_tips_are_removed_from_dashboard_labels(self):
+        for marker in (
+            '<h1 class=fieldtip id=session-page-title',
+            '<h1 class=fieldtip tabindex=0 aria-description="Local AI app logs',
+            '<h1 class=fieldtip tabindex=0 aria-description="Compare model runtimes',
+            '<h1 class=fieldtip tabindex=0 aria-description="What changed',
+            '<h1 class=fieldtip tabindex=0 aria-description="A practical review loop',
+            '<h1 class=fieldtip tabindex=0 aria-description="Review local tool',
+            '<h1 class=fieldtip tabindex=0 aria-description="Machine-wide controls',
+            'class="currentSessionsCount fieldtip"',
+            'class="previewStartText fieldtip"',
+            'class="card previewKpi fieldtip',
+            'class="learnShortcut fieldtip"',
+            '<h2 class=fieldtip tabindex=0 aria-description="Where the day’s covered spend',
+        ):
+            self.assertNotIn(marker, self.page)
+        for marker in (
+            '<h1 id=session-page-title>Sessions</h1>',
+            '<h1>Logs</h1>',
+            '<h1>Model performance</h1>',
+            '<h1>Daily brief</h1>',
+            '<h1>Learn</h1>',
+            '<h1>Tools</h1>',
+            '<h1>Settings</h1>',
+            '<div class="card previewKpi">',
+            'data-tip="Observed model output divided by attributable timing.',
+            'data-tip="Budget minus observed spend.',
+        ):
+            self.assertIn(marker, self.page)
+
     def test_sessions_use_the_distilled_token_meter_spectrum_system(self):
         for marker in (
             "shared-spectrum-system-v1",
@@ -2761,7 +2842,7 @@ class DashboardLayoutTests(unittest.TestCase):
             '<div class="dailyHead spectrumPageHead">',
             '<div class="learnHead spectrumPageHead">',
             '<div class="learnHead settingsPageHead spectrumPageHead">',
-            "Review local tool, MCP, and skill evidence before changing optional capability groups.",
+            "<h1>Tools</h1>",
             "<span class=spectrumPageMeta id=g-hint>recent activity</span>",
             "vertical-navigation-rail-v1",
             "body.spectrumApp .wrap{--navigation-rail-width:184px",

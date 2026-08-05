@@ -52,8 +52,8 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 - Persist machine-wide settings through the existing atomic JSON-write path and action-token-protected HTTP endpoints.
 - New settings require validation, idempotent writes, migration behavior, and tests.
 - Preserve legacy hash routes and stored preferences when changing navigation or native settings.
-- Keep the top-level dashboard order `Current → Logs → Daily → Models → Tools → Learn → Settings`; Logs is intentionally second.
-- Global is not a dashboard surface. Keep cross-session aggregation as shared backend data for Logs, Daily, Models, Tools, MCP, and the menu bar.
+- Keep the top-level dashboard order `Sessions → Daily → Models → Tools → Learn → Settings`. Sessions contains `Current sessions` and `All sessions`; All owns cross-session review.
+- Global is not a dashboard surface. Keep cross-session aggregation as shared backend data for Sessions All, Daily, Models, Tools, MCP, and the menu bar.
 - Keep the complete machine-wide monthly budget dashboard and controls inside Settings. The native companion may deep-link to `#settings-budgets`; preserve `#budgets` as a compatibility redirect.
 - Use macOS labels such as `⌥`, never `Alt`, in user-facing copy.
 - Do not add a top-level dashboard view when an existing workflow can contain the complete capability, unless the approved design explicitly calls for one.

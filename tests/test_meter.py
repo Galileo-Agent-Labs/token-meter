@@ -1732,7 +1732,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("function sessionStartMessage(s)", self.page)
         self.assertIn("$('preview-start').textContent=startMessage", self.page)
         current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
-            "<div class=view id=view-logs>", 1
+            "<div class=view id=view-models>", 1
         )[0]
         self.assertLess(current.index("id=preview-start"), current.index("id=preview-run-chart-slot"))
         self.assertIn("text-overflow:ellipsis;white-space:nowrap", self.page)
@@ -1743,6 +1743,20 @@ class DashboardLayoutTests(unittest.TestCase):
                        "external tool-result tokens"):
             self.assertIn(marker, self.page)
         self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
+
+    def test_codex_session_detail_links_to_the_desktop_thread(self):
+        for marker in (
+            'id=session-desktop-link',
+            'aria-label="Open this session in the Codex desktop app"',
+            'function codexDesktopSessionHref(session)',
+            "provider==='codex'&&id",
+            'codex://threads/${encodeURIComponent(id)}',
+            'function renderCodexDesktopSessionLink(session)',
+            'link.hidden=!href',
+            "link.removeAttribute('href')",
+            'renderCodexDesktopSessionLink(s);',
+        ):
+            self.assertIn(marker, self.page)
 
     def test_browser_operational_alerts_are_budget_only(self):
         self.assertIn("function renderInsights(ins)", self.page)
@@ -1820,7 +1834,7 @@ class DashboardLayoutTests(unittest.TestCase):
         ]
         alerts = self.page[
             self.page.index("id=panel-alerts"):
-            self.page.index("id=view-logs")
+            self.page.index("id=view-models")
         ]
         for marker in (
             "id=session-budget-control", "id=budget-slider type=range",
@@ -1834,7 +1848,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=budget type=number", alerts)
         self.assertNotIn("id=spike", alerts)
         self.assertIn("Only budget crossings create alerts.", alerts)
-        self.assertIn(
+        self.assertNotIn(
             "Set a live-run cap without changing the machine-wide monthly budget.",
             summary,
         )
@@ -1887,7 +1901,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=tab-preview", self.page)
         self.assertNotIn("id=view-preview", self.page)
         current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
-            "<div class=view id=view-logs>", 1
+            "<div class=view id=view-models>", 1
         )[0]
         self.assertNotIn("Settings map", current)
         self.assertNotIn("id=agent-access", current)
@@ -1956,9 +1970,10 @@ class DashboardLayoutTests(unittest.TestCase):
                        "id=m-table", "renderModelStats", "aggregateModelDays"):
             self.assertIn(marker, self.page)
         self.assertRegex(self.page, r"id=tab-models[^>]*>.*?<span class=tabLabel>Models</span>")
-        self.assertIn("$('tab-models').onclick=()=>setHashRoute('models')", self.page)
+        self.assertIn("function openTopLevelRoute(route){window.scrollTo(0,0);setHashRoute(route);}", self.page)
+        self.assertIn("$('tab-models').onclick=()=>openTopLevelRoute('models')", self.page)
         self.assertIn("if(h==='models'||h==='frustration')", self.page)
-        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-models"))
+        self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-models"))
         self.assertNotIn("Timing evidence", self.page)
         self.assertIn("Observed output pace is a secondary diagnostic.", self.page)
         self.assertIn("colspan=8", self.page)
@@ -1967,7 +1982,7 @@ class DashboardLayoutTests(unittest.TestCase):
         for marker in (
             "id=m-model-picker", "id=m-model-options", "id=m-model-summary",
             "tm_model_filters", "MODEL_COLORS", "buildModelTrend",
-            "bars show output", "observed tok/s", "id=m-legend",
+            "bars show output", "observed tok/s",
             "modelTipMetrics", "<small>input</small>", "<small>executions</small>",
             "Typical wait", "median wait", "human pause excluded",
             "modelWaitDistribution", "wait_durations_s", "p95_wait_s",
@@ -1978,6 +1993,31 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
+
+    def test_model_trend_omits_legend_without_removing_hover_details(self):
+        self.assertNotIn("id=m-legend", self.page)
+        self.assertNotIn("$('m-legend')", self.page)
+        for marker in (
+            "function modelTrendRowHasUsage(row)",
+            "Number(row?.input_tokens||0)>0",
+            "Number(row?.output_tokens||0)>0",
+            "Number(row?.executions||0)>0",
+            ".filter(item=>modelTrendRowHasUsage(item.row))",
+            "if(!rows.length){hideTip();return;}",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn(
+            '<div class=modelTipName title="${esc(item.model)}"><i class=modelSwatch '
+            'style="background:${item.color}"></i>${esc(item.model)}</div>',
+            self.page,
+        )
+        for marker in (
+            "<small>input</small>", "<small>output</small>",
+            "<small>executions</small>", "<small>avg input</small>",
+            "<small>avg output</small>", "<small>tok/s</small>",
+            "<small>typical wait</small>",
+        ):
+            self.assertIn(marker, self.page)
 
     def test_model_stats_supports_project_scoped_average_io_trends(self):
         for marker in (
@@ -2172,22 +2212,28 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("row.reviewable!==false", self.page)
         self.assertNotIn("...group,id:group.item_id", self.page)
 
-    def test_logs_daily_learn_and_settings_are_first_class_routes(self):
+    def test_sessions_all_daily_learn_and_settings_are_first_class_routes(self):
         for marker in (
-            "id=tab-logs", "id=view-logs", "id=tab-daily", "id=view-daily",
+            "id=session-scope-tabs", "id=session-scope-current", "id=session-scope-all",
+            "id=all-session-history", "id=tab-daily", "id=view-daily",
             "id=tab-learn", "id=view-learn", "id=tab-settings", "id=view-settings",
         ):
             self.assertIn(marker, self.page)
         for removed in (
             "id=tab-global", "id=view-global", "data-global-panel",
-            "id=tab-budgets", "id=view-budgets",
+            "id=tab-budgets", "id=view-budgets", "id=tab-logs", "id=view-logs",
         ):
             self.assertNotIn(removed, self.page)
         self.assertIn("const legacyGlobal=h==='global'||h==='global-logs'", self.page)
-        self.assertIn("if(legacyGlobal)setHashRoute('logs',{replace:true,apply:false})", self.page)
+        self.assertIn("if(h==='logs'||legacyGlobal)", self.page)
+        self.assertIn("'/#sessions-all'", self.page)
+        self.assertIn("function openSessionScope(scope", self.page)
+        self.assertIn("function setSessionScope(scope)", self.page)
+        self.assertIn('class="tabs sessionScopeTabs"', self.page)
+        self.assertIn('<span class=tabLabel>Current sessions</span>', self.page)
+        self.assertIn('<span class=tabLabel>All sessions</span>', self.page)
         self.assertIn("live · updated ${new Date(generatedAt*1000).toLocaleTimeString", self.page)
-        self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-logs"))
-        self.assertLess(self.page.index("id=tab-logs"), self.page.index("id=tab-daily"))
+        self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-daily"))
         self.assertIn("id=d-day-select", self.page)
         self.assertNotIn("id=learn-glossary", self.page)
         self.assertIn("Review loop", self.page)
@@ -2199,7 +2245,6 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_non_current_views_keep_visible_copy_terse(self):
         boundaries = (
-            ("logs", "models"),
             ("models", "daily"),
             ("daily", "learn"),
             ("learn", "capabilities"),
@@ -2301,13 +2346,13 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertLess(settings.index(">Monthly spend</h2>"), settings.index("id=budget-config"))
         self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
 
-    def test_software_updates_are_default_on_hourly_checks_with_an_explicit_install(self):
+    def test_software_updates_are_default_on_ten_minute_checks_with_an_explicit_install(self):
         for marker in (
             "data-settings-target=update-settings",
             "id=update-settings",
             "id=update-enabled",
             "id=update-enabled type=checkbox checked",
-            "Check for updates every hour",
+            "Check for updates every 10 minutes",
             "Enabled by default",
             "id=update-check",
             "id=update-notice",
@@ -2366,14 +2411,14 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_primary_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
-            "tab-session", "tab-logs", "tab-daily", "tab-models",
+            "tab-session", "tab-daily", "tab-models",
             "tab-capabilities", "tab-learn", "tab-settings",
         ]
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit6'",
             "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
             "event.key==='Enter'",
             "class=tabs aria-label=\"Primary navigation\"",
@@ -2395,16 +2440,24 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
 
-    def test_current_onboarding_uses_seven_closeable_teaching_lessons(self):
+    def test_current_onboarding_uses_six_closeable_teaching_lessons(self):
         current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
-            '<div class=view id=view-logs>', 1
+            '<div class=view id=view-models>', 1
         )[0]
+        current_overview = current.split(
+            '<section id=current-sessions-overview', 1
+        )[1].split('<section id=all-session-history', 1)[0]
+        self.assertIn("id=onboarding-card", current_overview)
+        self.assertLess(current_overview.index("id=onboarding-card"),
+                        current_overview.index("id=current-session-grid"))
+        self.assertNotIn("id=onboarding-card aria-labelledby=onboarding-title aria-live=polite data-current-detail",
+                         current)
         self.assertLess(current.index("id=onboarding-card"),
                         current.index("class=previewRunMeta"))
         for marker in (
             "id=onboarding-card", "id=onboarding-toggle",
             "id=onboarding-progress", "id=onboarding-next",
-            "id=onboarding-checklist", "aria-valuemax=7",
+            "id=onboarding-checklist", "aria-valuemax=6",
             "id=learn-onboarding-status", "id=learn-onboarding-action",
             "id=onboarding-dialog", "id=onboarding-dialog-title",
             "id=onboarding-dialog-points", "id=onboarding-dialog-close",
@@ -2419,14 +2472,16 @@ class DashboardLayoutTests(unittest.TestCase):
         steps = self.page.split("const ONBOARDING_STEPS=[", 1)[1].split(
             "const ONBOARDING_STEP_IDS", 1
         )[0]
-        self.assertEqual(steps.count("id:'"), 7)
-        self.assertEqual(steps.count("lesson:'"), 7)
-        self.assertEqual(steps.count("points:["), 7)
+        self.assertEqual(steps.count("id:'"), 6)
+        self.assertEqual(steps.count("lesson:'"), 6)
+        self.assertEqual(steps.count("points:["), 6)
         for step_id in (
-            "current", "activity", "logs", "daily", "models", "capabilities",
-            "palette",
+            "current", "logs", "daily", "models", "capabilities", "palette",
         ):
             self.assertIn(f"id:'{step_id}'", steps)
+        self.assertNotIn("id:'activity'", steps)
+        self.assertNotIn("short:'Activity'", steps)
+        self.assertNotIn("route:'activity'", steps)
         self.assertIn("short:'Models'", steps)
         self.assertIn("short:'Tools'", steps)
         self.assertIn("route:'models'", steps)
@@ -2453,6 +2508,12 @@ class DashboardLayoutTests(unittest.TestCase):
             "runNavigationCommand(command,{source:'shortcut'})",
         ):
             self.assertIn(marker, self.page)
+        resume = self.page.split("function resumeOrRestartOnboarding(){", 1)[1].split(
+            "$('onboarding-toggle').onclick", 1
+        )[0]
+        self.assertIn("openCurrentSessions();", resume)
+        self.assertNotIn("goToLatestSession();", resume)
+        self.assertIn("The six-step guide is back in Current sessions.", resume)
         self.assertNotIn("const teachPalette=", self.page)
         self.assertNotIn("openOnboardingLesson('palette')", self.page)
         self.assertNotIn("function markOnboardingRoute(", self.page)
@@ -2461,7 +2522,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("onboarding-dismiss", self.page)
         self.assertNotIn("Dismiss onboarding", self.page)
 
-    def test_logs_support_app_project_and_time_range_filters(self):
+    def test_all_sessions_supports_app_project_and_time_range_filters(self):
         for marker in ("id=g-app", "id=g-project", "id=g-time", "App filter",
                        "Projects filter", "Time range filter", "class=logsToolbarStatus", "id=g-active-filters",
                        "id=g-clear", "id=lf-cost", "id=lf-input", "id=lf-output", "id=lf-models"):
@@ -2482,39 +2543,43 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("tm_global_app", self.page)
         self.assertIn("tm_global_project", self.page)
         self.assertIn("tm_global_time", self.page)
-        self.assertIn("renderLogStats(sessions)", self.page)
+        self.assertIn("renderAllSessionStats(sessions)", self.page)
         self.assertIn("session.model_stats", self.page)
         self.assertIn("globalSearch='';globalApp='';globalProject='';globalTime='all'", self.page)
         self.assertIn("['tm_global_search','tm_global_app','tm_global_project','tm_global_time']", self.page)
         self.assertIn("fetch('/logs',{cache:'no-store'})", self.page)
-        self.assertIn("logSessionInventory?mergeLogSessionInventory(logSessionInventory,xs.sessions)", self.page)
+        self.assertIn("allSessionInventory?mergeAllSessionInventory(allSessionInventory,xs.sessions)", self.page)
 
-    def test_logs_live_updates_preserve_mounted_rows(self):
+    def test_all_sessions_live_updates_preserve_mounted_rows(self):
         for marker in (
             "const logHtmlCache=new WeakMap()",
             "function setLogText(element,value)",
             "function setLogAttribute(element,name,value)",
             "function setLogHtml(element,html)",
             "function logRowRenderKey(s,active)",
-            "function reconcileLogRows(sessions,maxCost)",
-            "function mergeLogSessionInventory(inventory,liveSessions)",
+            "function reconcileLogRows(sessions,maxCost,liveSessionIds=new Set())",
+            "function mergeAllSessionInventory(inventory,liveSessions)",
             "(liveSessions||[]).forEach(row=>rows.set(String(row.id),row))",
+            "const liveSessionIds=new Set((xs.current_sessions||[]).map(session=>String(session.id||'')));",
+            "const live=liveSessionIds.has(id)",
+            "const className=`srow${active?' active':''}${live?' live':''}`",
+            ".srow.active,.srow.live{border-color:rgba(0,188,235,.62)",
             "const existing=new Map([...root.children]",
             "if(row.className!==className)row.className=className",
             "if(row.getAttribute('aria-label')!==ariaLabel)",
             "if(row._logRenderKey!==renderKey)",
             "else root.insertBefore(row,cursor)",
-            "reconcileLogRows(sessions,maxCost)",
+            "reconcileLogRows(sessions,maxCost,liveSessionIds)",
             "$('slist').onclick=event=>",
             "$('slist').onkeydown=event=>",
-            "const inventoryStale=!logSessionInventory",
-            "if(inventoryStale)loadLogSessions()",
-            "else renderLogs(LATEST.xsession)",
+            "const inventoryStale=!allSessionInventory",
+            "if(inventoryStale)loadAllSessions()",
+            "else renderAllSessions(LATEST.xsession)",
         ):
             self.assertIn(marker, self.page)
         self.assertNotIn("$('slist').innerHTML=sessions.length?sessions.map", self.page)
 
-    def test_current_and_logs_share_the_defined_app_badge_helper(self):
+    def test_current_and_all_sessions_share_the_defined_app_badge_helper(self):
         self.assertIn("const appBadgeClass=session=>", self.page)
         self.assertIn("'badge app '+appBadgeClass(s)", self.page)
         self.assertIn("${appBadgeClass(s)}", self.page)
@@ -2611,6 +2676,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn('return `class=fieldtip tabindex=0 title="${safe}"', self.page)
 
     def test_daily_omits_tool_result_health_and_uses_the_logs_open_path(self):
+        self.assertIn(".dailySpendCard:before{content:none}", self.page)
         self.assertNotIn("Tool-result health", self.page)
         self.assertNotIn("Tool results need attention", self.page)
         self.assertNotIn("function openDailySession", self.page)
@@ -2663,15 +2729,17 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("data-current-panel=sessions", self.page)
         self.assertIn('id=current-tabs aria-label="Session views" data-current-detail', self.page)
         self.assertRegex(self.page, r"id=tab-session[^>]*>.*?<span class=tabLabel>Sessions</span>")
-        self.assertIn("if(h==='sessions'||h==='current-sessions')", self.page)
+        self.assertIn("if(h==='sessions'||h==='sessions-all'||h==='current-sessions')", self.page)
         self.assertIn("history.replaceState(null,'','/#sessions')", self.page)
         self.assertIn("function currentSessionModelName", self.page)
         self.assertIn("row.session_name||row.project||'Untitled session'", self.page)
         self.assertIn("`${runtime} / ${model}${effort?` ${effort}`:''}`", self.page)
         self.assertIn("<span>Speed</span>", self.page)
         self.assertIn("speedFmt(throughput.output_tps)} tok/s", self.page)
-        self.assertIn("Back to sessions", self.page)
-        self.assertIn("$('unpin').onclick=()=>openCurrentSessions()", self.page)
+        self.assertNotIn("id=unpin", self.page)
+        self.assertNotIn("Back to current sessions", self.page)
+        self.assertNotIn("Back to all sessions", self.page)
+        self.assertNotIn("$('unpin')", self.page)
         self.assertNotIn("Reorder: drag or ⌥ + arrows", self.page)
         self.assertNotIn("currentSessionsMoveHint", self.page)
         self.assertNotIn("currentSessionOpen", self.page)
@@ -2770,7 +2838,7 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertNotIn(marker, self.page)
         for marker in (
             '<h1 id=session-page-title>Sessions</h1>',
-            '<h1>Logs</h1>',
+            '<h2>All sessions</h2>',
             '<h1>Model performance</h1>',
             '<h1>Daily brief</h1>',
             '<h1>Learn</h1>',
@@ -2798,6 +2866,7 @@ class DashboardLayoutTests(unittest.TestCase):
             'class="previewHead spectrumPageHead"',
             'class="previewHeadCopy spectrumPageHeadCopy"',
             ".spectrumPageHead:before",
+            ".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px;align-items:flex-start",
             ".currentSessionCard:before{content:none}",
             ".currentSessionCard.activity-working",
             ".currentSessionGrip",
@@ -2824,6 +2893,8 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("直近30分", self.page)
         self.assertNotIn("稼働状況", self.page)
         self.assertNotIn("session-solar-field-v1", self.page)
+        self.assertNotIn("body.sessionRoute #view-session.sessionDetail .previewHead{min-height:152px}", self.page)
+        self.assertNotIn("body.sessionRoute #view-session.sessionDetail .previewStatus:after", self.page)
 
     def test_top_level_views_share_the_spectrum_design_primitives(self):
         for marker in (
@@ -2843,7 +2914,7 @@ class DashboardLayoutTests(unittest.TestCase):
             '<div class="learnHead spectrumPageHead">',
             '<div class="learnHead settingsPageHead spectrumPageHead">',
             "<h1>Tools</h1>",
-            "<span class=spectrumPageMeta id=g-hint>recent activity</span>",
+            "<span class=allSessionsHint id=g-hint>Recent activity</span>",
             "vertical-navigation-rail-v1",
             "body.spectrumApp .wrap{--navigation-rail-width:184px",
             "grid-template-columns:var(--navigation-rail-width) minmax(0,1320px)",
@@ -2875,7 +2946,7 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_sessions_is_default_new_cards_lead_and_known_cards_keep_manual_order(self):
         for marker in (
-            "$('tab-session').onclick=openCurrentSessions",
+            "$('tab-session').onclick=()=>{window.scrollTo(0,0);openCurrentSessions();};",
             "label:'Sessions'",
             "action:'sessions',directKey:'Digit1'",
             "setHashRoute('sessions',{replace:true,apply:false})",
@@ -2955,7 +3026,7 @@ class MenubarSourceTests(unittest.TestCase):
         cls.source = Path(meter.__file__).with_name("menubar").joinpath("TokenMeterMenuBar.swift").read_text()
 
     def test_daily_brief_action_opens_cross_session_daily_route(self):
-        self.assertIn('addAction("Open Daily Brief", #selector(openDailyBrief))', self.source)
+        self.assertIn('NSMenuItem(title: "Open Daily Brief", action: #selector(openDailyBrief)', self.source)
         self.assertIn('@objc private func openDailyBrief()', self.source)
         self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
 
@@ -2973,9 +3044,10 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('@objc private func openModelPrices()', self.source)
         self.assertIn('openDashboardPanel("model-pricing", includePinnedSession: false)', self.source)
 
-    def test_output_speed_is_a_dedicated_honest_metric_row(self):
-        self.assertIn('addMetricRow("Output speed", snapshot.outputSpeedLabel', self.source)
-        self.assertIn('addMetricRow("Model", snapshot.model)', self.source)
+    def test_output_speed_is_a_dedicated_honest_metric_readout(self):
+        self.assertIn('metricColumn("Output pace", snapshot.outputSpeedLabel', self.source)
+        self.assertIn('snapshot.outputSpeedTooltip', self.source)
+        self.assertIn('metricColumn(latestLabel, latest)', self.source)
         self.assertIn('· \(outputSpeedLabel) · \(model)', self.source)
         self.assertIn('formatTokenRate(rate)', self.source)
         self.assertIn('Tool execution time may be included.', self.source)
@@ -2996,29 +3068,107 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let costAvailable = metricAvailable(availability, "cost")', self.source)
         self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
         self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
-        self.assertIn('snapshot.estimatedTokens ? " est" : ""', self.source)
-        self.assertIn('Cursor tokens are local context-and-visible-output proxies', self.source)
+        self.assertIn('metricColumn("Run cost", snapshot.costLabel', self.source)
+        self.assertIn('Cursor output uses trace-visible text estimated at four characters per token.', self.source)
 
     def test_live_polling_bypasses_cached_menubar_responses(self):
         self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Pragma")', self.source)
 
+    def test_run_pulse_opens_from_the_status_item_and_transitions_trace_backed_pulse(self):
+        self.assertIn("private let popover = NSPopover()", self.source)
+        self.assertIn("private final class RunPulsePopoverController", self.source)
+        self.assertIn("private final class ExecutionTraceView", self.source)
+        self.assertIn("ExecutionTraceView(values: snapshot.contextPulse)", self.source)
+        self.assertIn('setAccessibilityLabel("Measured execution trace")', self.source)
+        self.assertIn('let latest = point(values.count - 1, values[values.count - 1])', self.source)
+        self.assertIn('let color = contextSignalColor(value)', self.source)
+        self.assertIn('private func makeScrollableEvidenceBody(_ content: NSView)', self.source)
+        self.assertIn('scroll.autohidesScrollers = true', self.source)
+        self.assertIn('bodyHost.heightAnchor.constraint(equalToConstant: evidence.height)', self.source)
+        self.assertIn('max(Layout.minEvidenceHeight, measuredHeight)', self.source)
+        self.assertIn('TOKEN_METER_MENUBAR_CONTENT_SMOKE', self.source)
+        self.assertIn('run-slip-content=scrollable', self.source)
+        self.assertIn('guard sessions.count < 3 || runHeight <= runScroll.contentView.bounds.height', self.source)
+        self.assertIn("popover.behavior = .transient", self.source)
+        self.assertIn("popover.appearance = NSAppearance(named: .vibrantDark)", self.source)
+        self.assertIn("popover.show(relativeTo: button.bounds", self.source)
+        self.assertIn("RUN SLIP CONTRACT", self.source)
+        self.assertIn("No measured context history", self.source)
+        self.assertIn("Only provider-reported limits are shown.", self.source)
+        self.assertIn("TOKEN_METER_MENUBAR_LAYOUT_SMOKE", self.source)
+        self.assertIn("static let width: CGFloat = 360", self.source)
+        self.assertIn("static let maxHeight: CGFloat = 452", self.source)
+        self.assertIn("sizes.allSatisfy({ $0.width == 360 && $0.height <= 452 })", self.source)
+        self.assertIn('button.widthAnchor.constraint(equalTo: item.widthAnchor)', self.source)
+        self.assertIn('button.heightAnchor.constraint(equalToConstant: 27)', self.source)
+        self.assertIn('column.widthAnchor.constraint(equalToConstant: Layout.width - Layout.horizontalInset * 2)', self.source)
+        self.assertIn('buttons.allSatisfy({ $0.frame.width >= 70 && $0.frame.height >= 24 })', self.source)
+        self.assertIn('Run evidence viewport leaves dead vertical space.', self.source)
+        self.assertIn("private var popoverRefreshPending = false", self.source)
+        self.assertIn("guard force || !popover.isShown else", self.source)
+        self.assertIn("func popoverDidClose", self.source)
+        self.assertIn("func runPopoverSmoke() throws", self.source)
+        self.assertIn("let originalPersistedTab = tokenMeterDefaults.string", self.source)
+        self.assertIn("tokenMeterDefaults.set(originalPersistedTab, forKey: selectedTabDefaultsKey)", self.source)
+        self.assertIn("TOKEN_METER_MENUBAR_POPOVER_SMOKE", self.source)
+        self.assertIn("animatedSurfaceRefresh: Bool = false", self.source)
+        self.assertIn("func transition(to tab: MenuTab) -> NSSize", self.source)
+        self.assertIn("outgoing?.removeFromSuperview()", self.source)
+        self.assertIn("incoming.scroll.alphaValue = 1", self.source)
+        self.assertIn("private func resizePopover(to targetSize: NSSize)", self.source)
+        self.assertIn("popover.contentSize = targetSize", self.source)
+        self.assertIn("mode=immediate", self.source)
+        self.assertIn("settledSurfaceTransitionGeneration == surfaceTransitionGeneration", self.source)
+        self.assertIn("popover.contentViewController === mountedController", self.source)
+        self.assertIn("mountedController.tabsAreFullyVisible()", self.source)
+        self.assertNotIn("CAMediaTimingFunction", self.source)
+        self.assertNotIn(".animator().setFrame", self.source)
+        self.assertNotIn("Timer(timeInterval: 1.0 / 60.0", self.source)
+        self.assertNotIn("Timer(timeInterval: 0.28", self.source)
+        self.assertNotIn("TransitionSnapshotView", self.source)
+        self.assertNotIn("makeTransitionSnapshot", self.source)
+        self.assertNotIn("nextView.alphaValue = 0.01", self.source)
+        self.assertNotIn("NSSegmentedControl", self.source)
+        self.assertNotIn("private let menu = NSMenu()", self.source)
+        self.assertNotIn("private func panel(_ content: NSView)", self.source)
+
+    def test_run_slip_leads_with_real_session_names_and_fits_three_rows(self):
+        self.assertIn('let selectedSessionID = string(selection["selected_id"])', self.source)
+        self.assertIn('sessions.first { $0.id == snapshot.selectedSessionID }?.identifier', self.source)
+        self.assertIn('textButton(session.identifier, action: #selector(selectSession(_:))', self.source)
+        self.assertIn('item.cell?.lineBreakMode = .byTruncatingTail', self.source)
+        self.assertIn('label(session.providerName, size: 10.5', self.source)
+        self.assertIn('stack.alignment = .leading', self.source)
+        self.assertIn('row.widthAnchor.constraint(equalTo: stack.widthAnchor)', self.source)
+        self.assertIn('if snapshot.pinnedSession', self.source)
+        self.assertIn('textButton("Follow latest", action: #selector(followLatest(_:)), primary: true)', self.source)
+        self.assertNotIn('private func makeRecommendation()', self.source)
+        self.assertNotIn('textButton(session.menuTitle', self.source)
+
     def test_provider_tabs_and_quota_cards_are_native_and_persisted(self):
         self.assertIn('enum MenuTab: String, CaseIterable', self.source)
-        self.assertIn('case overview', self.source)
+        self.assertNotIn('case overview', self.source)
         self.assertIn('case claude', self.source)
         self.assertIn('case codex', self.source)
         self.assertIn('case cursor', self.source)
-        self.assertIn('labels: tabs.map(\\.title)', self.source)
-        self.assertIn('private func addOverviewMenu()', self.source)
-        self.assertIn('private func addProviderMenu(_ providerID: String)', self.source)
-        self.assertIn('private func addQuotaWindowRow(_ window: QuotaWindow, stale: Bool)', self.source)
+        self.assertIn('button.setAccessibilityLabel("Show \\(tab.title)")', self.source)
+        self.assertIn('private func makeQuotaBody() -> NSView', self.source)
+        self.assertIn('private func makeProviderInstrument(_ provider: ProviderQuota)', self.source)
+        self.assertIn('LevelBarView(value: window.usedPercent / 100', self.source)
         self.assertIn('tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)', self.source)
         self.assertIn('coverageNote: string(dict["coverage_note"]) ?? ""', self.source)
-        self.assertIn('addSignalRow("Coverage", provider.coverageNote', self.source)
+        self.assertIn('label(provider.coverageNote, size: 10.5', self.source)
         self.assertIn("Only provider-reported limits are shown", self.source)
         self.assertIn('coverage=\\(coverage)', self.source)
+
+    def test_menu_bar_settings_are_visible_and_quota_threshold_is_explicit(self):
+        self.assertIn('textButton("Settings", action: #selector(showSettings(_:)), primary: false)', self.source)
+        self.assertIn('NSMenuItem(title: "Quota alert threshold (\\(quotaAlertThreshold)%)"', self.source)
+        self.assertIn('NSMenu(title: "Quota alert threshold")', self.source)
+        self.assertIn('NSMenuItem(title: "\\(threshold)% used"', self.source)
+        self.assertNotIn('NSMenuItem(title: "Warn at"', self.source)
 
     def test_configurable_title_and_quota_notifications_have_safe_defaults(self):
         self.assertIn('enum TitleMetric: String, CaseIterable', self.source)
@@ -3040,9 +3190,9 @@ class MenubarSourceTests(unittest.TestCase):
     def test_monthly_budget_status_and_transition_alerts_are_native(self):
         for marker in (
             'struct MonthlyBudget',
-            'addAction("Open Budget Settings", #selector(openBudgetSettings))',
+            'textButton(budget.compactLabel, action: #selector(openBudget(_:))',
             'tokenMeterBudgetSettingsURL',
-            'addMetricRow("Monthly budget"', 'private func evaluateBudgetNotifications()',
+            'label("Monthly budget", size: 11.5', 'private func evaluateBudgetNotifications()',
             'budgetNotificationStatesDefaultsKey', 'previous.month == budget.month',
             'firedThresholds: Set(budget.thresholds.filter',
             'if budget.nativeNotifications', 'monthly budget reached',
@@ -3058,8 +3208,6 @@ class MenubarSourceTests(unittest.TestCase):
             'let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)',
             'let warningRange = (title as NSString).range(of: "⚠︎")',
             'attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)',
-            'valueColor: .labelColor',
-            'strong: budget.anyExceeded',
             'let activeTitle = budget?.anyExceeded == true ? "⚠︎ \\(baseTitle)" : baseTitle',
             'print("budget-state=\\(budget?.compactLabel ?? "unconfigured") exceeded=\\(budget?.anyExceeded == true)")',
         ):
@@ -3369,6 +3517,24 @@ class HealthStateTests(unittest.TestCase):
 
 
 class MenubarSessionTests(unittest.TestCase):
+    def test_context_pulse_is_bounded_numeric_only_and_does_not_leak_trace_content(self):
+        state = {
+            "executions": [
+                {"context_pct": -0.5, "detail": "private prompt"},
+                {"context_pct": 0.251234, "tool_input": "private arguments"},
+                {"context_pct": 1.5, "path": "/private/logs/trace.jsonl"},
+                {"context_pct": None},
+                {"context_pct": "not a number"},
+                {"context_pct": True},
+            ],
+        }
+        pulse = meter.menubar_context_pulse(state, limit=2)
+
+        self.assertEqual(pulse, [0.2512, 1.0])
+        encoded = json.dumps(pulse)
+        self.assertNotIn("private", encoded)
+        self.assertNotIn("trace.jsonl", encoded)
+
     def test_recent_sessions_are_limited_and_keep_an_older_pin_visible(self):
         sources = [{
             "id": f"s{idx}", "provider": "codex" if idx % 2 else "claude",
@@ -3383,6 +3549,7 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in latest], ["s6", "s5", "s4", "s3", "s2"])
         self.assertEqual([row["id"] for row in pinned], ["s0", "s6", "s5", "s4", "s3"])
         self.assertEqual(pinned[0]["name"], "Task 0")
+        self.assertNotIn("project", pinned[0])
 
     def test_menubar_state_uses_requested_session_and_marks_pin(self):
         sources = [{
@@ -3392,7 +3559,7 @@ class MenubarSessionTests(unittest.TestCase):
         state = {
             "provider": "codex", "source": sources[0], "session": "pinned.jsonl",
             "project": "/repo/pinned-project", "context": {}, "cache": {}, "trace": [], "insights": [],
-            "executions": [{"idx": 1, "model": "gpt-5.6-sol"}],
+            "executions": [{"idx": 1, "model": "gpt-5.6-sol", "context_pct": 0.2}],
             "throughput": {"available": True, "output_tps": 42.5, "basis": "end_to_end",
                            "sample_count": 2, "timing_coverage": 0.75},
         }
@@ -3408,6 +3575,10 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertEqual(payload["recent_sessions"][0]["name"], "Pinned task")
         self.assertEqual(payload["model"], "gpt-5.6-sol")
         self.assertEqual(payload["provider_quotas"], [])
+        self.assertEqual(payload["context_pulse"], [0.2])
+        self.assertEqual(payload["project"], "pinned-project")
+        self.assertEqual(payload["source"]["project"], "pinned-project")
+        self.assertNotIn("/repo/pinned-project", json.dumps(payload))
         self.assertEqual(payload["throughput"], {
             "available": True, "output_tps": 42.5, "basis": "end_to_end",
             "sample_count": 2, "timing_coverage": 0.75,
@@ -3845,19 +4016,29 @@ class SoftwareUpdateTests(unittest.TestCase):
             stored = json.loads(path.read_text())
             explicit = meter.update_settings(str(path))
         self.assertTrue(initial["enabled"])
-        self.assertEqual(initial["interval_seconds"], 3600)
+        self.assertEqual(initial["interval_seconds"], 600)
         self.assertFalse(invalid["ok"])
         self.assertTrue(result["ok"])
         self.assertFalse(explicit["enabled"])
         self.assertEqual(stored["updates"], {"enabled": False})
         self.assertIn("model_pricing", stored)
 
-    def test_update_watcher_preserves_terminal_install_result_for_the_dashboard(self):
-        source = Path(meter.__file__).read_text()
-        self.assertIn('if phase in {"complete", "failed"}:', source)
-        self.assertIn("_update_wake.wait(UPDATE_CHECK_INTERVAL_S)", source)
+    def test_update_watcher_preserves_terminal_result_for_one_interval_then_checks(self):
+        wake = mock.Mock()
+        wake.wait.side_effect = [False, RuntimeError("stop watcher")]
+        with (mock.patch.object(meter, "_update_wake", wake),
+              mock.patch.object(meter, "update_settings", return_value={"enabled": True}),
+              mock.patch.object(meter, "_update_status_record", return_value={"phase": "complete"}),
+              mock.patch.object(meter, "check_for_software_update") as check):
+            with self.assertRaisesRegex(RuntimeError, "stop watcher"):
+                meter.software_update_watcher()
+        self.assertEqual(
+            wake.wait.call_args_list,
+            [mock.call(meter.UPDATE_CHECK_INTERVAL_S), mock.call(meter.UPDATE_CHECK_INTERVAL_S)],
+        )
+        check.assert_called_once_with()
 
-    def test_hourly_check_fetches_and_reports_a_clean_fast_forward_update(self):
+    def test_automatic_check_fetches_and_reports_a_clean_fast_forward_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = self.enabled_settings(tmp)
             status_path = Path(tmp) / "update-status.json"
@@ -3885,6 +4066,7 @@ class SoftwareUpdateTests(unittest.TestCase):
         self.assertEqual(status["current_revision"], "a" * 40)
         self.assertEqual(status["latest_revision"], "b" * 40)
         self.assertEqual(status["behind"], 2)
+        self.assertEqual(status["next_check_at"], 1834)
         self.assertIn(("fetch", "--quiet", "--prune", "--no-tags", "origin"), calls)
         self.assertNotIn(tmp, json.dumps(status))
 

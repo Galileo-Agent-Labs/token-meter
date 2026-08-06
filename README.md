@@ -15,7 +15,7 @@ turns them into one live dashboard.
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
 | **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in session detail and the menu bar. |
-| **Install updates explicitly** | Check the configured Git upstream once per hour by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
+| **Install updates explicitly** | Check the configured Git upstream every 10 minutes by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
 | **Keep data private** | Run analysis stays on your computer and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
@@ -35,7 +35,7 @@ machine.
 On macOS or Linux, clone the repository and run its installer:
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+git clone https://github.com/splunk/token-meter.git
 ./token-meter/scripts/install
 ```
 
@@ -84,18 +84,14 @@ need the underlying evidence or controls.
   <img src="images/dashboard.png" alt="Token Meter session detail with live cost, token, context, and execution metrics" width="900">
 </p>
 
-### 2. Find Expensive Or Noisy Logs
+### 2. Find Expensive Or Noisy Sessions
 
-Open **Logs** to search by title, project, model, or provider. Project and time
+Open **Sessions → All sessions** to search by title, project, model, or provider. Project and time
 filters recalculate the cost, token, execution, wait-time, and model summaries
 above the list. Sort by cost, tokens, or wait time to find the runs worth
 reviewing first; opening a
-row preserves that run as a frozen view, while Delete moves only its JSONL log
+row preserves that run as a frozen view, while Delete moves only its JSONL session record
 to macOS Trash after confirmation.
-
-<p align="center">
-  <img src="images/logs-filtering.png" alt="Token Meter Logs view with project and time filters, model statistics, and cost-ranked runs" width="900">
-</p>
 
 ### 3. Explain A Day's Spend
 
@@ -149,22 +145,27 @@ with an exact dollar field.
 
 ### 6. Keep The Live Signal In The Menu Bar
 
-The macOS companion has five native tabs: **Run**, **All**, **Claude**,
-**Codex**, and **Cursor**. Run keeps the current task's estimated cost, tokens,
-context pressure, output speed, model, shortcuts, and recent-session picker.
-All ranks fresh provider-reported limits and marks the most constrained one.
-Each provider tab shows only the windows that provider actually reports, with
+The macOS companion has four native tabs: **Run**, **Claude**, **Codex**, and
+**Cursor**. Run keeps the current task's estimated cost, tokens, context
+pressure, output speed, model, shortcuts, and recent-session picker. Each
+provider tab shows only the windows that provider actually reports, with
 usage bars, reset countdowns, pace/runout guidance, freshness, and source.
 When a common Session or Weekly window is absent, the tab says so explicitly;
 missing means unreported or unavailable, never 0%. Named limits such as Codex
 Spark remain separate from regular limits, and Cursor's monthly Plan cap is not
 renamed as a session or weekly allowance.
 
-The status-bar title defaults to **Cost + Output speed**. Under **Settings →
+The menu-bar item uses a compact Splunk chevron so it remains available on
+small or notched laptop displays. Its tooltip and popover carry the selected
+status metrics; the defaults are **Cost + Output speed**. Under **Settings →
 Menu bar title**, independently enable or disable Cost, Output speed, Context,
 Model, and Limits; hovering always shows the complete available summary.
-Quota notifications are on by default for new
-installs, warn at 80% by default, always treat 95% and exhaustion as critical,
+On first launch, Token Meter starts near the right side of the status area so
+its white text does not begin behind a laptop notch. Hold **Command** while
+dragging the item to choose another position; macOS restores that placement on
+later launches.
+Quota notifications are on by default for new installs. The **Quota alert
+threshold** defaults to 80% used; 95% and exhaustion are always critical,
 and report resets after a previously warned window rolls over. The first quota
 observation establishes a baseline and never sends a catch-up notification.
 
@@ -183,7 +184,7 @@ observation establishes a baseline and never sends a catch-up notification.
    in **Settings → Monthly budget**; their sum becomes the machine-wide limit.
 5. Connect Codex or Claude Code from **Settings** if you want on-demand answers
    inside the agent.
-6. After a few runs, use **Logs** and **Daily** to compare apps and explain
+6. After a few runs, use **Sessions → All sessions** and **Daily** to compare apps and explain
    spend, then open **Tools** for capability evidence.
 
 ## Requirements
@@ -254,9 +255,9 @@ alerts remain the proactive channels.
 
 ## Software Updates
 
-**Check for updates every hour** is enabled by default in **Settings → Software
+**Check for updates every 10 minutes** is enabled by default in **Settings → Software
 updates**. Token Meter immediately fetches revision metadata from the Git
-upstream configured during installation, then checks again once per hour while
+upstream configured during installation, then checks again every 10 minutes while
 the server is running. The installer keeps a dedicated update checkout beside
 the runtime so the background service does not need access to a development
 checkout under a macOS-protected folder such as Documents. You can disable
@@ -302,13 +303,17 @@ dashboard:
 python3 meter.py
 ```
 
-The desktop companion polls the local `/menubar` endpoint. It shows compact status
-for the active log and cached account quota snapshots. macOS presents tabs; Linux
-presents equivalent provider submenus. Recent sessions show the provider plus the
-session title or project, and the selected pin is kept in platform user
-preferences. Choose `Follow Latest` to resume automatic
-tracking.
-The companion does not parse logs or read provider credentials directly.
+The menu bar companion polls the local `/menubar` endpoint. On macOS, clicking its
+status item opens the **Run Slip** popover: the selected local run leads with a
+measured context trace, cost confidence, output pace, and latest-execution spend.
+The popover stays 360px wide across every scope, while sparse provider scopes
+shorten vertically; each whole scope cell is clickable, not only its label.
+Provider tabs show only cached provider-reported quota snapshots; unavailable
+or stale data is never shown as zero. Recent sessions are labeled Claude, Codex,
+or Cursor and can be pinned; choose **Follow latest** to resume automatic tracking.
+On Linux, the AppIndicator tray exposes equivalent run, provider-limit, and
+settings flows. The companion does not parse logs or read provider credentials
+directly.
 
 ## How It Finds Logs
 
@@ -331,7 +336,7 @@ Claude Desktop metadata contains the Desktop title, project directory, model,
 and a `cliSessionId`. Token Meter joins that id to the authoritative Claude
 trace under `~/.claude/projects`, so Desktop sessions use the same validated
 cost, token, tool, and execution parser without appearing twice. They are
-labeled `Claude Desktop` in Sessions and Logs.
+labeled `Claude Desktop` in both Current and All sessions.
 
 Agent/Cowork sessions use Claude Desktop's selected workspace folder when the
 trace itself runs from the managed `outputs` directory. Sessions without a
@@ -362,29 +367,33 @@ state whenever that source or its enrichment changes. Shared Cursor database
 and request-log timestamps invalidate cached parsing but do not make every
 Cursor session look equally recent.
 
-Logs has a dedicated top-level tab. Clicking a log opens it as a frozen view at
+Sessions has two internal views: **Current sessions** shows runs active in the
+last 30 minutes; **All sessions** is the searchable, filterable history. The
+full-width selector below the Sessions header uses the dashboard's main-tab
+treatment so both views stay obvious. Clicking a session opens it at
 `/sessions/<session-id>#summary`, so refreshing or sharing that local URL
-restores the same log. Clicking the top-level `Sessions` tab or
-`Back to sessions` removes the session path and returns to the recent-session
-cards.
+restores the same session. Returning from a session preserves Current or All
+within the browser.
 
 Dashboard tabs are addressable routes. The menu bar opens `#sessions` for Open
 Dashboard when no session is pinned, `#summary` for a pinned session,
 `#daily` for Open Daily Brief, `#activity` for Open Trace, and
 `#capabilities` for Tools and `#settings-budgets` for monthly budget settings.
-Session-detail panels keep their panel name in the hash. Logs use `#logs`.
-Legacy `#current-sessions` redirects to `#sessions`, `#global*` routes redirect
-to Logs, and `#budgets` redirects to `#settings-budgets`.
+Session-detail panels keep their panel name in the hash. All sessions uses
+`#sessions-all`. Legacy `#logs`, `#current-sessions`, and `#global*` routes
+redirect to the appropriate Sessions mode; `#budgets` redirects to
+`#settings-budgets`.
 
-The top navigation follows the review sequence **Sessions → Logs → Daily →
-Models → Tools → Learn → Settings**. Press **Command+K** on macOS or **Ctrl+K**
+The top navigation follows the review sequence **Sessions → Daily → Models →
+Tools → Learn → Settings**. Press **Command+K** on macOS or **Ctrl+K**
 elsewhere to search every view plus session and Settings destinations.
-**⌥1–7** opens the seven top-level views directly; ⌥1 returns to Sessions.
+**⌥1–6** opens the six top-level views directly; ⌥1 returns to Sessions.
 
 ## What The Dashboard Shows
 
-The Sessions tab is a concise list of runs active in the last 30 minutes.
-Selecting a card opens that session with:
+The Sessions view provides concise active-run cards in **Current sessions** and
+complete local session history in **All sessions**. Selecting a card or row
+opens that session with:
 
 - Run: live cost, tokens, completed prompt-to-response wait, burn rate per
   active minute, cache behavior, context pressure, per-execution input/output
@@ -404,21 +413,21 @@ Selecting a card opens that session with:
 - Alerts: session and monthly budget notifications plus browser delivery
   history.
 
-The session header also offers Delete session. It uses the same confirmation
-as Logs and warns when the selected session appears to still be live.
+The session header also offers Delete session and warns when the selected
+session appears to still be live.
 
-The Logs tab includes the searchable log inventory with an exact Projects
+The **All** mode includes the searchable session inventory with an exact Projects
 folder filter, rolling 24-hour, 7-day, 30-day, and 90-day activity ranges, and
 Recent, Cost, Tokens, Executions, and Wait sorting. Filters persist in the browser.
 Clear filters resets search, Projects, and time range without changing the
 selected sort order.
-The summary above the matching logs recalculates filtered cost, total input
+The summary above the matching sessions recalculates filtered cost, total input
 (fresh plus cached), output tokens, executions, cumulative wait, and per-model
 cost and token mix whenever any filter changes.
 Each row has a Delete action. Deletion requires an explicit confirmation and
 moves the exact discovered JSONL file to the system Trash so it remains recoverable.
 Provider metadata, project files, and configuration are not changed.
-Its live snapshot watches every discovered log, so a background Claude update
+Its live snapshot watches every discovered session, so a background Claude update
 appears without waiting for a newer Codex session (or vice versa). If a browser
 tab falls behind during a burst, Token Meter drops queued stale snapshots and
 keeps the newest one instead of silently detaching the live stream.
@@ -497,7 +506,7 @@ trace-visible context snapshot per execution, with sparse intermediate
 checkpoints interpolated between persisted values. Output uses deduplicated
 assistant and thinking text at four characters per token. The persisted model
 and speed variant select the rate; Composer 2.5 uses its separate Standard or
-Fast rate. These values make Sessions, Logs, Daily, Models, MCP, and the
+Fast rate. These values make Sessions, Daily, Models, MCP, and the
 menu bar useful, but they are not a replacement for Cursor's billing dashboard.
 Cache usage, hidden reasoning, and repeated internal model-call input are not
 available locally. Token Meter therefore labels Cursor tokens, cost, and output
@@ -588,7 +597,7 @@ Token Meter serves the UI from `page.html`. Use a full repository clone and run
 from the clone:
 
 ```bash
-git clone https://github.com/Galileo-Agent-Labs/token-meter.git
+git clone https://github.com/splunk/token-meter.git
 ./token-meter/scripts/install
 ```
 

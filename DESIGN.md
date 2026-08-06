@@ -105,6 +105,7 @@ That system now spans the whole dashboard. Every top-level route uses the same i
 **Key Characteristics:**
 
 - Dense, factual dark-mode operation with tabular numeric readouts.
+- The official white Splunk wordmark leads persistent dashboard and native headers; the exact Splunk chevron is reserved for the favicon and compact menu-bar status item.
 - Cyan, blue, and sky are shared Token Meter signals, expressed through reusable page, header, card, control, and active-state gradients.
 - Every route shares one header geometry and component language; only atmospheric emphasis and task-specific data composition vary.
 - Sessions uses a data-bearing context horizon rather than ornamental dials.
@@ -166,11 +167,11 @@ The palette is one cool Token Meter system. Cyan-to-sky is the common action and
 
 ## Layout
 
-The global dashboard sits in a centered 1320px container with 24px horizontal padding and a sticky top bar. Its default rhythm is built from 8px, 12px, 16px, and 24px intervals. Each top-level route opens with the same responsive spectrum field header; route-specific controls can occupy its trailing edge.
+The global dashboard pairs a centered content field of up to 1320px with a sticky 184px left navigation rail. The outer shell expands to preserve the content field rather than subtracting the rail from it. Its default rhythm is built from 8px, 12px, 16px, and 24px intervals. Each top-level route opens with the same responsive spectrum field header; route-specific controls can occupy its trailing edge.
 
 Sessions opens with one layered spectrum field header, then a two-column instrument grid with a 12px gap. At 700px and below the grid becomes one column. On detail, the working chart and decision instrument form an asymmetric two-column layout; it narrows at 1120px and becomes a single column at 900px. Supporting KPIs form an attached ledger: three columns below 1120px and two columns below 520px.
 
-At 520px, shared header padding tightens, the spectrum geometry scales down, and trailing controls stack below the title. In Sessions, task titles clamp to two lines, the metric ledger wraps its third readout across the full width, and tabs scroll horizontally.
+The rail keeps frequent monitoring routes near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At intermediate widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. At 760px and below the two navigation groups merge into one sticky, horizontally scrollable top strip so the working content keeps the full viewport width. At 520px, shared header padding tightens, the spectrum geometry scales down, and trailing controls stack below the title. In Sessions, task titles clamp to two lines, the metric ledger wraps its third readout across the full width, and route-local tabs scroll horizontally.
 
 ### Named Rules
 
@@ -227,7 +228,9 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 
 ### Navigation
 
-Global top-level navigation remains compact and preserves the product order. Top-level and route-local segmented controls share the same active gradient, hover, and focus treatments. At narrow widths the Sessions panel row scrolls horizontally rather than wrapping or hiding destinations.
+Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Daily, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide widths, contracts to icons at intermediate widths, and becomes a horizontally scrollable top strip at narrow widths; destinations never wrap or disappear.
+
+The brand lockup pairs Splunk's unmodified white corporate wordmark with the Token Meter product name. At the intermediate icon-only rail width, the wordmark remains visible and the product-name text hides; the full lockup returns in the mobile top strip.
 
 ### Session Instrument Card
 
@@ -255,3 +258,15 @@ The detail-side instrument pairs live state and estimated cost with context pres
 - **Don't** add a provider-colored left rail, Japanese notation, calibration ticks, a card dial, or a route-specific dot field to Sessions.
 - **Don't** let atmospheric violet or orange replace semantic danger, warning, live-state, or provider identity colors.
 - **Don't** add hosted imagery, decorative assets, or typography that weakens Token Meter's local-only, evidence-first operation.
+
+## Native Run Slip Companion
+
+The menu-bar companion is a separate native instrument, not a shrunken browser dashboard or a copy of another account menu. Selecting the status item opens a transient, fixed 360px-wide **Run Slip** with a content-fitted height capped at 452px: a charcoal field record with one cyan measurement trace, quiet hairlines, and system typography used with editorial restraint. It answers one question—how is the run behaving now? Every scope keeps the same width while sparse provider states shorten vertically instead of leaving dead space.
+
+- **Run first:** `Run | Claude | Codex | Cursor` is a text-first scope rail with four equal-width 29px hit targets and a cyan active mark, never a generic segmented slab. The entire tab cell switches scope, not only its text. Run leads with the selected task's real session title, then a full-width context trace, a compact two-line cost/output/latest ledger, budget state, and three recent run links. Recent rows give the task title the flexible width, keep the provider as a small aligned suffix, mark the selected row in cyan, and expose the complete bounded title in a tooltip when it truncates. A pinned session exposes a cyan `Follow latest` action. The signal field spans the full canvas; there is no nested card stranded inside empty popover space.
+- **Bounded evidence, fixed actions:** The evidence body fits its content up to a 320px scrolling cap inside the 360px-wide canvas. Content that exceeds it scrolls vertically under an auto-hiding overlay scroller; sparse states do not retain an empty 320px well. The header, scope rail, and footer remain stable around that evidence region. The fixed footer keeps Open Token Meter, Refresh, and an explicitly labeled Settings action available in every scope. Run stays factual and omits recommendation or insight rows.
+- **Data-bearing trace:** The continuous cyan execution trace connects bounded numeric context measurements from recent executions; the last point is explicitly marked. Missing history is stated plainly; it is never replaced with ornament. Context pressure uses cyan below 70%, yellow from 70%, and orange from 85%.
+- **Honest evidence:** Estimates remain labelled. Unavailable values stay unavailable rather than becoming measured zero, and provider scopes show only provider-reported limits. The native payload exposes only display-safe project leaves and bounded numeric pulse samples—never paths, prompts, responses, credentials, account data, or raw traces.
+- **Native behavior:** The popover uses system controls, SF Symbols, and visible tooltips. Scope changes preserve one mounted header, four-tab rail, and footer; only the bounded evidence body is replaced. Tab styling, body content, and the content-fitted popover size update atomically with no crossfade, window-frame morph, or settlement animation. This intentionally treats scope switching as a direct instrument change instead of a navigational scene transition. The 360px inner column prevents popover chrome from widening or clipping the rightmost tab. The two-second poll may update the status title, but it defers replacing an open popover until it closes so a user can change a tab, open settings, or select a session without losing focus.
+- **Branding:** The native header uses the same bundled white Splunk wordmark as the dashboard. The square status item uses the exact chevron geometry as a macOS template image so connected, offline, and budget-warning tint semantics remain visible without widening the menu bar.
+- **Verification:** Source-contract tests protect the text rail, full-cell hit targets, measured trace, fixed width, content-fitted height, overflow scroller, persistent chrome, deferred refresh, atomic scope changes, and absence of a segmented control. The deterministic content smoke requires a scrollable 320px viewport whose maximal evidence exceeds its bounds; the layout smoke checks 360px width across every scope, usable tab frames, and no dead Run viewport space while decoding the live pulse payload. The displayed popover smoke switches Run → Claude → Cursor on the same controller and requires all four tab frames to remain inside the visible canvas immediately after each change. These complement Swift compilation, server checks, and installed-runtime validation.

@@ -4,7 +4,7 @@ Thanks for helping improve Token Meter.
 
 ## Before you start
 
-- **New feature:** [Open a GitHub issue](https://github.com/Galileo-Agent-Labs/token-meter/issues/new)
+- **New feature:** [Open a GitHub issue](https://github.com/splunk/token-meter/issues/new)
   before writing code or creating a pull request. Describe the problem,
   proposed behavior, expected UI impact, and any privacy or local-only
   considerations. Wait until the scope is agreed before implementing it.

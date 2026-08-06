@@ -106,7 +106,7 @@ BUDGET_PROVIDERS = ("claude", "codex", "cursor")
 DEFAULT_RUNTIME_BUDGET = 1_000.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
-UPDATE_CHECK_INTERVAL_S = 60 * 60
+UPDATE_CHECK_INTERVAL_S = 10 * 60
 UPDATE_FETCH_TIMEOUT_S = 45
 UPDATE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$")
 
@@ -184,6 +184,7 @@ LOW_YIELD_INPUT_TOKENS = 60000
 TOOL_OVERSIZED_TOKENS = 8000
 PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,180}$")
 SKILL_PATH_RE = re.compile(r"(?:^|[/\\])([^/\\\s'\"]+)[/\\]SKILL\.md(?:\b|$)", re.IGNORECASE)
+SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,179}$")
 DATA_URL_RE = re.compile(r"data:image/[^;\s]+;base64,[A-Za-z0-9+/=]+")
 BASE64_FIELD_RE = re.compile(r'("(?:data|image_url)"\s*:\s*")([A-Za-z0-9+/=]{512,})(")')
 
@@ -1096,7 +1097,7 @@ def normalize_update_settings(values):
         raise ValueError("Update settings must be an object.")
     enabled = values.get("enabled", True)
     if not isinstance(enabled, bool):
-        raise ValueError("Hourly update checks must be on or off.")
+        raise ValueError("Automatic update checks must be on or off.")
     return {
         "enabled": enabled,
         "interval_seconds": UPDATE_CHECK_INTERVAL_S,
@@ -1104,7 +1105,7 @@ def normalize_update_settings(values):
 
 
 def update_settings(path=None):
-    """Load the default-on hourly update-check preference."""
+    """Load the default-on 10-minute update-check preference."""
     path = path or TOKEN_METER_SETTINGS
     settings = load_json(path, {})
     raw = settings.get("updates") if isinstance(settings, dict) else {}
@@ -1207,7 +1208,7 @@ def _persist_update_status(values, path=None):
 
 def _update_message(state, error_code="", latest_revision=""):
     if state == "disabled":
-        return "Hourly update checks are off."
+        return "Automatic update checks are off."
     if state == "checking":
         return "Checking the configured Git upstream."
     if state == "updating":
@@ -1397,7 +1398,7 @@ def check_for_software_update(
 def trigger_software_update_check(settings_path=None, status_path=None):
     """Start one non-blocking update check for a dashboard or settings action."""
     if not update_settings(settings_path)["enabled"]:
-        return {"ok": False, "error": "Enable hourly update checks first."}
+        return {"ok": False, "error": "Enable automatic update checks first."}
     if str(_update_status_record(status_path).get("phase") or "") in {
             "starting", "fetching", "installing"}:
         return {"ok": False, "error": "A Token Meter update is already in progress."}
@@ -1422,7 +1423,7 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
     """Launch the detached fast-forward-and-reinstall helper."""
     status = software_update_status(settings_path, status_path)
     if not status["enabled"]:
-        return {"ok": False, "error": "Enable hourly update checks first."}
+        return {"ok": False, "error": "Enable automatic update checks first."}
     if not status["available"] or not status["can_update"]:
         return {"ok": False, "error": "No safely installable update is available."}
     checkout = source_checkout_path()
@@ -1462,7 +1463,7 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
 
 
 def software_update_watcher():
-    """Run an immediate enabled check, then wait one hour between fetches."""
+    """Run an immediate enabled check, then wait 10 minutes between fetches."""
     while True:
         _update_wake.clear()
         settings = update_settings()
@@ -1474,8 +1475,8 @@ def software_update_watcher():
             _update_wake.wait(5)
             continue
         if phase in {"complete", "failed"}:
-            _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
-            continue
+            if _update_wake.wait(UPDATE_CHECK_INTERVAL_S):
+                continue
         check_for_software_update()
         _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
 
@@ -3623,13 +3624,20 @@ def argument_fingerprint(value):
     return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16] if text else ""
 
 
-def skill_names_from_value(value):
-    """Infer skill activations only when a trace argument references SKILL.md."""
+def skill_names_from_value(value, tool_name=""):
+    """Infer path-based loads and explicit native Skill-tool activations."""
     try:
         text = json.dumps(value, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError):
         text = str(value or "")
-    return sorted(set(match.group(1) for match in SKILL_PATH_RE.finditer(text)))
+    names = {match.group(1) for match in SKILL_PATH_RE.finditer(text)}
+    tool_leaf = str(tool_name or "").rsplit(".", 1)[-1].casefold()
+    direct = value.get("skill") if tool_leaf == "skill" and isinstance(value, dict) else None
+    if isinstance(direct, str):
+        direct = direct.strip()
+        if SKILL_NAME_RE.fullmatch(direct):
+            names.add(direct.rsplit(":", 1)[-1])
+    return sorted(names)
 
 
 def claude_tool_results(objs):
@@ -4033,7 +4041,7 @@ def recompute_cursor(source):
                     "output_tokens": output_chars // CHARS_PER_TOKEN,
                     "result_available": result_present,
                     "error": errored,
-                    "skills": skill_names_from_value(arguments),
+                    "skills": skill_names_from_value(arguments, tool_data.get("name")),
                 }
                 tools.append(tool)
                 trace.append(trace_event(
@@ -4070,7 +4078,7 @@ def recompute_cursor(source):
                         "args_fingerprint": argument_fingerprint(arguments),
                         "output_chars": 0, "output_tokens": 0,
                         "result_available": False, "error": False,
-                        "skills": skill_names_from_value(arguments),
+                        "skills": skill_names_from_value(arguments, block.get("name")),
                     }
                     tools.append(tool)
                     trace.append(trace_event(ts, "tool_call", ident["display"], ident["namespace"],
@@ -4389,7 +4397,7 @@ def recompute_claude(source):
                 "output_chars": out_chars,
                 "output_tokens": out_chars // CHARS_PER_TOKEN,
                 "error": bool(result_errors.get(tid)),
-                "skills": skill_names_from_value(block.get("input")),
+                "skills": skill_names_from_value(block.get("input"), block.get("name")),
             }
             tools.append(tool)
 
@@ -4687,7 +4695,7 @@ def recompute_codex(source):
                 "output_chars": 0,
                 "output_tokens": 0,
                 "error": False,
-                "skills": skill_names_from_value(arguments),
+                "skills": skill_names_from_value(arguments, name),
             }
             pending["calls"][call_id] = tool
             call_map[call_id] = tool
@@ -5369,7 +5377,7 @@ def claude_tool_call_evidence(objs, msgs=None):
                 "error": bool(result_errors.get(tid)),
                 "ts": result_ts.get(tid) or rec.get("ts") or 0,
                 "args_fingerprint": argument_fingerprint(block.get("input")),
-                "skills": skill_names_from_value(block.get("input")),
+                "skills": skill_names_from_value(block.get("input"), block.get("name")),
             })
     return calls
 
@@ -5390,7 +5398,7 @@ def codex_tool_call_evidence(objs):
                     **tool_identity(name), "output_chars": 0, "output_tokens": 0,
                     "error": False, "ts": ts,
                     "args_fingerprint": argument_fingerprint(arguments),
-                    "skills": skill_names_from_value(arguments),
+                    "skills": skill_names_from_value(arguments, name),
                 }
                 order.append(call_id)
             continue
@@ -9531,13 +9539,21 @@ def reset_provider_quota_cache():
         _quota_inflight.clear()
 
 
+def menubar_project_name(value):
+    """Return only a display-safe project leaf for the native payload."""
+    project = str(value or "").rstrip("/\\")
+    if not project or project == "No project":
+        return ""
+    return compact_text(project.replace("\\", "/").rsplit("/", 1)[-1], 52)
+
+
 def menubar_session_name(source):
     title = compact_text(source.get("title") or "", 52).strip()
     if title and title.lower() not in ("untitled", "untitled session"):
         return title
-    project = str(source.get("project") or "").rstrip("/\\")
-    if project and project != "No project":
-        return compact_text(project.replace("\\", "/").rsplit("/", 1)[-1], 52)
+    project = menubar_project_name(source.get("project"))
+    if project:
+        return project
     return str(source.get("id") or "session")[:12]
 
 
@@ -9561,9 +9577,30 @@ def menubar_recent_sessions(sources, selected_id=None, limit=5):
         "client": row.get("client") or row.get("provider"),
         "label": row.get("label"),
         "name": menubar_session_name(row),
-        "project": row.get("project") or "",
         "mtime": row.get("mtime") or 0,
     } for row in choices]
+
+
+def menubar_context_pulse(st, limit=18):
+    """Return a short numeric context history for the native Run Pulse.
+
+    The native companion needs a visual indication of whether measured context
+    is rising or settling, but it must never receive trace text, paths, tool
+    inputs, or other session contents. Keep only finite context percentages
+    from the most recent completed executions.
+    """
+    values = []
+    for execution in (st.get("executions") or []):
+        value = execution.get("context_pct")
+        if isinstance(value, bool):
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            values.append(round(max(0.0, min(1.0, value)), 4))
+    return values[-max(1, limit):]
 
 
 def menubar_state(session_id=None):
@@ -9603,6 +9640,7 @@ def menubar_state(session_id=None):
     effective_selected_id = requested_id if selected_source else selected_id
     model = next((row.get("model") for row in reversed(st.get("executions") or [])
                   if row.get("model")), None) or source.get("model") or "unknown"
+    project_name = menubar_project_name(st.get("project") or source.get("project"))
     cross = _xsess.get("data") or (STATE or {}).get("xsession") or {}
     budget = cross.get("budget") or monthly_budget_status([], budget_settings())
     return {
@@ -9613,14 +9651,14 @@ def menubar_state(session_id=None):
         "source": {
             "label": source.get("label"),
             "id": source.get("id"),
-            "project": source.get("project"),
+            "project": project_name,
             "pricing_note": source.get("pricing_note"),
             "approximate_cost": source.get("approximate_cost"),
             "token_estimate": source.get("token_estimate"),
             "availability": source.get("availability") or availability,
         },
         "session": st.get("session"),
-        "project": st.get("project") or source.get("project"),
+        "project": project_name,
         "total_cost": st.get("total_cost", 0),
         "cost_approx": st.get("cost_approx", False),
         "total_tokens": st.get("total_tokens", 0),
@@ -9666,6 +9704,7 @@ def menubar_state(session_id=None):
         "recent_sessions": menubar_recent_sessions(
             sources, selected_id=effective_selected_id, limit=5
         ),
+        "context_pulse": menubar_context_pulse(st),
         "provider_quotas": provider_quota_snapshots(),
         "budget": budget,
         "ts": st.get("ts"),
@@ -9772,15 +9811,30 @@ def is_dashboard_page_path(req_path):
     return req_path == "/" or bool(re.fullmatch(r"/sessions/[^/]{1,240}/?", req_path or ""))
 
 
+_DASHBOARD_ASSETS = {
+    "/assets/fonts/Tektur-Variable.ttf": ("assets/fonts/Tektur-Variable.ttf", "font/ttf"),
+    "/assets/brand/logo-splunk-acc-rgb-w.png": (
+        "assets/brand/logo-splunk-acc-rgb-w.png",
+        "image/png",
+    ),
+}
+
+
 def dashboard_asset_path(req_path):
-    """Resolve the one bundled dashboard font without exposing arbitrary files."""
-    if req_path != "/assets/fonts/Tektur-Variable.ttf":
+    """Resolve explicitly bundled dashboard assets without exposing arbitrary files."""
+    spec = _DASHBOARD_ASSETS.get(req_path)
+    if not spec:
         return None
     dashboard = page_path()
     if not dashboard:
         return None
-    path = os.path.join(os.path.dirname(dashboard), "assets", "fonts", "Tektur-Variable.ttf")
+    path = os.path.join(os.path.dirname(dashboard), *spec[0].split("/"))
     return path if os.path.isfile(path) else None
+
+
+def dashboard_asset_content_type(req_path):
+    spec = _DASHBOARD_ASSETS.get(req_path)
+    return spec[1] if spec else None
 
 
 def missing_page_html():
@@ -9857,10 +9911,9 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(os.path.getsize(path) if path else len(body)))
             self.end_headers()
-        elif dashboard_asset_path(req_path):
-            path = dashboard_asset_path(req_path)
+        elif (path := dashboard_asset_path(req_path)):
             self.send_response(200)
-            self.send_header("Content-Type", "font/ttf")
+            self.send_header("Content-Type", dashboard_asset_content_type(req_path))
             self.send_header("Content-Length", str(os.path.getsize(path)))
             self.end_headers()
         else:
@@ -10019,9 +10072,9 @@ class H(BaseHTTPRequestHandler):
                 self._send(open(path, encoding="utf-8").read())
             else:
                 self._send(missing_page_html(), status=503)
-        elif dashboard_asset_path(req_path):
-            with open(dashboard_asset_path(req_path), "rb") as asset:
-                self._send(asset.read(), "font/ttf")
+        elif (asset_path := dashboard_asset_path(req_path)):
+            with open(asset_path, "rb") as asset:
+                self._send(asset.read(), dashboard_asset_content_type(req_path))
         elif req_path == "/session":
             query = parse_qs(parsed.query)
             sid = (query.get("id") or [""])[0]

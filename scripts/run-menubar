@@ -8,8 +8,12 @@ case "$(uname -s)" in
       command -v swiftc >/dev/null 2>&1
       exit
     fi
-    BIN="$ROOT/.build/token-meter-menubar"
-    mkdir -p "$ROOT/.build"
+    APP="$ROOT/.build/Token Meter Menu Bar.app"
+    CONTENTS="$APP/Contents"
+    BIN="$CONTENTS/MacOS/token-meter-menubar"
+    INFO="$CONTENTS/Info.plist"
+    mkdir -p "$CONTENTS/MacOS"
+    ditto "$ROOT/menubar/Info.plist" "$INFO"
     swiftc "$ROOT/menubar/TokenMeterMenuBar.swift" -o "$BIN"
     exec "$BIN"
     ;;

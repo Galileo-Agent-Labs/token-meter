@@ -13,6 +13,7 @@ DEFAULT_INSTALL_ROOT="$HOME/Library/Application Support/Token Meter/runtime"
 INSTALL_ROOT="${TOKEN_METER_INSTALL_ROOT:-$DEFAULT_INSTALL_ROOT}"
 INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
 MANAGED_SOURCE_ROOT="${TOKEN_METER_SOURCE_ROOT:-$INSTALL_PARENT/source}"
+MANAGED_SOURCE_ROOT_EXPLICIT="${TOKEN_METER_SOURCE_ROOT:-}"
 SERVER_LABEL="com.token-meter.server"
 MENUBAR_LABEL="com.token-meter.menubar"
 HEALTH_URL="http://127.0.0.1:8722/health"
@@ -37,6 +38,7 @@ done
 
 required_paths=(
   meter.py page.html token_meter_mcp.py menubar/TokenMeterMenuBar.swift
+  menubar/Info.plist assets/brand/logo-splunk-acc-rgb-w.png
   scripts/install-linux scripts/install-launch-agent scripts/run-menubar scripts/start-token-meter
 )
 
@@ -48,7 +50,6 @@ done
 if [[ ! "$READINESS_TIMEOUT_SECONDS" =~ ^[0-9]+$ || "$READINESS_TIMEOUT_SECONDS" -lt 1 ]]; then
   fail "TOKEN_METER_READINESS_TIMEOUT_SECONDS must be a positive whole number."
 fi
-
 mkdir -p "$INSTALL_PARENT"
 INSTALL_PARENT="$(cd "$INSTALL_PARENT" && pwd)"
 MANAGED_SOURCE_ROOT="${TOKEN_METER_SOURCE_ROOT:-$INSTALL_PARENT/source}"
@@ -63,6 +64,27 @@ if [[ "$SOURCE_ROOT" != "$MANAGED_SOURCE_ROOT" ]]; then
     source_remote_url="$(git -C "$SOURCE_ROOT" remote get-url "$source_remote" 2>/dev/null || true)"
   fi
   if [[ -n "$source_remote_url" && -n "$source_branch" ]]; then
+    existing_managed_remote_url=""
+    if [[ -e "$MANAGED_SOURCE_ROOT" ]]; then
+      [[ -d "$MANAGED_SOURCE_ROOT/.git" ]] \
+        || fail "the managed update checkout is not a Git repository: $MANAGED_SOURCE_ROOT"
+      existing_managed_remote_url="$(git -C "$MANAGED_SOURCE_ROOT" remote get-url origin 2>/dev/null || true)"
+      if [[ -n "$existing_managed_remote_url" && "$existing_managed_remote_url" != "$source_remote_url" ]]; then
+        if [[ -n "$MANAGED_SOURCE_ROOT_EXPLICIT" ]]; then
+          fail "the managed update checkout belongs to a different upstream: $MANAGED_SOURCE_ROOT"
+        fi
+        source_slug="$(printf '%s' "$source_remote_url" \
+          | sed -E 's#^[^:/]+://##; s#^[^@]+@##; s#[:/]+#-#g' \
+          | tr -cd '[:alnum:]_.-')"
+        source_slug="${source_slug%.git}"
+        [[ -n "$source_slug" ]] || source_slug="upstream"
+        MANAGED_SOURCE_ROOT="$INSTALL_PARENT/source-$source_slug"
+        echo "Preserving the existing managed checkout at:"
+        echo "  $INSTALL_PARENT/source"
+        echo "Using an upstream-specific managed checkout:"
+        echo "  $MANAGED_SOURCE_ROOT"
+      fi
+    fi
     if [[ ! -e "$MANAGED_SOURCE_ROOT" ]]; then
       git clone --quiet --no-local "$SOURCE_ROOT" "$MANAGED_SOURCE_ROOT" \
         || fail "the managed update checkout could not be created."

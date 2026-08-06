@@ -1,4 +1,5 @@
 import Cocoa
+import Carbon.HIToolbox
 import Foundation
 
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
@@ -13,11 +14,97 @@ private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
 private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
 private let budgetNotificationStatesDefaultsKey = "TokenMeterBudgetNotificationStates"
 private let budgetExceededMonthsDefaultsKey = "TokenMeterBudgetExceededNotificationMonths"
-private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
+private let statusDisplayModeDefaultsKey = "TokenMeterStatusDisplayMode"
+private let globalShortcutDefaultsKey = "TokenMeterGlobalShortcut"
+private let customShortcutKeyCodeDefaultsKey = "TokenMeterCustomShortcutKeyCode"
+private let customShortcutModifiersDefaultsKey = "TokenMeterCustomShortcutModifiers"
+private let tokenMeterMenubarBundleIdentifier = "com.token-meter.menubar"
+private let statusItemAutosaveName = "TokenMeterPrimaryStatusItem"
+private let statusItemPreferredPositionDefaultsKey = "NSStatusItem Preferred Position \(statusItemAutosaveName)"
+private let statusItemInitialPreferredPosition = 50
+private let tokenMeterDefaults: UserDefaults = {
+    if Bundle.main.bundleIdentifier == tokenMeterMenubarBundleIdentifier { return .standard }
+    return UserDefaults(suiteName: tokenMeterMenubarBundleIdentifier) ?? .standard
+}()
 
 // Token Meter accent blue (#00BCEB)
 extension NSColor {
     static let tokenMeterBlue = NSColor(srgbRed: 0.0, green: 0.737, blue: 0.922, alpha: 1.0)
+    static let tokenMeterInk = NSColor(srgbRed: 0.035, green: 0.061, blue: 0.078, alpha: 1.0)
+    static let tokenMeterPlate = NSColor(srgbRed: 0.064, green: 0.102, blue: 0.125, alpha: 1.0)
+    static let tokenMeterLine = NSColor(srgbRed: 0.20, green: 0.28, blue: 0.31, alpha: 1.0)
+    static let tokenMeterMuted = NSColor(srgbRed: 0.61, green: 0.69, blue: 0.72, alpha: 1.0)
+}
+
+private func splunkWordmarkImage() -> NSImage? {
+    let source = URL(fileURLWithPath: #filePath)
+    let root = source.deletingLastPathComponent().deletingLastPathComponent()
+    let asset = root.appendingPathComponent("assets/brand/logo-splunk-acc-rgb-w.png")
+    guard let image = NSImage(contentsOf: asset) else { return nil }
+    image.accessibilityDescription = "Splunk"
+    return image
+}
+
+private func splunkChevronImage(accessibilityDescription: String = "Splunk Token Meter") -> NSImage {
+    let size = NSSize(width: 18, height: 18)
+    let image = NSImage(size: size, flipped: false) { rect in
+        let sourceWidth: CGFloat = 37.03
+        let sourceHeight: CGFloat = 44.58
+        let inset: CGFloat = 2
+        let scale = min(
+            (rect.width - inset * 2) / sourceWidth,
+            (rect.height - inset * 2) / sourceHeight
+        )
+        let origin = NSPoint(
+            x: rect.midX - sourceWidth * scale / 2,
+            y: rect.midY - sourceHeight * scale / 2
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            NSPoint(x: origin.x + x * scale, y: origin.y + (sourceHeight - y) * scale)
+        }
+
+        let chevron = NSBezierPath()
+        chevron.move(to: point(37.03, 26.16))
+        chevron.line(to: point(37.03, 18.58))
+        chevron.line(to: point(0, 0))
+        chevron.line(to: point(0, 8.32))
+        chevron.line(to: point(28.70, 22.29))
+        chevron.line(to: point(0, 36.44))
+        chevron.line(to: point(0, 44.58))
+        chevron.line(to: point(37.03, 26.18))
+        chevron.close()
+        NSColor.black.setFill()
+        chevron.fill()
+        return true
+    }
+    image.isTemplate = true
+    image.accessibilityDescription = accessibilityDescription
+    return image
+}
+
+private func statusTitleImage(_ title: String) -> NSImage {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    let attributedTitle = NSAttributedString(
+        string: title,
+        attributes: [
+            .foregroundColor: NSColor.black,
+            .font: font,
+        ]
+    )
+    let measuredSize = attributedTitle.size()
+    let imageSize = NSSize(width: ceil(measuredSize.width), height: 18)
+    let image = NSImage(size: imageSize, flipped: false) { rect in
+        attributedTitle.draw(at: NSPoint(
+            x: 0,
+            y: floor((rect.height - measuredSize.height) / 2)
+        ))
+        return true
+    }
+    // The glyphs are a mask. macOS owns the final black/white tint, using the
+    // actual menu-bar material rather than this process's effective appearance.
+    image.isTemplate = true
+    image.accessibilityDescription = title
+    return image
 }
 
 enum Verdict {
@@ -82,7 +169,6 @@ enum Verdict {
 
 enum MenuTab: String, CaseIterable {
     case run
-    case overview
     case claude
     case codex
     case cursor
@@ -90,7 +176,6 @@ enum MenuTab: String, CaseIterable {
     var title: String {
         switch self {
         case .run: return "Run"
-        case .overview: return "All"
         case .claude: return "Claude"
         case .codex: return "Codex"
         case .cursor: return "Cursor"
@@ -112,6 +197,56 @@ enum TitleMetric: String, CaseIterable {
         case .context: return "Context"
         case .model: return "Model"
         case .limits: return "Limits"
+        }
+    }
+}
+
+enum StatusDisplayMode: String, CaseIterable {
+    case automatic
+    case text
+    case icon
+
+    var title: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .text: return "Cost + speed text"
+        case .icon: return "Icon only"
+        }
+    }
+}
+
+enum MenuBarShortcut: String, CaseIterable {
+    case controlOptionT
+    case commandOptionT
+    case controlOptionM
+    case custom
+    case off
+
+    var title: String {
+        switch self {
+        case .controlOptionT: return "⌃⌥T"
+        case .commandOptionT: return "⌥⌘T"
+        case .controlOptionM: return "⌃⌥M"
+        case .custom: return "Custom…"
+        case .off: return "Off"
+        }
+    }
+
+    var keyCode: UInt32? {
+        switch self {
+        case .controlOptionT, .commandOptionT: return 17 // T on the macOS US keyboard layout.
+        case .controlOptionM: return 46 // M on the macOS US keyboard layout.
+        case .custom: return nil
+        case .off: return nil
+        }
+    }
+
+    var modifiers: UInt32 {
+        switch self {
+        case .controlOptionT, .controlOptionM: return UInt32(controlKey | optionKey)
+        case .commandOptionT: return UInt32(cmdKey | optionKey)
+        case .custom: return 0
+        case .off: return 0
         }
     }
 }
@@ -323,7 +458,6 @@ struct RecentSession {
     var provider: String
     var label: String
     var name: String
-    var project: String
 
     static func fromJSON(_ dict: [String: Any]) -> RecentSession? {
         guard let id = string(dict["id"]), !id.isEmpty else { return nil }
@@ -331,8 +465,7 @@ struct RecentSession {
             id: id,
             provider: string(dict["provider"]) ?? "",
             label: string(dict["label"]) ?? "",
-            name: string(dict["name"]) ?? "",
-            project: string(dict["project"]) ?? ""
+            name: string(dict["name"]) ?? ""
         )
     }
 
@@ -347,17 +480,11 @@ struct RecentSession {
     var identifier: String {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !cleanName.isEmpty { return cleanName }
-        let cleanProject = project.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !cleanProject.isEmpty {
-            return URL(fileURLWithPath: cleanProject.replacingOccurrences(of: "~", with: NSHomeDirectory())).lastPathComponent
-        }
         return String(id.prefix(12))
     }
 
-    var menuTitle: String { "\(providerName) · \(identifier)" }
-
     var toolTip: String {
-        [label.isEmpty ? providerName : label, project, String(id.prefix(12))]
+        [identifier, label.isEmpty ? providerName : label, String(id.prefix(12))]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -410,6 +537,9 @@ struct MeterSnapshot {
     var recommendationDetail: String
     var recommendationSeverity: String
     var topSignal: String
+    var contextPulse: [Double]
+    var selectedSessionID: String
+    var pinnedSession: Bool
 
     static func disconnected(_ error: String) -> MeterSnapshot {
         MeterSnapshot(
@@ -450,7 +580,10 @@ struct MeterSnapshot {
             recommendationLabel: "Start server",
             recommendationDetail: "Run Token Meter to load live log state.",
             recommendationSeverity: "idle",
-            topSignal: error
+            topSignal: error,
+            contextPulse: [],
+            selectedSessionID: "",
+            pinnedSession: false
         )
     }
 
@@ -508,6 +641,13 @@ struct MeterSnapshot {
         let warn = insights.first { string($0["kind"]) == "warn" }
         let firstInsight = warn ?? insights.first
         let topSignal = string(firstInsight?["text"]) ?? "No warnings yet."
+        let contextPulse = (dict["context_pulse"] as? [Any] ?? []).compactMap { value -> Double? in
+            guard let value = optionalDouble(value) else { return nil }
+            return max(0, min(1, value))
+        }
+        let selection = dict["selection"] as? [String: Any] ?? [:]
+        let selectedSessionID = string(selection["selected_id"]) ?? string(source["id"]) ?? ""
+        let pinnedSession = bool(selection["pinned"])
 
         let verdict: Verdict
         if let serverVerdict = serverVerdict {
@@ -567,7 +707,10 @@ struct MeterSnapshot {
             recommendationLabel: recommendationLabel,
             recommendationDetail: recommendationDetail,
             recommendationSeverity: recommendationSeverity,
-            topSignal: topSignal
+            topSignal: topSignal,
+            contextPulse: contextPulse,
+            selectedSessionID: selectedSessionID,
+            pinnedSession: pinnedSession
         )
     }
 
@@ -657,11 +800,723 @@ struct MeterSnapshot {
     }
 }
 
-final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
+private final class ExecutionTraceView: NSView {
+    private let values: [Double]
+
+    init(values: [Double]) {
+        self.values = values
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 34))
+        setAccessibilityElement(true)
+        setAccessibilityLabel("Measured execution trace")
+        setAccessibilityValue(values.isEmpty ? "No measured context history" : "\(values.count) recent measured executions")
+        toolTip = "Measured context percentage from recent completed executions."
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 34) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard !values.isEmpty else {
+            let note = "No measured context yet"
+            note.draw(
+                at: NSPoint(x: 0, y: 10),
+                withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                    .foregroundColor: NSColor.tokenMeterMuted,
+                ]
+            )
+            return
+        }
+
+        let inset: CGFloat = 5
+        let width = max(1, bounds.width - inset * 2)
+        let baseline = bounds.midY
+        let amplitude = max(8, bounds.height * 0.34)
+        let step = values.count > 1 ? width / CGFloat(values.count - 1) : 0
+        let point = { (index: Int, value: Double) -> NSPoint in
+            NSPoint(x: inset + CGFloat(index) * step, y: baseline + CGFloat(value - 0.5) * amplitude * 2)
+        }
+
+        NSColor.tokenMeterLine.withAlphaComponent(0.72).setStroke()
+        let baselinePath = NSBezierPath()
+        baselinePath.move(to: NSPoint(x: inset, y: baseline))
+        baselinePath.line(to: NSPoint(x: bounds.maxX - inset, y: baseline))
+        baselinePath.lineWidth = 1
+        baselinePath.stroke()
+
+        let trace = NSBezierPath()
+        for (index, value) in values.enumerated() {
+            let position = point(index, value)
+            if index == 0 { trace.move(to: position) } else { trace.line(to: position) }
+        }
+        NSColor.tokenMeterBlue.withAlphaComponent(0.78).setStroke()
+        trace.lineWidth = 1.5
+        trace.lineJoinStyle = .round
+        trace.stroke()
+
+        for (index, value) in values.enumerated() {
+            let position = point(index, value)
+            let dotSize: CGFloat = index == values.count - 1 ? 7 : 3.5
+            let dotRect = NSRect(x: position.x - dotSize / 2, y: position.y - dotSize / 2, width: dotSize, height: dotSize)
+            let color = contextSignalColor(value)
+            color.withAlphaComponent(index == values.count - 1 ? 1 : 0.45).setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+        }
+
+        let latest = point(values.count - 1, values[values.count - 1])
+        NSColor.tokenMeterInk.setFill()
+        NSBezierPath(ovalIn: NSRect(x: latest.x - 2, y: latest.y - 2, width: 4, height: 4)).fill()
+    }
+}
+
+private final class LevelBarView: NSView {
+    private let value: Double
+    private let color: NSColor
+
+    init(value: Double, color: NSColor = .tokenMeterBlue) {
+        self.value = max(0, min(1, value))
+        self.color = color
+        super.init(frame: NSRect(x: 0, y: 0, width: 250, height: 7))
+        setAccessibilityElement(true)
+        setAccessibilityLabel("Usage level")
+        setAccessibilityValue("\(Int((self.value * 100).rounded())) percent")
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 7) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = bounds
+        NSColor.tokenMeterLine.withAlphaComponent(0.68).setFill()
+        NSBezierPath(roundedRect: track, xRadius: 3.5, yRadius: 3.5).fill()
+        let fill = NSRect(x: track.minX, y: track.minY, width: track.width * CGFloat(value), height: track.height)
+        guard fill.width > 0 else { return }
+        color.setFill()
+        NSBezierPath(roundedRect: fill, xRadius: 3.5, yRadius: 3.5).fill()
+    }
+}
+
+// RUN SLIP CONTRACT
+// THESIS: Make the active run read like a precise field record, not a compressed dashboard.
+// OWN-WORLD: Charcoal paper, a single cyan execution trace, hairline dividers, and system type used with editorial restraint.
+// STORY: Identify the run, read its changing context, then decide whether its spend, pace, and allowance warrant attention.
+// FIRST VIEWPORT: Identity and quiet scope rail lead into one full-width measured trace, a three-part ledger, recent run links, and a text action footer.
+// FORM: Native transient popover; seed run-pulse-wide-band. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+private final class RunPulsePopoverController: NSViewController {
+    private enum Layout {
+        static let width: CGFloat = 360
+        static let maxHeight: CGFloat = 452
+        static let maxEvidenceHeight: CGFloat = 320
+        static let minEvidenceHeight: CGFloat = 80
+        static let horizontalInset: CGFloat = 16
+        static let verticalInset: CGFloat = 14
+    }
+
+    private let snapshot: MeterSnapshot
+    private let budget: MonthlyBudget?
+    private let quotas: [ProviderQuota]
+    private let sessions: [RecentSession]
+    private var selectedTab: MenuTab
+    private let onTab: (MenuTab) -> Void
+    private let onOpenDashboard: () -> Void
+    private let onOpenBudget: () -> Void
+    private let onRefresh: () -> Void
+    private let onSelectSession: (String?) -> Void
+    private let onSettings: (NSButton) -> Void
+    private weak var bodyHost: NSView?
+    private weak var evidenceScroll: NSScrollView?
+    private var bodyHeightConstraint: NSLayoutConstraint?
+    private var chromeHeight: CGFloat = 0
+    private var tabButtons: [NSButton] = []
+    private var tabMarkers: [NSView] = []
+
+    init(
+        snapshot: MeterSnapshot,
+        budget: MonthlyBudget?,
+        quotas: [ProviderQuota],
+        sessions: [RecentSession],
+        selectedTab: MenuTab,
+        onTab: @escaping (MenuTab) -> Void,
+        onOpenDashboard: @escaping () -> Void,
+        onOpenBudget: @escaping () -> Void,
+        onRefresh: @escaping () -> Void,
+        onSelectSession: @escaping (String?) -> Void,
+        onSettings: @escaping (NSButton) -> Void
+    ) {
+        self.snapshot = snapshot
+        self.budget = budget
+        self.quotas = quotas
+        self.sessions = sessions
+        self.selectedTab = selectedTab
+        self.onTab = onTab
+        self.onOpenDashboard = onOpenDashboard
+        self.onOpenBudget = onOpenBudget
+        self.onRefresh = onRefresh
+        self.onSelectSession = onSelectSession
+        self.onSettings = onSettings
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func loadView() {
+        let root = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: Layout.width, height: Layout.maxHeight))
+        root.material = .hudWindow
+        root.blendingMode = .withinWindow
+        root.state = .active
+        root.appearance = NSAppearance(named: .darkAqua)
+        root.wantsLayer = true
+        root.layer?.backgroundColor = NSColor.tokenMeterInk.cgColor
+        root.layer?.cornerRadius = 14
+        view = root
+        root.widthAnchor.constraint(equalToConstant: Layout.width).isActive = true
+
+        let column = NSStackView()
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.distribution = .fill
+        column.spacing = 11
+        column.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(column)
+        NSLayoutConstraint.activate([
+            column.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: Layout.horizontalInset),
+            column.widthAnchor.constraint(equalToConstant: Layout.width - Layout.horizontalInset * 2),
+            column.topAnchor.constraint(equalTo: root.topAnchor, constant: Layout.verticalInset),
+            column.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -Layout.verticalInset),
+        ])
+
+        column.addArrangedSubview(makeHeader())
+        column.addArrangedSubview(makeTabs())
+        let evidenceBody = selectedTab == .run ? makeRunBody() : makeQuotaBody()
+        let evidence = makeScrollableEvidenceBody(evidenceBody)
+        let bodyHost = NSView()
+        bodyHost.wantsLayer = true
+        bodyHost.layer?.masksToBounds = true
+        bodyHost.translatesAutoresizingMaskIntoConstraints = false
+        let bodyHeightConstraint = bodyHost.heightAnchor.constraint(equalToConstant: evidence.height)
+        bodyHeightConstraint.isActive = true
+        installEvidenceScroll(evidence.scroll, in: bodyHost)
+        self.bodyHost = bodyHost
+        self.evidenceScroll = evidence.scroll
+        self.bodyHeightConstraint = bodyHeightConstraint
+        column.addArrangedSubview(bodyHost)
+        column.addArrangedSubview(makeFooter())
+        for child in column.arrangedSubviews {
+            child.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+        }
+
+        root.layoutSubtreeIfNeeded()
+        let fittedHeight = min(Layout.maxHeight, ceil(column.fittingSize.height + Layout.verticalInset * 2))
+        chromeHeight = fittedHeight - evidence.height
+        root.frame.size = NSSize(width: Layout.width, height: fittedHeight)
+        preferredContentSize = NSSize(width: Layout.width, height: fittedHeight)
+    }
+
+    private func makeHeader() -> NSView {
+        let row = horizontal(spacing: 8)
+        if let wordmark = splunkWordmarkImage() {
+            let logo = NSImageView(image: wordmark)
+            logo.imageScaling = .scaleProportionallyUpOrDown
+            logo.translatesAutoresizingMaskIntoConstraints = false
+            logo.widthAnchor.constraint(equalToConstant: 63).isActive = true
+            logo.heightAnchor.constraint(equalToConstant: 25).isActive = true
+            logo.setContentHuggingPriority(.required, for: .horizontal)
+            logo.setAccessibilityLabel("Splunk")
+            row.addArrangedSubview(logo)
+        } else {
+            let logo = NSImageView(image: splunkChevronImage())
+            logo.contentTintColor = .tokenMeterBlue
+            logo.setContentHuggingPriority(.required, for: .horizontal)
+            row.addArrangedSubview(logo)
+        }
+        row.addArrangedSubview(label("Token Meter", size: 14, weight: .semibold, color: .labelColor))
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(spacer)
+        let live = label(snapshot.connected ? (snapshot.ended ? "PINNED" : "LIVE") : "OFFLINE", size: 10.5, weight: .bold,
+                         color: snapshot.connected ? .tokenMeterBlue : .systemOrange)
+        live.setContentHuggingPriority(.required, for: .horizontal)
+        row.addArrangedSubview(live)
+        return row
+    }
+
+    private func makeTabs() -> NSView {
+        let rail = horizontal(spacing: 0)
+        rail.distribution = .fillEqually
+        rail.heightAnchor.constraint(equalToConstant: 29).isActive = true
+        for (index, tab) in MenuTab.allCases.enumerated() {
+            let item = vertical(spacing: 0)
+            item.alignment = .centerX
+            let button = NSButton(title: tab.title, target: self, action: #selector(selectTab(_:)))
+            button.tag = index
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.font = .systemFont(ofSize: 11.5, weight: tab == selectedTab ? .semibold : .medium)
+            button.contentTintColor = tab == selectedTab ? .tokenMeterBlue : .tokenMeterMuted
+            button.alignment = .center
+            button.focusRingType = .none
+            button.setAccessibilityLabel("Show \(tab.title)")
+            item.addArrangedSubview(button)
+            button.widthAnchor.constraint(equalTo: item.widthAnchor).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 27).isActive = true
+            let marker = NSView()
+            marker.wantsLayer = true
+            marker.layer?.backgroundColor = (tab == selectedTab ? NSColor.tokenMeterBlue : NSColor.clear).cgColor
+            marker.widthAnchor.constraint(equalToConstant: 28).isActive = true
+            marker.heightAnchor.constraint(equalToConstant: 2).isActive = true
+            item.addArrangedSubview(marker)
+            rail.addArrangedSubview(item)
+            tabButtons.append(button)
+            tabMarkers.append(marker)
+        }
+        return rail
+    }
+
+    func transition(to tab: MenuTab) -> NSSize {
+        _ = view
+        guard tab != selectedTab,
+              let host = bodyHost,
+              let heightConstraint = bodyHeightConstraint
+        else { return preferredContentSize }
+
+        view.layoutSubtreeIfNeeded()
+        let outgoing = evidenceScroll
+        for staleView in host.subviews where staleView !== outgoing {
+            staleView.removeFromSuperview()
+        }
+
+        selectedTab = tab
+        updateTabAppearance()
+        let body = selectedTab == .run ? makeRunBody() : makeQuotaBody()
+        let incoming = makeScrollableEvidenceBody(body)
+        installEvidenceScroll(incoming.scroll, in: host)
+        evidenceScroll = incoming.scroll
+        heightConstraint.constant = incoming.height
+        let targetSize = NSSize(
+            width: Layout.width,
+            height: min(Layout.maxHeight, ceil(chromeHeight + incoming.height))
+        )
+        outgoing?.removeFromSuperview()
+        incoming.scroll.alphaValue = 1
+        view.layoutSubtreeIfNeeded()
+        return targetSize
+    }
+
+    func settlePreferredContentSize(_ size: NSSize) {
+        preferredContentSize = size
+    }
+
+    func tabsAreFullyVisible() -> Bool {
+        view.layoutSubtreeIfNeeded()
+        guard tabButtons.count == MenuTab.allCases.count else { return false }
+        return tabButtons.allSatisfy { button in
+            guard !button.isHidden, button.window === view.window else { return false }
+            let buttonFrame = view.convert(button.bounds, from: button)
+            return view.visibleRect.contains(buttonFrame)
+                && button.frame.width >= 70
+                && button.frame.height >= 24
+        }
+    }
+
+    func tabVisibilitySummary() -> String {
+        view.layoutSubtreeIfNeeded()
+        let frames = tabButtons.map { button -> String in
+            let frame = view.convert(button.bounds, from: button)
+            return "\(button.title):\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)),window=\(button.window === view.window)"
+        }.joined(separator: ";")
+        return "bounds=\(Int(view.bounds.width))x\(Int(view.bounds.height)) visible=\(Int(view.visibleRect.width))x\(Int(view.visibleRect.height)) \(frames)"
+    }
+
+    private func updateTabAppearance() {
+        for (index, tab) in MenuTab.allCases.enumerated() where tabButtons.indices.contains(index) {
+            let selected = tab == selectedTab
+            tabButtons[index].font = .systemFont(ofSize: 11.5, weight: selected ? .semibold : .medium)
+            tabButtons[index].contentTintColor = selected ? .tokenMeterBlue : .tokenMeterMuted
+            tabButtons[index].setAccessibilityValue(selected ? "Selected" : "Not selected")
+            if tabMarkers.indices.contains(index) {
+                tabMarkers[index].layer?.backgroundColor = (selected ? NSColor.tokenMeterBlue : NSColor.clear).cgColor
+            }
+        }
+    }
+
+    private func makeScrollableEvidenceBody(_ content: NSView) -> (scroll: NSScrollView, height: CGFloat) {
+        content.translatesAutoresizingMaskIntoConstraints = false
+        let measurementWidth = content.widthAnchor.constraint(
+            equalToConstant: Layout.width - Layout.horizontalInset * 2
+        )
+        measurementWidth.isActive = true
+        content.layoutSubtreeIfNeeded()
+        let measuredHeight = ceil(content.fittingSize.height)
+        measurementWidth.isActive = false
+        let viewportHeight = min(
+            Layout.maxEvidenceHeight,
+            max(Layout.minEvidenceHeight, measuredHeight)
+        )
+
+        let scroll = NSScrollView()
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.contentView.drawsBackground = false
+        scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+
+        scroll.documentView = content
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            content.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            content.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+        ])
+        return (scroll, viewportHeight)
+    }
+
+    private func installEvidenceScroll(_ scroll: NSScrollView, in host: NSView) {
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(scroll)
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: host.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+        ])
+    }
+
+    private func makeRunBody() -> NSView {
+        guard snapshot.connected else {
+            let offline = vertical(spacing: 8)
+            offline.addArrangedSubview(label("Token Meter is not reachable", size: 15, weight: .semibold, color: .labelColor))
+            offline.addArrangedSubview(label(snapshot.error, size: 12, weight: .regular, color: .tokenMeterMuted, lines: 2))
+            let action = textButton("Open dashboard", action: #selector(openDashboard(_:)), primary: true)
+            offline.addArrangedSubview(action)
+            return offline
+        }
+
+        let body = vertical(spacing: 10)
+        let identity = horizontal(spacing: 7)
+        let providerIcon = NSImageView(image: NSImage(systemSymbolName: providerSymbol(snapshot.provider), accessibilityDescription: snapshot.provider) ?? NSImage())
+        providerIcon.contentTintColor = .tokenMeterBlue
+        identity.addArrangedSubview(providerIcon)
+        let text = vertical(spacing: 1)
+        let selectedName = sessions.first { $0.id == snapshot.selectedSessionID }?.identifier ?? snapshot.menuTitle
+        let selectedTitle = label(selectedName, size: 13.5, weight: .semibold, color: .labelColor)
+        selectedTitle.toolTip = selectedName
+        selectedTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        text.addArrangedSubview(selectedTitle)
+        text.addArrangedSubview(label("\(snapshot.provider) · \(snapshot.model)", size: 11, weight: .medium, color: .tokenMeterMuted))
+        identity.addArrangedSubview(text)
+        body.addArrangedSubview(identity)
+        identity.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+
+        let ledger = makeMetricLedger()
+        body.addArrangedSubview(ledger)
+        ledger.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+
+        let pressure = vertical(spacing: 3)
+        let pressureHeader = horizontal(spacing: 8)
+        pressureHeader.addArrangedSubview(label("Context pressure", size: 11, weight: .semibold, color: .tokenMeterMuted))
+        let pressureSpacer = NSView()
+        pressureSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        pressureHeader.addArrangedSubview(pressureSpacer)
+        let pct = snapshot.contextPct.map { "\(Int(($0 * 100).rounded()))%" } ?? "--"
+        pressureHeader.addArrangedSubview(label(pct, size: 19, weight: .bold, color: contextSignalColor(snapshot.contextPct)))
+        let measured = snapshot.contextPct == nil
+            ? "Not reported by this trace"
+            : "\(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow)) measured"
+        pressure.addArrangedSubview(pressureHeader)
+        pressureHeader.widthAnchor.constraint(equalTo: pressure.widthAnchor).isActive = true
+        pressure.addArrangedSubview(label(measured, size: 10.5, weight: .medium, color: .tokenMeterMuted))
+        let trace = ExecutionTraceView(values: snapshot.contextPulse)
+        pressure.addArrangedSubview(trace)
+        trace.widthAnchor.constraint(equalTo: pressure.widthAnchor).isActive = true
+        body.addArrangedSubview(pressure)
+        pressure.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+
+        let signalDivider = divider()
+        body.addArrangedSubview(signalDivider)
+        signalDivider.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+        if let budget = budget, budget.configured {
+            let budgetLine = makeBudgetLine(budget)
+            body.addArrangedSubview(budgetLine)
+            budgetLine.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+        }
+
+        let result = vertical(spacing: 9)
+        result.addArrangedSubview(body)
+        body.widthAnchor.constraint(equalTo: result.widthAnchor).isActive = true
+        if !sessions.isEmpty {
+            let sessionsDivider = divider()
+            result.addArrangedSubview(sessionsDivider)
+            sessionsDivider.widthAnchor.constraint(equalTo: result.widthAnchor).isActive = true
+            let sessions = makeSessions()
+            result.addArrangedSubview(sessions)
+            sessions.widthAnchor.constraint(equalTo: result.widthAnchor).isActive = true
+        }
+        return result
+    }
+
+    private func makeMetricLedger() -> NSView {
+        let ledger = horizontal(spacing: 10)
+        let cost = metricColumn("Run cost", snapshot.costLabel, tooltip: snapshot.pricingNote)
+        ledger.addArrangedSubview(cost)
+        ledger.addArrangedSubview(divider(vertical: true))
+        let output = metricColumn("Output pace", snapshot.outputSpeedLabel, tooltip: snapshot.outputSpeedTooltip)
+        ledger.addArrangedSubview(output)
+        ledger.addArrangedSubview(divider(vertical: true))
+        let latest = snapshot.costAvailable ? formatMoney(snapshot.lastTurnCost) : "--"
+        let latestLabel = snapshot.estimatedCost ? "Latest est." : "Latest"
+        let latestColumn = metricColumn(latestLabel, latest)
+        ledger.addArrangedSubview(latestColumn)
+        cost.widthAnchor.constraint(equalTo: output.widthAnchor).isActive = true
+        output.widthAnchor.constraint(equalTo: latestColumn.widthAnchor).isActive = true
+        return ledger
+    }
+
+    private func makeBudgetLine(_ budget: MonthlyBudget) -> NSView {
+        let row = horizontal(spacing: 8)
+        let icon = NSImageView(image: NSImage(systemSymbolName: budget.anyExceeded ? "exclamationmark.triangle.fill" : "calendar", accessibilityDescription: "Monthly budget") ?? NSImage())
+        icon.contentTintColor = budget.anyExceeded ? .systemOrange : .tokenMeterBlue
+        row.addArrangedSubview(icon)
+        row.addArrangedSubview(label("Monthly budget", size: 11.5, weight: .semibold, color: .tokenMeterMuted))
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(spacer)
+        let action = textButton(budget.compactLabel, action: #selector(openBudget(_:)), primary: false)
+        action.setContentHuggingPriority(.required, for: .horizontal)
+        action.toolTip = budget.toolTip
+        row.addArrangedSubview(action)
+        return row
+    }
+
+    private func makeSessions() -> NSView {
+        let stack = vertical(spacing: 1)
+        let heading = horizontal(spacing: 7)
+        heading.addArrangedSubview(label("Recent sessions", size: 11.5, weight: .semibold, color: .tokenMeterMuted))
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        heading.addArrangedSubview(spacer)
+        if snapshot.pinnedSession {
+            let follow = textButton("Follow latest", action: #selector(followLatest(_:)), primary: true)
+            follow.setContentHuggingPriority(.required, for: .horizontal)
+            follow.toolTip = "Stop viewing this pinned session and follow the latest session"
+            heading.addArrangedSubview(follow)
+        }
+        stack.addArrangedSubview(heading)
+        heading.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        for (index, session) in sessions.prefix(3).enumerated() {
+            let row = horizontal(spacing: 7)
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 21).isActive = true
+            let icon = NSImageView(image: NSImage(systemSymbolName: session.symbolName, accessibilityDescription: session.providerName) ?? NSImage())
+            icon.contentTintColor = session.id == snapshot.selectedSessionID ? .tokenMeterBlue : .tokenMeterMuted
+            icon.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            row.addArrangedSubview(icon)
+            let item = textButton(session.identifier, action: #selector(selectSession(_:)), primary: false)
+            item.tag = index
+            item.alignment = .left
+            item.contentTintColor = session.id == snapshot.selectedSessionID ? .tokenMeterBlue : .labelColor
+            item.cell?.lineBreakMode = .byTruncatingTail
+            item.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            item.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            item.toolTip = "Switch to \(session.toolTip)"
+            row.addArrangedSubview(item)
+            let provider = label(session.providerName, size: 10.5, weight: .medium, color: .tokenMeterMuted)
+            provider.setContentHuggingPriority(.required, for: .horizontal)
+            row.addArrangedSubview(provider)
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+        return stack
+    }
+
+    private func makeQuotaBody() -> NSView {
+        let body = vertical(spacing: 10)
+        let scoped = quotas.filter { $0.id == selectedTab.rawValue }
+        let title = "\(selectedTab.title) limits"
+        body.addArrangedSubview(label(title, size: 16, weight: .semibold, color: .labelColor))
+
+        if scoped.isEmpty {
+            body.addArrangedSubview(label("No provider-reported limit is available yet.", size: 12, weight: .regular, color: .tokenMeterMuted, lines: 2))
+        } else {
+            for provider in scoped {
+                let instrument = makeProviderInstrument(provider)
+                body.addArrangedSubview(instrument)
+                instrument.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+            }
+        }
+        body.addArrangedSubview(label("Only provider-reported limits are shown.", size: 10.5, weight: .medium, color: .tokenMeterMuted))
+        return body
+    }
+
+    private func makeProviderInstrument(_ provider: ProviderQuota) -> NSView {
+        let stack = vertical(spacing: 6)
+        let head = horizontal(spacing: 7)
+        head.addArrangedSubview(label(provider.label, size: 13, weight: .semibold, color: .labelColor))
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        head.addArrangedSubview(spacer)
+        head.addArrangedSubview(label(provider.freshnessLabel, size: 10.5, weight: .medium, color: provider.stale ? .systemOrange : .tokenMeterMuted))
+        stack.addArrangedSubview(head)
+        head.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        if provider.windows.isEmpty {
+            let message = provider.error.isEmpty ? "No provider-reported quota window is available." : provider.error
+            stack.addArrangedSubview(label(message, size: 11.5, weight: .regular, color: .tokenMeterMuted, lines: 2))
+        } else {
+            for window in provider.windows {
+                let row = vertical(spacing: 3)
+                let labels = horizontal(spacing: 6)
+                labels.addArrangedSubview(label(window.label, size: 11.5, weight: .semibold, color: .labelColor))
+                let fill = NSView()
+                fill.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                labels.addArrangedSubview(fill)
+                labels.addArrangedSubview(label(window.percentLabel, size: 11.5, weight: .bold,
+                                                color: provider.stale ? .tokenMeterMuted : contextSignalColor(window.usedPercent / 100)))
+                row.addArrangedSubview(labels)
+                labels.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+                let level = LevelBarView(value: window.usedPercent / 100, color: provider.stale ? .tokenMeterMuted : contextSignalColor(window.usedPercent / 100))
+                row.addArrangedSubview(level)
+                level.widthAnchor.constraint(equalTo: row.widthAnchor).isActive = true
+                let detail = [window.resetLabel, window.pace?.summary].compactMap { $0 }.joined(separator: " · ")
+                row.addArrangedSubview(label(detail, size: 10.5, weight: .regular, color: .tokenMeterMuted))
+                stack.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            }
+        }
+        if !provider.coverageNote.isEmpty {
+            stack.addArrangedSubview(label(provider.coverageNote, size: 10.5, weight: .regular, color: .tokenMeterMuted, lines: 2))
+        }
+        return stack
+    }
+
+    private func makeFooter() -> NSView {
+        let row = horizontal(spacing: 6)
+        let open = textButton("Open Token Meter", action: #selector(openDashboard(_:)), primary: true)
+        open.image = NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: "Open Token Meter")
+        open.imagePosition = .imageLeading
+        row.addArrangedSubview(open)
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(symbolButton("arrow.clockwise", label: "Refresh Token Meter", action: #selector(refresh(_:))))
+        let settings = textButton("Settings", action: #selector(showSettings(_:)), primary: false)
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+        settings.imagePosition = .imageLeading
+        settings.toolTip = "Open menu bar settings"
+        row.addArrangedSubview(settings)
+        return row
+    }
+
+    private func metricColumn(_ name: String, _ value: String, tooltip: String? = nil) -> NSView {
+        let stack = vertical(spacing: 2)
+        stack.alignment = .leading
+        stack.addArrangedSubview(label(name, size: 10.5, weight: .semibold, color: .tokenMeterMuted))
+        let valueLabel = label(value, size: 14, weight: .bold, color: .labelColor)
+        valueLabel.toolTip = tooltip
+        stack.addArrangedSubview(valueLabel)
+        stack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return stack
+    }
+
+    private func label(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor, lines: Int = 1) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.font = .systemFont(ofSize: size, weight: weight)
+        field.textColor = color
+        field.lineBreakMode = lines == 1 ? .byTruncatingTail : .byWordWrapping
+        field.maximumNumberOfLines = lines
+        field.usesSingleLineMode = lines == 1
+        return field
+    }
+
+    private func textButton(_ title: String, action: Selector, primary: Bool) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.font = .systemFont(ofSize: 11.5, weight: primary ? .semibold : .medium)
+        button.contentTintColor = primary ? .tokenMeterBlue : .labelColor
+        button.setAccessibilityLabel(title)
+        return button
+    }
+
+    private func symbolButton(_ symbol: String, label: String, action: Selector) -> NSButton {
+        let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage(), target: self, action: action)
+        button.bezelStyle = .inline
+        button.contentTintColor = .tokenMeterMuted
+        button.toolTip = label
+        button.setAccessibilityLabel(label)
+        return button
+    }
+
+    private func horizontal(spacing: CGFloat) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.distribution = .fill
+        stack.spacing = spacing
+        return stack
+    }
+
+    private func vertical(spacing: CGFloat) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.distribution = .fill
+        stack.spacing = spacing
+        return stack
+    }
+
+    private func divider(vertical: Bool = false) -> NSView {
+        let line = NSView()
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor.tokenMeterLine.withAlphaComponent(0.74).cgColor
+        if vertical {
+            line.widthAnchor.constraint(equalToConstant: 1).isActive = true
+            line.heightAnchor.constraint(greaterThanOrEqualToConstant: 32).isActive = true
+        } else {
+            line.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        }
+        return line
+    }
+
+    @objc private func selectTab(_ sender: NSButton) {
+        let tabs = MenuTab.allCases
+        guard tabs.indices.contains(sender.tag) else { return }
+        onTab(tabs[sender.tag])
+    }
+
+    @objc private func openDashboard(_ sender: NSButton) { onOpenDashboard() }
+    @objc private func openBudget(_ sender: NSButton) { onOpenBudget() }
+    @objc private func refresh(_ sender: NSButton) { onRefresh() }
+    @objc private func followLatest(_ sender: NSButton) { onSelectSession(nil) }
+    @objc private func showSettings(_ sender: NSButton) { onSettings(sender) }
+
+    @objc private func selectSession(_ sender: NSButton) {
+        guard sessions.indices.contains(sender.tag) else { return }
+        onSelectSession(sessions[sender.tag].id)
+    }
+}
+
+private func contextSignalColor(_ value: Double?) -> NSColor {
+    guard let value = value else { return .tokenMeterMuted }
+    if value >= 0.85 { return .systemOrange }
+    if value >= 0.70 { return .systemYellow }
+    return .tokenMeterBlue
+}
+
+private func providerSymbol(_ provider: String) -> String {
+    switch provider.lowercased() {
+    case "codex": return "terminal"
+    case "cursor": return "cursorarrow"
+    default: return "sparkles"
+    }
+}
+
+final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let stateURL = tokenMeterMenubarURL
     private let dashboardURL = tokenMeterDashboardURL
-    private let menu = NSMenu()
-    private let menuWidth: CGFloat = 420
+    private let popover = NSPopover()
     private var statusItem: NSStatusItem!
     private var timer: Timer?
     private var pinnedSessionID = tokenMeterDefaults.string(forKey: pinnedSessionDefaultsKey)
@@ -670,6 +1525,21 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var selectedTab = MenuTab(
         rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? ""
     ) ?? .run
+    private var statusDisplayMode = StatusDisplayMode(
+        rawValue: tokenMeterDefaults.string(forKey: statusDisplayModeDefaultsKey) ?? StatusDisplayMode.text.rawValue
+    ) ?? .text
+    private var globalShortcut = MenuBarShortcut(
+        rawValue: tokenMeterDefaults.string(forKey: globalShortcutDefaultsKey) ?? ""
+    ) ?? .controlOptionT
+    private var customShortcutKeyCode: UInt32? = {
+        guard tokenMeterDefaults.object(forKey: customShortcutKeyCodeDefaultsKey) != nil else { return nil }
+        return UInt32(tokenMeterDefaults.integer(forKey: customShortcutKeyCodeDefaultsKey))
+    }()
+    private var customShortcutModifiers: UInt32 = UInt32(
+        tokenMeterDefaults.integer(forKey: customShortcutModifiersDefaultsKey)
+    )
+    private var globalHotKey: EventHotKeyRef?
+    private var globalHotKeyHandler: EventHandlerRef?
     private var titleMetrics: Set<TitleMetric> = {
         if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
             let metrics = Set(saved.compactMap(TitleMetric.init(rawValue:)))
@@ -704,18 +1574,33 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tokenMeterDefaults.stringArray(forKey: budgetExceededMonthsDefaultsKey) ?? []
     )
     private var quotaObservationEstablished = false
-    private var menuIsOpen = false
-    private var menuRefreshPending = false
+    private var popoverRefreshPending = false
+    private var surfaceTransitionGeneration = 0
+    private var settledSurfaceTransitionGeneration = 0
     private var snapshot = MeterSnapshot.disconnected("Waiting for http://127.0.0.1:8722/menubar")
     private var monthlyBudget: MonthlyBudget?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        statusItem.menu = menu
-        menu.delegate = self
-        rebuildMenu()
+        if tokenMeterDefaults.object(forKey: statusItemPreferredPositionDefaultsKey) == nil {
+            tokenMeterDefaults.set(statusItemInitialPreferredPosition, forKey: statusItemPreferredPositionDefaultsKey)
+        }
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.autosaveName = statusItemAutosaveName
+        if let button = statusItem.button {
+            button.image = splunkChevronImage()
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .tokenMeterBlue
+            button.target = self
+            button.action = #selector(togglePopover(_:))
+            button.sendAction(on: [.leftMouseUp])
+        }
+        popover.appearance = NSAppearance(named: .vibrantDark)
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
+        registerGlobalHotKey()
+        refreshSurface()
         fetchState()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.fetchState()
@@ -724,25 +1609,19 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
+        unregisterGlobalHotKey()
     }
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        rebuildMenu()
+    func popoverDidClose(_ notification: Notification) {
+        guard popoverRefreshPending else { return }
+        popoverRefreshPending = false
+        refreshSurface(force: true)
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        menuIsOpen = true
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        menuIsOpen = false
-        if menuRefreshPending {
-            menuRefreshPending = false
-            rebuildMenu()
-        }
-    }
-
-    private func fetchState() {
+    private func fetchState(
+        forceSurfaceRefresh: Bool = false,
+        animatedSurfaceRefresh: Bool = false
+    ) {
         let requestedSessionID = pinnedSessionID
         let requestURL = menubarRequestURL(sessionID: requestedSessionID)
         var request = URLRequest(
@@ -758,7 +1637,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard requestedSessionID == self.pinnedSessionID else { return }
                 if let error = error {
                     self.snapshot = MeterSnapshot.disconnected(error.localizedDescription)
-                    self.refreshMenu()
+                    self.refreshSurface(force: forceSurfaceRefresh, animated: animatedSurfaceRefresh)
                     return
                 }
                 guard
@@ -767,7 +1646,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let dict = obj as? [String: Any]
                 else {
                     self.snapshot = MeterSnapshot.disconnected("Token Meter returned unreadable state.")
-                    self.refreshMenu()
+                    self.refreshSurface(force: forceSurfaceRefresh, animated: animatedSurfaceRefresh)
                     return
                 }
                 let selection = dict["selection"] as? [String: Any] ?? [:]
@@ -782,7 +1661,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.monthlyBudget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
                 self.evaluateQuotaNotifications()
                 self.evaluateBudgetNotifications()
-                self.refreshMenu()
+                self.refreshSurface(force: forceSurfaceRefresh, animated: animatedSurfaceRefresh)
             }
         }.resume()
     }
@@ -796,101 +1675,259 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func refreshMenu() {
-        if menuIsOpen {
-            updateStatusTitle()
-            menuRefreshPending = true
-        } else {
-            rebuildMenu()
-        }
+        refreshSurface()
     }
 
-    private func rebuildMenu() {
+    private func refreshSurface(force: Bool = false, animated: Bool = false) {
         updateStatusTitle()
-        menu.removeAllItems()
-
-        addTabPicker()
-        menu.addItem(.separator())
-
-        switch selectedTab {
-        case .run:
-            addRunMenu()
-        case .overview:
-            addOverviewMenu()
-        case .claude, .codex, .cursor:
-            addProviderMenu(selectedTab.rawValue)
+        guard force || !popover.isShown else {
+            popoverRefreshPending = true
+            return
         }
-
-        menu.addItem(.separator())
-        addSettingsMenu()
-        addAction("Quit Token Meter Menubar", #selector(quit))
+        let controller = RunPulsePopoverController(
+            snapshot: snapshot,
+            budget: monthlyBudget,
+            quotas: providerQuotas,
+            sessions: recentSessions,
+            selectedTab: selectedTab,
+            onTab: { [weak self] tab in self?.changeTab(tab) },
+            onOpenDashboard: { [weak self] in self?.openDashboard() },
+            onOpenBudget: { [weak self] in self?.openBudgetSettings() },
+            onRefresh: { [weak self] in
+                self?.fetchState(forceSurfaceRefresh: true, animatedSurfaceRefresh: true)
+            },
+            onSelectSession: { [weak self] sessionID in self?.selectPulseSession(sessionID) },
+            onSettings: { [weak self] button in self?.showSettingsMenu(from: button) }
+        )
+        let targetSize = controller.preferredContentSize
+        popover.contentViewController = controller
+        resizePopover(to: targetSize)
     }
 
-    private func addRunMenu() {
-        addHeader()
-        menu.addItem(.separator())
+    private func resizePopover(to targetSize: NSSize) {
+        surfaceTransitionGeneration += 1
+        let transitionGeneration = surfaceTransitionGeneration
+        popover.contentSize = targetSize
+        (popover.contentViewController as? RunPulsePopoverController)?.settlePreferredContentSize(targetSize)
+        settledSurfaceTransitionGeneration = transitionGeneration
+        if popover.isShown,
+           ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_POPOVER_SMOKE"] == "1" {
+            let tabsVisible = (popover.contentViewController as? RunPulsePopoverController)?.tabsAreFullyVisible() ?? false
+            print("run-pulse-transition-settle expected=\(transitionGeneration) current=\(surfaceTransitionGeneration) tabs=\(tabsVisible) mode=immediate")
+        }
+    }
 
-        addAction("Open Dashboard", #selector(openDashboard))
-        addAction("Open Daily Brief", #selector(openDailyBrief))
-        addAction("Open Budget Settings", #selector(openBudgetSettings))
-        addAction("Open Trace", #selector(openTrace), enabled: snapshot.connected)
-        addAction("Open Tools", #selector(openToolsAndSkills))
-        menu.addItem(.separator())
+    @objc private func togglePopover(_ sender: Any?) {
+        if popover.isShown {
+            popover.performClose(sender)
+            return
+        }
+        refreshSurface(force: true)
+        guard let button = statusItem.button else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
 
-        addSessionPicker()
-        menu.addItem(.separator())
+    private var activeShortcutKeyCode: UInt32? {
+        globalShortcut == .custom ? customShortcutKeyCode : globalShortcut.keyCode
+    }
 
-        if snapshot.connected {
-            addMetricRow("Model", snapshot.model)
-            addMetricRow("Cost", snapshot.costAvailable
-                         ? "\(formatMoney(snapshot.totalCost))\(snapshot.estimatedCost ? " est" : "")"
-                         : "--", toolTip: snapshot.estimatedTokens
-                            ? snapshot.pricingNote
-                            : (snapshot.costAvailable ? nil : "This trace does not expose enough local pricing evidence."))
-            addMetricRow("Context", "\(snapshot.contextLabel) - \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))",
-                         toolTip: "Context watch starts at 70%; intervene starts at 85%.")
-            addContextBar()
-            addMetricRow("Output speed", snapshot.outputSpeedLabel, toolTip: snapshot.outputSpeedTooltip)
-            addMetricRow("Tokens", snapshot.tokensAvailable
-                         ? "\(formatCompactInt(snapshot.totalTokens))\(snapshot.estimatedTokens ? " est" : "") - \(snapshot.turns) execs"
-                         : "-- - \(snapshot.turns) execs",
-                         toolTip: snapshot.estimatedTokens
-                            ? "Cursor tokens are local context-and-visible-output proxies; cache and hidden model work are excluded."
-                            : (snapshot.tokensAvailable ? nil : "Input and output tokens are unavailable for this trace."))
-            addMetricRow("Cache", snapshot.cacheLabel)
-            addMetricRow("Last execution", snapshot.costAvailable
-                         ? "\(formatMoney(snapshot.lastTurnCost))\(snapshot.estimatedCost ? " est" : "")"
-                         : "--")
-            if let budget = monthlyBudget {
-                addMetricRow("Monthly budget", budget.compactLabel,
-                    valueColor: .labelColor,
-                    strong: budget.anyExceeded,
-                    toolTip: budget.toolTip
-                )
-            }
+    private var activeShortcutModifiers: UInt32 {
+        globalShortcut == .custom ? customShortcutModifiers : globalShortcut.modifiers
+    }
+
+    private func registerGlobalHotKey() {
+        unregisterGlobalHotKey()
+        guard let keyCode = activeShortcutKeyCode else { return }
+
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let userData = Unmanaged.passUnretained(self).toOpaque()
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData in
+                guard let userData = userData else { return noErr }
+                let delegate = Unmanaged<TokenMeterMenuBar>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    delegate.togglePopover(nil)
+                }
+                return noErr
+            },
+            1,
+            &eventSpec,
+            userData,
+            &globalHotKeyHandler
+        )
+        guard handlerStatus == noErr else { return }
+
+        let hotKeyID = EventHotKeyID(signature: 0x544D4854, id: 1)
+        let registrationStatus = RegisterEventHotKey(
+            keyCode,
+            activeShortcutModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &globalHotKey
+        )
+        if registrationStatus != noErr {
+            unregisterGlobalHotKey()
+        }
+    }
+
+    private func unregisterGlobalHotKey() {
+        if let globalHotKey = globalHotKey {
+            UnregisterEventHotKey(globalHotKey)
+            self.globalHotKey = nil
+        }
+        if let globalHotKeyHandler = globalHotKeyHandler {
+            RemoveEventHandler(globalHotKeyHandler)
+            self.globalHotKeyHandler = nil
+        }
+    }
+
+    private func changeTab(_ tab: MenuTab) {
+        guard tab != selectedTab else { return }
+        selectedTab = tab
+        tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)
+        if popover.isShown,
+           let controller = popover.contentViewController as? RunPulsePopoverController {
+            let targetSize = controller.transition(to: tab)
+            resizePopover(to: targetSize)
         } else {
-            addSignalRow("Connection", snapshot.error, color: .tokenMeterBlue)
+            refreshSurface(force: true)
+        }
+    }
+
+    private func selectPulseSession(_ sessionID: String?) {
+        persistPinnedSession(sessionID)
+        fetchState(forceSurfaceRefresh: true, animatedSurfaceRefresh: true)
+    }
+
+    func runPopoverSmoke() throws {
+        let originalTab = selectedTab
+        let originalPersistedTab = tokenMeterDefaults.string(forKey: selectedTabDefaultsKey)
+        defer {
+            selectedTab = originalTab
+            if let originalPersistedTab = originalPersistedTab {
+                tokenMeterDefaults.set(originalPersistedTab, forKey: selectedTabDefaultsKey)
+            } else {
+                tokenMeterDefaults.removeObject(forKey: selectedTabDefaultsKey)
+            }
+            timer?.invalidate()
+            popover.performClose(nil)
+            statusItem = nil
+        }
+        let smokeData = try Data(contentsOf: stateURL)
+        let smokeObject = try JSONSerialization.jsonObject(with: smokeData)
+        guard let smokePayload = smokeObject as? [String: Any] else {
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Run Pulse smoke payload was not a JSON object."]
+            )
+        }
+        snapshot = MeterSnapshot.fromJSON(smokePayload)
+        monthlyBudget = MonthlyBudget.fromJSON(smokePayload["budget"] as? [String: Any])
+        providerQuotas = (smokePayload["provider_quotas"] as? [[String: Any]] ?? [])
+            .compactMap(ProviderQuota.fromJSON)
+        recentSessions = (smokePayload["recent_sessions"] as? [[String: Any]] ?? [])
+            .compactMap(RecentSession.fromJSON)
+        togglePopover(nil)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
+        guard popover.isShown, popover.contentViewController is RunPulsePopoverController else {
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "Status-item click did not show Run Pulse."]
+            )
+        }
+        guard let mountedController = popover.contentViewController as? RunPulsePopoverController,
+              mountedController.tabsAreFullyVisible()
+        else {
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: "Run Pulse did not show all four scope tabs before switching."]
+            )
+        }
+        let transitionGeneration = surfaceTransitionGeneration
+        changeTab(.claude)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.08))
+        guard popover.contentViewController === mountedController,
+              mountedController.tabsAreFullyVisible() else {
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 11,
+                userInfo: [NSLocalizedDescriptionKey: "Run Pulse clipped a scope tab after switching to Claude (\(mountedController.tabVisibilitySummary()))."]
+            )
+        }
+        changeTab(.cursor)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.08))
+        guard popover.contentViewController === mountedController,
+              mountedController.tabsAreFullyVisible(),
+              surfaceTransitionGeneration > transitionGeneration,
+              settledSurfaceTransitionGeneration == surfaceTransitionGeneration,
+              popover.contentSize == popover.contentViewController?.preferredContentSize
+        else {
+            let actualSize = popover.contentSize
+            let expectedSize = popover.contentViewController?.preferredContentSize ?? .zero
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: "Run Pulse transition did not complete (tabs \(mountedController.tabsAreFullyVisible()), \(mountedController.tabVisibilitySummary()), generation \(surfaceTransitionGeneration), settled \(settledSurfaceTransitionGeneration), size \(actualSize), expected \(expectedSize))."]
+            )
         }
     }
 
     private func updateStatusTitle() {
-        let title = selectedStatusTitle()
+        let title = compactStatusTitle()
         let budgetExceeded = monthlyBudget?.anyExceeded == true
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: budgetExceeded ? NSColor.white : NSColor.labelColor,
-            .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        ]
-        let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)
-        if budgetExceeded {
-            let warningRange = (title as NSString).range(of: "⚠︎")
-            if warningRange.location != NSNotFound {
-                attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)
-            }
+        guard let button = statusItem.button else { return }
+        button.contentTintColor = budgetExceeded
+            ? NSColor.systemRed
+            : (snapshot.connected ? NSColor.tokenMeterBlue : NSColor.secondaryLabelColor)
+        switch effectiveStatusDisplayMode() {
+        case .text:
+            let titleImage = statusTitleImage(title)
+            statusItem.length = titleImage.size.width + 16
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = titleImage
+            button.imagePosition = .imageOnly
+            button.contentTintColor = nil
+        case .icon:
+            statusItem.length = NSStatusItem.squareLength
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = splunkChevronImage()
+            button.imagePosition = .imageOnly
+        case .automatic:
+            break
         }
-        statusItem.button?.attributedTitle = attributedTitle
-        var toolTip = snapshot.statusTooltip
+        button.setAccessibilityLabel("Token Meter")
+        button.setAccessibilityValue(title)
+        var toolTip = "Token Meter · \(title)\n\(snapshot.statusTooltip)"
         if let limits = limitsStatusTooltip() { toolTip += "\nLimits: \(limits)" }
         if let budget = monthlyBudget { toolTip += "\nBudget: \(budget.toolTip)" }
-        statusItem.button?.toolTip = toolTip
+        button.toolTip = toolTip
+    }
+
+    private func effectiveStatusDisplayMode() -> StatusDisplayMode {
+        guard statusDisplayMode == .automatic else { return statusDisplayMode }
+        let screen = statusItem.button?.window?.screen ?? NSScreen.main
+        // macOS keeps right-side status items in the usable menu-bar region;
+        // a notch alone is not a reason to hide the useful readout. Fall
+        // back to the chevron only on genuinely narrow menu bars.
+        guard let screen = screen, screen.visibleFrame.width > 0 else { return .text }
+        return screen.visibleFrame.width < 1200 ? .icon : .text
+    }
+
+    private func compactStatusTitle() -> String {
+        guard snapshot.connected else { return snapshot.verdict.prefix }
+        let base = "\(snapshot.costLabel) · \(snapshot.outputSpeedLabel)"
+        return monthlyBudget?.anyExceeded == true ? "⚠︎ \(base)" : base
     }
 
     private func selectedStatusTitle() -> String {
@@ -926,155 +1963,65 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .max { $0.window.usedPercent < $1.window.usedPercent }
     }
 
-    private func addTabPicker() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 42))
-        let tabs = MenuTab.allCases
-        let control = NSSegmentedControl(
-            labels: tabs.map(\.title),
-            trackingMode: .selectOne,
-            target: self,
-            action: #selector(selectTab(_:))
-        )
-        control.frame = NSRect(x: 12, y: 7, width: menuWidth - 24, height: 28)
-        control.segmentStyle = .rounded
-        control.controlSize = .small
-        control.selectedSegment = tabs.firstIndex(of: selectedTab) ?? 0
-        for index in tabs.indices {
-            control.setWidth((menuWidth - 24) / CGFloat(tabs.count), forSegment: index)
-        }
-        view.addSubview(control)
-        addViewItem(view)
+    private func showSettingsMenu(from button: NSButton) {
+        let settingsMenu = makeSettingsMenu()
+        settingsMenu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
     }
 
-    private func addOverviewMenu() {
-        let ranked = providerQuotas.sorted { lhs, rhs in
-            let left = lhs.fresh ? lhs.highestWindow?.usedPercent ?? -1 : -1
-            let right = rhs.fresh ? rhs.highestWindow?.usedPercent ?? -1 : -1
-            if left == right { return lhs.label < rhs.label }
-            return left > right
-        }
-        if let constrained = mostConstrainedQuota() {
-            addSignalRow(
-                "Most constrained",
-                "\(constrained.provider.label) · \(constrained.window.label) · \(constrained.window.percentLabel) used",
-                color: .labelColor
-            )
-            menu.addItem(.separator())
-        } else if providerQuotas.allSatisfy({ $0.status != "loading" }) {
-            addSignalRow("Provider limits", "No fresh provider-reported quota is available.", color: .secondaryLabelColor)
-            menu.addItem(.separator())
-        }
-
-        for provider in ranked {
-            if let window = provider.highestWindow {
-                let suffix: String
-                if provider.stale { suffix = " · stale" }
-                else if provider.status == "error" { suffix = " · last good" }
-                else { suffix = "" }
-                addMetricRow(provider.label, "\(window.percentLabel) · \(window.label)\(suffix)")
-            } else {
-                let value = provider.status == "loading" ? "loading…" : "unavailable"
-                addMetricRow(provider.label, value, valueColor: .secondaryLabelColor)
-            }
-        }
-        if providerQuotas.isEmpty {
-            addSignalRow("Provider limits", "Loading provider quotas.", color: .secondaryLabelColor)
-        }
-        addFooterRow("Only provider-reported limits are shown · refreshes every minute")
-    }
-
-    private func addProviderMenu(_ providerID: String) {
-        guard let provider = providerQuotas.first(where: { $0.id == providerID }) else {
-            addSignalRow(providerID.capitalized, "Loading provider quotas.", color: .secondaryLabelColor)
-            return
-        }
-        let plan = provider.plan.trimmingCharacters(in: .whitespacesAndNewlines)
-        addProviderHeader(
-            provider.label,
-            subtitle: [plan.isEmpty ? nil : plan, provider.freshnessLabel].compactMap { $0 }.joined(separator: " · ")
-        )
-
-        if provider.windows.isEmpty {
-            let message = provider.error.isEmpty ? "No provider-reported quota window is available." : provider.error
-            addSignalRow("Quota unavailable", message, color: .secondaryLabelColor)
-        } else {
-            for window in provider.windows {
-                addQuotaWindowRow(window, stale: provider.stale || provider.status == "error")
-            }
-            if provider.status == "error", !provider.error.isEmpty {
-                addFooterRow("Last refresh failed · showing last good values")
-            }
-        }
-        if !provider.coverageNote.isEmpty {
-            addSignalRow("Coverage", provider.coverageNote, color: .secondaryLabelColor)
-        }
-
-        let provenance = provider.provenance == "provider_reported" ? "Provider-reported" : "Unavailable"
-        addFooterRow("\(provenance) · \(provider.source) · \(provider.freshnessLabel)")
-    }
-
-    private func addProviderHeader(_ title: String, subtitle: String) {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 48))
-        let titleLabel = label(title, frame: NSRect(x: 14, y: 24, width: menuWidth - 28, height: 18),
-                               font: .systemFont(ofSize: 14, weight: .semibold), color: .labelColor)
-        let subtitleLabel = label(subtitle, frame: NSRect(x: 14, y: 6, width: menuWidth - 28, height: 16),
-                                  font: .systemFont(ofSize: 11.5, weight: .regular), color: .secondaryLabelColor)
-        view.addSubview(titleLabel)
-        view.addSubview(subtitleLabel)
-        addViewItem(view)
-    }
-
-    private func addQuotaWindowRow(_ window: QuotaWindow, stale: Bool) {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 76))
-        let title = label(window.label, frame: NSRect(x: 14, y: 55, width: menuWidth - 105, height: 16),
-                          font: .systemFont(ofSize: 12.5, weight: .semibold), color: .labelColor)
-        let percent = label(window.percentLabel, frame: NSRect(x: menuWidth - 90, y: 54, width: 76, height: 18),
-                            font: .monospacedDigitSystemFont(ofSize: 13, weight: .semibold),
-                            color: stale ? .secondaryLabelColor : .labelColor)
-        percent.alignment = .right
-
-        let track = NSView(frame: NSRect(x: 14, y: 42, width: menuWidth - 28, height: 6))
-        track.wantsLayer = true
-        track.layer?.cornerRadius = 3
-        track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
-        let fill = NSView(frame: NSRect(
-            x: 0, y: 0,
-            width: (menuWidth - 28) * CGFloat(window.usedPercent / 100), height: 6
-        ))
-        fill.wantsLayer = true
-        fill.layer?.cornerRadius = 3
-        fill.layer?.backgroundColor = NSColor.tokenMeterBlue.withAlphaComponent(stale ? 0.45 : 1).cgColor
-        track.addSubview(fill)
-
-        let reset = label(window.resetLabel, frame: NSRect(x: 14, y: 22, width: menuWidth - 28, height: 15),
-                          font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
-        let paceText = window.pace?.summary ?? "Pace forecast unavailable"
-        let pace = label(paceText, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 15),
-                         font: .systemFont(ofSize: 11.5), color: .secondaryLabelColor)
-        view.addSubview(title)
-        view.addSubview(percent)
-        view.addSubview(track)
-        view.addSubview(reset)
-        view.addSubview(pace)
-        addViewItem(view)
-    }
-
-    private func addFooterRow(_ text: String) {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 27))
-        let footer = label(text, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 16),
-                           font: .systemFont(ofSize: 10.5), color: .tertiaryLabelColor)
-        view.addSubview(footer)
-        addViewItem(view)
-    }
-
-    private func addSettingsMenu() {
-        let settingsItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+    private func makeSettingsMenu() -> NSMenu {
         let settingsMenu = NSMenu(title: "Settings")
 
+        let openDashboard = NSMenuItem(title: "Open Dashboard", action: #selector(openDashboard), keyEquivalent: "")
+        openDashboard.target = self
+        settingsMenu.addItem(openDashboard)
+        let dailyBrief = NSMenuItem(title: "Open Daily Brief", action: #selector(openDailyBrief), keyEquivalent: "")
+        dailyBrief.target = self
+        settingsMenu.addItem(dailyBrief)
+        let tools = NSMenuItem(title: "Open Tools", action: #selector(openToolsAndSkills), keyEquivalent: "")
+        tools.target = self
+        settingsMenu.addItem(tools)
+        let trace = NSMenuItem(title: "Open Trace", action: #selector(openTrace), keyEquivalent: "")
+        trace.target = self
+        trace.isEnabled = snapshot.connected
+        settingsMenu.addItem(trace)
+        settingsMenu.addItem(.separator())
+        let openSettings = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: "")
+        openSettings.target = self
+        settingsMenu.addItem(openSettings)
         let modelPrices = NSMenuItem(title: "Model Prices", action: #selector(openModelPrices), keyEquivalent: "")
         modelPrices.target = self
         settingsMenu.addItem(modelPrices)
         settingsMenu.addItem(.separator())
+
+        let displayItem = NSMenuItem(title: "Menu bar display", action: nil, keyEquivalent: "")
+        let displayMenu = NSMenu(title: "Menu bar display")
+        for mode in StatusDisplayMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(setStatusDisplayMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = statusDisplayMode == mode ? .on : .off
+            displayMenu.addItem(item)
+        }
+        displayItem.submenu = displayMenu
+        settingsMenu.addItem(displayItem)
+
+        let shortcutItem = NSMenuItem(title: "Keyboard shortcut", action: nil, keyEquivalent: "")
+        let shortcutMenu = NSMenu(title: "Keyboard shortcut")
+        for shortcut in MenuBarShortcut.allCases {
+            let itemTitle = shortcut == .custom ? customShortcutMenuTitle() : shortcut.title
+            let action = shortcut == .custom
+                ? #selector(configureCustomShortcut(_:))
+                : #selector(setGlobalShortcut(_:))
+            let item = NSMenuItem(title: itemTitle, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = shortcut.rawValue
+            item.state = shortcut == .custom && customShortcutKeyCode == nil
+                ? .off
+                : (globalShortcut == shortcut ? .on : .off)
+            shortcutMenu.addItem(item)
+        }
+        shortcutItem.submenu = shortcutMenu
+        settingsMenu.addItem(shortcutItem)
 
         let titleItem = NSMenuItem(title: "Menu bar title", action: nil, keyEquivalent: "")
         let titleMenu = NSMenu(title: "Menu bar title")
@@ -1093,10 +2040,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alerts.state = quotaAlertsEnabled ? .on : .off
         settingsMenu.addItem(alerts)
 
-        let thresholdItem = NSMenuItem(title: "Warn at", action: nil, keyEquivalent: "")
-        let thresholdMenu = NSMenu(title: "Warn at")
+        let thresholdItem = NSMenuItem(title: "Quota alert threshold (\(quotaAlertThreshold)%)", action: nil, keyEquivalent: "")
+        let thresholdMenu = NSMenu(title: "Quota alert threshold")
         for threshold in [80, 90, 95] {
-            let item = NSMenuItem(title: "\(threshold)%", action: #selector(setQuotaThreshold(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: "\(threshold)% used", action: #selector(setQuotaThreshold(_:)), keyEquivalent: "")
             item.target = self
             item.tag = threshold
             item.state = quotaAlertThreshold == threshold ? .on : .off
@@ -1104,128 +2051,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         thresholdItem.submenu = thresholdMenu
         settingsMenu.addItem(thresholdItem)
-
-        settingsItem.submenu = settingsMenu
-        menu.addItem(settingsItem)
-    }
-
-    private func addHeader() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 48))
-        let title = label(snapshot.menuTitle, frame: NSRect(x: 14, y: 23, width: menuWidth - 28, height: 18),
-                          font: .systemFont(ofSize: 13, weight: .semibold),
-                          color: .labelColor)
-        let subtitleText = pinnedSessionID == nil ? snapshot.idleLabel : "pinned · \(snapshot.idleLabel)"
-        let subtitle = label(subtitleText, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 16),
-                             font: .systemFont(ofSize: 12, weight: .regular),
-                             color: .secondaryLabelColor)
-        view.addSubview(title)
-        view.addSubview(subtitle)
-        addViewItem(view)
-    }
-
-    private func addSessionPicker() {
-        let heading = NSMenuItem(title: "Recent sessions", action: nil, keyEquivalent: "")
-        heading.isEnabled = false
-        menu.addItem(heading)
-
-        let follow = NSMenuItem(title: "Follow Latest", action: #selector(followLatest), keyEquivalent: "")
-        follow.target = self
-        follow.state = pinnedSessionID == nil ? .on : .off
-        follow.toolTip = "Automatically follow whichever session was active most recently."
-        follow.image = menuSymbol("arrow.triangle.2.circlepath", description: "Follow latest")
-        menu.addItem(follow)
-
-        for session in recentSessions {
-            let item = NSMenuItem(title: session.menuTitle, action: #selector(pinSession(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = session.id
-            item.state = pinnedSessionID == session.id ? .on : .off
-            item.toolTip = "Click to pin · \(session.toolTip)"
-            item.image = menuSymbol(session.symbolName, description: session.providerName)
-            menu.addItem(item)
-        }
-    }
-
-    private func menuSymbol(_ name: String, description: String) -> NSImage? {
-        if #available(macOS 11.0, *) {
-            let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
-            image?.isTemplate = true
-            return image
-        }
-        return nil
-    }
-
-    private func addMetricRow(_ name: String, _ value: String, valueColor: NSColor = .labelColor, strong: Bool = false, toolTip: String? = nil) {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 26))
-        view.toolTip = toolTip
-        let nameLabel = label(name, frame: NSRect(x: 14, y: 5, width: 112, height: 16),
-                              font: .systemFont(ofSize: 12, weight: .regular),
-                              color: .secondaryLabelColor)
-        let valueLabel = label(value, frame: NSRect(x: 126, y: 4, width: menuWidth - 140, height: 18),
-                               font: .monospacedDigitSystemFont(ofSize: 12.5, weight: strong ? .semibold : .medium),
-                               color: valueColor)
-        valueLabel.alignment = .right
-        nameLabel.toolTip = toolTip
-        valueLabel.toolTip = toolTip
-        view.addSubview(nameLabel)
-        view.addSubview(valueLabel)
-        addViewItem(view)
-    }
-
-    private func addContextBar() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 18))
-        let track = NSView(frame: NSRect(x: 14, y: 7, width: menuWidth - 28, height: 5))
-        track.wantsLayer = true
-        track.layer?.cornerRadius = 2.5
-        track.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.45).cgColor
-        let pct = max(0, min(snapshot.contextPct ?? 0, 1))
-        let fill = NSView(frame: NSRect(x: 0, y: 0, width: (menuWidth - 28) * CGFloat(pct), height: 5))
-        fill.wantsLayer = true
-        fill.layer?.cornerRadius = 2.5
-        fill.layer?.backgroundColor = contextColor(pct).cgColor
-        track.addSubview(fill)
-        view.addSubview(track)
-        addViewItem(view)
-    }
-
-    private func addSignalRow(_ name: String, _ value: String, color: NSColor = .labelColor) {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 50))
-        let nameLabel = label(name, frame: NSRect(x: 14, y: 29, width: menuWidth - 28, height: 15),
-                              font: .systemFont(ofSize: 11.5, weight: .semibold),
-                              color: .secondaryLabelColor)
-        let valueLabel = label(value, frame: NSRect(x: 14, y: 5, width: menuWidth - 28, height: 24),
-                               font: .systemFont(ofSize: 12.5, weight: .semibold),
-                               color: color)
-        valueLabel.lineBreakMode = .byWordWrapping
-        valueLabel.maximumNumberOfLines = 2
-        view.addSubview(nameLabel)
-        view.addSubview(valueLabel)
-        addViewItem(view)
-    }
-
-    private func label(_ text: String, frame: NSRect, font: NSFont, color: NSColor) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.frame = frame
-        field.font = font
-        field.textColor = color
-        field.lineBreakMode = .byTruncatingTail
-        field.maximumNumberOfLines = 1
-        field.isSelectable = false
-        field.allowsDefaultTighteningForTruncation = true
-        return field
-    }
-
-    private func addViewItem(_ view: NSView) {
-        let item = NSMenuItem()
-        item.view = view
-        menu.addItem(item)
-    }
-
-    private func addAction(_ title: String, _ action: Selector, enabled: Bool = true) {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        item.isEnabled = enabled
-        menu.addItem(item)
+        settingsMenu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "Quit Token Meter Menubar", action: #selector(quit), keyEquivalent: "")
+        quitItem.target = self
+        settingsMenu.addItem(quitItem)
+        return settingsMenu
     }
 
     private func persistPinnedSession(_ sessionID: String?) {
@@ -1235,14 +2065,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             tokenMeterDefaults.removeObject(forKey: pinnedSessionDefaultsKey)
         }
-    }
-
-    @objc private func selectTab(_ sender: NSSegmentedControl) {
-        let tabs = MenuTab.allCases
-        guard tabs.indices.contains(sender.selectedSegment) else { return }
-        selectedTab = tabs[sender.selectedSegment]
-        tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)
-        DispatchQueue.main.async { [weak self] in self?.rebuildMenu() }
     }
 
     @objc private func toggleTitleMetric(_ sender: NSMenuItem) {
@@ -1259,6 +2081,69 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             forKey: titleMetricsDefaultsKey
         )
         tokenMeterDefaults.removeObject(forKey: titleModeDefaultsKey)
+        refreshMenu()
+    }
+
+    @objc private func setStatusDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = StatusDisplayMode(rawValue: raw)
+        else { return }
+        statusDisplayMode = mode
+        tokenMeterDefaults.set(mode.rawValue, forKey: statusDisplayModeDefaultsKey)
+        updateStatusTitle()
+        refreshMenu()
+    }
+
+    @objc private func setGlobalShortcut(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let shortcut = MenuBarShortcut(rawValue: raw)
+        else { return }
+        guard shortcut != .custom else {
+            configureCustomShortcut(sender)
+            return
+        }
+        globalShortcut = shortcut
+        tokenMeterDefaults.set(shortcut.rawValue, forKey: globalShortcutDefaultsKey)
+        registerGlobalHotKey()
+        refreshMenu()
+    }
+
+    private func customShortcutMenuTitle() -> String {
+        guard let keyCode = customShortcutKeyCode else { return MenuBarShortcut.custom.title }
+        return "Custom (\(shortcutLabel(keyCode: keyCode, modifiers: customShortcutModifiers)))"
+    }
+
+    @objc private func configureCustomShortcut(_ sender: NSMenuItem) {
+        let alert = NSAlert()
+        alert.messageText = "Set Token Meter shortcut"
+        alert.informativeText = "Press a key with at least one modifier (⌃, ⌥, ⌘, or ⇧), then choose Save."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.isEnabled = false
+
+        var captured: (keyCode: UInt32, modifiers: UInt32)?
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak alert] event in
+            let modifiers = carbonModifiers(from: event.modifierFlags)
+            guard modifiers != 0 else {
+                alert?.informativeText = "Use at least one modifier with the key."
+                return nil
+            }
+            captured = (UInt32(event.keyCode), modifiers)
+            alert?.informativeText = "Shortcut: \(shortcutLabel(keyCode: UInt32(event.keyCode), modifiers: modifiers))"
+            alert?.buttons.first?.isEnabled = true
+            return nil
+        }
+        let response = alert.runModal()
+        if let monitor = monitor { NSEvent.removeMonitor(monitor) }
+        guard response == .alertFirstButtonReturn, let captured = captured else { return }
+
+        customShortcutKeyCode = captured.keyCode
+        customShortcutModifiers = captured.modifiers
+        globalShortcut = .custom
+        tokenMeterDefaults.set(MenuBarShortcut.custom.rawValue, forKey: globalShortcutDefaultsKey)
+        tokenMeterDefaults.set(Int(captured.keyCode), forKey: customShortcutKeyCodeDefaultsKey)
+        tokenMeterDefaults.set(Int(captured.modifiers), forKey: customShortcutModifiersDefaultsKey)
+        registerGlobalHotKey()
         refreshMenu()
     }
 
@@ -1413,19 +2298,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? process.run()
     }
 
-    @objc private func followLatest() {
-        persistPinnedSession(nil)
-        refreshMenu()
-        fetchState()
-    }
-
-    @objc private func pinSession(_ sender: NSMenuItem) {
-        guard let sessionID = sender.representedObject as? String, !sessionID.isEmpty else { return }
-        persistPinnedSession(sessionID)
-        refreshMenu()
-        fetchState()
-    }
-
     @objc private func openDashboard() {
         if pinnedSessionID?.isEmpty == false {
             openDashboardPanel("summary")
@@ -1454,6 +2326,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         openDashboardPanel("model-pricing", includePinnedSession: false)
     }
 
+    @objc private func openSettings() {
+        openDashboardPanel("settings", includePinnedSession: false)
+    }
+
     private func openDashboardPanel(_ panel: String, includePinnedSession: Bool = true) {
         var components = URLComponents(string: "http://127.0.0.1:8722/")
         if includePinnedSession, let sessionID = pinnedSessionID, !sessionID.isEmpty {
@@ -1470,6 +2346,31 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 private func string(_ value: Any?) -> String? {
     value as? String
+}
+
+private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+    let flags = flags.intersection(.deviceIndependentFlagsMask)
+    var modifiers: UInt32 = 0
+    if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+    if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+    if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+    if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+    return modifiers
+}
+
+private func shortcutLabel(keyCode: UInt32, modifiers: UInt32) -> String {
+    var label = ""
+    if modifiers & UInt32(controlKey) != 0 { label += "⌃" }
+    if modifiers & UInt32(optionKey) != 0 { label += "⌥" }
+    if modifiers & UInt32(cmdKey) != 0 { label += "⌘" }
+    if modifiers & UInt32(shiftKey) != 0 { label += "⇧" }
+    let key = [
+        0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
+        11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 31: "O", 32: "U",
+        34: "I", 35: "P", 37: "L", 38: "J", 40: "K", 45: "N", 46: "M",
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+    ][Int(keyCode)] ?? "Key \(keyCode)"
+    return label + key
 }
 
 private func int(_ value: Any?) -> Int {
@@ -1569,14 +2470,164 @@ private func compactScaled(_ value: Double, suffix: String) -> String {
     return number + suffix
 }
 
-private func contextColor(_ pct: Double) -> NSColor {
-    if pct >= 0.85 { return .tokenMeterBlue }
-    if pct >= 0.70 { return .tokenMeterBlue }
-    return .tokenMeterBlue
+if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_CONTENT_SMOKE"] == "1" {
+    _ = NSApplication.shared
+    let windows = (0..<8).map { index in
+        QuotaWindow(
+            id: "window-\(index)",
+            kind: index.isMultiple(of: 2) ? "session" : "weekly",
+            label: "Measured quota window \(index + 1)",
+            usedPercent: Double(20 + index * 9),
+            windowSeconds: 3_600,
+            resetAt: Date(timeIntervalSinceNow: 3_600),
+            pace: QuotaPace(state: "on_pace", summary: "On pace until reset")
+        )
+    }
+    let maximalQuota = ProviderQuota(
+        id: "codex",
+        label: "Codex",
+        status: "ok",
+        plan: "Business",
+        source: "Provider account",
+        provenance: "provider_reported",
+        ageSeconds: 0,
+        stale: false,
+        error: "",
+        coverageNote: "Provider-reported maximal payload used to verify bounded native overflow.",
+        windows: windows
+    )
+    let controller = RunPulsePopoverController(
+        snapshot: MeterSnapshot.disconnected("Content smoke"), budget: nil, quotas: [maximalQuota], sessions: [], selectedTab: .codex,
+        onTab: { _ in }, onOpenDashboard: {}, onOpenBudget: {}, onRefresh: {},
+        onSelectSession: { _ in }, onSettings: { _ in }
+    )
+    let root = controller.view
+    root.layoutSubtreeIfNeeded()
+    func findEvidenceScroller(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        return view.subviews.lazy.compactMap(findEvidenceScroller).first
+    }
+    guard let scroll = findEvidenceScroller(in: root), scroll.hasVerticalScroller else {
+        fputs("Token Meter Run Slip content smoke failed: evidence body is not scrollable.\n", stderr)
+        exit(1)
+    }
+    scroll.layoutSubtreeIfNeeded()
+    scroll.documentView?.layoutSubtreeIfNeeded()
+    let viewportHeight = scroll.contentView.bounds.height
+    let documentHeight = scroll.documentView?.fittingSize.height ?? 0
+    guard viewportHeight == 320, documentHeight > viewportHeight else {
+        fputs("Token Meter Run Slip content smoke failed: maximal payload does not exceed its bounded viewport.\n", stderr)
+        exit(1)
+    }
+    print("run-slip-content=scrollable viewport=\(Int(viewportHeight)) document=\(Int(documentHeight)) windows=\(windows.count)")
+    exit(0)
+}
+
+if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_LAYOUT_SMOKE"] == "1" {
+    do {
+        _ = NSApplication.shared
+        let data = try Data(contentsOf: tokenMeterMenubarURL)
+        let obj = try JSONSerialization.jsonObject(with: data)
+        guard let dict = obj as? [String: Any] else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 2, userInfo: [NSLocalizedDescriptionKey: "Response was not a JSON object."])
+        }
+        let snapshot = MeterSnapshot.fromJSON(dict)
+        let budget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
+        let quotas = (dict["provider_quotas"] as? [[String: Any]] ?? []).compactMap(ProviderQuota.fromJSON)
+        let sessions = (dict["recent_sessions"] as? [[String: Any]] ?? []).compactMap(RecentSession.fromJSON)
+        let controllers = MenuTab.allCases.map { tab in
+            RunPulsePopoverController(
+                snapshot: snapshot, budget: budget, quotas: quotas, sessions: sessions, selectedTab: tab,
+                onTab: { _ in }, onOpenDashboard: {}, onOpenBudget: {}, onRefresh: {},
+                onSelectSession: { _ in }, onSettings: { _ in }
+            )
+        }
+        let sizes = controllers.map { controller -> NSSize in
+            _ = controller.view
+            return controller.preferredContentSize
+        }
+        guard sizes.allSatisfy({ $0.width == 360 && $0.height <= 452 }) else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 3, userInfo: [NSLocalizedDescriptionKey: "Run Pulse layout size is invalid."])
+        }
+        let scopeTitles = Set(MenuTab.allCases.map(\.title))
+        func findScopeButtons(in view: NSView) -> [NSButton] {
+            let own = (view as? NSButton).map { scopeTitles.contains($0.title) ? [$0] : [] } ?? []
+            return own + view.subviews.flatMap(findScopeButtons)
+        }
+        for controller in controllers {
+            let scopeView = controller.view
+            scopeView.layoutSubtreeIfNeeded()
+            let buttons = findScopeButtons(in: scopeView)
+            guard buttons.count == MenuTab.allCases.count,
+                  buttons.allSatisfy({ $0.frame.width >= 70 && $0.frame.height >= 24 })
+            else {
+                throw NSError(domain: "TokenMeterMenuBar", code: 8, userInfo: [NSLocalizedDescriptionKey: "Scope tabs do not expose full-cell hit targets."])
+            }
+        }
+        let runView = controllers[0].view
+        runView.layoutSubtreeIfNeeded()
+        func findLayoutScroller(in view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView { return scroll }
+            return view.subviews.lazy.compactMap(findLayoutScroller).first
+        }
+        guard let runScroll = findLayoutScroller(in: runView) else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 6, userInfo: [NSLocalizedDescriptionKey: "Run evidence viewport is missing."])
+        }
+        runScroll.layoutSubtreeIfNeeded()
+        runScroll.documentView?.layoutSubtreeIfNeeded()
+        let runHeight = runScroll.documentView?.fittingSize.height ?? .infinity
+        guard sessions.count < 3 || runHeight <= runScroll.contentView.bounds.height else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 7, userInfo: [NSLocalizedDescriptionKey: "Three recent sessions do not fit the Run viewport."])
+        }
+        let expectedRunViewport = min(320, max(80, runHeight))
+        guard abs(runScroll.contentView.bounds.height - expectedRunViewport) < 1 else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 9, userInfo: [NSLocalizedDescriptionKey: "Run evidence viewport leaves dead vertical space."])
+        }
+        let heights = sizes.map { String(Int($0.height)) }.joined(separator: ",")
+        print("run-pulse-layout=width-360 heights=\(heights) tabs=\(sizes.count) pulse=\(snapshot.contextPulse.count) run=\(Int(runHeight))")
+        exit(0)
+    } catch {
+        fputs("Token Meter Run Pulse layout smoke failed: \(error.localizedDescription)\n", stderr)
+        exit(1)
+    }
+}
+
+if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_POPOVER_SMOKE"] == "1" {
+    let app = NSApplication.shared
+    let delegate = TokenMeterMenuBar()
+    app.delegate = delegate
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        do {
+            try delegate.runPopoverSmoke()
+            print("run-pulse-popover=shown transition=complete appearance=vibrant-dark")
+            exit(0)
+        } catch {
+            fputs("Token Meter Run Pulse popover smoke failed: \(error.localizedDescription)\n", stderr)
+            exit(1)
+        }
+    }
+    app.run()
 }
 
 if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
     do {
+        guard let wordmark = splunkWordmarkImage(),
+              wordmark.size.width > 0,
+              wordmark.size.height > 0
+        else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 10, userInfo: [NSLocalizedDescriptionKey: "Bundled Splunk wordmark is unavailable."])
+        }
+        let chevron = splunkChevronImage()
+        guard chevron.isTemplate, chevron.size == NSSize(width: 18, height: 18) else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 11, userInfo: [NSLocalizedDescriptionKey: "Splunk status-item chevron is invalid."])
+        }
+        let titleImage = statusTitleImage("$9.16 est · 36.2 tok/s")
+        guard titleImage.isTemplate,
+              titleImage.size.width > 100,
+              titleImage.size.height == 18
+        else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 12, userInfo: [NSLocalizedDescriptionKey: "Adaptive template status-title image is invalid."])
+        }
         let data = try Data(contentsOf: tokenMeterMenubarURL)
         let obj = try JSONSerialization.jsonObject(with: data)
         guard let dict = obj as? [String: Any] else {
@@ -1614,6 +2665,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             }
         }.joined(separator: " · ")
         let activeTitle = budget?.anyExceeded == true ? "⚠︎ \(baseTitle)" : baseTitle
+        print("native-brand=Splunk wordmark=\(Int(wordmark.size.width))x\(Int(wordmark.size.height)) chevron=template status-title=adaptive-template")
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)
         print("active-title=\(activeTitle)")

@@ -153,9 +153,15 @@ missing means unreported or unavailable, never 0%. Named limits such as Codex
 Spark remain separate from regular limits, and Cursor's monthly Plan cap is not
 renamed as a session or weekly allowance.
 
-The status-bar title defaults to **Cost + Output speed**. Under **Settings →
+The menu-bar item uses a compact Splunk chevron so it remains available on
+small or notched laptop displays. Its tooltip and popover carry the selected
+status metrics; the defaults are **Cost + Output speed**. Under **Settings →
 Menu bar title**, independently enable or disable Cost, Output speed, Context,
 Model, and Limits; hovering always shows the complete available summary.
+On first launch, Token Meter starts near the right side of the status area so
+its white text does not begin behind a laptop notch. Hold **Command** while
+dragging the item to choose another position; macOS restores that placement on
+later launches.
 Quota notifications are on by default for new installs. The **Quota alert
 threshold** defaults to 80% used; 95% and exhaustion are always critical,
 and report resets after a previously warned window rolls over. The first quota

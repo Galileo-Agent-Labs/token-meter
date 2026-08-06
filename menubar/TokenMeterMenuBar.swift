@@ -1,4 +1,5 @@
 import Cocoa
+import Carbon.HIToolbox
 import Foundation
 
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
@@ -13,7 +14,18 @@ private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
 private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
 private let budgetNotificationStatesDefaultsKey = "TokenMeterBudgetNotificationStates"
 private let budgetExceededMonthsDefaultsKey = "TokenMeterBudgetExceededNotificationMonths"
-private let tokenMeterDefaults = UserDefaults(suiteName: "com.token-meter.menubar") ?? .standard
+private let statusDisplayModeDefaultsKey = "TokenMeterStatusDisplayMode"
+private let globalShortcutDefaultsKey = "TokenMeterGlobalShortcut"
+private let customShortcutKeyCodeDefaultsKey = "TokenMeterCustomShortcutKeyCode"
+private let customShortcutModifiersDefaultsKey = "TokenMeterCustomShortcutModifiers"
+private let tokenMeterMenubarBundleIdentifier = "com.token-meter.menubar"
+private let statusItemAutosaveName = "TokenMeterPrimaryStatusItem"
+private let statusItemPreferredPositionDefaultsKey = "NSStatusItem Preferred Position \(statusItemAutosaveName)"
+private let statusItemInitialPreferredPosition = 50
+private let tokenMeterDefaults: UserDefaults = {
+    if Bundle.main.bundleIdentifier == tokenMeterMenubarBundleIdentifier { return .standard }
+    return UserDefaults(suiteName: tokenMeterMenubarBundleIdentifier) ?? .standard
+}()
 
 // Token Meter accent blue (#00BCEB)
 extension NSColor {
@@ -22,6 +34,77 @@ extension NSColor {
     static let tokenMeterPlate = NSColor(srgbRed: 0.064, green: 0.102, blue: 0.125, alpha: 1.0)
     static let tokenMeterLine = NSColor(srgbRed: 0.20, green: 0.28, blue: 0.31, alpha: 1.0)
     static let tokenMeterMuted = NSColor(srgbRed: 0.61, green: 0.69, blue: 0.72, alpha: 1.0)
+}
+
+private func splunkWordmarkImage() -> NSImage? {
+    let source = URL(fileURLWithPath: #filePath)
+    let root = source.deletingLastPathComponent().deletingLastPathComponent()
+    let asset = root.appendingPathComponent("assets/brand/logo-splunk-acc-rgb-w.png")
+    guard let image = NSImage(contentsOf: asset) else { return nil }
+    image.accessibilityDescription = "Splunk"
+    return image
+}
+
+private func splunkChevronImage(accessibilityDescription: String = "Splunk Token Meter") -> NSImage {
+    let size = NSSize(width: 18, height: 18)
+    let image = NSImage(size: size, flipped: false) { rect in
+        let sourceWidth: CGFloat = 37.03
+        let sourceHeight: CGFloat = 44.58
+        let inset: CGFloat = 2
+        let scale = min(
+            (rect.width - inset * 2) / sourceWidth,
+            (rect.height - inset * 2) / sourceHeight
+        )
+        let origin = NSPoint(
+            x: rect.midX - sourceWidth * scale / 2,
+            y: rect.midY - sourceHeight * scale / 2
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            NSPoint(x: origin.x + x * scale, y: origin.y + (sourceHeight - y) * scale)
+        }
+
+        let chevron = NSBezierPath()
+        chevron.move(to: point(37.03, 26.16))
+        chevron.line(to: point(37.03, 18.58))
+        chevron.line(to: point(0, 0))
+        chevron.line(to: point(0, 8.32))
+        chevron.line(to: point(28.70, 22.29))
+        chevron.line(to: point(0, 36.44))
+        chevron.line(to: point(0, 44.58))
+        chevron.line(to: point(37.03, 26.18))
+        chevron.close()
+        NSColor.black.setFill()
+        chevron.fill()
+        return true
+    }
+    image.isTemplate = true
+    image.accessibilityDescription = accessibilityDescription
+    return image
+}
+
+private func statusTitleImage(_ title: String) -> NSImage {
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    let attributedTitle = NSAttributedString(
+        string: title,
+        attributes: [
+            .foregroundColor: NSColor.black,
+            .font: font,
+        ]
+    )
+    let measuredSize = attributedTitle.size()
+    let imageSize = NSSize(width: ceil(measuredSize.width), height: 18)
+    let image = NSImage(size: imageSize, flipped: false) { rect in
+        attributedTitle.draw(at: NSPoint(
+            x: 0,
+            y: floor((rect.height - measuredSize.height) / 2)
+        ))
+        return true
+    }
+    // The glyphs are a mask. macOS owns the final black/white tint, using the
+    // actual menu-bar material rather than this process's effective appearance.
+    image.isTemplate = true
+    image.accessibilityDescription = title
+    return image
 }
 
 enum Verdict {
@@ -114,6 +197,56 @@ enum TitleMetric: String, CaseIterable {
         case .context: return "Context"
         case .model: return "Model"
         case .limits: return "Limits"
+        }
+    }
+}
+
+enum StatusDisplayMode: String, CaseIterable {
+    case automatic
+    case text
+    case icon
+
+    var title: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .text: return "Cost + speed text"
+        case .icon: return "Icon only"
+        }
+    }
+}
+
+enum MenuBarShortcut: String, CaseIterable {
+    case controlOptionT
+    case commandOptionT
+    case controlOptionM
+    case custom
+    case off
+
+    var title: String {
+        switch self {
+        case .controlOptionT: return "⌃⌥T"
+        case .commandOptionT: return "⌥⌘T"
+        case .controlOptionM: return "⌃⌥M"
+        case .custom: return "Custom…"
+        case .off: return "Off"
+        }
+    }
+
+    var keyCode: UInt32? {
+        switch self {
+        case .controlOptionT, .commandOptionT: return 17 // T on the macOS US keyboard layout.
+        case .controlOptionM: return 46 // M on the macOS US keyboard layout.
+        case .custom: return nil
+        case .off: return nil
+        }
+    }
+
+    var modifiers: UInt32 {
+        switch self {
+        case .controlOptionT, .controlOptionM: return UInt32(controlKey | optionKey)
+        case .commandOptionT: return UInt32(cmdKey | optionKey)
+        case .custom: return 0
+        case .off: return 0
         }
     }
 }
@@ -884,10 +1017,21 @@ private final class RunPulsePopoverController: NSViewController {
 
     private func makeHeader() -> NSView {
         let row = horizontal(spacing: 8)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Token Meter") ?? NSImage())
-        icon.contentTintColor = .tokenMeterBlue
-        icon.setContentHuggingPriority(.required, for: .horizontal)
-        row.addArrangedSubview(icon)
+        if let wordmark = splunkWordmarkImage() {
+            let logo = NSImageView(image: wordmark)
+            logo.imageScaling = .scaleProportionallyUpOrDown
+            logo.translatesAutoresizingMaskIntoConstraints = false
+            logo.widthAnchor.constraint(equalToConstant: 63).isActive = true
+            logo.heightAnchor.constraint(equalToConstant: 25).isActive = true
+            logo.setContentHuggingPriority(.required, for: .horizontal)
+            logo.setAccessibilityLabel("Splunk")
+            row.addArrangedSubview(logo)
+        } else {
+            let logo = NSImageView(image: splunkChevronImage())
+            logo.contentTintColor = .tokenMeterBlue
+            logo.setContentHuggingPriority(.required, for: .horizontal)
+            row.addArrangedSubview(logo)
+        }
         row.addArrangedSubview(label("Token Meter", size: 14, weight: .semibold, color: .labelColor))
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -1068,6 +1212,10 @@ private final class RunPulsePopoverController: NSViewController {
         body.addArrangedSubview(identity)
         identity.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
 
+        let ledger = makeMetricLedger()
+        body.addArrangedSubview(ledger)
+        ledger.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
+
         let pressure = vertical(spacing: 3)
         let pressureHeader = horizontal(spacing: 8)
         pressureHeader.addArrangedSubview(label("Context pressure", size: 11, weight: .semibold, color: .tokenMeterMuted))
@@ -1091,9 +1239,6 @@ private final class RunPulsePopoverController: NSViewController {
         let signalDivider = divider()
         body.addArrangedSubview(signalDivider)
         signalDivider.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
-        let ledger = makeMetricLedger()
-        body.addArrangedSubview(ledger)
-        ledger.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
         if let budget = budget, budget.configured {
             let budgetLine = makeBudgetLine(budget)
             body.addArrangedSubview(budgetLine)
@@ -1380,6 +1525,21 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
     private var selectedTab = MenuTab(
         rawValue: tokenMeterDefaults.string(forKey: selectedTabDefaultsKey) ?? ""
     ) ?? .run
+    private var statusDisplayMode = StatusDisplayMode(
+        rawValue: tokenMeterDefaults.string(forKey: statusDisplayModeDefaultsKey) ?? StatusDisplayMode.text.rawValue
+    ) ?? .text
+    private var globalShortcut = MenuBarShortcut(
+        rawValue: tokenMeterDefaults.string(forKey: globalShortcutDefaultsKey) ?? ""
+    ) ?? .controlOptionT
+    private var customShortcutKeyCode: UInt32? = {
+        guard tokenMeterDefaults.object(forKey: customShortcutKeyCodeDefaultsKey) != nil else { return nil }
+        return UInt32(tokenMeterDefaults.integer(forKey: customShortcutKeyCodeDefaultsKey))
+    }()
+    private var customShortcutModifiers: UInt32 = UInt32(
+        tokenMeterDefaults.integer(forKey: customShortcutModifiersDefaultsKey)
+    )
+    private var globalHotKey: EventHotKeyRef?
+    private var globalHotKeyHandler: EventHandlerRef?
     private var titleMetrics: Set<TitleMetric> = {
         if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
             let metrics = Set(saved.compactMap(TitleMetric.init(rawValue:)))
@@ -1422,15 +1582,24 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        statusItem.button?.target = self
-        statusItem.button?.action = #selector(togglePopover(_:))
-        statusItem.button?.sendAction(on: [.leftMouseUp])
+        if tokenMeterDefaults.object(forKey: statusItemPreferredPositionDefaultsKey) == nil {
+            tokenMeterDefaults.set(statusItemInitialPreferredPosition, forKey: statusItemPreferredPositionDefaultsKey)
+        }
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.autosaveName = statusItemAutosaveName
+        if let button = statusItem.button {
+            button.image = splunkChevronImage()
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .tokenMeterBlue
+            button.target = self
+            button.action = #selector(togglePopover(_:))
+            button.sendAction(on: [.leftMouseUp])
+        }
         popover.appearance = NSAppearance(named: .vibrantDark)
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
+        registerGlobalHotKey()
         refreshSurface()
         fetchState()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
@@ -1440,6 +1609,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
 
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
+        unregisterGlobalHotKey()
     }
 
     func popoverDidClose(_ notification: Notification) {
@@ -1548,13 +1718,73 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
     }
 
     @objc private func togglePopover(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
         if popover.isShown {
             popover.performClose(sender)
             return
         }
         refreshSurface(force: true)
+        guard let button = statusItem.button else { return }
+        NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private var activeShortcutKeyCode: UInt32? {
+        globalShortcut == .custom ? customShortcutKeyCode : globalShortcut.keyCode
+    }
+
+    private var activeShortcutModifiers: UInt32 {
+        globalShortcut == .custom ? customShortcutModifiers : globalShortcut.modifiers
+    }
+
+    private func registerGlobalHotKey() {
+        unregisterGlobalHotKey()
+        guard let keyCode = activeShortcutKeyCode else { return }
+
+        var eventSpec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let userData = Unmanaged.passUnretained(self).toOpaque()
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData in
+                guard let userData = userData else { return noErr }
+                let delegate = Unmanaged<TokenMeterMenuBar>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async {
+                    delegate.togglePopover(nil)
+                }
+                return noErr
+            },
+            1,
+            &eventSpec,
+            userData,
+            &globalHotKeyHandler
+        )
+        guard handlerStatus == noErr else { return }
+
+        let hotKeyID = EventHotKeyID(signature: 0x544D4854, id: 1)
+        let registrationStatus = RegisterEventHotKey(
+            keyCode,
+            activeShortcutModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &globalHotKey
+        )
+        if registrationStatus != noErr {
+            unregisterGlobalHotKey()
+        }
+    }
+
+    private func unregisterGlobalHotKey() {
+        if let globalHotKey = globalHotKey {
+            UnregisterEventHotKey(globalHotKey)
+            self.globalHotKey = nil
+        }
+        if let globalHotKeyHandler = globalHotKeyHandler {
+            RemoveEventHandler(globalHotKeyHandler)
+            self.globalHotKeyHandler = nil
+        }
     }
 
     private func changeTab(_ tab: MenuTab) {
@@ -1652,24 +1882,52 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
     }
 
     private func updateStatusTitle() {
-        let title = selectedStatusTitle()
+        let title = compactStatusTitle()
         let budgetExceeded = monthlyBudget?.anyExceeded == true
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: budgetExceeded ? NSColor.white : NSColor.labelColor,
-            .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        ]
-        let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)
-        if budgetExceeded {
-            let warningRange = (title as NSString).range(of: "⚠︎")
-            if warningRange.location != NSNotFound {
-                attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)
-            }
+        guard let button = statusItem.button else { return }
+        button.contentTintColor = budgetExceeded
+            ? NSColor.systemRed
+            : (snapshot.connected ? NSColor.tokenMeterBlue : NSColor.secondaryLabelColor)
+        switch effectiveStatusDisplayMode() {
+        case .text:
+            let titleImage = statusTitleImage(title)
+            statusItem.length = titleImage.size.width + 16
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = titleImage
+            button.imagePosition = .imageOnly
+            button.contentTintColor = nil
+        case .icon:
+            statusItem.length = NSStatusItem.squareLength
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
+            button.image = splunkChevronImage()
+            button.imagePosition = .imageOnly
+        case .automatic:
+            break
         }
-        statusItem.button?.attributedTitle = attributedTitle
-        var toolTip = snapshot.statusTooltip
+        button.setAccessibilityLabel("Token Meter")
+        button.setAccessibilityValue(title)
+        var toolTip = "Token Meter · \(title)\n\(snapshot.statusTooltip)"
         if let limits = limitsStatusTooltip() { toolTip += "\nLimits: \(limits)" }
         if let budget = monthlyBudget { toolTip += "\nBudget: \(budget.toolTip)" }
-        statusItem.button?.toolTip = toolTip
+        button.toolTip = toolTip
+    }
+
+    private func effectiveStatusDisplayMode() -> StatusDisplayMode {
+        guard statusDisplayMode == .automatic else { return statusDisplayMode }
+        let screen = statusItem.button?.window?.screen ?? NSScreen.main
+        // macOS keeps right-side status items in the usable menu-bar region;
+        // a notch alone is not a reason to hide the useful readout. Fall
+        // back to the chevron only on genuinely narrow menu bars.
+        guard let screen = screen, screen.visibleFrame.width > 0 else { return .text }
+        return screen.visibleFrame.width < 1200 ? .icon : .text
+    }
+
+    private func compactStatusTitle() -> String {
+        guard snapshot.connected else { return snapshot.verdict.prefix }
+        let base = "\(snapshot.costLabel) · \(snapshot.outputSpeedLabel)"
+        return monthlyBudget?.anyExceeded == true ? "⚠︎ \(base)" : base
     }
 
     private func selectedStatusTitle() -> String {
@@ -1735,6 +1993,36 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
         settingsMenu.addItem(modelPrices)
         settingsMenu.addItem(.separator())
 
+        let displayItem = NSMenuItem(title: "Menu bar display", action: nil, keyEquivalent: "")
+        let displayMenu = NSMenu(title: "Menu bar display")
+        for mode in StatusDisplayMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(setStatusDisplayMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = statusDisplayMode == mode ? .on : .off
+            displayMenu.addItem(item)
+        }
+        displayItem.submenu = displayMenu
+        settingsMenu.addItem(displayItem)
+
+        let shortcutItem = NSMenuItem(title: "Keyboard shortcut", action: nil, keyEquivalent: "")
+        let shortcutMenu = NSMenu(title: "Keyboard shortcut")
+        for shortcut in MenuBarShortcut.allCases {
+            let itemTitle = shortcut == .custom ? customShortcutMenuTitle() : shortcut.title
+            let action = shortcut == .custom
+                ? #selector(configureCustomShortcut(_:))
+                : #selector(setGlobalShortcut(_:))
+            let item = NSMenuItem(title: itemTitle, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = shortcut.rawValue
+            item.state = shortcut == .custom && customShortcutKeyCode == nil
+                ? .off
+                : (globalShortcut == shortcut ? .on : .off)
+            shortcutMenu.addItem(item)
+        }
+        shortcutItem.submenu = shortcutMenu
+        settingsMenu.addItem(shortcutItem)
+
         let titleItem = NSMenuItem(title: "Menu bar title", action: nil, keyEquivalent: "")
         let titleMenu = NSMenu(title: "Menu bar title")
         for metric in TitleMetric.allCases {
@@ -1793,6 +2081,69 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
             forKey: titleMetricsDefaultsKey
         )
         tokenMeterDefaults.removeObject(forKey: titleModeDefaultsKey)
+        refreshMenu()
+    }
+
+    @objc private func setStatusDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let mode = StatusDisplayMode(rawValue: raw)
+        else { return }
+        statusDisplayMode = mode
+        tokenMeterDefaults.set(mode.rawValue, forKey: statusDisplayModeDefaultsKey)
+        updateStatusTitle()
+        refreshMenu()
+    }
+
+    @objc private func setGlobalShortcut(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let shortcut = MenuBarShortcut(rawValue: raw)
+        else { return }
+        guard shortcut != .custom else {
+            configureCustomShortcut(sender)
+            return
+        }
+        globalShortcut = shortcut
+        tokenMeterDefaults.set(shortcut.rawValue, forKey: globalShortcutDefaultsKey)
+        registerGlobalHotKey()
+        refreshMenu()
+    }
+
+    private func customShortcutMenuTitle() -> String {
+        guard let keyCode = customShortcutKeyCode else { return MenuBarShortcut.custom.title }
+        return "Custom (\(shortcutLabel(keyCode: keyCode, modifiers: customShortcutModifiers)))"
+    }
+
+    @objc private func configureCustomShortcut(_ sender: NSMenuItem) {
+        let alert = NSAlert()
+        alert.messageText = "Set Token Meter shortcut"
+        alert.informativeText = "Press a key with at least one modifier (⌃, ⌥, ⌘, or ⇧), then choose Save."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.isEnabled = false
+
+        var captured: (keyCode: UInt32, modifiers: UInt32)?
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak alert] event in
+            let modifiers = carbonModifiers(from: event.modifierFlags)
+            guard modifiers != 0 else {
+                alert?.informativeText = "Use at least one modifier with the key."
+                return nil
+            }
+            captured = (UInt32(event.keyCode), modifiers)
+            alert?.informativeText = "Shortcut: \(shortcutLabel(keyCode: UInt32(event.keyCode), modifiers: modifiers))"
+            alert?.buttons.first?.isEnabled = true
+            return nil
+        }
+        let response = alert.runModal()
+        if let monitor = monitor { NSEvent.removeMonitor(monitor) }
+        guard response == .alertFirstButtonReturn, let captured = captured else { return }
+
+        customShortcutKeyCode = captured.keyCode
+        customShortcutModifiers = captured.modifiers
+        globalShortcut = .custom
+        tokenMeterDefaults.set(MenuBarShortcut.custom.rawValue, forKey: globalShortcutDefaultsKey)
+        tokenMeterDefaults.set(Int(captured.keyCode), forKey: customShortcutKeyCodeDefaultsKey)
+        tokenMeterDefaults.set(Int(captured.modifiers), forKey: customShortcutModifiersDefaultsKey)
+        registerGlobalHotKey()
         refreshMenu()
     }
 
@@ -1995,6 +2346,31 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSPopoverDelegat
 
 private func string(_ value: Any?) -> String? {
     value as? String
+}
+
+private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+    let flags = flags.intersection(.deviceIndependentFlagsMask)
+    var modifiers: UInt32 = 0
+    if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+    if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+    if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+    if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+    return modifiers
+}
+
+private func shortcutLabel(keyCode: UInt32, modifiers: UInt32) -> String {
+    var label = ""
+    if modifiers & UInt32(controlKey) != 0 { label += "⌃" }
+    if modifiers & UInt32(optionKey) != 0 { label += "⌥" }
+    if modifiers & UInt32(cmdKey) != 0 { label += "⌘" }
+    if modifiers & UInt32(shiftKey) != 0 { label += "⇧" }
+    let key = [
+        0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
+        11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y", 17: "T", 31: "O", 32: "U",
+        34: "I", 35: "P", 37: "L", 38: "J", 40: "K", 45: "N", 46: "M",
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+    ][Int(keyCode)] ?? "Key \(keyCode)"
+    return label + key
 }
 
 private func int(_ value: Any?) -> Int {
@@ -2235,6 +2611,23 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_POPOVER_SMOKE"] == "
 
 if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
     do {
+        guard let wordmark = splunkWordmarkImage(),
+              wordmark.size.width > 0,
+              wordmark.size.height > 0
+        else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 10, userInfo: [NSLocalizedDescriptionKey: "Bundled Splunk wordmark is unavailable."])
+        }
+        let chevron = splunkChevronImage()
+        guard chevron.isTemplate, chevron.size == NSSize(width: 18, height: 18) else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 11, userInfo: [NSLocalizedDescriptionKey: "Splunk status-item chevron is invalid."])
+        }
+        let titleImage = statusTitleImage("$9.16 est · 36.2 tok/s")
+        guard titleImage.isTemplate,
+              titleImage.size.width > 100,
+              titleImage.size.height == 18
+        else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 12, userInfo: [NSLocalizedDescriptionKey: "Adaptive template status-title image is invalid."])
+        }
         let data = try Data(contentsOf: tokenMeterMenubarURL)
         let obj = try JSONSerialization.jsonObject(with: data)
         guard let dict = obj as? [String: Any] else {
@@ -2272,6 +2665,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             }
         }.joined(separator: " · ")
         let activeTitle = budget?.anyExceeded == true ? "⚠︎ \(baseTitle)" : baseTitle
+        print("native-brand=Splunk wordmark=\(Int(wordmark.size.width))x\(Int(wordmark.size.height)) chevron=template status-title=adaptive-template")
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)
         print("active-title=\(activeTitle)")

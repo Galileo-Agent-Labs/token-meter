@@ -2,8 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/.build/token-meter-menubar"
+APP="$ROOT/.build/Token Meter Menu Bar.app"
+CONTENTS="$APP/Contents"
+BIN="$CONTENTS/MacOS/token-meter-menubar"
+INFO="$CONTENTS/Info.plist"
 
-mkdir -p "$ROOT/.build"
+mkdir -p "$CONTENTS/MacOS"
+ditto "$ROOT/menubar/Info.plist" "$INFO"
 swiftc "$ROOT/menubar/TokenMeterMenuBar.swift" -o "$BIN"
 exec "$BIN"

@@ -1,7 +1,7 @@
 <!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>Token Meter</title>
-<link rel=icon type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%2300bceb'/%3E%3Cstop offset='.55' stop-color='%231ba0e1'/%3E%3Cstop offset='1' stop-color='%237fdbf2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cg fill='none' stroke='%23062430' stroke-width='4.2' stroke-linecap='round'%3E%3Cpath d='M14 36v-6M20 36V22M26 36v-8M32 36V16M38 36v-8M44 36V22M50 36v-6M13 45h38'/%3E%3C/g%3E%3C/svg%3E">
+<link rel=icon type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2307090c'/%3E%3Cpath fill='%23fff' d='M47.03 36.16v-7.58L10 10v8.32l28.7 13.97L10 46.44v8.14l37.03-18.4z'/%3E%3C/svg%3E">
 <meta name=theme-color content="#07090c">
 <style>
 :root{
@@ -35,9 +35,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
 .wrap{max-width:1320px;margin:0 auto;padding:18px 24px 64px}
 .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;margin:0 0 18px;padding:10px 0 13px;background:linear-gradient(180deg,rgba(7,9,12,.98),rgba(7,9,12,.82));backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:780;font-size:15px;white-space:nowrap}
-.logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#00bceb,#1ba0e1 54%,#7fdbf2);display:grid;place-items:center;box-shadow:0 10px 24px rgba(0,188,235,.16),var(--shadow-soft)}
-.logo svg{width:23px;height:23px;display:block}
+.brand{display:flex;align-items:center;gap:8px;font-weight:780;font-size:15px;white-space:nowrap}
+.logo{width:50px;height:30px;display:flex;flex:0 0 auto;align-items:center;justify-content:flex-start}
+.logo img{display:block;width:50px;height:auto;max-height:30px;object-fit:contain}
 .tabs,.seg{display:flex;gap:3px;background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:8px;padding:3px;box-shadow:var(--inset)}
 .tab,.seg button{border:0;background:transparent;color:var(--dim);border-radius:6px;padding:7px 13px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:background .16s,border-color .16s,color .16s,transform .16s}
 .tab:hover,.seg button:hover{background:rgba(255,255,255,.045);color:var(--fg)}
@@ -224,8 +224,8 @@ body.spectrumApp .top .tab{display:grid;width:100%;min-height:42px;grid-template
 .tabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis}.tabShortcut{color:var(--faint);font:720 10px/1 ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
 body.spectrumApp .top .tab.on .tabShortcut{color:rgba(6,36,48,.66)}
 body.spectrumApp .top>.spacer{display:none}
-@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px;column-gap:16px;padding-right:18px;padding-left:18px}body.spectrumApp .top{padding:10px 8px}body.spectrumApp .top .brand{justify-content:center;padding-right:0;padding-left:0}.brandCopy,.tabLabel,.tabShortcut{display:none}body.spectrumApp .top .tab{display:grid;grid-template-columns:1fr;place-items:center;padding:9px}}
-@media(max-width:760px){body.spectrumApp .wrap{display:block;max-width:1320px;padding:12px 14px 64px}body.spectrumApp .wrap>:not(.top){min-width:0}body.spectrumApp .top{position:sticky;top:0;display:grid;height:auto;min-height:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 14px;padding:8px 0 10px;border:0;border-bottom:1px solid var(--spectrum-border);border-radius:0;background:linear-gradient(180deg,#07090c,#081018);box-shadow:none}body.spectrumApp .top .brand{grid-column:1;grid-row:1;justify-content:flex-start;padding:0}.brandCopy{display:grid}body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row;gap:3px;padding:8px 0 0;border-top:1px solid var(--line)}.navPrimary,.navSecondary{display:contents}body.spectrumApp .top .tab{display:flex;width:auto;min-height:38px;grid-template-columns:none;gap:7px;padding:8px 11px;white-space:nowrap}.tabLabel{display:inline}.tabShortcut{display:none}}
+@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px;column-gap:16px;padding-right:18px;padding-left:18px}body.spectrumApp .top{padding:10px 8px}body.spectrumApp .top .brand{justify-content:center;padding-right:0;padding-left:0}.logo,.logo img{width:50px}.brandCopy,.tabLabel,.tabShortcut{display:none}body.spectrumApp .top .tab{display:grid;grid-template-columns:1fr;place-items:center;padding:9px}}
+@media(max-width:760px){body.spectrumApp .wrap{display:block;max-width:1320px;padding:12px 14px 64px}body.spectrumApp .wrap>:not(.top){min-width:0}body.spectrumApp .top{position:sticky;top:0;display:grid;height:auto;min-height:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 14px;padding:8px 0 10px;border:0;border-bottom:1px solid var(--spectrum-border);border-radius:0;background:linear-gradient(180deg,#07090c,#081018);box-shadow:none}body.spectrumApp .top .brand{grid-column:1;grid-row:1;justify-content:flex-start;padding:0}.logo,.logo img{width:58px}.brandCopy{display:grid}body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row;gap:3px;padding:8px 0 0;border-top:1px solid var(--line)}.navPrimary,.navSecondary{display:contents}body.spectrumApp .top .tab{display:flex;width:auto;min-height:38px;grid-template-columns:none;gap:7px;padding:8px 11px;white-space:nowrap}.tabLabel{display:inline}.tabShortcut{display:none}}
 @media(max-width:520px){.brandName{font-size:14px}}
 body.spectrumApp .tab.on,body.spectrumApp .seg button.on{background:var(--spectrum-active);color:#062430;box-shadow:0 7px 20px rgba(0,188,235,.16)}
 body.spectrumApp .tab:hover:not(.on),body.spectrumApp .seg button:hover:not(.on){background:rgba(0,188,235,.07);color:var(--fg)}
@@ -387,7 +387,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 -->
 <div class=wrap>
  <div class=top aria-label="Token Meter navigation">
-  <div class=brand><div class=logo aria-hidden=true><svg viewBox="0 0 32 32" fill=none xmlns="http://www.w3.org/2000/svg"><g stroke="#062430" stroke-width="2.1" stroke-linecap="round"><path d="M7 18v-3"/><path d="M10 18v-7"/><path d="M13 18v-4"/><path d="M16 18V8"/><path d="M19 18v-4"/><path d="M22 18v-7"/><path d="M25 18v-3"/></g><path d="M6.5 22.5h19" stroke="#062430" stroke-width="2.1" stroke-linecap="round"/></svg></div><span class=brandCopy><span class=brandName>Token Meter</span></span></div>
+  <div class=brand><div class=logo role=img aria-label=Splunk><img src="/assets/brand/logo-splunk-acc-rgb-w.png" alt=""></div><span class=brandCopy><span class=brandName>Token Meter</span></span></div>
 	  <nav class=tabs aria-label="Primary navigation">
 	   <div class=navPrimary>
 	   <button class="tab on" id=tab-session data-label=Sessions aria-label=Sessions aria-keyshortcuts="Alt+1" title="Sessions · Shortcut: Option+1"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h16M4 12h16M4 17h16"/><path d="M7 5v4M14 10v4M18 15v4"/></svg><span class=tabLabel>Sessions</span><span class=tabShortcut aria-hidden=true>1</span></button>

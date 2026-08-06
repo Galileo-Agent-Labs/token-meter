@@ -1,6 +1,7 @@
 import unittest
 import json
 import os
+import plistlib
 import re
 import sqlite3
 import tempfile
@@ -1500,20 +1501,36 @@ class SessionRouteTests(unittest.TestCase):
         self.assertFalse(meter.is_dashboard_page_path("/sessions/"))
         self.assertFalse(meter.is_dashboard_page_path("/sessions/one/two"))
 
-    def test_dashboard_serves_only_the_bundled_display_font(self):
+    def test_dashboard_serves_only_explicitly_bundled_assets(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             page = root / "page.html"
             font = root / "assets" / "fonts" / "Tektur-Variable.ttf"
+            logo = root / "assets" / "brand" / "logo-splunk-acc-rgb-w.png"
             font.parent.mkdir(parents=True)
+            logo.parent.mkdir(parents=True)
             page.write_text("dashboard")
             font.write_bytes(b"font")
+            logo.write_bytes(b"logo")
             with mock.patch.object(meter, "page_path", return_value=str(page)):
                 self.assertEqual(
                     meter.dashboard_asset_path("/assets/fonts/Tektur-Variable.ttf"),
                     str(font),
                 )
+                self.assertEqual(
+                    meter.dashboard_asset_path("/assets/brand/logo-splunk-acc-rgb-w.png"),
+                    str(logo),
+                )
+                self.assertEqual(
+                    meter.dashboard_asset_content_type("/assets/fonts/Tektur-Variable.ttf"),
+                    "font/ttf",
+                )
+                self.assertEqual(
+                    meter.dashboard_asset_content_type("/assets/brand/logo-splunk-acc-rgb-w.png"),
+                    "image/png",
+                )
                 self.assertIsNone(meter.dashboard_asset_path("/assets/fonts/OFL-Tektur.txt"))
+                self.assertIsNone(meter.dashboard_asset_path("/assets/brand/SOURCE.md"))
                 self.assertIsNone(meter.dashboard_asset_path("/assets/../meter.py"))
 
 
@@ -1720,10 +1737,12 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("const PANEL_KEYS=['summary','activity','tools','insights','alerts'];", self.page)
         self.assertIn("efficiency:'summary'", self.page)
 
-    def test_dashboard_uses_inline_token_meter_favicon(self):
+    def test_dashboard_uses_splunk_favicon_and_bundled_wordmark(self):
         self.assertIn('rel=icon type="image/svg+xml"', self.page)
         self.assertIn("data:image/svg+xml", self.page)
-        self.assertIn("stop-color='%2300bceb'", self.page)
+        self.assertIn("M47.03 36.16v-7.58L10 10", self.page)
+        self.assertIn('class=logo role=img aria-label=Splunk', self.page)
+        self.assertIn('/assets/brand/logo-splunk-acc-rgb-w.png', self.page)
         self.assertIn('name=theme-color content="#07090c"', self.page)
 
     def test_current_header_keeps_one_line_session_start_message_visible(self):
@@ -3178,7 +3197,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('TitleMetric.allCases.filter(titleMetrics.contains).map(\\.rawValue)', self.source)
         self.assertIn('private func limitsStatusTitle() -> String?', self.source)
         self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel) · \\(constrained.window.compactKind)"', self.source)
-        self.assertIn('var toolTip = snapshot.statusTooltip', self.source)
+        self.assertIn('var toolTip = "Token Meter · \\(title)\\n\\(snapshot.statusTooltip)"', self.source)
         self.assertIn('if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }', self.source)
         self.assertIn('let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()', self.source)
         self.assertIn('guard var previous = quotaNotificationStates[key] else', self.source)
@@ -3186,6 +3205,61 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('quotaObservationEstablished = true', self.source)
         self.assertIn('process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")', self.source)
         self.assertIn('"--", title, body', self.source)
+
+    def test_status_item_uses_a_compact_cross_display_hit_target(self):
+        self.assertIn('NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)', self.source)
+        self.assertIn('private func splunkChevronImage(', self.source)
+        self.assertIn('private func statusTitleImage(_ title: String) -> NSImage', self.source)
+        self.assertIn('button.image = splunkChevronImage()', self.source)
+        self.assertNotIn('systemSymbolName: "waveform.path.ecg"', self.source)
+        self.assertIn('button.imagePosition = .imageOnly', self.source)
+        self.assertIn('.foregroundColor: NSColor.black', self.source)
+        self.assertIn('image.isTemplate = true', self.source)
+        self.assertIn('let titleImage = statusTitleImage(title)', self.source)
+        self.assertIn('statusItem.length = titleImage.size.width + 16', self.source)
+        self.assertIn('button.contentTintColor = nil', self.source)
+        self.assertIn('button.setAccessibilityLabel("Token Meter")', self.source)
+        self.assertIn('button.setAccessibilityValue(title)', self.source)
+        self.assertIn('var toolTip = "Token Meter · \\(title)\\n\\(snapshot.statusTooltip)"', self.source)
+        self.assertIn('button.contentTintColor = budgetExceeded', self.source)
+        self.assertIn('enum StatusDisplayMode: String, CaseIterable', self.source)
+        self.assertIn('StatusDisplayMode.text.rawValue', self.source)
+        self.assertIn('screen.visibleFrame.width < 1200 ? .icon : .text', self.source)
+        self.assertIn('private func compactStatusTitle() -> String', self.source)
+        self.assertIn('statusItem.autosaveName = statusItemAutosaveName', self.source)
+        self.assertIn('"NSStatusItem Preferred Position \\(statusItemAutosaveName)"', self.source)
+        self.assertIn('statusItemInitialPreferredPosition = 50', self.source)
+        self.assertIn('object(forKey: statusItemPreferredPositionDefaultsKey) == nil', self.source)
+        self.assertNotIn('statusTitleColor(for:', self.source)
+        self.assertNotIn('NSWorkspace.didActivateApplicationNotification', self.source)
+
+    def test_run_slip_leads_with_cost_and_output_pace(self):
+        ledger_position = self.source.index('let ledger = makeMetricLedger()')
+        pressure_position = self.source.index('let pressure = vertical(spacing: 3)')
+        self.assertLess(ledger_position, pressure_position)
+        self.assertIn('metricColumn("Run cost", snapshot.costLabel', self.source)
+        self.assertIn('metricColumn("Output pace", snapshot.outputSpeedLabel', self.source)
+
+    def test_global_toggle_shortcut_is_configurable_and_persisted(self):
+        self.assertIn('import Carbon.HIToolbox', self.source)
+        self.assertIn('enum MenuBarShortcut: String, CaseIterable', self.source)
+        self.assertIn('case .controlOptionT: return "⌃⌥T"', self.source)
+        self.assertIn('private let globalShortcutDefaultsKey = "TokenMeterGlobalShortcut"', self.source)
+        self.assertIn('RegisterEventHotKey(', self.source)
+        self.assertIn('delegate.togglePopover(nil)', self.source)
+        self.assertIn('NSMenuItem(title: "Keyboard shortcut"', self.source)
+        self.assertIn('case .custom: return "Custom…"', self.source)
+        self.assertIn('@objc private func configureCustomShortcut(_ sender: NSMenuItem)', self.source)
+        self.assertIn('NSEvent.addLocalMonitorForEvents(matching: .keyDown)', self.source)
+        self.assertIn('tokenMeterDefaults.set(shortcut.rawValue, forKey: globalShortcutDefaultsKey)', self.source)
+
+    def test_native_header_uses_bundled_splunk_wordmark(self):
+        self.assertIn('private func splunkWordmarkImage() -> NSImage?', self.source)
+        self.assertIn('assets/brand/logo-splunk-acc-rgb-w.png', self.source)
+        self.assertIn('if let wordmark = splunkWordmarkImage()', self.source)
+        self.assertIn('logo.setAccessibilityLabel("Splunk")', self.source)
+        self.assertIn('row.addArrangedSubview(label("Token Meter"', self.source)
+        self.assertIn('native-brand=Splunk wordmark=', self.source)
 
     def test_monthly_budget_status_and_transition_alerts_are_native(self):
         for marker in (
@@ -3204,10 +3278,9 @@ class MenubarSourceTests(unittest.TestCase):
             'budgetExceededNotificationMonths',
             'title: "Overall monthly budget exceeded"',
             'return monthlyBudget?.anyExceeded == true ? "⚠︎ \\(base)" : base',
-            'budgetExceeded ? NSColor.white : NSColor.labelColor',
-            'let attributedTitle = NSMutableAttributedString(string: title, attributes: attrs)',
-            'let warningRange = (title as NSString).range(of: "⚠︎")',
-            'attributedTitle.addAttribute(.foregroundColor, value: NSColor.systemRed, range: warningRange)',
+            'button.contentTintColor = budgetExceeded',
+            'NSColor.systemRed',
+            'button.setAccessibilityLabel("Token Meter")',
             'let activeTitle = budget?.anyExceeded == true ? "⚠︎ \\(baseTitle)" : baseTitle',
             'print("budget-state=\\(budget?.compactLabel ?? "unconfigured") exceeded=\\(budget?.anyExceeded == true)")',
         ):
@@ -4189,6 +4262,18 @@ class SoftwareUpdateTests(unittest.TestCase):
 
 
 class InstallationTests(unittest.TestCase):
+    def test_menu_bar_launcher_builds_a_stable_background_app_bundle(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "run-menubar").read_text()
+        info = plistlib.loads((root / "menubar" / "Info.plist").read_bytes())
+        self.assertIn('APP="$ROOT/.build/Token Meter Menu Bar.app"', script)
+        self.assertIn('ditto "$ROOT/menubar/Info.plist" "$INFO"', script)
+        self.assertIn('swiftc "$ROOT/menubar/TokenMeterMenuBar.swift" -o "$BIN"', script)
+        self.assertIn('exec "$BIN"', script)
+        self.assertEqual(info["CFBundleIdentifier"], "com.token-meter.menubar")
+        self.assertEqual(info["CFBundleExecutable"], "token-meter-menubar")
+        self.assertTrue(info["LSUIElement"])
+
     def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
         script = (root / "scripts" / "install").read_text()
@@ -4210,6 +4295,8 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('"$INSTALL_ROOT/meter.py"', script)
         self.assertIn('"$INSTALL_ROOT/scripts/run-menubar"', script)
         self.assertIn('ditto "$SOURCE_ROOT/assets" "$INSTALL_ROOT/assets"', script)
+        self.assertIn('"$SOURCE_ROOT/assets/brand/logo-splunk-acc-rgb-w.png"', script)
+        self.assertIn('"$SOURCE_ROOT/menubar/Info.plist"', script)
         self.assertIn(
             'printf \'%s\\n\' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"',
             script,
@@ -4225,6 +4312,10 @@ class InstallationTests(unittest.TestCase):
         )
         self.assertIn('remote set-url origin "$source_remote_url"', script)
         self.assertIn('"branch.$managed_branch.merge" "refs/heads/$source_branch"', script)
+        self.assertIn('source_slug=', script)
+        self.assertIn('source_slug="${source_slug%.git}"', script)
+        self.assertIn('MANAGED_SOURCE_ROOT="$INSTALL_PARENT/source-$source_slug"', script)
+        self.assertIn('Preserving the existing managed checkout at:', script)
         self.assertIn("Token Meter installation complete.", script)
         self.assertNotRegex(script, r"(?m)^exec ")
 

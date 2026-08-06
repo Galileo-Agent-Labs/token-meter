@@ -374,7 +374,7 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 .learnOnboarding{padding:16px;border:1px solid rgba(0,188,235,.25);border-radius:9px;background:rgba(0,188,235,.045)}.learnOnboarding .learnSectionHead{align-items:center}.learnShortcutGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.learnShortcut{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--dim);font-size:11px}.learnShortcut kbd{min-width:42px;border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:2px 6px;color:var(--fg);font:750 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;text-align:center;white-space:nowrap}
 @media(max-width:900px){.onboardingChecklist{grid-template-columns:repeat(3,minmax(0,1fr))}.learnShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.onboardingCard{padding:13px}.onboardingHead{display:grid;grid-template-columns:1fr}.onboardingHeadActions{justify-content:space-between}.onboardingNext{grid-template-columns:1fr}.onboardingNext .tbtn{justify-self:start}.onboardingChecklist,.learnShortcutGrid{grid-template-columns:1fr}.onboardingCard.collapsed .onboardingHead{grid-template-columns:minmax(0,1fr) auto;align-items:center}.onboardingCard.collapsed .onboardingHeadActions{justify-content:end}.onboardingCard.collapsed .onboardingCount{display:none}.commandCoach{align-items:stretch;flex-direction:column;padding:9px 12px}.commandCoach .tbtn{width:100%}.onboardingLesson{padding:18px}.onboardingLesson h2{font-size:20px}.onboardingLessonFoot{align-items:flex-start;flex-direction:column}.onboardingLessonFoot .tbtn{width:100%}}
-.modelHead.spectrumPageHead{overflow:visible;z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}
+.modelHead.spectrumPageHead{overflow:visible;z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}
 .dailySpendCard:before{content:none}
 </style></head><body class=spectrumApp>
 <!--
@@ -522,6 +522,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
      <button class=fieldtip data-scale=linear title="Use a normal proportional token scale." data-tip="Use a normal proportional token scale.">Linear</button>
      <button class=fieldtip data-scale=sqrt title="Compress large spikes while keeping small values visible." data-tip="Compress large spikes while keeping small values visible.">Sqrt</button>
      <button class=fieldtip data-scale=log title="Strongly compress large ranges; useful when spikes dominate the chart." data-tip="Strongly compress large ranges; useful when spikes dominate the chart.">Log</button>
+     <button class=fieldtip data-scale=cumulative title="Show running estimated cost or token totals through each execution." data-tip="Show running estimated cost or token totals through each execution.">Cumulative</button>
     </div>
    </div>
    <div class=chartwrap>
@@ -2490,9 +2491,18 @@ function extendBudget(){
 $('budget-add-btn').onclick=extendBudget;
 $('budget-add').addEventListener('keydown',e=>{ if(e.key==='Enter') extendBudget(); });
 
+const CHART_SCALES=['linear','sqrt','log','cumulative'];
 let chartScale=localStorage.getItem('tm_chart_scale')||'linear';
+if(!CHART_SCALES.includes(chartScale)){
+ chartScale='linear';
+ localStorage.setItem('tm_chart_scale',chartScale);
+}
 function paintScale(){
- [...$('scale').querySelectorAll('button')].forEach(b=>b.classList.toggle('on',b.dataset.scale===chartScale));
+ [...$('scale').querySelectorAll('button')].forEach(b=>{
+  const selected=b.dataset.scale===chartScale;
+  b.classList.toggle('on',selected);
+  b.setAttribute('aria-pressed',selected?'true':'false');
+ });
 }
 $('scale').onclick=e=>{ if(e.target.dataset.scale){ chartScale=e.target.dataset.scale; localStorage.setItem('tm_chart_scale',chartScale); paintScale(); if(CURRENT) drawIO(CURRENT.series||[]); } };
 paintScale();
@@ -2794,8 +2804,10 @@ function tipAttrs(text){
 function legendField(label,color,tip){
  return `<span ${tipAttrs(tip)}><i class=dot style="background:${color}"></i>${esc(label)}</span>`;
 }
-function chartLegendHtml(mode){
+function chartLegendHtml(mode,cumulative=false){
  const cursor=CURRENT?.provider==='cursor';
+ const cumulativeLabel=cumulative?'cumulative ':'';
+ const cumulativeTip=cumulative?' Running total through each execution.':'';
  const eventMarks=[
   legendField('user message','var(--fg)','Execution points with a captured user message preview. The diamond marker sits on the active chart series.'),
   legendField('notable tools','var(--toolcall)','Executions with unusually high tool-call count for this log/thread.'),
@@ -2808,11 +2820,11 @@ function chartLegendHtml(mode){
   legendField('85% high','var(--bad)','High threshold: context is close to the model window limit.'),
  ].join('')+eventMarks;
  if(mode==='tokens') return [
-  legendField(cursor?'input context est':'input total','var(--c-input)',cursor?'One trace-visible context snapshot per Cursor execution; this is a local proxy, not billable input.':'Total input/context tokens for each execution, including uncached input and prompt-cache tokens.'),
-  legendField(cursor?'visible output est':'output','var(--c-output)',cursor?'Model-authored text persisted in Cursor bubbles, estimated at four characters per token.':'Model output tokens produced by the execution.'),
-  legendField('cache read','var(--c-cache-read)','Input tokens served from the provider prompt cache. These are usually cheaper than uncached input.'),
-  legendField('cache write','var(--c-cache-write)','Input tokens written into the provider prompt cache for possible reuse later. Some providers may report zero.'),
-  legendField('uncached input','var(--c-input)','Input tokens charged as normal input because they were new or did not hit prompt cache.'),
+  legendField(cumulativeLabel+(cursor?'input context est':'input total'),'var(--c-input)',(cursor?'One trace-visible context snapshot per Cursor execution; this is a local proxy, not billable input.':'Total input/context tokens for each execution, including uncached input and prompt-cache tokens.')+cumulativeTip),
+  legendField(cumulativeLabel+(cursor?'visible output est':'output'),'var(--c-output)',(cursor?'Model-authored text persisted in Cursor bubbles, estimated at four characters per token.':'Model output tokens produced by the execution.')+cumulativeTip),
+  legendField(cumulativeLabel+'cache read','var(--c-cache-read)','Input tokens served from the provider prompt cache. These are usually cheaper than uncached input.'+cumulativeTip),
+  legendField(cumulativeLabel+'cache write','var(--c-cache-write)','Input tokens written into the provider prompt cache for possible reuse later. Some providers may report zero.'+cumulativeTip),
+  legendField(cumulativeLabel+'uncached input','var(--c-input)','Input tokens charged as normal input because they were new or did not hit prompt cache.'+cumulativeTip),
  ].join('')+eventMarks;
  if(mode==='tools') return [
   legendField('tool calls','var(--toolcall)','Number of tool calls observed in each execution.'),
@@ -2826,7 +2838,7 @@ function chartLegendHtml(mode){
   legendField('wait time','var(--accent)','Wall-clock time from the user prompt until the completed response, including reasoning and tool use.'),
   legendField('request message','var(--fg)','The captured user message associated with the timed request, when available.'),
  ].join('');
- if(mode==='cost') return legendField(cursor?'local execution estimate':'execution cost','var(--c-cost)',cursor?'Context-and-visible-output proxy priced with the persisted model variant; cache and hidden model work are excluded.':'Estimated USD cost for this execution using the configured public API rates.')+eventMarks;
+ if(mode==='cost') return legendField(cumulative?(cursor?'cumulative local cost est':'cumulative cost'):(cursor?'local execution estimate':'execution cost'),'var(--c-cost)',(cursor?'Context-and-visible-output proxy priced with the persisted model variant; cache and hidden model work are excluded.':'Estimated USD cost for this execution using the configured public API rates.')+cumulativeTip)+eventMarks;
  return chartLegendHtml('context');
 }
 function chartParts(s){
@@ -2838,6 +2850,14 @@ function chartParts(s){
  const total=Math.max(+(s.in||0),fresh+cache);
  const ctx=s.context_pct===undefined||s.context_pct===null?null:+s.context_pct;
  return {fresh,read,write,cache,total,out:+(s.out||0),cost:+(s.cost||0),context:ctx,reason:+(s.reasoning||0),tools:+(s.tools||0)};
+}
+function cumulativeChartParts(parts,mode){
+ const keys=mode==='cost'?['cost']:['fresh','read','write','cache','total','out'];
+ const sums=Object.fromEntries(keys.map(key=>[key,0]));
+ return parts.map(part=>{
+  keys.forEach(key=>{sums[key]+=Math.max(0,Number(part[key]||0));});
+  return {...part,...sums};
+ });
 }
 function requestStepGroups(series){
  const groups=[];
@@ -2945,18 +2965,26 @@ function drawIO(series){
  const svg=$('iochart'), VW=1040, VH=244, MR=16, MT=14, MB=42;
  const tip=$('chart-tip');
  const mode=CHART_MODES.includes(chartMode)?chartMode:'context';
- const legend=$('chart-legend'); if(legend) legend.innerHTML=chartLegendHtml(mode);
+ const cumulativeTokens=mode==='tokens'&&chartScale==='cumulative';
+ const cumulativeCost=mode==='cost'&&chartScale==='cumulative';
+ const cumulativeValues=cumulativeTokens||cumulativeCost;
+ const legend=$('chart-legend'); if(legend) legend.innerHTML=chartLegendHtml(mode,cumulativeValues);
  const profileHint=$('exec-profile-hint'), activity=CURRENT?.tools?.activity||{};
  if(profileHint) profileHint.textContent=mode==='tools'
   ? `${f(activity.total_calls)} total calls · ${f(activity.observed_unique)} observed types · peak ${f(activity.peak_calls_per_execution)}/execution`
   : mode==='wait'
    ? `${f(CURRENT?.wait_time?.sample_count||0)} completed timed ${countWord(CURRENT?.wait_time?.sample_count||0,'request')} · lower is better`
+   : cumulativeCost
+    ? 'running estimated cost through each execution'
+   : cumulativeTokens
+    ? 'running token totals through each execution'
    : 'per execution or request';
  if(mode==='wait'){drawWaitChart(CURRENT?.wait_time?.samples||[],series);return;}
  const n=series.length; if(!n){svg.innerHTML='<text x=520 y=122 text-anchor=middle fill="'+CHART.lbl+'">no executions yet</text>'; if(tip)tip.style.display='none'; return;}
  if(mode==='steps'){ drawStepsChart(series); return; }
  if((mode==='tokens'&&!metricAvailable(CURRENT,'tokens'))||(mode==='cost'&&!metricAvailable(CURRENT,'cost'))){svg.innerHTML='<text x=520 y=122 text-anchor=middle fill="'+CHART.lbl+'">'+(mode==='cost'?'cost estimate':'token evidence')+' unavailable in this trace</text>';if(tip)tip.style.display='none';return;}
- const parts=series.map(chartParts), scaleMode=mode==='tokens'?chartScale:'linear';
+ const rawParts=series.map(chartParts), parts=cumulativeValues?cumulativeChartParts(rawParts,mode):rawParts;
+ const scaleMode=mode==='tokens'&&!cumulativeValues?chartScale:'linear';
  const maxCache=Math.max(10,...parts.map(p=>Math.max(p.total,p.cache,p.fresh,p.out)));
  const maxCost=Math.max(.001,...parts.map(p=>p.cost));
  const maxTools=Math.max(1,...parts.map(p=>p.tools));
@@ -2992,8 +3020,8 @@ function drawIO(series){
  const cacheRead=parts.map(p=>p.read), cacheTop=parts.map(p=>p.cache), output=parts.map(p=>p.out), costs=parts.map(p=>p.cost), contexts=parts.map(p=>p.context), toolCalls=parts.map(p=>p.tools);
  const nonZeroSorted=(vals)=>vals.filter(v=>v>0).sort((a,b)=>a-b);
  const percentile=(vals,q,fallback=0)=>{ vals=nonZeroSorted(vals); return vals.length?vals[Math.min(vals.length-1,Math.floor((vals.length-1)*q))]:fallback; };
- const toolCut=Math.max(3,percentile(parts.map(p=>p.tools),.85,0));
- const reasonCut=Math.max(1000,percentile(parts.map(p=>p.reason),.85,0));
+ const toolCut=Math.max(3,percentile(rawParts.map(p=>p.tools),.85,0));
+ const reasonCut=Math.max(1000,percentile(rawParts.map(p=>p.reason),.85,0));
  const primaryFor=p=>{
   if(mode==='tokens') return {value:p.total,color:CHART.input};
   if(mode==='cost') return {value:p.cost,color:CHART.cost};
@@ -3028,7 +3056,7 @@ function drawIO(series){
    }
   }
  });
- const yTitle=mode==='cost'?'usd':(mode==='context'?'context':(mode==='tools'?'tool calls':'tokens'));
+ const yTitle=mode==='cost'?(cumulativeCost?'cumulative usd':'usd'):(mode==='context'?'context':(mode==='tools'?'tool calls':(cumulativeTokens?'cumulative tokens':'tokens')));
  const titles=`<text x=${(ML+PW/2).toFixed(1)} y=${VH-1} text-anchor=middle style="${T}">execution</text><text x=14 y=${(MT+PH/2).toFixed(1)} text-anchor=middle transform="rotate(-90 14 ${(MT+PH/2).toFixed(1)})" style="${T}">${yTitle}</text>`;
  const hover=`<rect id=ch-hit x=${ML} y=${MT} width=${PW} height=${PH} fill="transparent" pointer-events="all"/><g id=chart-hover opacity=0 style="pointer-events:none">
   <line id=ch-x y1=${MT} y2=${MT+PH} stroke="${CHART.tipLine}" stroke-dasharray="4 4"/>
@@ -3064,23 +3092,25 @@ function drawIO(series){
    const prompt=userMessage?esc(userMessage):'--';
    const promptBlock=userMessage?`<div class=prompt><span>user message</span><b>${prompt}</b></div>`:'';
    const cursor=CURRENT?.provider==='cursor',est=cursor?' est':'';
+   const costLabel=cumulativeCost?'cumulative cost':'cost';
    const common=[
     row('context','context',p.context===null?'--':pct(p.context)),
-    row('cost','cost',metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--'),
+    row('cost',costLabel,metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--'),
    ];
+   const tokenPrefix=cumulativeTokens?'cumulative ':'';
    const tokenRows=[
-    row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),
-    row('out',cursor?'visible output':'output',metricAvailable(CURRENT,'output_tokens')?f(p.out)+est:'--'),
-    row('fresh','uncached input',metricAvailable(CURRENT,'cache')?f(p.fresh):'--'),
-    row('cacheRead','cache read',metricAvailable(CURRENT,'cache')?f(p.read):'--'),
-    row('cacheWrite','cache write',metricAvailable(CURRENT,'cache')?f(p.write):'--'),
+    row('in',tokenPrefix+(cursor?'input context':'input total'),metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),
+    row('out',tokenPrefix+(cursor?'visible output':'output'),metricAvailable(CURRENT,'output_tokens')?f(p.out)+est:'--'),
+    row('fresh',tokenPrefix+'uncached input',metricAvailable(CURRENT,'cache')?f(p.fresh):'--'),
+    row('cacheRead',tokenPrefix+'cache read',metricAvailable(CURRENT,'cache')?f(p.read):'--'),
+    row('cacheWrite',tokenPrefix+'cache write',metricAvailable(CURRENT,'cache')?f(p.write):'--'),
    ];
    const toolRows=[
     row('tools','tool calls',f(p.tools)),
     row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),
     row('out',cursor?'visible output':'output',metricAvailable(CURRENT,'output_tokens')?f(p.out)+est:'--'),
    ];
-   const rows=mode==='tools'?[...toolRows,...common]:mode==='tokens'?[...tokenRows,row('tools','tool calls',f(p.tools)),...common]:mode==='context'?[row('context','context',p.context===null?'--':pct(p.context)),row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),row('tools','tool calls',f(p.tools)),row('cost','cost',metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--')]:[row('cost','cost',metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--'),row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),row('out',cursor?'visible output':'output',metricAvailable(CURRENT,'output_tokens')?f(p.out)+est:'--'),row('tools','tool calls',f(p.tools))];
+   const rows=mode==='tools'?[...toolRows,...common]:mode==='tokens'?[...tokenRows,row('tools','tool calls',f(p.tools)),...common]:mode==='context'?[row('context','context',p.context===null?'--':pct(p.context)),row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),row('tools','tool calls',f(p.tools)),row('cost','cost',metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--')]:[row('cost',costLabel,metricAvailable(CURRENT,'cost')?money(p.cost)+est:'--'),row('in',cursor?'input context':'input total',metricAvailable(CURRENT,'input_tokens')?f(p.total)+est:'--'),row('out',cursor?'visible output':'output',metricAvailable(CURRENT,'output_tokens')?f(p.out)+est:'--'),row('tools','tool calls',f(p.tools))];
    tip.innerHTML=`<div class=h>execution #${esc(s.i??idx+1)}</div>${rows.join('')}${markers?`<div class=r><span>markers</span><b>${esc(markers)}</b></div>`:''}${promptBlock}`;
   }
  }
@@ -4070,6 +4100,8 @@ function logRowContent(s){
 }
 function reconcileLogRows(sessions,maxCost,liveSessionIds=new Set()){
  const root=$('slist');
+ const interactingLogRow=root.querySelector('.srow:hover,.srow:focus-within');
+ if(interactingLogRow)return;
  if(!sessions.length){
   setLogHtml(root,'<div class="ins empty">No sessions match the selected filters</div>');
   return;

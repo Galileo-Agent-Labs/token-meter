@@ -2119,6 +2119,32 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("wait_time?.total_s", self.page)
         self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
+    def test_session_chart_supports_cumulative_cost_and_token_views(self):
+        for marker in (
+            "data-scale=cumulative",
+            "Show running estimated cost or token totals through each execution.",
+            "const CHART_SCALES=['linear','sqrt','log','cumulative'];",
+            "if(!CHART_SCALES.includes(chartScale))",
+            "b.setAttribute('aria-pressed',selected?'true':'false');",
+            "function cumulativeChartParts(parts,mode)",
+            "const keys=mode==='cost'?['cost']:['fresh','read','write','cache','total','out'];",
+            "keys.forEach(key=>{sums[key]+=Math.max(0,Number(part[key]||0));});",
+            "const cumulativeTokens=mode==='tokens'&&chartScale==='cumulative';",
+            "const cumulativeCost=mode==='cost'&&chartScale==='cumulative';",
+            "const cumulativeValues=cumulativeTokens||cumulativeCost;",
+            "parts=cumulativeValues?cumulativeChartParts(rawParts,mode):rawParts",
+            "scaleMode=mode==='tokens'&&!cumulativeValues?chartScale:'linear'",
+            "running estimated cost through each execution",
+            "running token totals through each execution",
+            "cumulative cost",
+            "cumulative usd",
+            "cumulative tokens",
+            "const tokenPrefix=cumulativeTokens?'cumulative ':'';",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn("rawParts.map(p=>p.tools)", self.page)
+        self.assertIn("rawParts.map(p=>p.reason)", self.page)
+
     def test_language_signals_are_inside_models_with_machine_wide_settings(self):
         for marker in (
             "id=model-frustration", "id=f-utterances",
@@ -2577,6 +2603,8 @@ class DashboardLayoutTests(unittest.TestCase):
             "function setLogHtml(element,html)",
             "function logRowRenderKey(s,active)",
             "function reconcileLogRows(sessions,maxCost,liveSessionIds=new Set())",
+            "const interactingLogRow=root.querySelector('.srow:hover,.srow:focus-within');",
+            "if(interactingLogRow)return;",
             "function mergeAllSessionInventory(inventory,liveSessions)",
             "(liveSessions||[]).forEach(row=>rows.set(String(row.id),row))",
             "const liveSessionIds=new Set((xs.current_sessions||[]).map(session=>String(session.id||'')));",
@@ -2596,6 +2624,10 @@ class DashboardLayoutTests(unittest.TestCase):
             "else renderAllSessions(LATEST.xsession)",
         ):
             self.assertIn(marker, self.page)
+        self.assertIn(
+            "body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}",
+            self.page,
+        )
         self.assertNotIn("$('slist').innerHTML=sessions.length?sessions.map", self.page)
 
     def test_current_and_all_sessions_share_the_defined_app_badge_helper(self):

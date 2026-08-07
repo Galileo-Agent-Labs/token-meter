@@ -2,12 +2,26 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/.build/Token Meter Menu Bar.app"
-CONTENTS="$APP/Contents"
-BIN="$CONTENTS/MacOS/token-meter-menubar"
-INFO="$CONTENTS/Info.plist"
-
-mkdir -p "$CONTENTS/MacOS"
-ditto "$ROOT/menubar/Info.plist" "$INFO"
-swiftc "$ROOT/menubar/TokenMeterMenuBar.swift" -o "$BIN"
-exec "$BIN"
+case "$(uname -s)" in
+  Darwin)
+    if [[ "${1:-}" == "--check" ]]; then
+      command -v swiftc >/dev/null 2>&1
+      exit
+    fi
+    APP="$ROOT/.build/Token Meter Menu Bar.app"
+    CONTENTS="$APP/Contents"
+    BIN="$CONTENTS/MacOS/token-meter-menubar"
+    INFO="$CONTENTS/Info.plist"
+    mkdir -p "$CONTENTS/MacOS"
+    ditto "$ROOT/menubar/Info.plist" "$INFO"
+    swiftc "$ROOT/menubar/TokenMeterMenuBar.swift" -o "$BIN"
+    exec "$BIN"
+    ;;
+  Linux)
+    exec python3 "$ROOT/menubar/token_meter_tray.py" "$@"
+    ;;
+  *)
+    echo "Token Meter's desktop companion supports macOS and Linux." >&2
+    exit 1
+    ;;
+esac

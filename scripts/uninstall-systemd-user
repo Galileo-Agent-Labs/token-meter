@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SERVER_UNIT="$SYSTEMD_USER_DIR/token-meter-server.service"
+TRAY_UNIT="$SYSTEMD_USER_DIR/token-meter-tray.service"
+
+systemctl --user disable --now token-meter-tray.service token-meter-server.service >/dev/null 2>&1 || true
+rm -f "$TRAY_UNIT" "$SERVER_UNIT"
+systemctl --user daemon-reload
+systemctl --user reset-failed token-meter-tray.service token-meter-server.service >/dev/null 2>&1 || true
+
+echo "Uninstalled token-meter-tray.service"
+echo "Removed: $TRAY_UNIT"
+echo "Uninstalled token-meter-server.service"
+echo "Removed: $SERVER_UNIT"

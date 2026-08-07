@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MODE="${1:-all}"
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SERVER_UNIT="$SYSTEMD_USER_DIR/token-meter-server.service"
+TRAY_UNIT="$SYSTEMD_USER_DIR/token-meter-tray.service"
+PYTHON_BIN="$(command -v python3 || true)"
+UNIT_ROOT="${ROOT// /\x20}"
+
+case "$MODE" in
+  all|server-only|menubar-only) ;;
+  *)
+    echo "Usage: $0 [all|server-only|menubar-only]" >&2
+    exit 2
+    ;;
+esac
+
+[[ "$(uname -s)" == "Linux" ]] || { echo "This helper is for Linux." >&2; exit 1; }
+[[ -n "$PYTHON_BIN" ]] || { echo "Missing executable: python3" >&2; exit 1; }
+command -v systemctl >/dev/null 2>&1 || { echo "Missing executable: systemctl" >&2; exit 1; }
+mkdir -p "$SYSTEMD_USER_DIR"
+
+tee "$SERVER_UNIT" >/dev/null <<UNIT
+[Unit]
+Description=Token Meter local server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$UNIT_ROOT
+ExecStart="$PYTHON_BIN" "$ROOT/meter.py"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+
+tee "$TRAY_UNIT" >/dev/null <<UNIT
+[Unit]
+Description=Token Meter desktop tray
+After=token-meter-server.service
+Requires=token-meter-server.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=$UNIT_ROOT
+ExecStart="$ROOT/scripts/run-menubar"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+
+start_server() {
+  systemctl --user daemon-reload
+  systemctl --user enable --now token-meter-server.service
+  echo "Installed token-meter-server.service"
+  echo "Unit: $SERVER_UNIT"
+}
+
+start_tray() {
+  systemctl --user daemon-reload
+  systemctl --user enable --now token-meter-tray.service
+  echo "Installed token-meter-tray.service"
+  echo "Unit: $TRAY_UNIT"
+}
+
+case "$MODE" in
+  server-only)
+    systemctl --user disable --now token-meter-tray.service >/dev/null 2>&1 || true
+    systemctl --user disable --now token-meter-server.service >/dev/null 2>&1 || true
+    start_server
+    ;;
+  menubar-only)
+    systemctl --user disable --now token-meter-tray.service >/dev/null 2>&1 || true
+    start_tray
+    ;;
+  all)
+    systemctl --user disable --now token-meter-tray.service >/dev/null 2>&1 || true
+    systemctl --user disable --now token-meter-server.service >/dev/null 2>&1 || true
+    start_server
+    if ! start_tray; then
+      systemctl --user disable --now token-meter-server.service >/dev/null 2>&1 || true
+      exit 1
+    fi
+    ;;
+esac
+
+echo "Uninstall: $ROOT/scripts/uninstall-systemd-user"

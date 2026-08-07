@@ -63,7 +63,7 @@ themselves cannot change configuration, budgets, sessions, or Token Meter state.
 
 Dashboard session deletion uses the same local-origin action token and accepts
 only a canonical ID from the currently discovered session inventory. It moves
-the exact discovered `.jsonl` file to macOS Trash with collision-safe naming;
+the exact discovered `.jsonl` file to the system Trash with collision-safe naming;
 it does not delete provider metadata, project files, configuration, Cursor's
 shared `state.vscdb` database/WAL, or Cursor request logs. The UI
 requires an explicit confirmation and warns when the target appears to be the

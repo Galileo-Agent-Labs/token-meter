@@ -34,6 +34,7 @@ import shutil
 import sqlite3
 import subprocess
 import statistics
+import sys
 import time
 import threading
 from collections import defaultdict
@@ -42,13 +43,22 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
+IS_LINUX = sys.platform.startswith("linux")
+XDG_CONFIG_HOME = os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config"))
+XDG_DATA_HOME = os.path.expanduser(os.environ.get("XDG_DATA_HOME", "~/.local/share"))
+
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
-CLAUDE_DESKTOP_DATA_ROOTS = [
-    os.path.expanduser("~/Library/Application Support/Claude"),
-    # Claude Desktop's third-party provider builds (including Bedrock-backed
-    # Cowork) keep the same metadata and nested Claude trace layout here.
-    os.path.expanduser("~/Library/Application Support/Claude-3p"),
-]
+if IS_LINUX:
+    CLAUDE_DESKTOP_DATA_ROOTS = [
+        os.path.join(XDG_CONFIG_HOME, "Claude"),
+        os.path.join(XDG_CONFIG_HOME, "Claude-3p"),
+    ]
+else:
+    CLAUDE_DESKTOP_DATA_ROOTS = [
+        os.path.expanduser("~/Library/Application Support/Claude"),
+        # Claude Desktop third-party builds use the parallel support root.
+        os.path.expanduser("~/Library/Application Support/Claude-3p"),
+    ]
 CLAUDE_DESKTOP_SESSIONS = os.path.join(CLAUDE_DESKTOP_DATA_ROOTS[0], "claude-code-sessions")
 CLAUDE_SETTINGS = os.path.expanduser("~/.claude/settings.json")
 CLAUDE_ROOT_CONFIG = os.path.expanduser("~/.claude.json")
@@ -58,10 +68,16 @@ CODEX_CONFIG = os.path.expanduser("~/.codex/config.toml")
 CODEX_AUTH = os.path.expanduser("~/.codex/auth.json")
 CLAUDE_CREDENTIALS = os.path.expanduser("~/.claude/.credentials.json")
 CURSOR_PROJECTS = os.path.expanduser("~/.cursor/projects")
-CURSOR_STATE_DB = os.path.expanduser(
-    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-)
-CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
+if IS_LINUX:
+    CURSOR_STATE_DB = os.path.join(
+        XDG_CONFIG_HOME, "Cursor", "User", "globalStorage", "state.vscdb"
+    )
+    CURSOR_REQUEST_LOGS = os.path.join(XDG_CONFIG_HOME, "Cursor", "logs")
+else:
+    CURSOR_STATE_DB = os.path.expanduser(
+        "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+    )
+    CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -2307,19 +2323,32 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
         return {"ok": False, "error": "The discovered session log is not available.",
                 "error_code": "not_found"}
 
-    trash_dir = os.path.expanduser(trash_dir or "~/.Trash")
-    mover = mover or shutil.move
+    linux_system_trash = IS_LINUX and trash_dir is None and mover is None and shutil.which("gio")
     try:
-        os.makedirs(trash_dir, exist_ok=True)
-        base = f"Token Meter - {os.path.basename(path)}"
-        stem, ext = os.path.splitext(base)
-        destination = os.path.join(trash_dir, base)
-        suffix = 2
-        while os.path.exists(destination):
-            destination = os.path.join(trash_dir, f"{stem} {suffix}{ext}")
-            suffix += 1
-        mover(path, destination)
-    except OSError:
+        if linux_system_trash:
+            subprocess.run(
+                ["gio", "trash", path], check=True, timeout=10,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            destination = os.path.basename(path)
+        else:
+            if trash_dir:
+                trash_dir = os.path.expanduser(trash_dir)
+            elif IS_LINUX:
+                trash_dir = os.path.join(XDG_DATA_HOME, "Trash", "files")
+            else:
+                trash_dir = os.path.expanduser("~/.Trash")
+            mover = mover or shutil.move
+            os.makedirs(trash_dir, exist_ok=True)
+            base = f"Token Meter - {os.path.basename(path)}"
+            stem, ext = os.path.splitext(base)
+            destination = os.path.join(trash_dir, base)
+            suffix = 2
+            while os.path.exists(destination):
+                destination = os.path.join(trash_dir, f"{stem} {suffix}{ext}")
+                suffix += 1
+            mover(path, destination)
+    except (OSError, subprocess.SubprocessError):
         return {"ok": False, "error": "Token Meter could not move the session log to Trash.",
                 "error_code": "trash_failed"}
 
@@ -6467,11 +6496,12 @@ def capability_action_capability():
 
 
 def session_action_capability():
+    destination = "Trash" if IS_LINUX else "macOS Trash"
     return {
         "available": True,
         "token": _ACTION_TOKEN,
         "recoverable": True,
-        "destination": "macOS Trash",
+        "destination": destination,
     }
 
 

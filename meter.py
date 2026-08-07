@@ -103,7 +103,7 @@ DEFAULT_POSITIVE_TERMS = [
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
-MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
+MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor", "opencode")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE = 1_000_000.0
@@ -633,6 +633,7 @@ def builtin_model_price_tables():
         "claude": CLAUDE_PRICE,
         "codex": OPENAI_PRICE,
         "cursor": CURSOR_PRICE,
+        "opencode": {},
     }
 
 
@@ -840,7 +841,8 @@ def model_pricing_settings(path=None):
     path = path or TOKEN_METER_SETTINGS
     histories = _load_model_price_histories(path)
     rows = []
-    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor"}
+    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor",
+               "opencode": "OpenCode"}
     for provider in MODEL_PRICE_PROVIDERS:
         builtins = builtin_model_price_tables()[provider]
         effective = effective_model_price_table(provider, path)

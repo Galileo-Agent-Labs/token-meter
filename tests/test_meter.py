@@ -552,6 +552,59 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(summary["output_tps"], 12.5)
         self.assertEqual(summary["avg_ttft_ms"], 2000)
 
+    def test_codex_live_speed_uses_completed_steps_before_task_complete(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-01T00:00:00.000Z", "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:04.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 200, "cached_input_tokens": 50,
+                    "output_tokens": 40, "total_tokens": 240,
+                }},
+            }},
+            {"timestamp": "2026-07-01T00:00:05.000Z", "payload": {
+                "type": "function_call", "name": "exec_command", "call_id": "call-1",
+            }},
+            {"timestamp": "2026-07-01T00:00:10.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 250, "cached_input_tokens": 100,
+                    "output_tokens": 60, "total_tokens": 310,
+                }},
+            }},
+        ]
+
+        live = meter.codex_live_performance_summary(objs)
+
+        self.assertFalse(meter.performance_summary(
+            meter.codex_performance_samples(objs, "gpt-5.6"), 100,
+        )["available"])
+        self.assertTrue(live["available"])
+        self.assertEqual(live["basis"], "live_end_to_end")
+        self.assertEqual(live["completed_steps"], 2)
+        self.assertEqual(live["measured_output_tokens"], 100)
+        self.assertEqual(live["measured_seconds"], 10)
+        self.assertEqual(live["output_tps"], 10)
+
+    def test_codex_live_speed_disappears_when_task_completes(self):
+        objs = [
+            {"timestamp": "2026-07-01T00:00:00.000Z", "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:04.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 200, "output_tokens": 40, "total_tokens": 240,
+                }},
+            }},
+            {"timestamp": "2026-07-01T00:00:05.000Z", "payload": {
+                "type": "task_complete", "duration_ms": 5000,
+            }},
+        ]
+
+        live = meter.codex_live_performance_summary(objs)
+
+        self.assertFalse(live["available"])
+        self.assertEqual(live["completed_steps"], 0)
+        self.assertEqual(live["output_tps"], 0)
+
     def test_tool_bearing_task_falls_back_to_end_to_end_throughput(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
@@ -3095,23 +3148,38 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('@objc private func openModelPrices()', self.source)
         self.assertIn('openDashboardPanel("model-pricing", includePinnedSession: false)', self.source)
 
-    def test_output_speed_is_a_dedicated_honest_metric_readout(self):
-        self.assertIn('metricColumn("Output pace", snapshot.outputSpeedLabel', self.source)
+    def test_output_speed_remains_available_without_a_standing_menu_row(self):
+        rebuild = self.source[
+            self.source.index("    private func rebuildMenu()"):
+            self.source.index("    private var activeShortcutKeyCode")
+        ]
+        self.assertNotIn('addMetricRow("Output', rebuild)
+        self.assertIn('Output speed: \(outputSpeedLabel)', self.source)
         self.assertIn('snapshot.outputSpeedTooltip', self.source)
-        self.assertIn('metricColumn(latestLabel, latest)', self.source)
         self.assertIn('· \(outputSpeedLabel) · \(model)', self.source)
         self.assertIn('formatTokenRate(rate)', self.source)
         self.assertIn('Tool execution time may be included.', self.source)
+        self.assertIn(
+            'return "\\(formatTokenRate(rate)) tok/s\\(estimatedTokens ? " est" : "")"',
+            self.source,
+        )
+        self.assertNotIn('tok/s\\(live)', self.source)
+        self.assertIn('completed \\(stepWord)', self.source)
+        self.assertIn('replaced by the final completed-response measurement', self.source)
         self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
 
     def test_core_info_starts_with_amount_and_omits_operational_rows(self):
+        rebuild = self.source[
+            self.source.index("    private func rebuildMenu()"):
+            self.source.index("    private var activeShortcutKeyCode")
+        ]
         self.assertIn('return "\\(costLabel) · \\(contextLabel) · \\(outputSpeedLabel) · \\(model)"', self.source)
         self.assertNotIn('return "\\(verdict.prefix) \\(formatMoney(totalCost))', self.source)
-        self.assertNotIn('addActivityRow()', self.source)
-        self.assertNotIn('addRecommendationRow()', self.source)
-        self.assertNotIn('addMetricRow("Status"', self.source)
-        self.assertNotIn('label("Now"', self.source)
-        self.assertNotIn('label("Action"', self.source)
+        self.assertIn('addMetricRow("Cost", snapshot.costLabel', rebuild)
+        self.assertIn('"Context",\n                contextDetail', rebuild)
+        self.assertNotIn('addMetricRow("Status"', rebuild)
+        self.assertNotIn('"Now"', rebuild)
+        self.assertNotIn('"Action"', rebuild)
 
     def test_cursor_uses_provider_identity_and_estimated_usage_labels(self):
         self.assertIn('case "cursor": return "Cursor"', self.source)
@@ -3119,7 +3187,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let costAvailable = metricAvailable(availability, "cost")', self.source)
         self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
         self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
-        self.assertIn('metricColumn("Run cost", snapshot.costLabel', self.source)
+        self.assertIn('addMetricRow("Cost", snapshot.costLabel', self.source)
         self.assertIn('Cursor output uses trace-visible text estimated at four characters per token.', self.source)
 
     def test_live_polling_bypasses_cached_menubar_responses(self):
@@ -3127,95 +3195,55 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Pragma")', self.source)
 
-    def test_run_pulse_opens_from_the_status_item_and_transitions_trace_backed_pulse(self):
-        self.assertIn("private let popover = NSPopover()", self.source)
-        self.assertIn("private final class RunPulsePopoverController", self.source)
-        self.assertIn("private final class ExecutionTraceView", self.source)
-        self.assertIn("ExecutionTraceView(values: snapshot.contextPulse)", self.source)
-        self.assertIn('setAccessibilityLabel("Measured execution trace")', self.source)
-        self.assertIn('let latest = point(values.count - 1, values[values.count - 1])', self.source)
-        self.assertIn('let color = contextSignalColor(value)', self.source)
-        self.assertIn('private func makeScrollableEvidenceBody(_ content: NSView)', self.source)
-        self.assertIn('scroll.autohidesScrollers = true', self.source)
-        self.assertIn('bodyHost.heightAnchor.constraint(equalToConstant: evidence.height)', self.source)
-        self.assertIn('max(Layout.minEvidenceHeight, measuredHeight)', self.source)
-        self.assertIn('TOKEN_METER_MENUBAR_CONTENT_SMOKE', self.source)
-        self.assertIn('run-slip-content=scrollable', self.source)
-        self.assertIn('guard sessions.count < 3 || runHeight <= runScroll.contentView.bounds.height', self.source)
-        self.assertIn("popover.behavior = .transient", self.source)
-        self.assertIn("popover.appearance = NSAppearance(named: .vibrantDark)", self.source)
-        self.assertIn("popover.show(relativeTo: button.bounds", self.source)
-        self.assertIn("RUN SLIP CONTRACT", self.source)
-        self.assertIn("No measured context history", self.source)
-        self.assertIn("Only provider-reported limits are shown.", self.source)
-        self.assertIn("TOKEN_METER_MENUBAR_LAYOUT_SMOKE", self.source)
-        self.assertIn("static let width: CGFloat = 360", self.source)
-        self.assertIn("static let maxHeight: CGFloat = 452", self.source)
-        self.assertIn("sizes.allSatisfy({ $0.width == 360 && $0.height <= 452 })", self.source)
-        self.assertIn('button.widthAnchor.constraint(equalTo: item.widthAnchor)', self.source)
-        self.assertIn('button.heightAnchor.constraint(equalToConstant: 27)', self.source)
-        self.assertIn('column.widthAnchor.constraint(equalToConstant: Layout.width - Layout.horizontalInset * 2)', self.source)
-        self.assertIn('buttons.allSatisfy({ $0.frame.width >= 70 && $0.frame.height >= 24 })', self.source)
-        self.assertIn('Run evidence viewport leaves dead vertical space.', self.source)
-        self.assertIn("private var popoverRefreshPending = false", self.source)
-        self.assertIn("guard force || !popover.isShown else", self.source)
-        self.assertIn("func popoverDidClose", self.source)
-        self.assertIn("func runPopoverSmoke() throws", self.source)
-        self.assertIn("let originalPersistedTab = tokenMeterDefaults.string", self.source)
-        self.assertIn("tokenMeterDefaults.set(originalPersistedTab, forKey: selectedTabDefaultsKey)", self.source)
-        self.assertIn("TOKEN_METER_MENUBAR_POPOVER_SMOKE", self.source)
-        self.assertIn("animatedSurfaceRefresh: Bool = false", self.source)
-        self.assertIn("func transition(to tab: MenuTab) -> NSSize", self.source)
-        self.assertIn("outgoing?.removeFromSuperview()", self.source)
-        self.assertIn("incoming.scroll.alphaValue = 1", self.source)
-        self.assertIn("private func resizePopover(to targetSize: NSSize)", self.source)
-        self.assertIn("popover.contentSize = targetSize", self.source)
-        self.assertIn("mode=immediate", self.source)
-        self.assertIn("settledSurfaceTransitionGeneration == surfaceTransitionGeneration", self.source)
-        self.assertIn("popover.contentViewController === mountedController", self.source)
-        self.assertIn("mountedController.tabsAreFullyVisible()", self.source)
-        self.assertNotIn("CAMediaTimingFunction", self.source)
-        self.assertNotIn(".animator().setFrame", self.source)
-        self.assertNotIn("Timer(timeInterval: 1.0 / 60.0", self.source)
-        self.assertNotIn("Timer(timeInterval: 0.28", self.source)
-        self.assertNotIn("TransitionSnapshotView", self.source)
-        self.assertNotIn("makeTransitionSnapshot", self.source)
-        self.assertNotIn("nextView.alphaValue = 0.01", self.source)
-        self.assertNotIn("NSSegmentedControl", self.source)
-        self.assertNotIn("private let menu = NSMenu()", self.source)
-        self.assertNotIn("private func panel(_ content: NSView)", self.source)
+    def test_status_item_owns_a_clean_native_menu(self):
+        app = self.source[
+            self.source.index("final class TokenMeterMenuBar"):
+            self.source.index("private func string(")
+        ]
+        self.assertIn('private let menu = NSMenu(title: "Token Meter")', app)
+        self.assertIn('statusItem.menu = menu', app)
+        self.assertIn('menu.delegate = self', app)
+        self.assertIn('func menuNeedsUpdate(_ menu: NSMenu)', app)
+        self.assertIn('func menuWillOpen(_ menu: NSMenu)', app)
+        self.assertIn('func menuDidClose(_ menu: NSMenu)', app)
+        self.assertIn('private var menuRefreshPending = false', app)
+        self.assertIn('guard !menuIsOpen else', app)
+        self.assertIn('func runMenuSmoke() throws', app)
+        self.assertIn('TOKEN_METER_MENUBAR_MENU_SMOKE', self.source)
+        self.assertIn('native-menu=ready sessions=direct follow-latest=direct', self.source)
+        self.assertNotIn('private let popover = NSPopover()', app)
+        self.assertNotIn('popover.show(relativeTo: button.bounds', app)
+        self.assertNotIn('NSSegmentedControl', app)
 
-    def test_run_slip_leads_with_real_session_names_and_fits_three_rows(self):
+    def test_native_menu_exposes_direct_session_following(self):
         self.assertIn('let selectedSessionID = string(selection["selected_id"])', self.source)
-        self.assertIn('sessions.first { $0.id == snapshot.selectedSessionID }?.identifier', self.source)
-        self.assertIn('textButton(session.identifier, action: #selector(selectSession(_:))', self.source)
-        self.assertIn('item.cell?.lineBreakMode = .byTruncatingTail', self.source)
-        self.assertIn('label(session.providerName, size: 10.5', self.source)
-        self.assertIn('stack.alignment = .leading', self.source)
-        self.assertIn('row.widthAnchor.constraint(equalTo: stack.widthAnchor)', self.source)
-        self.assertIn('if snapshot.pinnedSession', self.source)
-        self.assertIn('textButton("Follow latest", action: #selector(followLatest(_:)), primary: true)', self.source)
-        self.assertNotIn('private func makeRecommendation()', self.source)
-        self.assertNotIn('textButton(session.menuTitle', self.source)
+        self.assertIn('let selectedSession = recentSessions.first { $0.id == snapshot.selectedSessionID }', self.source)
+        self.assertIn('NSMenuItem(title: "Follow latest", action: #selector(followLatest)', self.source)
+        self.assertIn('for session in recentSessions.prefix(5)', self.source)
+        self.assertIn('NSMenuItem(title: session.menuTitle, action: #selector(pinSession(_:))', self.source)
+        self.assertIn('item.state = pinnedSessionID == session.id ? .on : .off', self.source)
+        self.assertIn('item.representedObject = session.id', self.source)
+        self.assertIn('item.toolTip = "Follow this session · \(session.toolTip)"', self.source)
+        self.assertIn('@objc private func followLatest()', self.source)
+        self.assertIn('@objc private func pinSession(_ sender: NSMenuItem)', self.source)
+        self.assertIn('let maximumNameLength = 36', self.source)
 
-    def test_provider_tabs_and_quota_cards_are_native_and_persisted(self):
-        self.assertIn('enum MenuTab: String, CaseIterable', self.source)
-        self.assertNotIn('case overview', self.source)
-        self.assertIn('case claude', self.source)
-        self.assertIn('case codex', self.source)
-        self.assertIn('case cursor', self.source)
-        self.assertIn('button.setAccessibilityLabel("Show \\(tab.title)")', self.source)
-        self.assertIn('private func makeQuotaBody() -> NSView', self.source)
-        self.assertIn('private func makeProviderInstrument(_ provider: ProviderQuota)', self.source)
-        self.assertIn('LevelBarView(value: window.usedPercent / 100', self.source)
-        self.assertIn('tokenMeterDefaults.set(selectedTab.rawValue, forKey: selectedTabDefaultsKey)', self.source)
+    def test_provider_limits_are_preserved_in_one_compact_submenu(self):
+        self.assertIn('NSMenuItem(title: "Provider limits", action: nil', self.source)
+        self.assertIn('limitsItem.submenu = makeLimitsMenu()', self.source)
+        self.assertIn('private func makeLimitsMenu() -> NSMenu', self.source)
+        self.assertIn('for provider in providerQuotas', self.source)
+        self.assertIn('for window in provider.windows', self.source)
+        self.assertIn('"\\(window.label) · \\(window.percentLabel) used"', self.source)
+        self.assertIn('window.resetLabel, window.pace?.summary, provider.freshnessLabel', self.source)
         self.assertIn('coverageNote: string(dict["coverage_note"]) ?? ""', self.source)
-        self.assertIn('label(provider.coverageNote, size: 10.5', self.source)
-        self.assertIn("Only provider-reported limits are shown", self.source)
         self.assertIn('coverage=\\(coverage)', self.source)
 
     def test_menu_bar_settings_are_visible_and_quota_threshold_is_explicit(self):
-        self.assertIn('textButton("Settings", action: #selector(showSettings(_:)), primary: false)', self.source)
+        self.assertIn('NSMenuItem(title: "More", action: nil', self.source)
+        self.assertIn('moreItem.submenu = makeSettingsMenu()', self.source)
+        self.assertIn('addAction("Quit Token Meter", #selector(quit))', self.source)
+        self.assertNotIn('Quit Token Meter Menubar', self.source)
         self.assertIn('NSMenuItem(title: "Quota alert threshold (\\(quotaAlertThreshold)%)"', self.source)
         self.assertIn('NSMenu(title: "Quota alert threshold")', self.source)
         self.assertIn('NSMenuItem(title: "\\(threshold)% used"', self.source)
@@ -3227,8 +3255,16 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('for metric in TitleMetric.allCases', self.source)
         self.assertIn('#selector(toggleTitleMetric(_:))', self.source)
         self.assertIn('TitleMetric.allCases.filter(titleMetrics.contains).map(\\.rawValue)', self.source)
+        self.assertIn('let title = selectedStatusTitle()', self.source)
+        self.assertIn('case .cost: return snapshot.costLabel', self.source)
+        self.assertIn('case .speed: return snapshot.outputSpeedLabel', self.source)
+        self.assertIn('case .context: return snapshot.contextLabel', self.source)
+        self.assertIn('case .model: return snapshot.model', self.source)
+        self.assertIn('case .limits: return limitsStatusTitle()', self.source)
+        self.assertNotIn('private func compactStatusTitle()', self.source)
         self.assertIn('private func limitsStatusTitle() -> String?', self.source)
-        self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel) · \\(constrained.window.compactKind)"', self.source)
+        self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel)"', self.source)
+        self.assertNotIn('constrained.window.compactKind', self.source)
         self.assertIn('var toolTip = "Token Meter · \\(title)\\n\\(snapshot.statusTooltip)"', self.source)
         self.assertIn('if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }', self.source)
         self.assertIn('let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()', self.source)
@@ -3239,7 +3275,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('"--", title, body', self.source)
 
     def test_status_item_uses_a_compact_cross_display_hit_target(self):
-        self.assertIn('NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)', self.source)
+        self.assertIn('NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)', self.source)
         self.assertIn('private func splunkChevronImage(', self.source)
         self.assertIn('private func statusTitleImage(_ title: String) -> NSImage', self.source)
         self.assertIn('button.image = splunkChevronImage()', self.source)
@@ -3257,7 +3293,11 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('enum StatusDisplayMode: String, CaseIterable', self.source)
         self.assertIn('StatusDisplayMode.text.rawValue', self.source)
         self.assertIn('screen.visibleFrame.width < 1200 ? .icon : .text', self.source)
-        self.assertIn('private func compactStatusTitle() -> String', self.source)
+        self.assertIn('private func selectedStatusTitle() -> String', self.source)
+        self.assertIn('let renderedTitle = statusItem.button?.accessibilityValue() as? String', self.source)
+        self.assertIn('renderedTitle == expectedTitle', self.source)
+        self.assertIn('titleMetrics = Set(TitleMetric.allCases)', self.source)
+        self.assertIn('titleMetrics = originalTitleMetrics', self.source)
         self.assertIn('statusItem.autosaveName = statusItemAutosaveName', self.source)
         self.assertIn('"NSStatusItem Preferred Position \\(statusItemAutosaveName)"', self.source)
         self.assertIn('statusItemInitialPreferredPosition = 50', self.source)
@@ -3265,12 +3305,21 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertNotIn('statusTitleColor(for:', self.source)
         self.assertNotIn('NSWorkspace.didActivateApplicationNotification', self.source)
 
-    def test_run_slip_leads_with_cost_and_output_pace(self):
-        ledger_position = self.source.index('let ledger = makeMetricLedger()')
-        pressure_position = self.source.index('let pressure = vertical(spacing: 3)')
-        self.assertLess(ledger_position, pressure_position)
-        self.assertIn('metricColumn("Run cost", snapshot.costLabel', self.source)
-        self.assertIn('metricColumn("Output pace", snapshot.outputSpeedLabel', self.source)
+    def test_native_menu_leads_with_cost_and_context_only(self):
+        rebuild = self.source[
+            self.source.index("    private func rebuildMenu()"):
+            self.source.index("    private var activeShortcutKeyCode")
+        ]
+        sessions_position = rebuild.index('addSessionPicker()')
+        cost_position = rebuild.index('addMetricRow("Cost", snapshot.costLabel')
+        limits_position = rebuild.index('let limitsItem = NSMenuItem(title: "Provider limits"')
+        self.assertLess(sessions_position, cost_position)
+        self.assertLess(cost_position, limits_position)
+        self.assertIn('"Context",\n                contextDetail', rebuild)
+        self.assertNotIn('addMetricRow("Tokens"', rebuild)
+        self.assertNotIn('addMetricRow("Cache"', rebuild)
+        self.assertNotIn('addMetricRow("Output', rebuild)
+        self.assertNotIn('ExecutionTraceView', rebuild)
 
     def test_global_toggle_shortcut_is_configurable_and_persisted(self):
         self.assertIn('import Carbon.HIToolbox', self.source)
@@ -3278,34 +3327,38 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('case .controlOptionT: return "⌃⌥T"', self.source)
         self.assertIn('private let globalShortcutDefaultsKey = "TokenMeterGlobalShortcut"', self.source)
         self.assertIn('RegisterEventHotKey(', self.source)
-        self.assertIn('delegate.togglePopover(nil)', self.source)
+        self.assertIn('delegate.openMenu()', self.source)
         self.assertIn('NSMenuItem(title: "Keyboard shortcut"', self.source)
         self.assertIn('case .custom: return "Custom…"', self.source)
         self.assertIn('@objc private func configureCustomShortcut(_ sender: NSMenuItem)', self.source)
         self.assertIn('NSEvent.addLocalMonitorForEvents(matching: .keyDown)', self.source)
         self.assertIn('tokenMeterDefaults.set(shortcut.rawValue, forKey: globalShortcutDefaultsKey)', self.source)
 
-    def test_native_header_uses_bundled_splunk_wordmark(self):
-        self.assertIn('private func splunkWordmarkImage() -> NSImage?', self.source)
-        self.assertIn('assets/brand/logo-splunk-acc-rgb-w.png', self.source)
-        self.assertIn('if let wordmark = splunkWordmarkImage()', self.source)
-        self.assertIn('logo.setAccessibilityLabel("Splunk")', self.source)
-        self.assertIn('row.addArrangedSubview(label("Token Meter"', self.source)
-        self.assertIn('native-brand=Splunk wordmark=', self.source)
+    def test_native_menu_header_has_no_splunk_wordmark(self):
+        header = self.source[
+            self.source.index("    private func addHeader()"):
+            self.source.index("    private func addSessionPicker()")
+        ]
+        self.assertIn('titleText = selectedSession?.identifier ?? snapshot.menuTitle', header)
+        self.assertIn('"Following latest"', header)
+        self.assertIn('"Following this session"', header)
+        self.assertNotIn('splunkWordmarkImage', header)
+        self.assertNotIn('logo', header)
 
     def test_monthly_budget_status_and_transition_alerts_are_native(self):
         for marker in (
             'struct MonthlyBudget',
-            'textButton(budget.compactLabel, action: #selector(openBudget(_:))',
+            'let prefix = budget.anyExceeded ? "Budget alert" : "Monthly budget"',
+            'title: "\(prefix) · \(budget.compactLabel)"',
             'tokenMeterBudgetSettingsURL',
-            'label("Monthly budget", size: 11.5', 'private func evaluateBudgetNotifications()',
+            'action: #selector(openBudgetSettings)', 'private func evaluateBudgetNotifications()',
             'budgetNotificationStatesDefaultsKey', 'previous.month == budget.month',
             'firedThresholds: Set(budget.thresholds.filter',
             'if budget.nativeNotifications', 'monthly budget reached',
             'var exceeded: Bool { configured && percent >= 100 }',
             'var anyExceeded: Bool { exceeded || !exceededRuntimeScopes.isEmpty }',
             'if let scope = exceededRuntimeScopes.first',
-            'return "⚠︎ \\(scope.label) · \\(Int(scope.percent.rounded()))%"',
+            'return "\\(scope.label) · \\(Int(scope.percent.rounded()))%"',
             'budgetExceededMonthsDefaultsKey',
             'budgetExceededNotificationMonths',
             'title: "Overall monthly budget exceeded"',
@@ -3786,6 +3839,9 @@ class MenubarSessionTests(unittest.TestCase):
             "executions": [{"idx": 1, "model": "gpt-5.6-sol", "context_pct": 0.2}],
             "throughput": {"available": True, "output_tps": 42.5, "basis": "end_to_end",
                            "sample_count": 2, "timing_coverage": 0.75},
+            "live_throughput": {"available": True, "output_tps": 18.25,
+                                "basis": "live_end_to_end", "completed_steps": 3,
+                                "measured_output_tokens": 365, "measured_seconds": 20},
         }
         with mock.patch.object(meter, "STATE", {"source": {"id": "live"}}), \
                 mock.patch.object(meter, "cached_session_sources", return_value=(sources, True)), \
@@ -3806,6 +3862,11 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertEqual(payload["throughput"], {
             "available": True, "output_tps": 42.5, "basis": "end_to_end",
             "sample_count": 2, "timing_coverage": 0.75,
+        })
+        self.assertEqual(payload["live_throughput"], {
+            "available": True, "output_tps": 18.25, "basis": "live_end_to_end",
+            "completed_steps": 3, "measured_output_tokens": 365,
+            "measured_seconds": 20,
         })
 
     def test_cold_start_does_not_rebuild_all_history_for_each_menu_poll(self):
@@ -3896,6 +3957,25 @@ class ClaudeDesktopDiscoveryTests(unittest.TestCase):
                 paths = set(meter.claude_desktop_metadata_paths())
 
         self.assertEqual(paths, {str(standard_metadata), str(third_party_metadata)})
+
+    def test_default_discovery_recurses_below_known_session_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            standard = Path(tmp) / "Claude"
+            third_party = Path(tmp) / "Claude-3p"
+            nested_metadata = (
+                standard / "local-agent-mode-sessions" / "account" / "workspace" /
+                "additional-level" / "local_nested.json"
+            )
+            unrelated_metadata = standard / "unrelated" / "local_ignore.json"
+            nested_metadata.parent.mkdir(parents=True)
+            unrelated_metadata.parent.mkdir(parents=True)
+            nested_metadata.write_text(json.dumps({"cliSessionId": "nested-cli"}))
+            unrelated_metadata.write_text(json.dumps({"cliSessionId": "ignore-cli"}))
+
+            with mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", [str(standard), str(third_party)]):
+                paths = set(meter.claude_desktop_metadata_paths())
+
+        self.assertEqual(paths, {str(nested_metadata)})
 
     def test_indexes_desktop_metadata_by_cli_session(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -4495,6 +4575,8 @@ class InstallationTests(unittest.TestCase):
             script.count('launchctl print "gui/$UID/$label"'), 3,
         )
         self.assertEqual(script.count("<key>KeepAlive</key>"), 2)
+        self.assertEqual(script.count("<key>SuccessfulExit</key>"), 1)
+        self.assertEqual(script.count("<key>SuccessfulExit</key>\n    <false/>"), 1)
         self.assertNotIn("start-token-meter", script)
         self.assertIn("all|server-only|menubar-only", script)
         self.assertIn("server-only)", script)

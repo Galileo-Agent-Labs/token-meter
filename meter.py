@@ -2031,8 +2031,11 @@ def claude_desktop_metadata_paths(root=None):
         return glob.glob(os.path.join(root, "**", "local_*.json"), recursive=True)
     paths = []
     for data_root in CLAUDE_DESKTOP_DATA_ROOTS:
-        paths.extend(glob.glob(os.path.join(data_root, "claude-code-sessions", "*", "*", "local_*.json")))
-        paths.extend(glob.glob(os.path.join(data_root, "local-agent-mode-sessions", "*", "*", "local_*.json")))
+        for session_dir in ("claude-code-sessions", "local-agent-mode-sessions"):
+            paths.extend(glob.glob(
+                os.path.join(data_root, session_dir, "**", "local_*.json"),
+                recursive=True,
+            ))
     return paths
 
 
@@ -2706,6 +2709,74 @@ def codex_performance_samples(objs, default_model=None):
         if ptype == "task_complete":
             close_task(payload, ts)
     return samples
+
+
+def codex_live_performance_summary(objs):
+    """Return provisional pace from completed checkpoints in the active task.
+
+    Final throughput remains gated on ``task_complete`` in
+    ``codex_performance_samples``. This separate summary lets the native menu
+    show useful progress sooner without admitting an unfinished task into
+    historical/model analytics. The denominator stops at the latest completed
+    token checkpoint, so the displayed value changes only when another step
+    completes rather than decaying while a tool is still running.
+    """
+    current = None
+
+    for obj in objs:
+        payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+        ptype = payload.get("type")
+        ts = parse_iso(obj.get("timestamp", "")) or 0
+        if ptype == "task_started":
+            current = {
+                "started_ts": ts,
+                "latest_checkpoint_ts": 0,
+                "output_tokens": 0,
+                "completed_steps": 0,
+            }
+            continue
+        if ptype == "task_complete":
+            current = None
+            continue
+        if ptype != "token_count" or not current:
+            continue
+        raw = ((payload.get("info") or {}).get("last_token_usage") or {})
+        if not raw:
+            continue
+        output_tokens = usage_io_tokens(codex_usage(raw))[1]
+        if output_tokens <= 0 or not ts:
+            continue
+        current["output_tokens"] += output_tokens
+        current["completed_steps"] += 1
+        current["latest_checkpoint_ts"] = max(
+            float(current.get("latest_checkpoint_ts") or 0), ts,
+        )
+
+    empty = {
+        "available": False,
+        "output_tps": 0,
+        "basis": "unavailable",
+        "completed_steps": 0,
+        "measured_output_tokens": 0,
+        "measured_seconds": 0,
+    }
+    if not current:
+        return empty
+    started_ts = float(current.get("started_ts") or 0)
+    checkpoint_ts = float(current.get("latest_checkpoint_ts") or 0)
+    measured_seconds = checkpoint_ts - started_ts
+    measured_output = int(current.get("output_tokens") or 0)
+    completed_steps = int(current.get("completed_steps") or 0)
+    if measured_seconds <= 0 or measured_output <= 0 or completed_steps <= 0:
+        return empty
+    return {
+        "available": True,
+        "output_tps": measured_output / measured_seconds,
+        "basis": "live_end_to_end",
+        "completed_steps": completed_steps,
+        "measured_output_tokens": measured_output,
+        "measured_seconds": measured_seconds,
+    }
 
 
 def _wait_sample(group, end_ts, duration_s, timing_basis, provider,
@@ -4889,6 +4960,7 @@ def recompute_codex(source):
                         primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs),
                         wait_samples)
     state["throughput"] = performance_summary(codex_performance_samples(objs, source.get("model")), tot["output"])
+    state["live_throughput"] = codex_live_performance_summary(objs)
     return state
 
 
@@ -9632,6 +9704,7 @@ def menubar_state(session_id=None):
     context = st.get("context") or {}
     cache = st.get("cache") or {}
     throughput = st.get("throughput") or {}
+    live_throughput = st.get("live_throughput") or {}
     activity = menubar_activity(st)
     recommendation = menubar_recommendation(st)
     verdict = menubar_verdict(st, recommendation)
@@ -9669,6 +9742,14 @@ def menubar_state(session_id=None):
             "basis": throughput.get("basis") or "unavailable",
             "sample_count": throughput.get("sample_count", 0),
             "timing_coverage": throughput.get("timing_coverage", 0),
+        },
+        "live_throughput": {
+            "available": bool(live_throughput.get("available")),
+            "output_tps": live_throughput.get("output_tps", 0),
+            "basis": live_throughput.get("basis") or "unavailable",
+            "completed_steps": live_throughput.get("completed_steps", 0),
+            "measured_output_tokens": live_throughput.get("measured_output_tokens", 0),
+            "measured_seconds": live_throughput.get("measured_seconds", 0),
         },
         "cache": {
             "available": bool(availability.get("cache", True)),

@@ -434,6 +434,7 @@ struct RecentSession {
         switch provider.lowercased() {
         case "codex": return "Codex"
         case "cursor": return "Cursor"
+        case "opencode": return "OpenCode"
         default: return "Claude"
         }
     }
@@ -463,6 +464,7 @@ struct RecentSession {
         switch provider.lowercased() {
         case "codex": return "terminal"
         case "cursor": return "cursorarrow"
+        case "opencode": return "gearshape.2"
         default: return "sparkles"
         }
     }

@@ -78,6 +78,12 @@ else:
         "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
     )
     CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
+# OpenCode keeps every session, message, and message part in one SQLite
+# database (WAL-mode, held open while OpenCode runs). Override OPENCODE_DB
+# so tests can point at a hermetic fixture database.
+OPENCODE_DB = os.path.expanduser(
+    os.environ.get("OPENCODE_DB", os.path.join("~/.local/share/opencode", "opencode.db"))
+)
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -102,7 +108,7 @@ MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
-BUDGET_PROVIDERS = ("claude", "codex", "cursor")
+BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode")
 DEFAULT_RUNTIME_BUDGET = 1_000.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
@@ -1822,7 +1828,7 @@ def _cursor_db_connection(path=None):
     uri = f"file:{quote(path, safe='/')}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=0.05)
     conn.execute("PRAGMA query_only = ON")
-    conn.execute("PRAGMA busy_timeout = 50")
+    conn.execute("PRAGMA busy_timeout = 3000")
     return conn
 
 
@@ -2026,6 +2032,117 @@ def cursor_enrichment_mtime(db_path=None, log_root=None):
     return max(values, default=0)
 
 
+def opencode_db_path():
+    return os.path.abspath(os.path.expanduser(OPENCODE_DB))
+
+
+_opencode_models_cache = None
+_OPECODE_MODELS_PATH = os.path.expanduser("~/.cache/opencode/models.json")
+
+
+def _load_opencode_models():
+    global _opencode_models_cache
+    if _opencode_models_cache is not None:
+        return _opencode_models_cache
+    try:
+        with open(_OPECODE_MODELS_PATH, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        _opencode_models_cache = {}
+        return _opencode_models_cache
+    catalog = {}
+    if isinstance(raw, dict):
+        for provider_info in raw.values():
+            if not isinstance(provider_info, dict):
+                continue
+            for model_id, model_info in (provider_info.get("models") or {}).items():
+                limit = (model_info or {}).get("limit") or {}
+                window = int(limit.get("context") or 0)
+                if window:
+                    catalog[str(model_id)] = window
+    _opencode_models_cache = catalog
+    return catalog
+
+
+def _opencode_model_window(model_id):
+    models = _load_opencode_models()
+    return models.get(str(model_id or "")) or None
+
+
+def _opencode_db_connection(path=None):
+    """Open OpenCode's live database read-only while retaining WAL visibility."""
+    path = os.path.abspath(os.path.expanduser(path or opencode_db_path()))
+    uri = f"file:{quote(path, safe='/')}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=1.0)
+    conn.execute("PRAGMA query_only = ON")
+    conn.execute("PRAGMA busy_timeout = 1000")
+    return conn
+
+
+def _opencode_json(value, default=None):
+    """Decode one OpenCode SQLite JSON text value without failing the session."""
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return default
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
+    return decoded if isinstance(decoded, dict) else default
+
+
+def opencode_session_sources(db_path=None):
+    """Return top-level OpenCode sessions from the read-only session table."""
+    sources = []
+    try:
+        with _opencode_db_connection(db_path) as conn:
+            rows = conn.execute(
+                "SELECT id, directory, COALESCE(title,''), COALESCE(agent,''), "
+                "COALESCE(model,''), time_created, time_updated, time_archived "
+                "FROM session WHERE parent_id IS NULL "
+                "AND time_archived IS NULL "
+                "ORDER BY time_updated DESC"
+            ).fetchall()
+    except (OSError, sqlite3.Error):
+        return sources
+    for sid, directory, title, agent, model_raw, created, updated, archived in rows:
+        model = _opencode_json(model_raw, {}) or {}
+        model_name = str(model.get("id") or "unknown")
+        title = str(title or "")
+        if title.startswith("New session") or not title.strip():
+            title = ""
+        updated_s = 0.0
+        try:
+            updated_s = float(int(updated or 0)) / 1000.0
+        except (TypeError, ValueError):
+            updated_s = 0.0
+        project = home_shorten(str(directory or "")) or agent or "No project"
+        sources.append({
+            "provider": "opencode",
+            "client": "opencode",
+            "label": "OpenCode",
+            "runtime": "OpenCode",
+            "id": str(sid),
+            "session": str(sid),
+            "path": "opencode:" + str(sid),
+            "project": project,
+            "mtime": updated_s,
+            "signature_mtime": updated_s,
+            "title": compact_text(title, 90) or None,
+            "model": model_name,
+            "model_provider": model.get("providerID") or "",
+            "agent": str(agent or ""),
+            "tools_loaded": 0,
+        })
+    return sources
+
+
 def claude_desktop_metadata_paths(root=None):
     if root:
         return glob.glob(os.path.join(root, "**", "local_*.json"), recursive=True)
@@ -2217,6 +2334,8 @@ def all_session_sources():
 
     sources.extend(cursor_sources.values())
 
+    sources.extend(opencode_session_sources())
+
     discovered_paths = {source.get("path") for source in sources if source.get("path")}
     with _source_metadata_lock:
         for stale_path in set(_codex_meta_cache) - discovered_paths:
@@ -2251,6 +2370,12 @@ def cached_session_sources():
 
 
 def source_from_path(path):
+    if str(path or "").startswith("opencode:"):
+        sid = str(path).split(":", 1)[1]
+        for source in opencode_session_sources():
+            if source["id"] == sid:
+                return source
+        return None
     for source in all_session_sources():
         if source["path"] == path:
             return source
@@ -2368,6 +2493,48 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
         "provider": source.get("provider") or "",
         "trash_name": os.path.basename(destination),
         "message": "Session log moved to Trash.",
+    }
+
+
+def remove_opencode_session(session_id, db_path=None):
+    """Remove one OpenCode session and its messages/parts from the database.
+
+    OpenCode has no per-session file to move to Trash, so deletion removes the
+    session rows from the user-owned database. The connection briefly opens for
+    write; all other OpenCode access stays read-only.
+    """
+    session_id = str(session_id or "").strip()
+    if not session_id or len(session_id) > 240:
+        return {"ok": False, "error": "A valid session ID is required.", "error_code": "invalid_id"}
+    db_path = os.path.abspath(os.path.expanduser(db_path or opencode_db_path()))
+    try:
+        conn = sqlite3.connect(db_path, timeout=2.0)
+        try:
+            conn.execute("PRAGMA busy_timeout = 2000")
+            exists = conn.execute(
+                "SELECT 1 FROM session WHERE id = ? AND parent_id IS NULL", (session_id,)
+            ).fetchone()
+            if not exists:
+                return {"ok": False, "error": "Session is not in the discovered OpenCode inventory.",
+                        "error_code": "not_found"}
+            conn.execute("DELETE FROM part WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM message WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM session_diff WHERE id = ?", (session_id,))
+            conn.execute("DELETE FROM session WHERE id = ?", (session_id,))
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {"ok": False, "error": "Token Meter could not remove the OpenCode session.",
+                "error_code": "delete_failed"}
+    with _session_state_cache_lock:
+        _session_state_cache.pop("opencode:" + session_id, None)
+    _xsess["data"], _xsess["at"] = None, 0.0
+    return {
+        "ok": True, "changed": True, "session_id": session_id,
+        "title": "(OpenCode session)", "project": "",
+        "provider": "opencode",
+        "message": "OpenCode session removed from the local database.",
     }
 
 
@@ -4333,6 +4500,370 @@ def recompute_cursor(source):
     return state
 
 
+def _opencode_int(value, default=0):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+# OpenCode records an authoritative total cost per message from its own
+# provider. No public rate table can cover arbitrary OpenCode backends, so
+# Token Meter distributes that exact total across the input / cache-write /
+# cache-read / output buckets using a documented token-weighted proxy that
+# preserves the authoritative total. The proxy does not invent cost.
+_OPENCODE_WEIGHT = {"input": 1.0, "cache_write": 1.25, "cache_read": 0.10,
+                    "output": 5.0, "reasoning": 5.0}
+
+
+def _opencode_distribute(msg_cost, usage):
+    """Split one authoritative OpenCode-reported cost into display buckets.
+
+    OpenCode records an authoritative total cost per message from its own
+    provider. No bundled rate table can cover arbitrary OpenCode backends, so
+    Token Meter distributes that exact total across the input / cache-write /
+    cache-read / output buckets with a documented token-weighted proxy. The
+    total is never invented; only its bucket split is estimated.
+    """
+    msg_cost = float(msg_cost or 0.0)
+    buckets = {
+        "input": usage.get("input_tokens", 0),
+        "cache_write": usage.get("cache_creation_input_tokens", 0),
+        "cache_read": usage.get("cache_read_input_tokens", 0),
+        "output": usage.get("output_tokens", 0),
+        "reasoning": usage.get("reasoning_tokens", 0),
+    }
+    weights = {
+        key: float(buckets.get(key) or 0) * _OPENCODE_WEIGHT.get(key, 0)
+        for key in buckets
+    }
+    total_weight = sum(weights.values())
+    if msg_cost <= 0 or total_weight <= 0:
+        return {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": msg_cost}
+    per_weight = msg_cost / total_weight
+    breakdown = {key: w * per_weight for key, w in weights.items()}
+    breakdown["output"] += breakdown["reasoning"]
+    return {"input": round(breakdown["input"], 6),
+            "cache_write": round(breakdown["cache_write"], 6),
+            "cache_read": round(breakdown["cache_read"], 6),
+            "output": round(breakdown["output"], 6)}
+
+
+def recompute_opencode(source):
+    """Build usage from OpenCode's authoritative per-message tokens and cost.
+
+    The session row provides cumulative aggregates that are always accurate.
+    Per-message queries are limited to the most recent turns so live watcher
+    recompute stays fast even while the owning process writes the WAL DB.
+    """
+    sid = str(source.get("id") or "")
+    try:
+        with _opencode_db_connection(opencode_db_path()) as conn:
+            session_row = conn.execute(
+                "SELECT tokens_input, tokens_output, tokens_reasoning, "
+                "tokens_cache_read, tokens_cache_write, cost, time_created, time_updated, model "
+                "FROM session WHERE id = ?", (sid,)
+            ).fetchone()
+            if not session_row:
+                return None
+            s_input, s_output, s_reasoning, s_cr, s_cw, s_cost, created, updated, session_model_raw = session_row
+            message_rows = conn.execute(
+                "SELECT id, data FROM message WHERE session_id=? "
+                "ORDER BY time_created DESC, id DESC LIMIT 200",
+                (sid,)).fetchall()
+            if not message_rows:
+                message_rows = []
+            mid_list = [row[0] for row in message_rows]
+            if mid_list:
+                placeholders = ",".join("?" for _ in mid_list)
+                part_rows = conn.execute(
+                    f"SELECT message_id, data FROM part WHERE message_id IN ({placeholders}) "
+                    "ORDER BY time_created ASC",
+                    mid_list).fetchall()
+            else:
+                part_rows = []
+    except (OSError, sqlite3.Error):
+        return None
+
+    message_rows.reverse()
+
+    parts_by_message = defaultdict(list)
+    for message_id, data_raw in part_rows:
+        data = _opencode_json(data_raw, None)
+        if isinstance(data, dict) and data.get("type") in ("tool", "reasoning"):
+            parts_by_message[str(message_id)].append(data)
+
+    tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    series, executions, trace = [], [], []
+    wait_samples, performance_samples, active_intervals = [], [], []
+    model_tok, model_cost = defaultdict(int), defaultdict(float)
+    think_tokens = 0
+    think_turns = 0
+    think_cost = 0.0
+    routine_out = 0
+    completed = 0
+    first_ts = last_ts = 0.0
+    biggest = None
+
+    for message_id, data_raw in message_rows:
+        data = _opencode_json(data_raw, None)
+        if not isinstance(data, dict) or data.get("role") != "assistant":
+            continue
+        tokens = data.get("tokens") or {}
+        if not isinstance(tokens, dict):
+            tokens = {}
+        cache = tokens.get("cache") or {}
+        if not isinstance(cache, dict):
+            cache = {}
+        in_tok = _opencode_int(tokens.get("input"))
+        cache_write = _opencode_int(cache.get("write"))
+        cache_read = _opencode_int(cache.get("read"))
+        out_tok = _opencode_int(tokens.get("output"))
+        reasoning_tok = _opencode_int(tokens.get("reasoning"))
+        total_tok = in_tok + cache_write + cache_read + out_tok + reasoning_tok
+        msg_cost = float(data.get("cost") or 0.0)
+        if total_tok <= 0 and msg_cost <= 0:
+            continue
+        idx = len(series) + 1
+        model = str(data.get("modelID") or source.get("model") or "unknown")
+        time_obj = data.get("time")
+        created = _opencode_int(time_obj.get("created")) if isinstance(time_obj, dict) else 0
+        completed_ms = _opencode_int(time_obj.get("completed")) if isinstance(time_obj, dict) else 0
+        ts = (created / 1000.0) if created else (last_ts or 0.0)
+        end_ts = (completed_ms / 1000.0) if completed_ms else ts
+        duration_ms = (completed_ms - created) if (created and completed_ms) else 0
+        usage = {
+            "input_tokens": in_tok, "cache_creation_input_tokens": cache_write,
+            "cache_read_input_tokens": cache_read, "output_tokens": out_tok,
+            "reasoning_tokens": reasoning_tok,
+        }
+        c = _opencode_distribute(msg_cost, usage)
+        tc = msg_cost
+        cache_tok = cache_write + cache_read
+        fresh_tok = in_tok
+        model_tok[model] += total_tok
+        model_cost[model] += tc
+        tot["input"] += in_tok
+        tot["cache_write"] += cache_write
+        tot["cache_read"] += cache_read
+        tot["output"] += out_tok
+        for key in cost:
+            cost[key] += c[key]
+        think_now = reasoning_tok > 0
+        if think_now:
+            think_tokens += reasoning_tok
+            think_turns += 1
+            think_cost += reasoning_tok * (_OPENCODE_WEIGHT["output"] / 1e6)
+        routine_out += max(0, (out_tok - reasoning_tok) if think_now else out_tok)
+        if data.get("finish") == "turn_complete":
+            completed += 1
+
+        tools = []
+        part_reasoning_ms = 0.0
+        for part in parts_by_message.get(str(message_id), []):
+            ptype = part.get("type")
+            if ptype == "tool":
+                name = str(part.get("tool") or "?")
+                ident = tool_identity(name)
+                call_id = str(part.get("callID") or "")
+                state = part.get("state") or {}
+                status = str(state.get("status") or "").lower()
+                error = bool(state.get("error") not in (None, "", False)) or status in ("error", "failed")
+                args = state.get("input")
+                result_value = state.get("output")
+                result_present = result_value not in (None, "", [], {})
+                output_chars = observable_output_chars(result_value) if result_present else 0
+                tools.append({
+                    **ident, "id": call_id, "call_id": call_id,
+                    "args_chars": len(json.dumps(args or "")) if args is not None else 0,
+                    "args_fingerprint": argument_fingerprint(args),
+                    "output_chars": output_chars,
+                    "output_tokens": output_chars // CHARS_PER_TOKEN,
+                    "result_available": result_present,
+                    "error": error,
+                    "skills": skill_names_from_value(args, name),
+                })
+            elif ptype == "reasoning":
+                rtime = part.get("time") or {}
+                rstart = _opencode_int(rtime.get("start"))
+                rend = _opencode_int(rtime.get("end"))
+                if rend and rstart:
+                    part_reasoning_ms += max(0, rend - rstart)
+
+        if first_ts:
+            first_ts = min(first_ts, ts) if ts else first_ts
+        else:
+            first_ts = ts
+        if end_ts:
+            last_ts = max(last_ts, end_ts)
+
+        cost_available = msg_cost > 0
+        execution_availability = metric_availability(
+            "opencode", cost=cost_available, tokens=bool(total_tok > 0),
+            input_tokens=bool(in_tok or cache_tok), output_tokens=bool(out_tok),
+            throughput=bool(duration_ms and out_tok),
+            context=False, timing=bool(duration_ms), tool_results=True,
+        )
+        for tool in tools:
+            trace.append(trace_event(
+                ts, "tool_call", tool["display"], tool["namespace"], idx,
+                tool=tool["name"], severity="tool", model=model,
+                args_chars=tool["args_chars"], tool_kind=tool["kind"],
+            ))
+            if tool["result_available"] or tool["error"]:
+                trace.append(trace_event(
+                    ts, "tool_result", tool["display"],
+                    f"~{tool['output_tokens']:,} returned tokens" if tool["result_available"] else "Tool error",
+                    idx, tool=tool["name"], tokens=tool["output_tokens"],
+                    severity="warn" if tool["error"] else "retrieval", model=model,
+                    output_chars=tool["output_chars"],
+                    retrieval_tokens=tool["output_tokens"], error=tool["error"],
+                ))
+        if part_reasoning_ms or think_now:
+            trace.append(trace_event(
+                ts, "reasoning", "Reasoning",
+                duration_label(part_reasoning_ms / 1000.0) if part_reasoning_ms
+                else f"{reasoning_tok:,} reasoning tokens",
+                idx, tokens=reasoning_tok, severity="reasoning", model=model,
+                duration_ms=part_reasoning_ms or None, output_tokens=reasoning_tok,
+            ))
+        trace.append(trace_event(
+            ts, "message", "Assistant turn",
+            f"{out_tok:,} out / {in_tok + cache_tok:,} in", idx,
+            tokens=total_tok, cost=tc, severity="usage", model=model,
+            input_tokens=in_tok + cache_tok, output_tokens=out_tok,
+            cache_tokens=cache_tok, context_tokens=in_tok + cache_tok,
+            fresh_input_tokens=fresh_tok, cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write, tool_count=len(tools),
+            reasoning_tokens=reasoning_tok,
+        ))
+
+        active_s = duration_ms / 1000.0 if duration_ms else 0.0
+        if duration_ms:
+            active_intervals.append((ts, end_ts))
+        if duration_ms and out_tok:
+            performance_samples.append({
+                "provider": "opencode", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+                "ts": end_ts or ts, "input_tokens": in_tok + cache_tok,
+                "output_tokens": out_tok, "peak_input_tokens": in_tok + cache_tok,
+                "uncached_input_tokens": in_tok, "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write, "model_calls": 1,
+                "duration_s": active_s, "generation_s": active_s, "ttft_s": 0.0,
+                "tool_calls": len(tools), "timing_basis": "open-code response time",
+            })
+
+        series.append({
+            "i": idx, "in": in_tok + cache_tok, "out": out_tok,
+            "cost": round(tc, 4), "fresh_input": fresh_tok,
+            "cache": cache_tok, "cache_read": cache_read, "cache_write": cache_write,
+            "think": think_now, "tools": len(tools), "side": False,
+            "reasoning": reasoning_tok,
+            "user_message": "", "user_input": "",
+        })
+        executions.append({
+            "id": message_id, "idx": idx, "ts": ts or 0,
+            "time": time.strftime("%H:%M:%S", time.localtime(ts)) if ts else "",
+            "model": model,
+            "tokens": {"input": in_tok + cache_tok, "output": out_tok,
+                       "reasoning": reasoning_tok,
+                       "retrieval": sum(t["output_tokens"] for t in tools),
+                       "fresh_input": fresh_tok, "cache": cache_tok,
+                       "cache_read": cache_read, "cache_write": cache_write,
+                       "total": total_tok},
+            "cost": round(tc, 6),
+            "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
+            "tools": tools, "tool_count": len(tools),
+            "reasoning_tokens": reasoning_tok,
+            "context_tokens": in_tok + cache_tok, "context_window": None,
+            "context_pct": None, "duration_ms": duration_ms or None,
+            "summary": f"Execution {idx}: {len(tools)} tools · ${tc:.3f} OpenCode-reported"
+                       if cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable",
+            "user_message": "", "user_input": "",
+            "availability": execution_availability,
+        })
+        if biggest is None or tc > biggest["cost"]:
+            biggest = {"cost": tc, "idx": idx}
+
+    # Session row carries the authoritative cumulative totals. Override
+    # the per-message accumulation (which covers only the last 200 turns).
+    tot = {
+        "input": int(s_input or 0), "cache_write": int(s_cw or 0),
+        "cache_read": int(s_cr or 0), "output": int(s_output or 0),
+    }
+    s_cost_val = float(s_cost or 0.0)
+    total_cost = s_cost_val
+    total_tokens = sum(tot.values())
+    cost = _opencode_distribute(total_cost, {
+        "input_tokens": tot["input"], "cache_creation_input_tokens": tot["cache_write"],
+        "cache_read_input_tokens": tot["cache_read"], "output_tokens": tot["output"],
+        "reasoning_tokens": int(s_reasoning or 0),
+    })
+    if total_cost <= 0:
+        cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    tool_data = tool_summary(executions)
+    model_names = [execution.get("model") or "unknown" for execution in executions]
+    primary_model = max(set(model_names), key=model_names.count) if model_names else source.get("model") or "unknown"
+    reasoning_total = sum(int(execution.get("reasoning_tokens") or 0) for execution in executions)
+    reasoning_cost = sum(
+        float((execution.get("cost_breakdown") or {}).get("output") or 0)
+        * int(execution.get("reasoning_tokens") or 0)
+        / max(1, int((execution.get("tokens") or {}).get("output") or 0))
+        for execution in executions
+    )
+    semantic = {
+        "reasoning": think_tokens,
+        "output": max(0, routine_out),
+        "retrieval": tool_data["total_output_tokens"],
+        "coordination": 0,
+    }
+    analyses = analysis_block(
+        tot, total_cost, think_tokens, think_turns, think_cost,
+        model_tok, model_cost, tool_data, 0.0, 0, completed,
+    )
+    idle = (time.time() - last_ts) if last_ts else 1e9
+    cache_in = tot["cache_read"] + tot["cache_write"]
+    cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
+    insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series),
+                              analyses, "opencode", primary_model, False, executions)
+    source = dict(source)
+    session_model = _opencode_json(session_model_raw, {}) or {}
+    model_id = str(session_model.get("id") or source.get("model") or "")
+    context_window = _opencode_model_window(model_id)
+    context_latest = int(executions[-1].get("context_tokens") or 0) if executions else 0
+    source.update({
+        "token_estimate": False,
+        "estimate_basis": "",
+        "pricing_variant": "",
+        "context_window": context_window,
+        "context_latest": context_latest,
+    })
+    input_available = bool(executions and all(metric_available(e, "input_tokens") for e in executions))
+    output_available = bool(executions and all(metric_available(e, "output_tokens") for e in executions))
+    cost_available = total_cost > 0
+    active_s = _merge_execution_intervals(active_intervals)
+    throughput = performance_summary(performance_samples, tot["output"])
+    availability = metric_availability(
+        "opencode", cost=cost_available, tokens=bool(input_available or output_available),
+        input_tokens=input_available, output_tokens=output_available,
+        throughput=bool(throughput.get("available")),
+        context=bool(context_window), timing=bool(active_s or duration_ms),
+        tool_results=any(tool.get("result_available") for e in executions for tool in e.get("tools") or []),
+    )
+    state = build_state(
+        source, tot, cost, total_tokens, total_cost, series, executions, trace,
+        semantic, analyses, insights, first_ts, last_ts, idle, biggest, 0, False,
+        primary_model, "OpenCode-reported cost", {"duration_s": active_s, "available": bool(active_s),
+        "reported_executions": sum(bool(e.get("duration_ms")) for e in executions),
+        "observed_executions": 0, "execution_count": len(executions),
+        "basis": "OpenCode message timestamps" if active_s else "unavailable"},
+        wait_samples, availability=availability,
+    )
+    state["throughput"] = throughput
+    return state
+
+
 def recompute(source):
     if isinstance(source, str):
         source = source_from_path(source)
@@ -4344,6 +4875,8 @@ def recompute(source):
         return recompute_claude(source)
     if source["provider"] == "cursor":
         return recompute_cursor(source)
+    if source["provider"] == "opencode":
+        return recompute_opencode(source)
     return None
 
 
@@ -5842,6 +6375,81 @@ def cursor_summary(source, objs=None):
     return row
 
 
+def opencode_summary(source, objs=None):
+    """Build a cross-session OpenCode row from the session table row alone.
+
+    Reads only the session-row aggregates (tokens, cost, timestamps, model)
+    so the summary is instant even while the owning process writes the WAL DB.
+    Per-turn detail and trace are reserved for the full recompute in
+    recompute_opencode (cached after first call).
+    """
+    sid = str(source.get("id") or "")
+    try:
+        with _opencode_db_connection(opencode_db_path()) as conn:
+            row = conn.execute(
+                "SELECT tokens_input, tokens_output, tokens_reasoning, "
+                "tokens_cache_read, tokens_cache_write, cost, model, "
+                "COALESCE(time_created,0), COALESCE(time_updated,0) "
+                "FROM session WHERE id = ?", (sid,)
+            ).fetchone()
+    except (OSError, sqlite3.Error):
+        row = None
+    if not row:
+        availability = metric_availability("opencode")
+        return summary_row(
+            source, source.get("title"), 0.0, 0, 0, set(), None, None,
+            {}, {}, {}, False, availability=availability,
+        )
+    s_input, s_output, s_reasoning, s_cr, s_cw, s_cost, s_model_raw, created, updated = row
+    s_cost_val = float(s_cost or 0.0)
+    inp = int(s_input or 0)
+    out = int(s_output or 0)
+    cre = int(s_cr or 0)
+    cw = int(s_cw or 0)
+    tokens = inp + out + cre + cw
+    session_model = _opencode_json(s_model_raw, {}) or {}
+    model = str(session_model.get("id") or source.get("model") or "unknown")
+    models = {model}
+    model_cost = defaultdict(float, {model: s_cost_val})
+    model_tok = defaultdict(int, {model: tokens})
+    model_stats = {model: {
+        "cost": s_cost_val, "tokens": tokens, "input_tokens": inp,
+        "output_tokens": out, "executions": 1, "availability": metric_availability("opencode"),
+    }}
+    model_daily = {}
+    first_ts = (created / 1000.0) if created else None
+    last_ts = (updated / 1000.0) if updated else None
+    day_cost = {}
+    if last_ts and s_cost_val:
+        day = time.strftime("%Y-%m-%d", time.localtime(last_ts))
+        day_cost[day] = s_cost_val
+        model_daily = {(model, day): {
+            "model": model, "day": day, "cost": s_cost_val,
+            "input_tokens": inp, "output_tokens": out, "executions": 1,
+            "availability": metric_availability("opencode"),
+        }}
+    active = {"duration_s": max(0, (updated - created) / 1000.0) if updated and created else 0,
+              "available": bool(updated and created and updated > created),
+              "basis": "session time window"}
+    performance_samples = []
+    availability = metric_availability("opencode", cost=bool(s_cost_val > 0),
+                                       tokens=bool(tokens > 0), input_tokens=bool(inp or cre or cw),
+                                       output_tokens=bool(out), throughput=bool(active["available"] and out),
+                                       cache=bool(cre or cw), context=False)
+    row = summary_row(
+        source, source.get("title"), s_cost_val, tokens, 1, models,
+        first_ts, last_ts, model_cost, model_tok, day_cost, False, active,
+        inp, out, model_stats, list(model_daily.values()), performance_samples, [],
+        availability,
+    )
+    row["primary_model"] = model
+    row["context"] = {}
+    row["_context_samples"] = [inp + cre + cw] if inp else []
+    row["terminal"] = False
+    row["_tool_evidence"] = []
+    return row
+
+
 def session_summary(source):
     cached = _summary_cache.get(source["path"])
     mtime = source.get("signature_mtime") or source.get("mtime") or safe_mtime(source["path"])
@@ -5854,6 +6462,8 @@ def session_summary(source):
         row = claude_summary(source, objs)
     elif source["provider"] == "cursor":
         row = cursor_summary(source, objs)
+    elif source["provider"] == "opencode":
+        row = opencode_summary(source, objs)
     else:
         row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
                           {}, {}, {}, False, availability=metric_availability("unknown"))
@@ -9823,7 +10433,6 @@ def watcher():
                 time.sleep(0.5)
                 continue
             if sig != last_sig:
-                last_sig = sig
                 updated_state = recompute(cur)
                 if updated_state:
                     cache_at = _xsess.get("at") or 0.0
@@ -9834,6 +10443,7 @@ def watcher():
                     if (_xsess.get("at") or 0.0) > cache_at:
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
+                    last_sig = sig
         now = time.monotonic()
         if cross_session_refresh_due(
                 cross_dirty, membership_changed, now, last_cross_refresh):
@@ -10115,11 +10725,16 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(result), "application/json", status=status)
             return
         if req_path == "/session/delete":
-            result = trash_session_log(payload.get("session_id"))
+            session_id = payload.get("session_id")
+            source = find_session(session_id) if session_id else None
+            if source and source.get("provider") == "opencode":
+                result = remove_opencode_session(session_id)
+            else:
+                result = trash_session_log(session_id)
             if result.get("ok"):
                 result["next_session_id"] = publish_after_session_delete()
             status = 200 if result.get("ok") else (404 if result.get("error_code") == "not_found" else
-                     (500 if result.get("error_code") == "trash_failed" else 400))
+                     (500 if result.get("error_code") in ("trash_failed", "delete_failed") else 400))
             self._send(json.dumps(result), "application/json", status=status)
             return
         if req_path == "/capability/disable-unused":

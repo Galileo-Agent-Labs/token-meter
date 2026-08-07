@@ -146,6 +146,7 @@ class CursorTraceTests(unittest.TestCase):
             with mock.patch.object(meter, "CURSOR_PROJECTS", str(projects)), \
                     mock.patch.object(meter, "CURSOR_STATE_DB", str(db_path)), \
                     mock.patch.object(meter, "CURSOR_REQUEST_LOGS", str(logs)), \
+                    mock.patch.object(meter, "OPENCODE_DB", str(root / "no-opencode.db")), \
                     mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
                     mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
                     mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
@@ -5016,10 +5017,10 @@ class MonthlyBudgetTests(unittest.TestCase):
             stored = json.loads(path.read_text())
         self.assertFalse(invalid["ok"])
         self.assertTrue(result["ok"])
-        self.assertEqual(stored["budgets"]["monthly_total"], 80)
+        self.assertEqual(stored["budgets"]["monthly_total"], 1080)
         self.assertEqual(
             stored["budgets"]["allocations"],
-            {"claude": 50, "codex": 30, "cursor": 0},
+            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 1000},
         )
         self.assertIn("model_pricing", stored)
 
@@ -5040,16 +5041,16 @@ class MonthlyBudgetTests(unittest.TestCase):
                 "thresholds": [80, 90, 100],
                 "native_notifications": True,
             }, str(path))
-        self.assertEqual(loaded["monthly_total"], 3000)
+        self.assertEqual(loaded["monthly_total"], 4000)
         self.assertEqual(
             loaded["allocations"],
-            {"claude": 1000, "codex": 1000, "cursor": 1000},
+            {"claude": 1000, "codex": 1000, "cursor": 1000, "opencode": 1000},
         )
         self.assertTrue(saved["ok"])
-        self.assertEqual(saved["budgets"]["monthly_total"], 1490)
+        self.assertEqual(saved["budgets"]["monthly_total"], 2490)
         self.assertEqual(
             saved["budgets"]["allocations"],
-            {"claude": 0, "codex": 1490, "cursor": 0},
+            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 1000},
         )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
@@ -5105,13 +5106,13 @@ class MonthlyBudgetTests(unittest.TestCase):
             "native_notifications": True,
         }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
         self.assertEqual(status["spend"], 60)
-        self.assertEqual(status["budget"], 80)
-        self.assertEqual(status["remaining"], 20)
+        self.assertEqual(status["budget"], 1080)
+        self.assertEqual(status["remaining"], 1020)
         self.assertEqual(status["unallocated"], 0)
         self.assertAlmostEqual(status["projected_spend"], 186)
         self.assertTrue(status["lower_bound"])
-        self.assertEqual(status["thresholds_crossed"], [50])
-        self.assertEqual(status["next_threshold"], 80)
+        self.assertEqual(status["thresholds_crossed"], [])
+        self.assertEqual(status["next_threshold"], 50)
         claude = next(row for row in status["runtimes"] if row["provider"] == "claude")
         self.assertEqual(claude["percent"], 0.8)
 
@@ -5137,6 +5138,242 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(status["exceeded_runtimes"][0]["over_by"], 11)
         codex = next(row for row in status["runtimes"] if row["provider"] == "codex")
         self.assertTrue(codex["exceeded"])
+
+
+class OpenCodeTests(unittest.TestCase):
+    """OpenCode is discovered from its read-only SQLite database."""
+
+    def _build_db(self, root):
+        db_path = Path(root) / "opencode.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE session (id TEXT PRIMARY KEY, project_id TEXT, parent_id TEXT, "
+                     "slug TEXT, directory TEXT, title TEXT, version TEXT, time_created INTEGER, "
+                     "time_updated INTEGER, time_archived INTEGER, agent TEXT, model TEXT, cost REAL, "
+                     "tokens_input INTEGER, tokens_output INTEGER, tokens_reasoning INTEGER, "
+                     "tokens_cache_read INTEGER, tokens_cache_write INTEGER)")
+        conn.execute("CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, "
+                     "time_updated INTEGER, data TEXT)")
+        conn.execute("CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, "
+                     "time_created INTEGER, time_updated INTEGER, data TEXT)")
+        conn.execute("CREATE TABLE session_diff (id TEXT PRIMARY KEY, data TEXT)")
+        conn.execute("CREATE TABLE todo (id TEXT PRIMARY KEY, session_id TEXT)")
+        return conn
+
+    def _session_row(self, sid, directory, title, model, cost, inp, out, rea, cr, cw,
+                     updated, parent_id=None, archived=None, agent="build"):
+        return {
+            "id": sid, "project_id": "proj", "parent_id": parent_id, "slug": sid,
+            "directory": directory, "title": title, "version": "1.18.14",
+            "time_created": updated - 1000, "time_updated": updated,
+            "time_archived": archived, "agent": agent,
+            "model": json.dumps({"id": model, "providerID": "opencode-go", "variant": "high"}),
+            "cost": cost, "tokens_input": inp, "tokens_output": out,
+            "tokens_reasoning": rea, "tokens_cache_read": cr, "tokens_cache_write": cw,
+        }
+
+    def _message(self, mid, sid, data, created):
+        return (mid, sid, created, created, json.dumps(data))
+
+    def test_discovery_labels_and_filters_children_and_archived(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.5, 1000, 200, 50, 300, 0, 1_784_548_900_000)
+            child = self._session_row("ses_child", "/repo", "subagent work", "deepseek-v4-flash",
+                                      0.1, 100, 50, 0, 0, 0, 1_784_548_950_000, parent_id="ses_top")
+            archived = self._session_row("ses_arch", "/repo", "old", "deepseek-v4-pro",
+                                         0.2, 100, 50, 0, 0, 0, 1_784_548_980_000, archived=1_784_549_000_000)
+            for row in (top, child, archived):
+                conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                             (row["id"], row["project_id"], row["parent_id"], row["slug"],
+                              row["directory"], row["title"], row["version"], row["time_created"],
+                              row["time_updated"], row["time_archived"], row["agent"], row["model"],
+                              row["cost"], row["tokens_input"], row["tokens_output"],
+                              row["tokens_reasoning"], row["tokens_cache_read"], row["tokens_cache_write"]))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(db_path := root / "opencode.db")):
+                sources = meter.opencode_session_sources()
+        self.assertEqual([row["id"] for row in sources], ["ses_top"])
+        source = sources[0]
+        self.assertEqual(source["provider"], "opencode")
+        self.assertEqual(source["label"], "OpenCode")
+        self.assertEqual(source["runtime"], "OpenCode")
+        self.assertEqual(source["model"], "deepseek-v4-pro")
+        self.assertEqual(source["project"], "/repo")
+        self.assertEqual(source["path"], "opencode:ses_top")
+        self.assertAlmostEqual(source["mtime"], 1_784_548_900.0)
+        self.assertEqual(source["signature_mtime"], source["mtime"])
+        self.assertEqual(meter.source_runtime_label(source), "OpenCode")
+
+    def test_discovery_joins_all_session_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.5, 1000, 200, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (top["id"], top["project_id"], top["parent_id"], top["slug"],
+                          top["directory"], top["title"], top["version"], top["time_created"],
+                          top["time_updated"], top["time_archived"], top["agent"], top["model"],
+                          top["cost"], top["tokens_input"], top["tokens_output"],
+                          top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
+                    mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
+                    mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
+                    mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
+                    mock.patch.object(meter, "claude_desktop_index", return_value={}):
+                sources = meter.all_session_sources()
+        self.assertEqual([row["id"] for row in sources], ["ses_top"])
+        found = meter.find_session("ses_top", sources)
+        self.assertEqual(found["path"], "opencode:ses_top")
+
+    def _sample_messages(self):
+        base = 1_784_548_800_000
+        return [
+            self._message("msg1", "ses_top", {
+                "role": "assistant", "agent": "build", "modelID": "deepseek-v4-pro",
+                "providerID": "opencode-go",
+                "tokens": {"input": 1000, "output": 200, "reasoning": 50,
+                           "cache": {"write": 0, "read": 300}},
+                "cost": 0.01, "finish": "tool-calls",
+                "time": {"created": base, "completed": base + 5000},
+            }, base),
+            self._message("msg2", "ses_top", {
+                "role": "assistant", "agent": "build", "modelID": "deepseek-v4-pro",
+                "providerID": "opencode-go",
+                "tokens": {"input": 500, "output": 100, "reasoning": 0,
+                           "cache": {"write": 0, "read": 0}},
+                "cost": 0.005, "finish": "turn_complete",
+                "time": {"created": base + 60_000, "completed": base + 70_000},
+            }, base + 60_000),
+            self._message("msg3", "ses_top", {"role": "user", "text": "hi"}, base + 10_000),
+        ]
+
+    def test_recompute_opencode_reads_authoritative_tokens_and_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.015, 1500, 300, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (top["id"], top["project_id"], top["parent_id"], top["slug"],
+                          top["directory"], top["title"], top["version"], top["time_created"],
+                          top["time_updated"], top["time_archived"], top["agent"], top["model"],
+                          top["cost"], top["tokens_input"], top["tokens_output"],
+                          top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
+            for mid, sid, created, updated, data in self._sample_messages():
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (mid, sid, created, updated, data))
+            conn.execute("INSERT INTO part VALUES ('p1','msg1','ses_top',1,1,?)", (json.dumps({
+                "type": "tool", "tool": "read", "callID": "call-1",
+                "state": {"status": "completed", "input": {"filePath": "/repo/a.py"},
+                          "output": "line one\nline two"},
+            }),))
+            conn.execute("INSERT INTO part VALUES ('p2','msg1','ses_top',1,1,?)", (json.dumps({
+                "type": "reasoning", "text": "think", "time": {"start": 1_784_548_800_100, "end": 1_784_548_800_900},
+            }),))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
+                state = meter.recompute_opencode({
+                    "provider": "opencode", "id": "ses_top", "model": "deepseek-v4-pro",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo",
+                })
+        self.assertEqual(state["provider"], "opencode")
+        self.assertEqual(state["turns"], 2)
+        self.assertEqual(state["tokens"], {"input": 1500, "cache_write": 0, "cache_read": 300, "output": 300})
+        self.assertEqual(state["total_tokens"], 2100)
+        self.assertAlmostEqual(state["total_cost"], 0.015, places=6)
+        self.assertEqual(state["primary_model"], "deepseek-v4-pro")
+        self.assertTrue(state["availability"]["tokens"])
+        self.assertTrue(state["availability"]["cost"])
+        self.assertTrue(state["availability"]["context"])
+        self.assertTrue(state["timing"]["duration_available"])
+        self.assertEqual(state["timing"]["execution_count"], 2)
+        # Bucket split preserves the authoritative total.
+        self.assertAlmostEqual(sum(state["cost"][k] for k in ("input", "cache_write", "cache_read", "output")),
+                               state["total_cost"], places=6)
+        self.assertEqual(len(state["executions"]), 2)
+        self.assertEqual(state["executions"][0]["tool_count"], 1)
+        self.assertEqual(state["executions"][0]["tools"][0]["name"], "read")
+        self.assertGreater(state["executions"][0]["tools"][0]["output_tokens"], 0)
+        self.assertEqual(state["executions"][0]["reasoning_tokens"], 50)
+        self.assertEqual(state["executions"][0]["duration_ms"], 5000)
+        self.assertGreater(state["throughput"]["available"], False)
+
+    def test_recompute_dispatch_routes_opencode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.015, 1500, 300, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (top["id"], top["project_id"], top["parent_id"], top["slug"],
+                          top["directory"], top["title"], top["version"], top["time_created"],
+                          top["time_updated"], top["time_archived"], top["agent"], top["model"],
+                          top["cost"], top["tokens_input"], top["tokens_output"],
+                          top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
+            for mid, sid, created, updated, data in self._sample_messages():
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (mid, sid, created, updated, data))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
+                    mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
+                    mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
+                    mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
+                    mock.patch.object(meter, "claude_desktop_index", return_value={}):
+                state = meter.recompute({
+                    "provider": "opencode", "id": "ses_top", "model": "deepseek-v4-pro",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo",
+                })
+        self.assertIsNotNone(state)
+        self.assertEqual(state["provider"], "opencode")
+
+    def test_remove_opencode_session_deletes_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.015, 1500, 300, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (top["id"], top["project_id"], top["parent_id"], top["slug"],
+                          top["directory"], top["title"], top["version"], top["time_created"],
+                          top["time_updated"], top["time_archived"], top["agent"], top["model"],
+                          top["cost"], top["tokens_input"], top["tokens_output"],
+                          top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
+            for mid, sid, created, updated, data in self._sample_messages():
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (mid, sid, created, updated, data))
+            conn.execute("INSERT INTO part VALUES ('p1','msg1','ses_top',1,1,'{}')")
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
+                result = meter.remove_opencode_session("ses_top")
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["provider"], "opencode")
+                conn = meter._opencode_db_connection()
+                rows = conn.execute("SELECT COUNT(*) FROM message").fetchone()[0]
+                conn.close()
+                self.assertEqual(rows, 0)
+                result = meter.remove_opencode_session("ses_top")
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["error_code"], "not_found")
+
+    def test_opencode_budget_defaults_and_distribute_cost(self):
+        with mock.patch.object(meter, "OPENCODE_DB", str(Path("/nonexistent/opencode.db"))):
+            settings = meter.normalize_budget_settings({"allocations": {}})
+        self.assertEqual(settings["allocations"]["opencode"], meter.DEFAULT_RUNTIME_BUDGET)
+        usage = {"input_tokens": 1000, "cache_creation_input_tokens": 0,
+                 "cache_read_input_tokens": 500, "output_tokens": 100, "reasoning_tokens": 50}
+        split = meter._opencode_distribute(0.02, usage)
+        self.assertAlmostEqual(sum(split.values()), 0.02, places=6)
+        self.assertEqual(meter._opencode_distribute(0.0, usage)["output"], 0.0)
 
 
 if __name__ == "__main__":

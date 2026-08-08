@@ -2594,8 +2594,17 @@ def price_for(model, provider="claude", variant=None, at=None):
             or _matching_price(model, effective_model_price_table("claude", at=at))
         )
         return (price or dict(ZERO_PRICE)), True
-    if provider not in ("claude", "codex"):
+    if provider not in ("claude", "codex", "opencode"):
         return dict(ZERO_PRICE), True
+    if provider == "opencode":
+        table = effective_model_price_table("opencode", at=at)
+        price = _matching_price(model, table)
+        if price:
+            return price, False
+        # No custom price — estimate from the token-weight proxy ratios.
+        # The per-1M-token baselines are conservative defaults; the relative
+        # cache discounts are the meaningful signal for savings computation.
+        return {"input": 2.0, "output": 10.0, "cache_write": 2.50, "cache_read": 0.20}, True
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
     table = effective_model_price_table(provider, at=at)
     default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL

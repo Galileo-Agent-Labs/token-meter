@@ -6434,9 +6434,21 @@ def opencode_summary(source, objs=None):
               "available": bool(updated and created and updated > created),
               "basis": "session time window"}
     performance_samples = []
+    duration_s = active["duration_s"]
+    if duration_s > 0 and out > 0:
+        performance_samples.append({
+            "provider": "opencode", "model": model,
+            "day": time.strftime("%Y-%m-%d", time.localtime(last_ts)) if last_ts else "",
+            "ts": last_ts, "input_tokens": inp + cre + cw, "output_tokens": out,
+            "peak_input_tokens": inp + cre + cw,
+            "uncached_input_tokens": inp, "cache_read_tokens": cre,
+            "cache_write_tokens": cw, "model_calls": 1,
+            "duration_s": duration_s, "generation_s": duration_s, "ttft_s": 0.0,
+            "tool_calls": 1, "timing_basis": "session time window",
+        })
     availability = metric_availability("opencode", cost=bool(s_cost_val > 0),
                                        tokens=bool(tokens > 0), input_tokens=bool(inp or cre or cw),
-                                       output_tokens=bool(out), throughput=bool(active["available"] and out),
+                                       output_tokens=bool(out), throughput=bool(duration_s > 0 and out > 0),
                                        cache=bool(cre or cw), context=False)
     row = summary_row(
         source, source.get("title"), s_cost_val, tokens, 1, models,

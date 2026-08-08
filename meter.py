@@ -4598,6 +4598,10 @@ def recompute_opencode(source):
 
     message_rows.reverse()
 
+    session_model = _opencode_json(session_model_raw, {}) or {}
+    model_id = str(session_model.get("id") or source.get("model") or "")
+    context_window = _opencode_model_window(model_id)
+
     parts_by_message = defaultdict(list)
     for message_id, data_raw in part_rows:
         data = _opencode_json(data_raw, None)
@@ -4813,8 +4817,8 @@ def recompute_opencode(source):
             "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
             "tools": tools, "tool_count": len(tools),
             "reasoning_tokens": reasoning_tok,
-            "context_tokens": in_tok + cache_tok, "context_window": None,
-            "context_pct": None, "duration_ms": duration_ms or None,
+            "context_tokens": in_tok + cache_tok, "context_window": context_window,
+            "context_pct": (in_tok + cache_tok) / context_window if context_window else None, "duration_ms": duration_ms or None,
             "summary": f"Execution {idx}: {len(tools)} tools · ${tc:.3f} OpenCode-reported"
                        if cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable",
             "user_message": "", "user_input": "",
@@ -4865,9 +4869,6 @@ def recompute_opencode(source):
     insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series),
                               analyses, "opencode", primary_model, False, executions)
     source = dict(source)
-    session_model = _opencode_json(session_model_raw, {}) or {}
-    model_id = str(session_model.get("id") or source.get("model") or "")
-    context_window = _opencode_model_window(model_id)
     context_latest = int(executions[-1].get("context_tokens") or 0) if executions else 0
     source.update({
         "token_estimate": False,

@@ -1021,7 +1021,7 @@ def normalize_budget_settings(values):
         raise ValueError("Runtime allocations must be an object.")
     unknown = sorted(set(raw_allocations) - set(BUDGET_PROVIDERS))
     if unknown:
-        raise ValueError("Runtime allocations support Claude, Codex, and Cursor only.")
+        raise ValueError("Runtime allocations support Claude, Codex, Cursor, and OpenCode only.")
     allocations = {}
     for provider in BUDGET_PROVIDERS:
         value = raw_allocations.get(provider, DEFAULT_RUNTIME_BUDGET)
@@ -6394,8 +6394,24 @@ def opencode_summary(source, objs=None):
                 "COALESCE(time_created,0), COALESCE(time_updated,0) "
                 "FROM session WHERE id = ?", (sid,)
             ).fetchone()
+            te = []
+            tool_texts = []
+            if row:
+                te = conn.execute(
+                    "SELECT DISTINCT json_extract(data,'$.tool') as name "
+                    "FROM part WHERE session_id=? AND json_extract(data,'$.type')='tool'",
+                    (sid,)
+                ).fetchall()
+                tool_texts = conn.execute(
+                    "SELECT data FROM message WHERE session_id=? "
+                    "AND json_extract(data,'$.role')='user' "
+                    "ORDER BY time_created ASC LIMIT 5",
+                    (sid,)
+                ).fetchall()
     except (OSError, sqlite3.Error):
         row = None
+        te = []
+        tool_texts = []
     if not row:
         availability = metric_availability("opencode")
         return summary_row(
@@ -6408,9 +6424,29 @@ def opencode_summary(source, objs=None):
     out = int(s_output or 0)
     cre = int(s_cr or 0)
     cw = int(s_cw or 0)
+    model = str((_opencode_json(s_model_raw, {}) or {}).get("id") or source.get("model") or "unknown")
+    last_ts = (updated / 1000.0) if updated else None
+
+    # Lightweight tool evidence: only distinct tool names (not full args/chars).
+    tool_evidence = []
+    for (name,) in (te or []):
+        if name:
+            evidence = tool_identity(str(name))
+            evidence["output_tokens"] = 0
+            evidence["error"] = False
+            evidence["ts"] = (updated / 1000.0) if updated else 0
+            evidence["calls"] = 1
+            tool_evidence.append(evidence)
+
+    # Quick signal turn for language analysis.
+    signal_turns = []
+    for (data_raw,) in (tool_texts or []):
+        data = _opencode_json(data_raw, {}) or {}
+        content = data.get("content")
+        if isinstance(content, str) and content.strip():
+            signal_turns.append({"ts": last_ts or 0, "text": compact_text(content, 90),
+                                 "model": model})
     tokens = inp + out + cre + cw
-    session_model = _opencode_json(s_model_raw, {}) or {}
-    model = str(session_model.get("id") or source.get("model") or "unknown")
     models = {model}
     model_cost = defaultdict(float, {model: s_cost_val})
     model_tok = defaultdict(int, {model: tokens})
@@ -6420,7 +6456,6 @@ def opencode_summary(source, objs=None):
     }}
     model_daily = {}
     first_ts = (created / 1000.0) if created else None
-    last_ts = (updated / 1000.0) if updated else None
     day_cost = {}
     if last_ts and s_cost_val:
         day = time.strftime("%Y-%m-%d", time.localtime(last_ts))
@@ -6460,7 +6495,9 @@ def opencode_summary(source, objs=None):
     row["context"] = {}
     row["_context_samples"] = [inp + cre + cw] if inp else []
     row["terminal"] = False
-    row["_tool_evidence"] = []
+    row["_tool_evidence"] = tool_evidence
+    signal_rollups, signal_events = analyze_language_signal_turns(signal_turns)
+    attach_language_signals(row, signal_rollups, signal_events)
     return row
 
 
@@ -8843,7 +8880,7 @@ def publish_after_session_delete():
             return next_source.get("id")
     publish({
         "ok": False,
-        "message": "No Claude, Codex, or Cursor logs found yet.",
+        "message": "No Claude, Codex, Cursor, or OpenCode logs found yet.",
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -8907,6 +8944,8 @@ def agent_provider(value):
         return "codex"
     if value.startswith("cursor"):
         return "cursor"
+    if value.startswith("opencode"):
+        return "opencode"
     return ""
 
 
@@ -8941,16 +8980,18 @@ def resolve_agent_source(session_id=None, caller=None, sources=None):
             matches = [row for candidate, row in ancestor_matches if len(candidate) == nearest_length]
         if not matches:
             runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
-                       else "Cursor" if provider == "cursor" else "agent")
+                       else "Cursor" if provider == "cursor" else "OpenCode" if provider == "opencode"
+                       else "agent")
             return None, f"No {runtime} run matched the caller's current project."
         candidates = matches
     if not candidates:
-        return None, "No matching Claude, Codex, or Cursor run was found."
+        return None, "No matching Claude, Codex, Cursor, or OpenCode run was found."
     selected = max(candidates, key=lambda row: float(row.get("mtime") or 0))
     mtime = float(selected.get("mtime") or 0)
     if not mtime or time.time() - mtime > AGENT_CURRENT_MAX_AGE_S:
         runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
-                   else "Cursor" if provider == "cursor" else "agent")
+                   else "Cursor" if provider == "cursor" else "OpenCode" if provider == "opencode"
+                   else "agent")
         return None, f"No recent {runtime} run matched the caller's current project."
     return selected, "matched"
 
@@ -9221,7 +9262,7 @@ def agent_usage(window="7d", focus="changes"):
     }[focus]
     if not selected:
         answer = f"Token Meter has no aggregate usage for {window}."
-        action = "Run Claude, Codex, or Cursor, then ask again after Token Meter observes a local trace."
+        action = "Run Claude, Codex, Cursor, or OpenCode, then ask again after Token Meter observes a local trace."
         assessment = "No data"
     elif delta is not None and delta >= 0.25:
         answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
@@ -10469,7 +10510,7 @@ def watcher():
                 publish({
                     "ok": False,
                     "loading": False,
-                    "message": "No readable Claude, Codex, or Cursor logs found yet.",
+                    "message": "No readable Claude, Codex, Cursor, or OpenCode logs found yet.",
                     "source": {},
                     "total_cost": 0,
                     "total_tokens": 0,

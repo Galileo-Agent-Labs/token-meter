@@ -4693,7 +4693,7 @@ def recompute_opencode(source):
             think_turns += 1
             think_cost += reasoning_tok * (_OPENCODE_WEIGHT["output"] / 1e6)
         routine_out += max(0, (out_tok - reasoning_tok) if think_now else out_tok)
-        if data.get("finish") == "turn_complete":
+        if data.get("finish") in ("turn_complete", "stop"):
             completed += 1
 
         tools = []

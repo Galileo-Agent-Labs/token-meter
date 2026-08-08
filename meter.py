@@ -6436,6 +6436,8 @@ def opencode_summary(source, objs=None):
             evidence["error"] = False
             evidence["ts"] = (updated / 1000.0) if updated else 0
             evidence["calls"] = 1
+            evidence["args_fingerprint"] = ""
+            evidence["skills"] = []
             tool_evidence.append(evidence)
 
     # Quick signal turn for language analysis.
@@ -6495,7 +6497,7 @@ def opencode_summary(source, objs=None):
     row["context"] = {}
     row["_context_samples"] = [inp + cre + cw] if inp else []
     row["terminal"] = False
-    row["_tool_evidence"] = tool_evidence
+    row["_tool_evidence"] = summarize_tool_evidence(tool_evidence)
     signal_rollups, signal_events = analyze_language_signal_turns(signal_turns)
     attach_language_signals(row, signal_rollups, signal_events)
     return row

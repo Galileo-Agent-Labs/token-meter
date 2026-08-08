@@ -4608,9 +4608,20 @@ def recompute_opencode(source):
     first_ts = last_ts = 0.0
     biggest = None
 
+    last_user_ts = 0.0
+
     for message_id, data_raw in message_rows:
         data = _opencode_json(data_raw, None)
-        if not isinstance(data, dict) or data.get("role") != "assistant":
+        if not isinstance(data, dict):
+            continue
+        role = data.get("role")
+        if role == "user":
+            time_obj = data.get("time")
+            created_ms = _opencode_int(time_obj.get("created")) if isinstance(time_obj, dict) else 0
+            if created_ms:
+                last_user_ts = created_ms / 1000.0
+            continue
+        if role != "assistant":
             continue
         tokens = data.get("tokens") or {}
         if not isinstance(tokens, dict):
@@ -4635,6 +4646,22 @@ def recompute_opencode(source):
         ts = (created / 1000.0) if created else (last_ts or 0.0)
         end_ts = (completed_ms / 1000.0) if completed_ms else ts
         duration_ms = (completed_ms - created) if (created and completed_ms) else 0
+        cache_tok = cache_write + cache_read
+        if last_user_ts > 0 and end_ts > last_user_ts:
+            wait_s = end_ts - last_user_ts
+            if wait_s > 0:
+                tool_parts_count = sum(1 for p in parts_by_message.get(str(message_id), [])
+                                       if p.get("type") == "tool")
+                wait_samples.append({
+                    "provider": "opencode", "model": model,
+                    "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                    "ts": end_ts, "start_ts": last_user_ts, "duration_s": wait_s,
+                    "tool_calls": tool_parts_count, "output_tokens": out_tok,
+                    "context_tokens": in_tok + cache_tok, "model_calls": 1,
+                    "timing_basis": "message timestamps",
+                    "ttft_s": 0.0, "attempts": 1, "failed_attempts": 0, "retries": 0,
+                })
+            last_user_ts = 0.0
         usage = {
             "input_tokens": in_tok, "cache_creation_input_tokens": cache_write,
             "cache_read_input_tokens": cache_read, "output_tokens": out_tok,
@@ -4642,7 +4669,6 @@ def recompute_opencode(source):
         }
         c = _opencode_distribute(msg_cost, usage)
         tc = msg_cost
-        cache_tok = cache_write + cache_read
         fresh_tok = in_tok
         model_tok[model] += total_tok
         model_cost[model] += tc

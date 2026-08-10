@@ -17,6 +17,7 @@ Codex uses token_count events instead; those are already one usage slice.
 import calendar
 import base64
 import copy
+import contextlib
 import datetime
 import glob
 import hashlib
@@ -46,6 +47,7 @@ from urllib.request import Request, urlopen
 IS_LINUX = sys.platform.startswith("linux")
 XDG_CONFIG_HOME = os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config"))
 XDG_DATA_HOME = os.path.expanduser(os.environ.get("XDG_DATA_HOME", "~/.local/share"))
+XDG_CACHE_HOME = os.path.expanduser(os.environ.get("XDG_CACHE_HOME", "~/.cache"))
 
 CLAUDE_PROJECTS = os.path.expanduser("~/.claude/projects")
 if IS_LINUX:
@@ -78,6 +80,20 @@ else:
         "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
     )
     CURSOR_REQUEST_LOGS = os.path.expanduser("~/Library/Application Support/Cursor/logs")
+# OpenCode keeps every session, message, and message part in one SQLite
+# database (WAL-mode, held open while OpenCode runs). Its relative database
+# override is rooted below the OpenCode XDG data directory, matching OpenCode.
+OPENCODE_DATA_ROOT = os.path.join(XDG_DATA_HOME, "opencode")
+OPENCODE_CACHE_ROOT = os.path.join(XDG_CACHE_HOME, "opencode")
+_opencode_db_override = os.path.expanduser(os.environ.get("OPENCODE_DB", ""))
+OPENCODE_DB = (
+    _opencode_db_override
+    if os.path.isabs(_opencode_db_override)
+    else os.path.join(OPENCODE_DATA_ROOT, _opencode_db_override or "opencode.db")
+)
+OPENCODE_MODELS_PATH = os.path.expanduser(
+    os.environ.get("OPENCODE_MODELS_PATH", os.path.join(OPENCODE_CACHE_ROOT, "models.json"))
+)
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -97,15 +113,16 @@ DEFAULT_POSITIVE_TERMS = [
 MAX_FRUSTRATION_TERMS = 64
 MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_FIELDS = ("input", "output", "cache_write", "cache_read")
-MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor")
+MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor", "opencode")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
-BUDGET_PROVIDERS = ("claude", "codex", "cursor")
-DEFAULT_RUNTIME_BUDGET = 1_000.0
+BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode")
+DEFAULT_RUNTIME_BUDGET = 0.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 MAX_MONTHLY_BUDGET = 100_000_000.0
+OPENCODE_DETAIL_MESSAGE_LIMIT = 200
 UPDATE_CHECK_INTERVAL_S = 10 * 60
 UPDATE_FETCH_TIMEOUT_S = 45
 UPDATE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$")
@@ -627,6 +644,7 @@ def builtin_model_price_tables():
         "claude": CLAUDE_PRICE,
         "codex": OPENAI_PRICE,
         "cursor": CURSOR_PRICE,
+        "opencode": {},
     }
 
 
@@ -834,7 +852,8 @@ def model_pricing_settings(path=None):
     path = path or TOKEN_METER_SETTINGS
     histories = _load_model_price_histories(path)
     rows = []
-    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor"}
+    labels = {"claude": "Claude", "codex": "Codex / OpenAI", "cursor": "Cursor",
+               "opencode": "OpenCode"}
     for provider in MODEL_PRICE_PROVIDERS:
         builtins = builtin_model_price_tables()[provider]
         effective = effective_model_price_table(provider, path)
@@ -1013,7 +1032,7 @@ def normalize_budget_settings(values):
         raise ValueError("Runtime allocations must be an object.")
     unknown = sorted(set(raw_allocations) - set(BUDGET_PROVIDERS))
     if unknown:
-        raise ValueError("Runtime allocations support Claude, Codex, and Cursor only.")
+        raise ValueError("Runtime allocations support Claude, Codex, Cursor, and OpenCode only.")
     allocations = {}
     for provider in BUDGET_PROVIDERS:
         value = raw_allocations.get(provider, DEFAULT_RUNTIME_BUDGET)
@@ -1822,7 +1841,7 @@ def _cursor_db_connection(path=None):
     uri = f"file:{quote(path, safe='/')}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, timeout=0.05)
     conn.execute("PRAGMA query_only = ON")
-    conn.execute("PRAGMA busy_timeout = 50")
+    conn.execute("PRAGMA busy_timeout = 3000")
     return conn
 
 
@@ -2026,6 +2045,144 @@ def cursor_enrichment_mtime(db_path=None, log_root=None):
     return max(values, default=0)
 
 
+def opencode_db_path():
+    path = os.path.expanduser(OPENCODE_DB)
+    return path if os.path.isabs(path) else os.path.join(OPENCODE_DATA_ROOT, path)
+
+
+_opencode_models_cache = {"path": None, "signature": None, "models": {}}
+_opencode_sources_cache = {"path": None, "signature": None, "sources": []}
+
+
+def _load_opencode_models(path=None):
+    global _opencode_models_cache
+    path = os.path.abspath(os.path.expanduser(path or OPENCODE_MODELS_PATH))
+    signature = file_signature(path)
+    if (_opencode_models_cache.get("path") == path
+            and _opencode_models_cache.get("signature") == signature):
+        return _opencode_models_cache.get("models") or {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        _opencode_models_cache = {"path": path, "signature": signature, "models": {}}
+        return {}
+    catalog = {}
+    if isinstance(raw, dict):
+        for provider_key, provider_info in raw.items():
+            if not isinstance(provider_info, dict):
+                continue
+            provider_id = str(provider_info.get("id") or provider_key or "")
+            for model_id, model_info in (provider_info.get("models") or {}).items():
+                limit = (model_info or {}).get("limit") or {}
+                window = int(limit.get("context") or 0)
+                if window:
+                    catalog[(provider_id, str(model_id))] = window
+    _opencode_models_cache = {"path": path, "signature": signature, "models": catalog}
+    return catalog
+
+
+def _opencode_model_window(model_id, provider_id=""):
+    models = _load_opencode_models()
+    model_id = str(model_id or "")
+    provider_id = str(provider_id or "")
+    if provider_id and (provider_id, model_id) in models:
+        return models[(provider_id, model_id)]
+    matches = {window for (provider, model), window in models.items() if model == model_id}
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
+def _opencode_db_connection(path=None):
+    """Open OpenCode's live database read-only while retaining WAL visibility."""
+    path = os.path.abspath(os.path.expanduser(path or opencode_db_path()))
+    uri = f"file:{quote(path, safe='/')}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True, timeout=1.0)
+    conn.execute("PRAGMA query_only = ON")
+    conn.execute("PRAGMA busy_timeout = 1000")
+    return conn
+
+
+def _opencode_json(value, default=None):
+    """Decode one OpenCode SQLite JSON text value without failing the session."""
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return default
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
+    return decoded if isinstance(decoded, dict) else default
+
+
+def opencode_session_sources(db_path=None):
+    """Return top-level OpenCode sessions from the read-only session table."""
+    global _opencode_sources_cache
+    sources = []
+    path = os.path.abspath(os.path.expanduser(db_path or opencode_db_path()))
+    signature = (file_signature(path), file_signature(path + "-wal"))
+    if (_opencode_sources_cache.get("path") == path
+            and _opencode_sources_cache.get("signature") == signature):
+        return [dict(source) for source in _opencode_sources_cache.get("sources") or []]
+    try:
+        with _opencode_db_connection(path) as conn:
+            rows = conn.execute(
+                "SELECT s.id, s.directory, COALESCE(s.title,''), COALESCE(s.agent,''), "
+                "COALESCE(s.model,''), s.time_created, s.time_updated, s.time_archived, "
+                "MAX(COALESCE(s.time_updated,0), "
+                "COALESCE((SELECT MAX(m.time_updated) FROM message m WHERE m.session_id=s.id),0), "
+                "COALESCE((SELECT MAX(p.time_updated) FROM part p WHERE p.session_id=s.id),0)) "
+                "FROM session s WHERE s.parent_id IS NULL "
+                "AND s.time_archived IS NULL "
+                "ORDER BY s.time_updated DESC"
+            ).fetchall()
+    except (OSError, sqlite3.Error):
+        if _opencode_sources_cache.get("path") == path:
+            return [dict(source) for source in _opencode_sources_cache.get("sources") or []]
+        return sources
+    for sid, directory, title, agent, model_raw, created, updated, archived, signature_updated in rows:
+        model = _opencode_json(model_raw, {}) or {}
+        model_name = str(model.get("id") or "unknown")
+        title = str(title or "")
+        if title.startswith("New session") or not title.strip():
+            title = ""
+        updated_s = 0.0
+        try:
+            updated_s = float(int(updated or 0)) / 1000.0
+        except (TypeError, ValueError):
+            updated_s = 0.0
+        try:
+            signature_updated_s = float(int(signature_updated or 0)) / 1000.0
+        except (TypeError, ValueError):
+            signature_updated_s = updated_s
+        project = home_shorten(str(directory or "")) or agent or "No project"
+        sources.append({
+            "provider": "opencode",
+            "client": "opencode",
+            "label": "OpenCode",
+            "runtime": "OpenCode",
+            "id": str(sid),
+            "session": str(sid),
+            "path": "opencode:" + str(sid),
+            "project": project,
+            "mtime": updated_s,
+            "signature_mtime": signature_updated_s,
+            "title": compact_text(title, 90) or None,
+            "model": model_name,
+            "model_provider": model.get("providerID") or "",
+            "agent": str(agent or ""),
+            "tools_loaded": 0,
+        })
+    _opencode_sources_cache = {"path": path, "signature": signature,
+                               "sources": [dict(source) for source in sources]}
+    return sources
+
+
 def claude_desktop_metadata_paths(root=None):
     if root:
         return glob.glob(os.path.join(root, "**", "local_*.json"), recursive=True)
@@ -2217,6 +2374,8 @@ def all_session_sources():
 
     sources.extend(cursor_sources.values())
 
+    sources.extend(opencode_session_sources())
+
     discovered_paths = {source.get("path") for source in sources if source.get("path")}
     with _source_metadata_lock:
         for stale_path in set(_codex_meta_cache) - discovered_paths:
@@ -2251,6 +2410,12 @@ def cached_session_sources():
 
 
 def source_from_path(path):
+    if str(path or "").startswith("opencode:"):
+        sid = str(path).split(":", 1)[1]
+        for source in opencode_session_sources():
+            if source["id"] == sid:
+                return source
+        return None
     for source in all_session_sources():
         if source["path"] == path:
             return source
@@ -2425,8 +2590,17 @@ def price_for(model, provider="claude", variant=None, at=None):
             or _matching_price(model, effective_model_price_table("claude", at=at))
         )
         return (price or dict(ZERO_PRICE)), True
-    if provider not in ("claude", "codex"):
+    if provider not in ("claude", "codex", "opencode"):
         return dict(ZERO_PRICE), True
+    if provider == "opencode":
+        table = effective_model_price_table("opencode", at=at)
+        price = _matching_price(model, table)
+        if price:
+            return price, False
+        # No custom price — estimate from the token-weight proxy ratios.
+        # The per-1M-token baselines are conservative defaults; the relative
+        # cache discounts are the meaningful signal for savings computation.
+        return {"input": 2.0, "output": 10.0, "cache_write": 2.50, "cache_read": 0.20}, True
     model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
     table = effective_model_price_table(provider, at=at)
     default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL
@@ -4416,6 +4590,472 @@ def recompute_cursor(source):
     return state
 
 
+def _opencode_int(value, default=0):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _opencode_usage(data):
+    """Return OpenCode's five independent token components."""
+    tokens = data.get("tokens") if isinstance(data, dict) else {}
+    tokens = tokens if isinstance(tokens, dict) else {}
+    cache = tokens.get("cache")
+    cache = cache if isinstance(cache, dict) else {}
+    return {
+        "input_tokens": _opencode_int(tokens.get("input")),
+        "output_tokens": _opencode_int(tokens.get("output")),
+        "reasoning_tokens": _opencode_int(tokens.get("reasoning")),
+        "cache_read_input_tokens": _opencode_int(cache.get("read")),
+        "cache_creation_input_tokens": _opencode_int(cache.get("write")),
+    }
+
+
+def _opencode_context_tokens(usage):
+    return sum(int(usage.get(key) or 0) for key in (
+        "input_tokens", "output_tokens", "reasoning_tokens",
+        "cache_read_input_tokens", "cache_creation_input_tokens",
+    ))
+
+
+def _opencode_reported_cost(data):
+    """Return (cost, available); a reported numeric zero remains available."""
+    value = data.get("cost") if isinstance(data, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0, False
+    value = float(value)
+    return (value, True) if math.isfinite(value) and value >= 0 else (0.0, False)
+
+
+# OpenCode records an authoritative total cost per message from its own
+# provider. No public rate table can cover arbitrary OpenCode backends, so
+# Token Meter distributes that exact total across the input / cache-write /
+# cache-read / output buckets using a documented token-weighted proxy that
+# preserves the authoritative total. The proxy does not invent cost.
+_OPENCODE_WEIGHT = {"input": 1.0, "cache_write": 1.25, "cache_read": 0.10,
+                    "output": 5.0, "reasoning": 5.0}
+
+
+def _opencode_distribute(msg_cost, usage):
+    """Split one authoritative OpenCode-reported cost into five proxy buckets.
+
+    OpenCode records an authoritative total cost per message from its own
+    provider. No bundled rate table can cover arbitrary OpenCode backends, so
+    Token Meter distributes that exact total across the five independent token
+    components with a documented token-weighted proxy. The total is never
+    invented; only its category split is estimated.
+    """
+    msg_cost = float(msg_cost or 0.0)
+    buckets = {
+        "input": usage.get("input_tokens", 0),
+        "cache_write": usage.get("cache_creation_input_tokens", 0),
+        "cache_read": usage.get("cache_read_input_tokens", 0),
+        "output": usage.get("output_tokens", 0),
+        "reasoning": usage.get("reasoning_tokens", 0),
+    }
+    weights = {
+        key: float(buckets.get(key) or 0) * _OPENCODE_WEIGHT.get(key, 0)
+        for key in buckets
+    }
+    total_weight = sum(weights.values())
+    if msg_cost <= 0 or total_weight <= 0:
+        return {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0,
+                "output": msg_cost, "reasoning": 0.0}
+    per_weight = msg_cost / total_weight
+    breakdown = {key: w * per_weight for key, w in weights.items()}
+    result = {"input": round(breakdown["input"], 6),
+              "cache_write": round(breakdown["cache_write"], 6),
+              "cache_read": round(breakdown["cache_read"], 6),
+              "reasoning": round(breakdown["reasoning"], 6)}
+    # Put the sub-micro rounding residual in output so the authoritative total
+    # remains exact after the category proxy is rounded for display.
+    result["output"] = msg_cost - sum(result.values())
+    return result
+
+
+def _opencode_display_cost(breakdown):
+    """Fold reasoning into output for Token Meter's four-bucket UI contract."""
+    return {
+        "input": float(breakdown.get("input") or 0),
+        "cache_write": float(breakdown.get("cache_write") or 0),
+        "cache_read": float(breakdown.get("cache_read") or 0),
+        "output": float(breakdown.get("output") or 0)
+                  + float(breakdown.get("reasoning") or 0),
+    }
+
+
+def recompute_opencode(source):
+    """Build usage from OpenCode's authoritative per-message tokens and cost.
+
+    The session row provides cumulative aggregates that are always accurate.
+    Per-message queries are limited to the most recent turns so live watcher
+    recompute stays fast even while the owning process writes the WAL DB.
+    """
+    sid = str(source.get("id") or "")
+    try:
+        with _opencode_db_connection(opencode_db_path()) as conn:
+            session_row = conn.execute(
+                "SELECT tokens_input, tokens_output, tokens_reasoning, "
+                "tokens_cache_read, tokens_cache_write, cost, time_created, time_updated, model "
+                "FROM session WHERE id = ?", (sid,)
+            ).fetchone()
+            if not session_row:
+                return None
+            s_input, s_output, s_reasoning, s_cr, s_cw, s_cost, created, updated, session_model_raw = session_row
+            message_rows = conn.execute(
+                "SELECT id, data FROM message WHERE session_id=? "
+                "ORDER BY time_created DESC, id DESC LIMIT ?",
+                (sid, OPENCODE_DETAIL_MESSAGE_LIMIT + 1)).fetchall()
+            if not message_rows:
+                message_rows = []
+            history_truncated = len(message_rows) > OPENCODE_DETAIL_MESSAGE_LIMIT
+            message_rows = message_rows[:OPENCODE_DETAIL_MESSAGE_LIMIT]
+            mid_list = [row[0] for row in message_rows]
+            if mid_list:
+                placeholders = ",".join("?" for _ in mid_list)
+                part_rows = conn.execute(
+                    f"SELECT message_id, data FROM part WHERE message_id IN ({placeholders}) "
+                    "ORDER BY time_created ASC",
+                    mid_list).fetchall()
+            else:
+                part_rows = []
+    except (OSError, sqlite3.Error):
+        return None
+
+    message_rows.reverse()
+
+    session_model = _opencode_json(session_model_raw, {}) or {}
+    model_id = str(session_model.get("id") or source.get("model") or "")
+    model_provider = str(session_model.get("providerID") or source.get("model_provider") or "")
+    context_window = _opencode_model_window(model_id, model_provider)
+
+    parts_by_message = defaultdict(list)
+    text_parts_by_message = defaultdict(list)
+    for message_id, data_raw in part_rows:
+        data = _opencode_json(data_raw, None)
+        if not isinstance(data, dict):
+            continue
+        part_type = data.get("type")
+        if part_type in ("tool", "reasoning"):
+            parts_by_message[str(message_id)].append(data)
+        elif part_type == "text" and isinstance(data.get("text"), str):
+            text_parts_by_message[str(message_id)].append(data["text"])
+
+    tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+    series, executions, trace = [], [], []
+    wait_samples, performance_samples, active_intervals = [], [], []
+    model_tok, model_cost = defaultdict(int), defaultdict(float)
+    think_tokens = 0
+    think_turns = 0
+    think_cost = 0.0
+    routine_out = 0
+    completed = 0
+    first_ts = last_ts = 0.0
+    biggest = None
+    duration_ms = 0
+    cost_observed = (
+        not isinstance(s_cost, bool) and isinstance(s_cost, (int, float))
+        and math.isfinite(float(s_cost)) and float(s_cost) >= 0
+    )
+
+    last_user_ts = 0.0
+    pending_user_prompts = []
+
+    for message_id, data_raw in message_rows:
+        data = _opencode_json(data_raw, None)
+        if not isinstance(data, dict):
+            continue
+        role = data.get("role")
+        if role == "user":
+            time_obj = data.get("time")
+            created_ms = _opencode_int(time_obj.get("created")) if isinstance(time_obj, dict) else 0
+            if created_ms:
+                last_user_ts = created_ms / 1000.0
+            user_texts = text_parts_by_message.get(str(message_id), [])
+            if not user_texts and isinstance(data.get("text"), str):
+                user_texts = [data["text"]]
+            user_input = user_prompt_preview(user_texts)
+            if user_input:
+                pending_user_prompts.append({"text": user_input, "ts": last_user_ts})
+            continue
+        if role != "assistant":
+            continue
+        token_evidence = isinstance(data.get("tokens"), dict)
+        usage = _opencode_usage(data)
+        in_tok = usage["input_tokens"]
+        cache_write = usage["cache_creation_input_tokens"]
+        cache_read = usage["cache_read_input_tokens"]
+        out_tok = usage["output_tokens"]
+        reasoning_tok = usage["reasoning_tokens"]
+        total_tok = _opencode_context_tokens(usage)
+        msg_cost, msg_cost_available = _opencode_reported_cost(data)
+        cost_observed = cost_observed or msg_cost_available
+        if total_tok <= 0 and not msg_cost_available and not token_evidence:
+            continue
+        idx = len(series) + 1
+        model = str(data.get("modelID") or source.get("model") or "unknown")
+        provider_id = str(data.get("providerID") or model_provider)
+        message_context_window = _opencode_model_window(model, provider_id) or context_window
+        user_input = user_prompt_preview([
+            prompt.get("text") or "" for prompt in pending_user_prompts
+        ])
+        time_obj = data.get("time")
+        created = _opencode_int(time_obj.get("created")) if isinstance(time_obj, dict) else 0
+        completed_ms = _opencode_int(time_obj.get("completed")) if isinstance(time_obj, dict) else 0
+        ts = (created / 1000.0) if created else (last_ts or 0.0)
+        end_ts = (completed_ms / 1000.0) if completed_ms else ts
+        duration_ms = (completed_ms - created) if (created and completed_ms) else 0
+        cache_tok = cache_write + cache_read
+        if last_user_ts > 0 and end_ts > last_user_ts:
+            wait_s = end_ts - last_user_ts
+            if wait_s > 0:
+                tool_parts_count = sum(1 for p in parts_by_message.get(str(message_id), [])
+                                       if p.get("type") == "tool")
+                wait_samples.append({
+                    "provider": "opencode", "model": model,
+                    "day": time.strftime("%Y-%m-%d", time.localtime(end_ts)) if end_ts else "",
+                    "ts": end_ts, "start_ts": last_user_ts, "duration_s": wait_s,
+                    "tool_calls": tool_parts_count, "output_tokens": out_tok,
+                    "context_tokens": total_tok, "model_calls": 1,
+                    "timing_basis": "message timestamps",
+                    "ttft_s": 0.0, "attempts": 1, "failed_attempts": 0, "retries": 0,
+                })
+            last_user_ts = 0.0
+        c = _opencode_distribute(msg_cost, usage)
+        display_c = _opencode_display_cost(c)
+        tc = msg_cost
+        fresh_tok = in_tok
+        model_tok[model] += total_tok
+        model_cost[model] += tc
+        tot["input"] += in_tok
+        tot["cache_write"] += cache_write
+        tot["cache_read"] += cache_read
+        tot["output"] += out_tok
+        for key in cost:
+            cost[key] += display_c[key]
+        think_now = reasoning_tok > 0
+        if think_now:
+            think_tokens += reasoning_tok
+            think_turns += 1
+            think_cost += c["reasoning"]
+        routine_out += out_tok
+        if data.get("finish") in ("turn_complete", "stop"):
+            completed += 1
+
+        tools = []
+        part_reasoning_ms = 0.0
+        for part in parts_by_message.get(str(message_id), []):
+            ptype = part.get("type")
+            if ptype == "tool":
+                name = str(part.get("tool") or "?")
+                ident = tool_identity(name)
+                call_id = str(part.get("callID") or "")
+                state = part.get("state") or {}
+                status = str(state.get("status") or "").lower()
+                error = bool(state.get("error") not in (None, "", False)) or status in ("error", "failed")
+                args = state.get("input")
+                result_value = state.get("output")
+                result_present = result_value not in (None, "", [], {})
+                output_chars = observable_output_chars(result_value) if result_present else 0
+                tools.append({
+                    **ident, "id": call_id, "call_id": call_id,
+                    "args_chars": len(json.dumps(args or "")) if args is not None else 0,
+                    "args_fingerprint": argument_fingerprint(args),
+                    "output_chars": output_chars,
+                    "output_tokens": output_chars // CHARS_PER_TOKEN,
+                    "result_available": result_present,
+                    "error": error,
+                    "skills": skill_names_from_value(args, name),
+                })
+            elif ptype == "reasoning":
+                rtime = part.get("time") or {}
+                rstart = _opencode_int(rtime.get("start"))
+                rend = _opencode_int(rtime.get("end"))
+                if rend and rstart:
+                    part_reasoning_ms += max(0, rend - rstart)
+
+        if first_ts:
+            first_ts = min(first_ts, ts) if ts else first_ts
+        else:
+            first_ts = ts
+        if end_ts:
+            last_ts = max(last_ts, end_ts)
+
+        execution_cost_available = msg_cost_available
+        execution_availability = metric_availability(
+            "opencode", cost=execution_cost_available, tokens=token_evidence,
+            input_tokens=token_evidence, output_tokens=token_evidence,
+            throughput=bool(duration_ms and out_tok),
+            context=bool(message_context_window), timing=bool(duration_ms), tool_results=True,
+        )
+        for prompt in pending_user_prompts:
+            trace.append(trace_event(
+                prompt.get("ts") or ts, "user", "User message",
+                compact_text(prompt.get("text") or "", 84), idx,
+                severity="start", model=model,
+            ))
+        for tool in tools:
+            trace.append(trace_event(
+                ts, "tool_call", tool["display"], tool["namespace"], idx,
+                tool=tool["name"], severity="tool", model=model,
+                args_chars=tool["args_chars"], tool_kind=tool["kind"],
+            ))
+            if tool["result_available"] or tool["error"]:
+                trace.append(trace_event(
+                    ts, "tool_result", tool["display"],
+                    f"~{tool['output_tokens']:,} returned tokens" if tool["result_available"] else "Tool error",
+                    idx, tool=tool["name"], tokens=tool["output_tokens"],
+                    severity="warn" if tool["error"] else "retrieval", model=model,
+                    output_chars=tool["output_chars"],
+                    retrieval_tokens=tool["output_tokens"], error=tool["error"],
+                ))
+        if part_reasoning_ms or think_now:
+            trace.append(trace_event(
+                ts, "reasoning", "Reasoning",
+                duration_label(part_reasoning_ms / 1000.0) if part_reasoning_ms
+                else f"{reasoning_tok:,} reasoning tokens",
+                idx, tokens=reasoning_tok, severity="reasoning", model=model,
+                duration_ms=part_reasoning_ms or None, output_tokens=reasoning_tok,
+            ))
+        trace.append(trace_event(
+            ts, "message", "Assistant turn",
+            f"{out_tok + reasoning_tok:,} out / {in_tok + cache_tok:,} in", idx,
+            tokens=total_tok, cost=tc, severity="usage", model=model,
+            input_tokens=in_tok + cache_tok, output_tokens=out_tok,
+            cache_tokens=cache_tok, context_tokens=total_tok,
+            fresh_input_tokens=fresh_tok, cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write, tool_count=len(tools),
+            reasoning_tokens=reasoning_tok,
+        ))
+
+        active_s = duration_ms / 1000.0 if duration_ms else 0.0
+        if duration_ms:
+            active_intervals.append((ts, end_ts))
+        if duration_ms and out_tok:
+            performance_samples.append({
+                "provider": "opencode", "model": model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+                "ts": end_ts or ts, "input_tokens": in_tok + cache_tok,
+                "output_tokens": out_tok + reasoning_tok, "peak_input_tokens": total_tok,
+                "uncached_input_tokens": in_tok, "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write, "model_calls": 1,
+                "duration_s": active_s, "generation_s": active_s, "ttft_s": 0.0,
+                "tool_calls": len(tools), "timing_basis": "open-code response time",
+            })
+
+        ctx_tokens = total_tok
+        ctx_pct = ctx_tokens / message_context_window if message_context_window else None
+        series.append({
+            "i": idx, "in": ctx_tokens, "out": out_tok,
+            "cost": round(tc, 4), "fresh_input": fresh_tok,
+            "cache": cache_tok, "cache_read": cache_read, "cache_write": cache_write,
+            "think": think_now, "tools": len(tools), "side": False,
+            "reasoning": reasoning_tok,
+            "context_pct": ctx_pct,
+            "user_message": user_input, "user_input": user_input,
+        })
+        executions.append({
+            "id": message_id, "idx": idx, "ts": ts or 0,
+            "time": time.strftime("%H:%M:%S", time.localtime(ts)) if ts else "",
+            "model": model,
+            "tokens": {"input": in_tok + cache_tok, "output": out_tok,
+                       "reasoning": reasoning_tok,
+                       "retrieval": sum(t["output_tokens"] for t in tools),
+                       "fresh_input": fresh_tok, "cache": cache_tok,
+                       "cache_read": cache_read, "cache_write": cache_write,
+                       "total": total_tok},
+            "cost": round(tc, 6),
+            "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
+            "tools": tools, "tool_count": len(tools),
+            "reasoning_tokens": reasoning_tok,
+            "context_tokens": ctx_tokens, "context_window": message_context_window,
+            "context_pct": ctx_pct, "duration_ms": duration_ms or None,
+            "summary": f"Execution {idx}: {len(tools)} tools · ${tc:.3f} OpenCode-reported"
+                       if execution_cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable",
+            "user_message": user_input, "user_input": user_input,
+            "availability": execution_availability,
+        })
+        pending_user_prompts = []
+        if biggest is None or tc > biggest["cost"]:
+            biggest = {"cost": tc, "idx": idx}
+
+    # Session row carries the authoritative cumulative totals. Override
+    # the per-message accumulation (which covers only the last 200 turns).
+    tot = {
+        "input": int(s_input or 0), "cache_write": int(s_cw or 0),
+        "cache_read": int(s_cr or 0), "output": int(s_output or 0),
+    }
+    s_cost_val = float(s_cost or 0.0)
+    total_cost = s_cost_val
+    total_tokens = sum(tot.values()) + int(s_reasoning or 0)
+    full_cost_breakdown = _opencode_distribute(total_cost, {
+        "input_tokens": tot["input"], "cache_creation_input_tokens": tot["cache_write"],
+        "cache_read_input_tokens": tot["cache_read"], "output_tokens": tot["output"],
+        "reasoning_tokens": int(s_reasoning or 0),
+    })
+    cost = _opencode_display_cost(full_cost_breakdown)
+    tool_data = tool_summary(executions)
+    model_names = [execution.get("model") or "unknown" for execution in executions]
+    primary_model = max(set(model_names), key=model_names.count) if model_names else source.get("model") or "unknown"
+    reasoning_total = sum(int(execution.get("reasoning_tokens") or 0) for execution in executions)
+    semantic = {
+        "reasoning": think_tokens,
+        "output": max(0, routine_out),
+        "retrieval": tool_data["total_output_tokens"],
+        "coordination": 0,
+    }
+    analyses = analysis_block(
+        tot, total_cost, think_tokens, think_turns, think_cost,
+        model_tok, model_cost, tool_data, 0.0, 0, completed,
+    )
+    idle = (time.time() - last_ts) if last_ts else 1e9
+    cache_in = tot["cache_read"] + tot["cache_write"]
+    cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
+    insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series),
+                              analyses, "opencode", primary_model, False, executions)
+    source = dict(source)
+    context_latest = int(executions[-1].get("context_tokens") or 0) if executions else 0
+    context_window = (
+        int(executions[-1].get("context_window") or 0) or context_window
+        if executions else context_window
+    )
+    source.update({
+        "token_estimate": False,
+        "estimate_basis": "",
+        "pricing_variant": "",
+        "context_window": context_window,
+        "context_latest": context_latest,
+    })
+    input_available = bool(executions and all(metric_available(e, "input_tokens") for e in executions))
+    output_available = bool(executions and all(metric_available(e, "output_tokens") for e in executions))
+    cost_available = cost_observed
+    active_s = _merge_execution_intervals(active_intervals)
+    throughput = performance_summary(performance_samples, tot["output"] + int(s_reasoning or 0))
+    availability = metric_availability(
+        "opencode", cost=cost_available, tokens=bool(input_available or output_available),
+        input_tokens=input_available, output_tokens=output_available,
+        throughput=bool(throughput.get("available")),
+        context=bool(context_window and executions), timing=bool(active_s),
+        tool_results=any(tool.get("result_available") for e in executions for tool in e.get("tools") or []),
+    )
+    state = build_state(
+        source, tot, cost, total_tokens, total_cost, series, executions, trace,
+        semantic, analyses, insights, first_ts, last_ts, idle, biggest, 0, False,
+        primary_model, "OpenCode-reported total; category split estimated from token weights",
+        {"duration_s": active_s, "available": bool(active_s),
+        "reported_executions": sum(bool(e.get("duration_ms")) for e in executions),
+        "observed_executions": 0, "execution_count": len(executions),
+        "basis": "OpenCode message timestamps" if active_s else "unavailable"},
+        wait_samples, availability=availability,
+    )
+    state["throughput"] = throughput
+    state["execution_history_truncated"] = history_truncated
+    state["execution_history_limit"] = OPENCODE_DETAIL_MESSAGE_LIMIT
+    return state
+
+
 def recompute(source):
     if isinstance(source, str):
         source = source_from_path(source)
@@ -4427,7 +5067,20 @@ def recompute(source):
         return recompute_claude(source)
     if source["provider"] == "cursor":
         return recompute_cursor(source)
+    if source["provider"] == "opencode":
+        return recompute_opencode(source)
     return None
+
+
+def source_revision_signature(source):
+    """Track trace activity plus display metadata stored outside the trace."""
+    if not source:
+        return None
+    path = str(source.get("path") or "")
+    return (
+        float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
+        str(source.get("title") or ""),
+    )
 
 
 def session_state_signature(source):
@@ -4439,7 +5092,7 @@ def session_state_signature(source):
         str(source.get("provider") or ""),
         str(source.get("id") or ""),
         path,
-        float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
+        source_revision_signature(source),
         file_signature(path),
     )
 
@@ -5925,22 +6578,269 @@ def cursor_summary(source, objs=None):
     return row
 
 
-def session_summary(source):
+def opencode_summary(source, objs=None):
+    """Build exact OpenCode day/model attribution without loading part text."""
+    sid = str(source.get("id") or "")
+    conn = objs if isinstance(objs, sqlite3.Connection) else None
+    owns_connection = conn is None
+    try:
+        if conn is None:
+            conn = _opencode_db_connection(opencode_db_path())
+        row = conn.execute(
+            "SELECT tokens_input, tokens_output, tokens_reasoning, "
+            "tokens_cache_read, tokens_cache_write, cost, model, "
+            "COALESCE(time_created,0), COALESCE(time_updated,0) "
+            "FROM session WHERE id = ?", (sid,)
+        ).fetchone()
+        te = []
+        message_rows = []
+        if row:
+            te = conn.execute(
+                "SELECT DISTINCT json_extract(data,'$.tool') as name "
+                "FROM part WHERE session_id=? AND json_extract(data,'$.type')='tool'",
+                (sid,)
+            ).fetchall()
+            message_rows = conn.execute(
+                "SELECT data, time_created FROM message WHERE session_id=? "
+                "AND json_extract(data,'$.role') IN ('user','assistant') "
+                "ORDER BY time_created ASC, id ASC",
+                (sid,)
+            ).fetchall()
+    except (OSError, sqlite3.Error):
+        row = None
+        te = []
+        message_rows = []
+    finally:
+        if owns_connection and conn is not None:
+            conn.close()
+    if not row:
+        availability = metric_availability("opencode")
+        return summary_row(
+            source, source.get("title"), 0.0, 0, 0, set(), None, None,
+            {}, {}, {}, False, availability=availability,
+        )
+    s_input, s_output, s_reasoning, s_cr, s_cw, s_cost, s_model_raw, created, updated = row
+    s_cost_val = float(s_cost or 0.0)
+    inp = int(s_input or 0)
+    out = int(s_output or 0)
+    reasoning = int(s_reasoning or 0)
+    cre = int(s_cr or 0)
+    cw = int(s_cw or 0)
+    session_model = _opencode_json(s_model_raw, {}) or {}
+    model = str(session_model.get("id") or source.get("model") or "unknown")
+    model_provider = str(session_model.get("providerID") or source.get("model_provider") or "")
+    last_ts = (updated / 1000.0) if updated else None
+    first_ts = (created / 1000.0) if created else None
+    context_window = _opencode_model_window(model, model_provider)
+
+    # Lightweight tool evidence: only distinct tool names (not full args/chars).
+    tool_evidence = []
+    for (name,) in (te or []):
+        if name:
+            evidence = tool_identity(str(name))
+            evidence["output_tokens"] = 0
+            evidence["error"] = False
+            evidence["ts"] = (updated / 1000.0) if updated else 0
+            evidence["calls"] = 1
+            evidence["args_fingerprint"] = ""
+            evidence["skills"] = []
+            tool_evidence.append(evidence)
+
+    tokens = inp + out + reasoning + cre + cw
+    models = set()
+    model_cost = defaultdict(float)
+    model_tok = defaultdict(int)
+    model_stats = {}
+    model_daily = {}
+    day_cost = defaultdict(float)
+    performance_samples = []
+    wait_samples = []
+    context_samples = []
+    latest_context = 0
+    turns = 0
+    active_intervals = []
+    last_user_ms = 0
+
+    # Message metadata is sufficient for exact executions, calendar-day usage,
+    # model attribution, context, and response timing. Part text remains unread.
+    signal_turns = []
+    for data_raw, row_created in message_rows:
+        data = _opencode_json(data_raw, None)
+        if not isinstance(data, dict):
+            continue
+        role = data.get("role")
+        time_obj = data.get("time") if isinstance(data.get("time"), dict) else {}
+        created_ms = _opencode_int(time_obj.get("created")) or _opencode_int(row_created)
+        completed_ms = _opencode_int(time_obj.get("completed"))
+        if role == "user":
+            last_user_ms = created_ms
+            content = data.get("content")
+            if isinstance(content, str) and content.strip() and len(signal_turns) < 5:
+                signal_turns.append({
+                    "ts": created_ms / 1000.0 if created_ms else 0,
+                    "text": compact_text(content, 90), "model": model,
+                })
+            continue
+        if role != "assistant":
+            continue
+
+        turns += 1
+        usage = _opencode_usage(data)
+        msg_tokens = _opencode_context_tokens(usage)
+        msg_cost, msg_cost_available = _opencode_reported_cost(data)
+        msg_model = str(data.get("modelID") or model)
+        msg_provider = str(data.get("providerID") or model_provider)
+        msg_window = _opencode_model_window(msg_model, msg_provider) or context_window
+        end_ms = completed_ms or created_ms
+        ts = end_ms / 1000.0 if end_ms else (last_ts or 0)
+        duration_s = max(0.0, (completed_ms - created_ms) / 1000.0) \
+            if created_ms and completed_ms else 0.0
+        input_tokens = (usage["input_tokens"] + usage["cache_read_input_tokens"]
+                        + usage["cache_creation_input_tokens"])
+        output_tokens = usage["output_tokens"] + usage["reasoning_tokens"]
+
+        models.add(msg_model)
+        model_cost[msg_model] += msg_cost
+        model_tok[msg_model] += msg_tokens
+        stats = model_stats.setdefault(msg_model, {
+            "cost": 0.0, "tokens": 0, "input_tokens": 0,
+            "output_tokens": 0, "executions": 0,
+            "cost_evidence": False, "token_evidence": False,
+        })
+        stats["cost"] += msg_cost
+        stats["tokens"] += msg_tokens
+        stats["input_tokens"] += input_tokens
+        stats["output_tokens"] += output_tokens
+        stats["executions"] += 1
+        stats["cost_evidence"] = stats["cost_evidence"] or msg_cost_available
+        stats["token_evidence"] = stats["token_evidence"] or isinstance(data.get("tokens"), dict)
+
+        if ts:
+            day = time.strftime("%Y-%m-%d", time.localtime(ts))
+            if msg_cost_available:
+                day_cost[day] += msg_cost
+            daily = model_daily.setdefault((msg_model, day), {
+                "model": msg_model, "day": day, "cost": 0.0,
+                "input_tokens": 0, "output_tokens": 0, "executions": 0,
+                "cost_evidence": False, "token_evidence": False,
+            })
+            daily["cost"] += msg_cost
+            daily["input_tokens"] += input_tokens
+            daily["output_tokens"] += output_tokens
+            daily["executions"] += 1
+            daily["cost_evidence"] = daily["cost_evidence"] or msg_cost_available
+            daily["token_evidence"] = daily["token_evidence"] or isinstance(data.get("tokens"), dict)
+
+        if msg_tokens or isinstance(data.get("tokens"), dict):
+            context_samples.append(msg_tokens)
+            latest_context = msg_tokens
+            context_window = msg_window or context_window
+        if duration_s:
+            active_intervals.append((created_ms / 1000.0, completed_ms / 1000.0))
+        if duration_s and output_tokens:
+            performance_samples.append({
+                "provider": "opencode", "model": msg_model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(ts)) if ts else "",
+                "ts": ts, "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "peak_input_tokens": msg_tokens,
+                "uncached_input_tokens": usage["input_tokens"],
+                "cache_read_tokens": usage["cache_read_input_tokens"],
+                "cache_write_tokens": usage["cache_creation_input_tokens"],
+                "model_calls": 1, "duration_s": duration_s,
+                "generation_s": duration_s, "ttft_s": 0.0,
+                "tool_calls": 0, "timing_basis": "OpenCode message timestamps",
+            })
+        if last_user_ms and end_ms > last_user_ms:
+            wait_s = (end_ms - last_user_ms) / 1000.0
+            wait_samples.append({
+                "provider": "opencode", "model": msg_model,
+                "day": time.strftime("%Y-%m-%d", time.localtime(end_ms / 1000.0)),
+                "ts": end_ms / 1000.0, "start_ts": last_user_ms / 1000.0,
+                "duration_s": wait_s, "tool_calls": 0,
+                "output_tokens": output_tokens, "context_tokens": msg_tokens,
+                "model_calls": 1, "timing_basis": "OpenCode message timestamps",
+                "ttft_s": 0.0, "attempts": 1, "failed_attempts": 0, "retries": 0,
+            })
+            last_user_ms = 0
+
+    if not models:
+        models.add(model)
+    for stats in model_stats.values():
+        cost_evidence = stats.pop("cost_evidence")
+        token_evidence = stats.pop("token_evidence")
+        stats["availability"] = metric_availability(
+            "opencode", cost=cost_evidence, tokens=token_evidence,
+            input_tokens=token_evidence, output_tokens=token_evidence,
+        )
+    model_daily_rows = []
+    for daily in model_daily.values():
+        cost_evidence = daily.pop("cost_evidence")
+        token_evidence = daily.pop("token_evidence")
+        daily["availability"] = metric_availability(
+            "opencode", cost=cost_evidence, tokens=token_evidence,
+            input_tokens=token_evidence, output_tokens=token_evidence,
+        )
+        model_daily_rows.append(daily)
+
+    active_s = _merge_execution_intervals(active_intervals)
+    active = {"duration_s": active_s, "available": bool(active_s),
+              "basis": "OpenCode message timestamps" if active_s else "unavailable"}
+    session_cost_available = (
+        not isinstance(s_cost, bool) and isinstance(s_cost, (int, float))
+        and math.isfinite(float(s_cost)) and float(s_cost) >= 0
+    )
+    session_token_evidence = all(value is not None for value in (
+        s_input, s_output, s_reasoning, s_cr, s_cw,
+    ))
+    availability = metric_availability(
+        "opencode", cost=session_cost_available, tokens=session_token_evidence,
+        input_tokens=session_token_evidence, output_tokens=session_token_evidence,
+        throughput=bool(performance_samples), cache=session_token_evidence,
+        context=bool(context_window and context_samples), timing=bool(active_s),
+    )
+    row = summary_row(
+        source, source.get("title"), s_cost_val, tokens, turns, models,
+        first_ts, last_ts, model_cost, model_tok, day_cost, False, active,
+        inp + cre + cw, out + reasoning, model_stats, model_daily_rows, performance_samples,
+        wait_samples, availability,
+    )
+    row["primary_model"] = max(
+        model_stats,
+        key=lambda name: (model_stats[name]["executions"], model_stats[name]["tokens"]),
+    ) if model_stats else model
+    row["context"] = {
+        "window": context_window,
+        "latest": latest_context or None,
+        "latest_pct": (latest_context / context_window)
+                      if (context_window and latest_context) else None,
+        "estimated": False,
+    }
+    row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+    row["terminal"] = False
+    row["_tool_evidence"] = summarize_tool_evidence(tool_evidence)
+    signal_rollups, signal_events = analyze_language_signal_turns(signal_turns)
+    attach_language_signals(row, signal_rollups, signal_events)
+    return row
+
+
+def session_summary(source, opencode_conn=None):
     cached = _summary_cache.get(source["path"])
-    mtime = source.get("signature_mtime") or source.get("mtime") or safe_mtime(source["path"])
-    if cached and cached.get("mtime") == mtime:
+    signature = source_revision_signature(source)
+    if cached and cached.get("signature") == signature:
         return cached["row"]
-    objs = load(source["path"])
+    objs = None if source["provider"] == "opencode" else load(source["path"])
     if source["provider"] == "codex":
         row = codex_summary(source, objs)
     elif source["provider"] == "claude":
         row = claude_summary(source, objs)
     elif source["provider"] == "cursor":
         row = cursor_summary(source, objs)
+    elif source["provider"] == "opencode":
+        row = opencode_summary(source, opencode_conn)
     else:
         row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
                           {}, {}, {}, False, availability=metric_availability("unknown"))
-    _summary_cache[source["path"]] = {"mtime": mtime, "row": row}
+    _summary_cache[source["path"]] = {"signature": signature, "row": row}
     return row
 
 
@@ -6685,6 +7585,7 @@ def session_action_capability():
         "token": _ACTION_TOKEN,
         "recoverable": True,
         "destination": destination,
+        "read_only_providers": ["opencode"],
     }
 
 
@@ -7436,7 +8337,7 @@ def monthly_budget_status(months, settings=None, now=None):
         exceeded = bool(allocation and runtime_spend >= allocation)
         runtimes.append({
             "provider": provider,
-            "label": provider.title(),
+            "label": "OpenCode" if provider == "opencode" else provider.title(),
             "spend": runtime_spend,
             "allocation": allocation,
             "percent": runtime_spend / allocation if allocation else None,
@@ -8039,43 +8940,58 @@ def cross_session(sources=None):
     provider_rows = defaultdict(list)
 
     source_rows = list(sources) if sources is not None else all_session_sources()
-    for source in source_rows:
-        row = session_summary(source)
-        if row["turns"] == 0:
-            continue
-        internal_rows.append(row)
-        sessions.append({key: value for key, value in row.items() if not key.startswith("_")})
-        provider_cost[row["provider"]] += row["cost"]
-        provider_sessions[row["provider"]] += 1
-        provider_rows[row["provider"]].append(row)
-        runtime = row.get("runtime") or source_runtime_label(row)
-        row_model_cost = row.get("_model_cost", {})
-        row_model_tokens = row.get("_model_tok", {})
-        for model in set(row_model_cost) | set(row_model_tokens):
-            key = f"{model}::{runtime}"
-            item = model_mix_rows.setdefault(key, {
-                "id": key, "model": model, "runtime": runtime,
-                "providers": set(), "cost": 0.0, "tokens": 0,
-                "session_ids": set(), "cost_ids": set(), "token_ids": set(),
-                "estimated_ids": set(), "estimated_cost": 0.0, "estimated_tokens": 0,
-            })
-            cost_value = float(row_model_cost.get(model) or 0)
-            token_value = int(row_model_tokens.get(model) or 0)
-            item["providers"].add(row.get("provider") or "unknown")
-            item["cost"] += cost_value
-            item["tokens"] += token_value
-            item["session_ids"].add(row["id"])
-            if metric_available(row, "cost"):
-                item["cost_ids"].add(row["id"])
-            if metric_available(row, "tokens"):
-                item["token_ids"].add(row["id"])
-            if row.get("token_estimate"):
-                item["estimated_ids"].add(row["id"])
-                item["estimated_cost"] += cost_value
-                item["estimated_tokens"] += token_value
-            model_name_cost[model] += cost_value
-        for day, val in row.get("_day_cost", {}).items():
-            day_cost[day] += val
+    opencode_conn = None
+    if any(source.get("provider") == "opencode" for source in source_rows):
+        try:
+            opencode_conn = _opencode_db_connection(opencode_db_path())
+        except (OSError, sqlite3.Error):
+            opencode_conn = None
+    connection_manager = (
+        contextlib.closing(opencode_conn) if opencode_conn is not None
+        else contextlib.nullcontext(None)
+    )
+    with connection_manager as shared_opencode_conn:
+        for source in source_rows:
+            row = (
+                session_summary(source, opencode_conn=shared_opencode_conn)
+                if source.get("provider") == "opencode" and shared_opencode_conn is not None
+                else session_summary(source)
+            )
+            if row["turns"] == 0:
+                continue
+            internal_rows.append(row)
+            sessions.append({key: value for key, value in row.items() if not key.startswith("_")})
+            provider_cost[row["provider"]] += row["cost"]
+            provider_sessions[row["provider"]] += 1
+            provider_rows[row["provider"]].append(row)
+            runtime = row.get("runtime") or source_runtime_label(row)
+            row_model_cost = row.get("_model_cost", {})
+            row_model_tokens = row.get("_model_tok", {})
+            for model in set(row_model_cost) | set(row_model_tokens):
+                key = f"{model}::{runtime}"
+                item = model_mix_rows.setdefault(key, {
+                    "id": key, "model": model, "runtime": runtime,
+                    "providers": set(), "cost": 0.0, "tokens": 0,
+                    "session_ids": set(), "cost_ids": set(), "token_ids": set(),
+                    "estimated_ids": set(), "estimated_cost": 0.0, "estimated_tokens": 0,
+                })
+                cost_value = float(row_model_cost.get(model) or 0)
+                token_value = int(row_model_tokens.get(model) or 0)
+                item["providers"].add(row.get("provider") or "unknown")
+                item["cost"] += cost_value
+                item["tokens"] += token_value
+                item["session_ids"].add(row["id"])
+                if metric_available(row, "cost"):
+                    item["cost_ids"].add(row["id"])
+                if metric_available(row, "tokens"):
+                    item["token_ids"].add(row["id"])
+                if row.get("token_estimate"):
+                    item["estimated_ids"].add(row["id"])
+                    item["estimated_cost"] += cost_value
+                    item["estimated_tokens"] += token_value
+                model_name_cost[model] += cost_value
+            for day, val in row.get("_day_cost", {}).items():
+                day_cost[day] += val
 
     sessions.sort(key=lambda s: -s["mtime"])
     _xsess["sessions"] = sessions
@@ -8276,10 +9192,10 @@ def publish(state):
 
 
 def source_mtime_signature(sources):
-    """Track additions, removals, and updates across every discovered log."""
+    """Track additions, removals, trace updates, and display metadata changes."""
     return tuple(sorted(
         (str(source.get("path") or ""),
-         float(source.get("signature_mtime") or source.get("mtime") or 0))
+         source_revision_signature(source))
         for source in (sources or [])
         if source.get("path")
     ))
@@ -8330,7 +9246,7 @@ def publish_after_session_delete():
             return next_source.get("id")
     publish({
         "ok": False,
-        "message": "No Claude, Codex, or Cursor logs found yet.",
+        "message": "No Claude, Codex, Cursor, or OpenCode logs found yet.",
         "source": {},
         "total_cost": 0,
         "total_tokens": 0,
@@ -8394,6 +9310,8 @@ def agent_provider(value):
         return "codex"
     if value.startswith("cursor"):
         return "cursor"
+    if value.startswith("opencode"):
+        return "opencode"
     return ""
 
 
@@ -8428,16 +9346,18 @@ def resolve_agent_source(session_id=None, caller=None, sources=None):
             matches = [row for candidate, row in ancestor_matches if len(candidate) == nearest_length]
         if not matches:
             runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
-                       else "Cursor" if provider == "cursor" else "agent")
+                       else "Cursor" if provider == "cursor" else "OpenCode" if provider == "opencode"
+                       else "agent")
             return None, f"No {runtime} run matched the caller's current project."
         candidates = matches
     if not candidates:
-        return None, "No matching Claude, Codex, or Cursor run was found."
+        return None, "No matching Claude, Codex, Cursor, or OpenCode run was found."
     selected = max(candidates, key=lambda row: float(row.get("mtime") or 0))
     mtime = float(selected.get("mtime") or 0)
     if not mtime or time.time() - mtime > AGENT_CURRENT_MAX_AGE_S:
         runtime = ("Codex" if provider == "codex" else "Claude" if provider == "claude"
-                   else "Cursor" if provider == "cursor" else "agent")
+                   else "Cursor" if provider == "cursor" else "OpenCode" if provider == "opencode"
+                   else "agent")
         return None, f"No recent {runtime} run matched the caller's current project."
     return selected, "matched"
 
@@ -8708,7 +9628,7 @@ def agent_usage(window="7d", focus="changes"):
     }[focus]
     if not selected:
         answer = f"Token Meter has no aggregate usage for {window}."
-        action = "Run Claude, Codex, or Cursor, then ask again after Token Meter observes a local trace."
+        action = "Run Claude, Codex, Cursor, or OpenCode, then ask again after Token Meter observes a local trace."
         assessment = "No data"
     elif delta is not None and delta >= 0.25:
         answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
@@ -9928,13 +10848,12 @@ def watcher():
             cur = nf
         updated_state = None
         if cur:
-            sig = float(cur.get("signature_mtime") or cur.get("mtime") or safe_mtime(cur["path"]))
-            if not sig:
+            sig = source_revision_signature(cur)
+            if not sig or not sig[0]:
                 cur = None
                 time.sleep(0.5)
                 continue
             if sig != last_sig:
-                last_sig = sig
                 updated_state = recompute(cur)
                 if updated_state:
                     cache_at = _xsess.get("at") or 0.0
@@ -9945,6 +10864,7 @@ def watcher():
                     if (_xsess.get("at") or 0.0) > cache_at:
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
+                    last_sig = sig
         now = time.monotonic()
         if cross_session_refresh_due(
                 cross_dirty, membership_changed, now, last_cross_refresh):
@@ -9956,7 +10876,7 @@ def watcher():
                 publish({
                     "ok": False,
                     "loading": False,
-                    "message": "No readable Claude, Codex, or Cursor logs found yet.",
+                    "message": "No readable Claude, Codex, Cursor, or OpenCode logs found yet.",
                     "source": {},
                     "total_cost": 0,
                     "total_tokens": 0,
@@ -10226,7 +11146,16 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(result), "application/json", status=status)
             return
         if req_path == "/session/delete":
-            result = trash_session_log(payload.get("session_id"))
+            session_id = payload.get("session_id")
+            source = find_session(session_id) if session_id else None
+            if source and source.get("provider") == "opencode":
+                result = {
+                    "ok": False,
+                    "error": "OpenCode sessions are read-only in Token Meter.",
+                    "error_code": "read_only_provider",
+                }
+            else:
+                result = trash_session_log(session_id)
             if result.get("ok"):
                 result["next_session_id"] = publish_after_session_delete()
             status = 200 if result.get("ok") else (404 if result.get("error_code") == "not_found" else

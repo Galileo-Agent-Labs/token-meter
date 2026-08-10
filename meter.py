@@ -6296,7 +6296,11 @@ def discovered_skills(skill_usage=None, runtime_sessions=None):
         if providers and expected_provider not in providers:
             used = {}
         unmeasurable = not bool(used) and not _skill_has_measurable_capabilities(path)
-        loaded = runtime_sessions.get(runtime, 0) if unmeasurable else 0
+        loaded = 0
+        if unmeasurable:
+            loaded = runtime_sessions.get(runtime, 0)
+            if not loaded and runtime == "Claude":
+                loaded = runtime_sessions.get("Claude Code", 0)
         rows.append({
             "id": skill_identity(runtime, name, origin_id, plugin_id),
             "type": "skill", "name": name, "runtime": runtime, "source": source,
@@ -6397,7 +6401,7 @@ def capability_control_groups(_mcp_items, skill_items):
         if not row.get("unmeasurable"):
             pack["measurable_members"] += 1
         else:
-            pack["loaded_sessions"] += int(row.get("loaded_sessions") or 0)
+            pack["loaded_sessions"] = max(pack["loaded_sessions"], int(row.get("loaded_sessions") or 0))
         last_used = row.get("last_used") or "Never"
         if last_used != "Never" and (pack["last_used"] == "Never" or last_used > pack["last_used"]):
             pack["last_used"] = last_used

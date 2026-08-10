@@ -5365,6 +5365,37 @@ class OpenCodeTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertEqual(result["error_code"], "not_found")
 
+    def test_opencode_summary_reports_latest_context_pct(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Explain it", "deepseek-v4-pro",
+                                    0.015, 1500, 300, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (top["id"], top["project_id"], top["parent_id"], top["slug"],
+                          top["directory"], top["title"], top["version"], top["time_created"],
+                          top["time_updated"], top["time_archived"], top["agent"], top["model"],
+                          top["cost"], top["tokens_input"], top["tokens_output"],
+                          top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
+            for mid, sid, created, updated, data in self._sample_messages():
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (mid, sid, created, updated, data))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=200000):
+                row = meter.opencode_summary({
+                    "provider": "opencode", "id": "ses_top", "model": "deepseek-v4-pro",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo", "title": "Explain it",
+                    "mtime": 1_784_548_900.0,
+                })
+        self.assertEqual(row["context"]["window"], 200000)
+        self.assertEqual(row["context"]["latest"], 500)
+        self.assertAlmostEqual(row["context"]["latest_pct"], 500 / 200000)
+        self.assertFalse(row["context"]["estimated"])
+        self.assertEqual(row["_context_samples"], [1300, 500])
+        self.assertTrue(row["availability"]["context"])
+
     def test_opencode_budget_defaults_and_distribute_cost(self):
         with mock.patch.object(meter, "OPENCODE_DB", str(Path("/nonexistent/opencode.db"))):
             settings = meter.normalize_budget_settings({"allocations": {}})

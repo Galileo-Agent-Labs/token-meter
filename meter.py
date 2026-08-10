@@ -4795,12 +4795,15 @@ def recompute_opencode(source):
                 "tool_calls": len(tools), "timing_basis": "open-code response time",
             })
 
+        ctx_tokens = in_tok + cache_tok
+        ctx_pct = ctx_tokens / context_window if context_window else None
         series.append({
-            "i": idx, "in": in_tok + cache_tok, "out": out_tok,
+            "i": idx, "in": ctx_tokens, "out": out_tok,
             "cost": round(tc, 4), "fresh_input": fresh_tok,
             "cache": cache_tok, "cache_read": cache_read, "cache_write": cache_write,
             "think": think_now, "tools": len(tools), "side": False,
             "reasoning": reasoning_tok,
+            "context_pct": ctx_pct,
             "user_message": "", "user_input": "",
         })
         executions.append({
@@ -4817,8 +4820,8 @@ def recompute_opencode(source):
             "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
             "tools": tools, "tool_count": len(tools),
             "reasoning_tokens": reasoning_tok,
-            "context_tokens": in_tok + cache_tok, "context_window": context_window,
-            "context_pct": (in_tok + cache_tok) / context_window if context_window else None, "duration_ms": duration_ms or None,
+            "context_tokens": ctx_tokens, "context_window": context_window,
+            "context_pct": ctx_pct, "duration_ms": duration_ms or None,
             "summary": f"Execution {idx}: {len(tools)} tools · ${tc:.3f} OpenCode-reported"
                        if cost_available else f"Execution {idx}: {len(tools)} tools · cost unavailable",
             "user_message": "", "user_input": "",
@@ -6414,12 +6417,11 @@ def cursor_summary(source, objs=None):
 
 
 def opencode_summary(source, objs=None):
-    """Build a cross-session OpenCode row from the session table row alone.
+    """Build a cross-session OpenCode row from the session table row.
 
-    Reads only the session-row aggregates (tokens, cost, timestamps, model)
-    so the summary is instant even while the owning process writes the WAL DB.
-    Per-turn detail and trace are reserved for the full recompute in
-    recompute_opencode (cached after first call).
+    Reads session-row aggregates for the fast path and queries a bounded
+    window of recent messages for wait-time evidence used by model
+    aggregation.  Per-turn detail and trace remain in recompute_opencode.
     """
     sid = str(source.get("id") or "")
     try:
@@ -6432,6 +6434,7 @@ def opencode_summary(source, objs=None):
             ).fetchone()
             te = []
             tool_texts = []
+            wait_rows = []
             if row:
                 te = conn.execute(
                     "SELECT DISTINCT json_extract(data,'$.tool') as name "
@@ -6444,10 +6447,17 @@ def opencode_summary(source, objs=None):
                     "ORDER BY time_created ASC LIMIT 5",
                     (sid,)
                 ).fetchall()
+                wait_rows = conn.execute(
+                    "SELECT data FROM message WHERE session_id=? "
+                    "AND json_extract(data,'$.role') IN ('user','assistant') "
+                    "ORDER BY time_created DESC LIMIT 100",
+                    (sid,)
+                ).fetchall()
     except (OSError, sqlite3.Error):
         row = None
         te = []
         tool_texts = []
+        wait_rows = []
     if not row:
         availability = metric_availability("opencode")
         return summary_row(
@@ -6462,6 +6472,7 @@ def opencode_summary(source, objs=None):
     cw = int(s_cw or 0)
     model = str((_opencode_json(s_model_raw, {}) or {}).get("id") or source.get("model") or "unknown")
     last_ts = (updated / 1000.0) if updated else None
+    context_window = _opencode_model_window(model)
 
     # Lightweight tool evidence: only distinct tool names (not full args/chars).
     tool_evidence = []
@@ -6506,6 +6517,64 @@ def opencode_summary(source, objs=None):
     active = {"duration_s": max(0, (updated - created) / 1000.0) if updated and created else 0,
               "available": bool(updated and created and updated > created),
               "basis": "session time window"}
+    # Wait samples from recent user→assistant message pairs, plus the latest
+    # per-message context size (input + cache) for the session card.
+    wait_samples = []
+    context_samples = []
+    latest_context = 0
+    dt_ms = 0
+    if wait_rows:
+        wait_rows.reverse()
+        last_user_ms = 0
+        for (data_raw,) in wait_rows:
+            data = _opencode_json(data_raw, None)
+            if not isinstance(data, dict):
+                continue
+            role = data.get("role")
+            if role == "assistant":
+                msg_tokens = data.get("tokens")
+                if isinstance(msg_tokens, dict):
+                    cache = msg_tokens.get("cache")
+                    if not isinstance(cache, dict):
+                        cache = {}
+                    msg_context = (_opencode_int(msg_tokens.get("input"))
+                                   + _opencode_int(cache.get("read"))
+                                   + _opencode_int(cache.get("write")))
+                    if msg_context > 0:
+                        context_samples.append(msg_context)
+                        latest_context = msg_context
+            if not last_ts:
+                continue
+            if role == "user":
+                to = data.get("time")
+                last_user_ms = _opencode_int(to.get("created")) if isinstance(to, dict) else 0
+            elif role == "assistant" and last_user_ms:
+                to = data.get("time")
+                created_ms = _opencode_int(to.get("created")) if isinstance(to, dict) else 0
+                completed_ms = _opencode_int(to.get("completed")) if isinstance(to, dict) else 0
+                end_ms = completed_ms or created_ms
+                if end_ms > last_user_ms:
+                    wait_s = (end_ms - last_user_ms) / 1000.0
+                    if wait_s > 0:
+                        wait_samples.append({
+                            "provider": "opencode",
+                            "model": str(data.get("modelID") or model),
+                            "day": time.strftime("%Y-%m-%d", time.localtime(end_ms / 1000.0)),
+                            "ts": end_ms / 1000.0,
+                            "start_ts": last_user_ms / 1000.0,
+                            "duration_s": wait_s,
+                            "tool_calls": 1,
+                            "output_tokens": 0,
+                            "context_tokens": 0,
+                            "model_calls": 1,
+                            "timing_basis": "message timestamps",
+                            "ttft_s": 0.0,
+                            "attempts": 1,
+                            "failed_attempts": 0,
+                            "retries": 0,
+                        })
+                        dt_ms += (end_ms - last_user_ms)
+                last_user_ms = 0
     performance_samples = []
     duration_s = active["duration_s"]
     if duration_s > 0 and out > 0:
@@ -6522,16 +6591,22 @@ def opencode_summary(source, objs=None):
     availability = metric_availability("opencode", cost=bool(s_cost_val > 0),
                                        tokens=bool(tokens > 0), input_tokens=bool(inp or cre or cw),
                                        output_tokens=bool(out), throughput=bool(duration_s > 0 and out > 0),
-                                       cache=bool(cre or cw), context=False)
+                                       cache=bool(cre or cw), context=bool(context_window))
     row = summary_row(
         source, source.get("title"), s_cost_val, tokens, 1, models,
         first_ts, last_ts, model_cost, model_tok, day_cost, False, active,
-        inp, out, model_stats, list(model_daily.values()), performance_samples, [],
-        availability,
+        inp, out, model_stats, list(model_daily.values()), performance_samples,
+        wait_samples, availability,
     )
     row["primary_model"] = model
-    row["context"] = {}
-    row["_context_samples"] = [inp + cre + cw] if inp else []
+    row["context"] = {
+        "window": context_window,
+        "latest": latest_context or None,
+        "latest_pct": (latest_context / context_window)
+                      if (context_window and latest_context) else None,
+        "estimated": False,
+    }
+    row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
     row["terminal"] = False
     row["_tool_evidence"] = summarize_tool_evidence(tool_evidence)
     signal_rollups, signal_events = analyze_language_signal_turns(signal_turns)

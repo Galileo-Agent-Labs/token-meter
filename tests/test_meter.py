@@ -4170,6 +4170,91 @@ class ToolEvidenceTests(unittest.TestCase):
         self.assertEqual(summary["used"], 1)
         self.assertEqual(summary["review_candidates"], [])
 
+    def test_skill_frontmatter_parses_name_description_only(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: caveman\ndescription: Ultra-compressed communication mode\n---\n\nbody")
+            path = f.name
+        try:
+            fm = meter._skill_frontmatter(path)
+            self.assertEqual(fm, {"name": "caveman", "description": "Ultra-compressed communication mode"})
+        finally:
+            os.unlink(path)
+
+    def test_skill_frontmatter_parses_allowed_tools(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: firewall-manager\nallowed-tools: Bash, Read\n---\n\nbody")
+            path = f.name
+        try:
+            fm = meter._skill_frontmatter(path)
+            self.assertEqual(fm["allowed-tools"], "Bash, Read")
+        finally:
+            os.unlink(path)
+
+    def test_skill_frontmatter_returns_empty_for_missing_file(self):
+        fm = meter._skill_frontmatter("/nonexistent/path/SKILL.md")
+        self.assertEqual(fm, {})
+
+    def test_skill_has_measurable_capabilities_with_allowed_tools(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: firewall\ndescription: Manage firewall\nallowed-tools: Bash\n---\n\nbody")
+            path = f.name
+        try:
+            self.assertTrue(meter._skill_has_measurable_capabilities(path))
+        finally:
+            os.unlink(path)
+
+    def test_skill_has_measurable_capabilities_prompt_only(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: caveman\ndescription: Be terse\n---\n\nbody")
+            path = f.name
+        try:
+            self.assertFalse(meter._skill_has_measurable_capabilities(path))
+        finally:
+            os.unlink(path)
+
+    def test_prompt_only_skill_pack_excluded_from_review_candidates(self):
+        skill_items = [
+            {"id": "skill:claude:caveman:caveman", "name": "caveman", "runtime": "Claude",
+             "plugin_id": "caveman@skills-marketplace", "mutable": True, "enabled": True,
+             "used": False, "activations": 0, "unmeasurable": True, "reviewable": True},
+        ]
+        groups = meter.capability_control_groups([], skill_items)
+        self.assertEqual(groups[0]["unmeasurable"], True)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(summary["enabled"], 1)
+        self.assertEqual(summary["unused"], 0)
+        self.assertEqual(summary["unmeasurable_packs"], 1)
+        self.assertEqual(summary["review_candidates"], [])
+
+    def test_measurable_skill_pack_remains_review_candidate(self):
+        skill_items = [
+            {"id": "skill:codex:browser:browser", "name": "browser", "runtime": "Codex",
+             "plugin_id": "browser@personal", "mutable": True, "enabled": True,
+             "used": False, "activations": 0, "unmeasurable": False, "reviewable": True},
+        ]
+        groups = meter.capability_control_groups([], skill_items)
+        self.assertEqual(groups[0]["unmeasurable"], False)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(summary["unused"], 1)
+        self.assertEqual(summary["unmeasurable_packs"], 0)
+        self.assertEqual(len(summary["review_candidates"]), 1)
+
+    def test_used_skill_pack_never_unmeasurable(self):
+        skill_items = [
+            {"id": "skill:claude:caveman:caveman", "name": "caveman", "runtime": "Claude",
+             "plugin_id": "caveman@skills-marketplace", "mutable": True, "enabled": True,
+             "used": True, "activations": 3, "unmeasurable": True, "reviewable": True},
+        ]
+        summary = meter.optional_capability_summary(meter.capability_control_groups([], skill_items))
+        self.assertEqual(summary["used"], 1)
+        self.assertEqual(summary["unused"], 0)
+        self.assertEqual(summary["unmeasurable_packs"], 0)
+        self.assertEqual(len(summary["review_candidates"]), 0)
+
     def test_token_meter_diagnostics_are_accounted_but_never_recommended_for_cleanup(self):
         calls = [{**meter.tool_identity("mcp__tokenmeter__check"), "output_tokens": 50000,
                   "ts": 100, "args_fingerprint": "one", "error": False}]

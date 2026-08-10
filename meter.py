@@ -6604,9 +6604,10 @@ def opencode_summary(source, objs=None):
             message_rows = conn.execute(
                 "SELECT data, time_created FROM message WHERE session_id=? "
                 "AND json_extract(data,'$.role') IN ('user','assistant') "
-                "ORDER BY time_created ASC, id ASC",
+                "ORDER BY time_created DESC, id DESC LIMIT 500",
                 (sid,)
             ).fetchall()
+            message_rows.reverse()
     except (OSError, sqlite3.Error):
         row = None
         te = []
@@ -8830,26 +8831,29 @@ def aggregate_model_stats(session_rows):
                     target["ttft_samples"] += 1
                 context_tokens = int(sample.get("context_tokens") or 0)
                 if context_tokens > 0:
-                    target["workload_peak_inputs"].append(context_tokens)
-                    target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
-                    target["workload_model_calls"].append(
-                        max(1, int(sample.get("model_calls") or 1))
-                    )
-                target["workload_peak_inputs"].append(peak_input_tokens)
-                target["workload_outputs"].append(output_tokens)
-                target["workload_tool_calls"].append(tool_calls)
-                target["workload_model_calls"].append(model_calls)
-                if metric_available(session, "cache"):
-                    target["workload_cache_ratios"].append(cache_ratio)
+                    if len(target["workload_peak_inputs"]) < 2000:
+                        target["workload_peak_inputs"].append(context_tokens)
+                        target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
+                        target["workload_model_calls"].append(
+                            max(1, int(sample.get("model_calls") or 1))
+                        )
+                if len(target["workload_peak_inputs"]) < 2000:
+                    target["workload_peak_inputs"].append(peak_input_tokens)
+                    target["workload_outputs"].append(output_tokens)
+                    target["workload_tool_calls"].append(tool_calls)
+                    target["workload_model_calls"].append(model_calls)
+                    if metric_available(session, "cache"):
+                        target["workload_cache_ratios"].append(cache_ratio)
             if (not session.get("token_estimate") and duration_s > 0
                     and input_tokens > 0 and output_tokens > 0):
-                pace_groups[row["id"]].append({
-                    "day": day, "ts": float(sample.get("ts") or 0),
-                    "duration_s": duration_s, "input_tokens": input_tokens,
-                    "peak_input_tokens": peak_input_tokens,
-                    "output_tokens": output_tokens, "tool_calls": tool_calls,
-                    "model_calls": model_calls, "cache_read_tokens": cache_read_tokens,
-                })
+                if len(pace_groups[row["id"]]) < 500:
+                    pace_groups[row["id"]].append({
+                        "day": day, "ts": float(sample.get("ts") or 0),
+                        "duration_s": duration_s, "input_tokens": input_tokens,
+                        "peak_input_tokens": peak_input_tokens,
+                        "output_tokens": output_tokens, "tool_calls": tool_calls,
+                        "model_calls": model_calls, "cache_read_tokens": cache_read_tokens,
+                    })
             row["last_ts"] = max(float(row.get("last_ts") or 0), float(sample.get("ts") or 0))
         for sample in session.get("_wait_samples") or []:
             model = sample.get("model") or ""
@@ -8935,8 +8939,8 @@ def aggregate_model_stats(session_rows):
         row["daily"] = daily
         result.append(finalize_coverage(_finalize_throughput_fields(row)))
     result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"],
-                                 -row["executions"], -row["wait_samples"],
-                                 row["model"], row["runtime"]))
+                                  -row["executions"], -row["wait_samples"],
+                                   row["model"], row["runtime"]))
     valid_ids = {row["id"] for row in result}
     projects = sorted({
         str(session.get("project") or "No project")
@@ -9154,6 +9158,11 @@ def cross_session(sources=None):
         for row in internal_rows
         for sample in (row.get("_wait_samples") or [])
     ])
+    _ms = aggregate_model_stats(internal_rows)
+    _ls = aggregate_language_signals(internal_rows)
+    _fr = aggregate_frustration(internal_rows)
+    _mp = model_pricing_settings()
+    _ci = capability_inventory(tool_waste)
     data = {
         "generated_at": int(now),
         "sessions": sessions[:60],
@@ -9196,16 +9205,16 @@ def cross_session(sources=None):
             }
             for k in provider_cost
         ], key=lambda r: -r["cost"]),
-        "model_stats": aggregate_model_stats(internal_rows),
-        "language_signals": aggregate_language_signals(internal_rows),
-        "frustration": aggregate_frustration(internal_rows),
-        "model_pricing": model_pricing_settings(),
+        "model_stats": _ms,
+        "language_signals": _ls,
+        "frustration": _fr,
+        "model_pricing": _mp,
         "budgets": budgets,
         "budget": budget,
         "tool_waste": tool_waste,
         "daily": daily,
         "monthly": monthly,
-        "capabilities": capability_inventory(tool_waste),
+        "capabilities": _ci,
         "session_actions": session_action_capability(),
     }
     _xsess["internal_rows"] = tuple(internal_rows)
@@ -11309,7 +11318,7 @@ class H(BaseHTTPRequestHandler):
             source = find_session(sid)
             st = cached_session_state(source) if source else None
             if st:
-                cross = cross_session()
+                cross = _xsess.get("data") or cross_session()
                 attach_cross_session(st, cross)
                 current_ids = {
                     str(row.get("id") or "")

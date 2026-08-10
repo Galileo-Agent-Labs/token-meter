@@ -1533,6 +1533,18 @@ class CurrentSessionSummaryTests(unittest.TestCase):
         self.assertEqual(result["recent"]["activity_state"], "recent")
         self.assertEqual(result["working"]["context"]["latest_pct"], 0.25)
 
+    def test_duplicate_session_segments_prefer_active_work(self):
+        now = 25_000
+        rows = [
+            self.row("resumed", now - 15, terminal=False, turns=8),
+            self.row("resumed", now - 5, terminal=True, turns=120),
+        ]
+        result = meter.current_session_summaries(rows, now=now)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "resumed")
+        self.assertEqual(result[0]["activity_state"], "working")
+        self.assertEqual(result[0]["turns"], 8)
+
     def test_keeps_context_tokens_without_inventing_a_window(self):
         row = self.row(
             "claude-session", 29_990, provider="claude", client="claude_code",
@@ -2183,7 +2195,8 @@ class DashboardLayoutTests(unittest.TestCase):
     def test_session_card_hover_preserves_the_live_card_node(self):
         for marker in (
             "currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');",
-            "if(currentSessionDragId||interactingCurrentSessionCard)return;",
+            "if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}",
+            "card.classList.remove('activity-working','activity-waiting','activity-recent');",
             "body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}",
         ):
             self.assertIn(marker, self.page)
@@ -2326,20 +2339,69 @@ class DashboardLayoutTests(unittest.TestCase):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
             self.assertIn(marker, self.page)
         self.assertIn("renderCurrentOptimization(s)", self.page)
+        self.assertIn("function setCapabilityStatBar(id,value)", self.page)
+        self.assertLess(
+            self.page.index("function setCapabilityStatBar(id,value)"),
+            self.page.index("setCapabilityStatBar('ov-optional-bar'"),
+        )
+        self.assertIn("if(!bar)return;", self.page)
+        self.assertIn("bar.setAttribute('aria-valuetext',label);", self.page)
         self.assertNotIn("renderCapabilityUsage('ov-cap'", self.page)
         self.assertIn("Default tools and MCP servers are read-only evidence", self.page)
 
-    def test_tools_and_skills_uses_removable_groups_and_review_filter(self):
-        for marker in ("id=c-opt-enabled", "id=c-opt-used", "id=c-opt-review", "id=c-mcp-observed"):
-            self.assertIn(marker, self.page)
+    def test_tools_leads_with_stats_review_queue_and_visible_inventory(self):
         self.assertRegex(self.page, r"id=tab-capabilities[^>]*>.*?<span class=tabLabel>Tools</span>")
-        self.assertIn("data-cstate=review", self.page)
-        self.assertIn("They remain read-only in Token Meter", self.page)
-        self.assertIn("const reviewIds=new Set(cap?.summary?.optional?.review_candidates||[])", self.page)
-        self.assertIn("reviewIds.has(row.id)", self.page)
+        tools = self.page.split("id=view-capabilities", 1)[1].split(
+            "id=view-settings", 1
+        )[0]
+        for marker in (
+            'aria-label="Capability overview"', "id=c-stat-tools",
+            "id=c-stat-mcps", "id=c-stat-skills", "data-cap-jump=tool",
+            "id=c-review-queue", "id=c-review-list", "id=c-evidence-status",
+            "id=c-evidence-updated", "id=c-selection-bar", "id=c-disable-selected",
+            "id=c-inventory", "id=c-clear-filters", "id=c-active-filters",
+            'aria-label="Prompt-load evidence"',
+        ):
+            self.assertIn(marker, tools)
+        self.assertLess(tools.index('aria-label="Capability overview"'), tools.index("id=c-review-queue"))
+        self.assertLess(tools.index("id=c-review-queue"), tools.index("id=c-inventory"))
+        self.assertRegex(tools, r"<section class=\"card capInventory\" id=c-inventory")
+        self.assertNotIn('class="card capInventory" id=c-inventory-details', tools)
+        self.assertNotIn("id=c-catalog-details", tools)
+        self.assertNotIn("spectrumPageHead", tools)
+        for removed in (
+            "id=c-decision-panel", "id=c-opt-enabled", "id=c-opt-used",
+            "id=c-opt-review", "id=c-mcp-observed",
+            'aria-label="Capability evidence summary"', "id=c-review-filter",
+            "id=c-browse-all",
+        ):
+            self.assertNotIn(removed, tools)
+        self.assertIn('aria-label="Capability type"', self.page)
+        self.assertIn('aria-label="Evidence and configuration"', self.page)
+        self.assertIn('aria-label="Search installed capabilities"', self.page)
+        self.assertIn("button.setAttribute('aria-pressed'", self.page)
+        self.assertIn("function renderCapabilityReviewQueue(cap", self.page)
+        self.assertIn("function unusedReviewGroups(cap)", self.page)
+        self.assertIn("if(!cap)return;", self.page)
+        self.assertIn("fetch('/capabilities/inventory'", self.page)
+        self.assertIn("CAPABILITY_PAGE_SIZE=100", self.page)
+        self.assertIn("id=c-mobile-sort", self.page)
+        self.assertIn("function openCapabilityInventory(type='all')", self.page)
+        self.assertIn("button.onclick=()=>openCapabilityInventory(button.dataset.capJump)", self.page)
+        self.assertIn("function clearCapabilityFilter(key)", self.page)
         self.assertIn("row.measurement==='instruction'?'Instruction-only':'Evidence unavailable'", self.page)
         self.assertIn("return row.enabled?'Enabled':'Disabled'", self.page)
+        self.assertIn("const selectedCapabilityIds=new Set()", self.page)
+        self.assertIn("openSelectedDisableDialog", self.page)
+        self.assertIn("capabilityRuntime='all'", self.page)
+        self.assertIn("lastCapabilityReviewRevision", self.page)
+        self.assertIn("cap.review_revision", self.page)
+        self.assertIn("cap.inventory_revision", self.page)
+        self.assertIn("setCapabilityAvailability('stale'", self.page)
+        self.assertIn("data-label=\"Configuration\"", self.page)
+        self.assertIn("data-label=\"Evidence\"", self.page)
         self.assertNotIn("Loaded ·", self.page)
+        self.assertNotIn("Disable all unused", self.page)
         self.assertNotIn("if(row.unmeasurable) return '<span class=subline>not measurable</span>'", self.page)
 
     def test_fieldtips_are_portaled_and_viewport_bound(self):
@@ -2392,7 +2454,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("if(h==='learn')", self.page)
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
-        self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'nearest'})", self.page)
+        self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'center'})", self.page)
 
     def test_non_current_views_keep_visible_copy_terse(self):
         boundaries = (
@@ -2448,17 +2510,20 @@ class DashboardLayoutTests(unittest.TestCase):
             "class=budgetRuntimeHead", "class=budgetRuntimeInput",
             "class=budgetChartInner", "class=budgetTarget",
             "id=budget-input-claude", "id=budget-input-codex",
-            "id=budget-input-cursor", "id=budget-input-thresholds",
+            "id=budget-input-cursor", "id=budget-input-opencode",
+            "id=budget-input-thresholds",
             "id=budget-runtime-spend-claude",
             "id=budget-runtime-spend-codex",
             "id=budget-runtime-spend-cursor",
+            "id=budget-runtime-spend-opencode",
             "id=budget-runtime-track-claude",
+            "id=budget-runtime-track-opencode",
             "/settings/budgets", "tm_monthly_budget_alerts",
             "Partial cost coverage: recorded spend is a lower bound.",
             "Calculated budget",
-            "The sum of the Claude, Codex, and Cursor budgets.",
+            "The sum of the Claude, Codex, Cursor, and OpenCode budgets.",
             "Runtime budgets are added to calculate the monthly total.",
-            "Claude + Codex + Cursor",
+            "Claude + Codex + Cursor + OpenCode",
             "planJump.textContent=configured?'Edit budgets':'Set budgets'",
             "config.scrollIntoView({behavior:",
             "const config=$('budget-config'),input=$('budget-input-claude')",
@@ -2742,6 +2807,14 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("${appBadgeClass(s)}", self.page)
         self.assertNotIn("providerBadgeClass", self.page)
 
+    def test_current_sessions_keep_opencode_identity(self):
+        self.assertIn(
+            "['claude','codex','cursor','gemini','opencode'].includes(row.provider)",
+            self.page,
+        )
+        self.assertIn('class="card currentSessionCard provider-${provider}', self.page)
+        self.assertIn('Start Claude, Codex, Cursor, or OpenCode to see one here.', self.page)
+
     def test_session_delete_actions_require_confirmation_and_use_trash_endpoint(self):
         for marker in ("id=session-delete", "data-delete-session", "id=session-delete-dialog",
                        "id=session-delete-confirm", "Move to Trash", "/session/delete"):
@@ -2754,12 +2827,47 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("actions?.read_only_providers", self.page)
         self.assertIn("!sessionDeleteAvailable(target,actions)", self.page)
 
-    def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
-        self.assertIn("id=c-disable-unused", self.page)
+    def test_selected_candidate_action_has_confirmation_and_exact_control_ids(self):
+        self.assertIn("id=c-disable-selected", self.page)
         self.assertIn("id=bulk-dialog", self.page)
         self.assertIn("/capability/disable-unused", self.page)
-        self.assertIn("control_ids:groups.map(row=>row.id)", self.page)
+        self.assertIn('data-cap-select="${esc(row.id)}"', self.page)
+        self.assertIn("selectedCapabilityIds.add(input.dataset.capSelect)", self.page)
+        self.assertIn("unusedReviewGroups(cap).filter(row=>selectedCapabilityIds.has(row.id))", self.page)
+        self.assertIn("pendingBulkDisable={controlIds,fingerprints:", self.page)
+        self.assertIn("capabilityGroupFingerprint(row)", self.page)
+        self.assertIn("$('bulk-dialog-controls').textContent=controlIds.join('\\n')", self.page)
+        self.assertIn("control_ids:controlIds", self.page)
+        self.assertIn("Review evidence changed", self.page)
+        self.assertIn('aria-label="Select ${esc(capabilityPackName(row))} pack"', self.page)
         self.assertIn("MCP servers, runtime packs, built-ins, standalone skills, and used groups are excluded.", self.page)
+        self.assertIn("Disable selected", self.page)
+        self.assertNotIn("id=c-disable-unused", self.page)
+
+    def test_capability_polling_uses_stable_revisions_and_lazy_inventory(self):
+        review = self.page.split("function renderCapabilityReviewQueue", 1)[1].split(
+            "function renderCapabilityTable", 1
+        )[0]
+        inventory = self.page.split("function renderCapabilityTable", 1)[1].split(
+            "let pendingCapabilityAction", 1
+        )[0]
+        self.assertIn("revision===lastCapabilityReviewRevision", review)
+        self.assertIn("lastCapabilityReviewRevision=revision", review)
+        self.assertIn("if(!cap)return;", inventory)
+        self.assertNotIn("c-inventory-details", inventory)
+        self.assertNotIn("$('c-inventory-details').addEventListener('toggle'", self.page)
+        self.assertIn("fetch('/capabilities/inventory',{cache:'no-store'})", self.page)
+        self.assertIn("countWord(inventoryCount,'capability','capabilities')", self.page)
+        self.assertIn("capabilityInventorySnapshot.inventory_revision===cap.inventory_revision", self.page)
+        self.assertIn("renderCapabilityTable(merged,{force});", self.page)
+        self.assertIn("if(inventory)renderCapabilityTable(inventory,{force:true});", self.page)
+        self.assertIn("capabilityLastGoodAt=Date.now()", self.page)
+        self.assertIn("setCapabilityAvailability('unavailable'", self.page)
+        self.assertIn("setCapabilityAvailability('stale'", self.page)
+        self.assertIn("capabilityEvidenceState!=='current'", self.page)
+        self.assertIn("Confirmation closed", self.page)
+        self.assertIn("Capability evidence could not be refreshed", self.page)
+        self.assertIn("if(capabilitySort==='returned')capabilitySort='use'", self.page)
 
     def test_agent_access_has_a_dedicated_settings_tab(self):
         for marker in ("id=agent-discovery", "id=agent-access", "id=agent-clients",
@@ -3068,7 +3176,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "--spectrum-control:linear-gradient",
             "--spectrum-active:linear-gradient",
             '<div class="previewHead spectrumPageHead">',
-            "<div class=spectrumPageHead>",
+            "<header class=capPageHead>",
             '<div class="modelHead spectrumPageHead">',
             '<div class="dailyHead spectrumPageHead">',
             '<div class="learnHead spectrumPageHead">',
@@ -3113,6 +3221,8 @@ class DashboardLayoutTests(unittest.TestCase):
             "const CURRENT_SESSION_ORDER_KEY='tm_current_session_order_v1'",
             "const CURRENT_SESSION_ORDER_MIGRATION_KEY='tm_current_session_newest_first_v1'",
             "function orderedCurrentSessionRows(rows)",
+            "function currentSessionActivity(row)",
+            "function syncCurrentSessionActivity(root,rows)",
             "if(!Array.isArray(sourceRows))",
             "function moveCurrentSessionCard(sourceId,targetId,after=false)",
             "function moveCurrentSessionCardBy(sourceId,delta)",
@@ -3128,8 +3238,13 @@ class DashboardLayoutTests(unittest.TestCase):
             "id=current-session-order-status",
         ):
             self.assertIn(marker, self.page)
+        self.assertIn("if(!id||byId.has(id))return;", self.page)
         self.assertIn(
             "const known=currentSessionOrder.filter(id=>byId.has(id)),seen=new Set(known);",
+            self.page,
+        )
+        self.assertIn(
+            "if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}",
             self.page,
         )
         self.assertIn(
@@ -4192,6 +4307,8 @@ class ToolEvidenceTests(unittest.TestCase):
         tools = [row for row in waste["inventory_tools"] if row["name"] == "read_file"]
         self.assertEqual({row["id"] for row in tools}, {"codex::read_file", "cursor::read_file"})
         self.assertEqual({row["runtime"] for row in tools}, {"Codex", "Cursor"})
+        self.assertEqual(waste["provider_sessions"], {"codex": 1, "cursor": 1})
+        self.assertEqual(waste["runtime_sessions"], {"Codex": 1, "Cursor": 1})
 
     def test_skill_name_is_inferred_from_skill_descriptor_path(self):
         value = {"cmd": "sed -n '1,80p' /tmp/skills/execution-plan/SKILL.md"}
@@ -5103,6 +5220,114 @@ class CapabilityConfigTests(unittest.TestCase):
         summary = meter.optional_capability_summary(groups)
         self.assertEqual(summary["enabled"], 1)
         self.assertEqual(summary["review_candidates"], ["skill_pack:Codex:custom@personal"])
+
+    def test_observed_tools_do_not_claim_configuration_enabled(self):
+        waste = {"inventory_tools": [{
+            "id": "codex::exec", "name": "exec", "display": "exec",
+            "kind": "tool", "runtime": "Codex", "namespace": "shell",
+            "calls": 2, "output_tokens": 120, "last_used": "2026-08-10",
+            "advertised_sessions": 0, "eager_sessions": 0, "deferred_sessions": 0,
+        }]}
+        with mock.patch.object(meter, "codex_mcp_states", return_value={}), \
+                mock.patch.object(meter, "claude_mcp_states", return_value={}), \
+                mock.patch.object(meter, "discovered_skills", return_value=[]), \
+                mock.patch.object(meter, "claude_desktop_index", return_value={}), \
+                mock.patch.object(meter, "claude_local_agent_sources", return_value=[]):
+            capabilities = meter.capability_inventory(waste)
+        row = capabilities["items"][0]
+        self.assertIsNone(row["enabled"])
+        self.assertEqual(row["configuration"], "Unknown")
+        self.assertEqual(row["state"], "Observed only")
+        self.assertIsNone(capabilities["summary"]["tools"]["enabled"])
+        self.assertEqual(capabilities["summary"]["tools"]["observed"], 1)
+
+    def test_capability_revisions_are_stable_across_generation_time(self):
+        waste = {"inventory_tools": [{
+            "id": "codex::exec", "name": "exec", "display": "exec",
+            "kind": "tool", "runtime": "Codex", "namespace": "shell",
+            "calls": 2, "output_tokens": 120, "last_used": "2026-08-10",
+            "advertised_sessions": 1, "eager_sessions": 1, "deferred_sessions": 0,
+        }]}
+        with mock.patch.object(meter, "codex_mcp_states", return_value={}), \
+                mock.patch.object(meter, "claude_mcp_states", return_value={}), \
+                mock.patch.object(meter, "discovered_skills", return_value=[]), \
+                mock.patch.object(meter, "claude_desktop_index", return_value={}), \
+                mock.patch.object(meter, "claude_local_agent_sources", return_value=[]), \
+                mock.patch.object(meter.time, "time", side_effect=[100, 200, 300]):
+            first = meter.capability_inventory(waste)
+            second = meter.capability_inventory(waste)
+            changed = meter.capability_inventory({
+                **waste,
+                "inventory_tools": [{**waste["inventory_tools"][0], "calls": 3}],
+            })
+        self.assertNotEqual(first["generated_at"], second["generated_at"])
+        self.assertEqual(first["review_revision"], second["review_revision"])
+        self.assertEqual(first["inventory_revision"], second["inventory_revision"])
+        self.assertEqual(first["revision"], second["revision"])
+        self.assertNotEqual(second["inventory_revision"], changed["inventory_revision"])
+        self.assertNotEqual(second["revision"], changed["revision"])
+
+    def test_dashboard_state_omits_heavy_capability_rows_and_tool_waste(self):
+        capabilities = {
+            "items": [{"id": "tool:exec"}],
+            "summary": {"tools": {"available": 1}},
+            "control_groups": [], "inventory_revision": "inventory-a",
+        }
+        state = {"xsession": {
+            "capabilities": capabilities,
+            "tool_waste": {"inventory_tools": [{"private": "trace detail"}]},
+            "total_sessions": 2,
+        }}
+        payload = meter.dashboard_state_payload(state)
+        public_capabilities = payload["xsession"]["capabilities"]
+        self.assertNotIn("items", public_capabilities)
+        self.assertEqual(public_capabilities["inventory_count"], 1)
+        self.assertNotIn("tool_waste", payload["xsession"])
+        self.assertIn("items", state["xsession"]["capabilities"])
+        self.assertIn("tool_waste", state["xsession"])
+        self.assertIn(
+            'elif req_path == "/capabilities/inventory":',
+            Path(meter.__file__).read_text(),
+        )
+
+    def test_pack_without_runtime_logs_is_not_a_review_candidate(self):
+        base = {
+            "id": "skill_pack:Claude:custom@personal", "name": "custom@personal",
+            "control_type": "skill_pack", "enabled": True, "used": False,
+            "mutable": True, "reviewable": True, "unmeasurable": False,
+        }
+        unscanned = meter.optional_capability_summary([{**base, "scanned_sessions": 0}])
+        scanned = meter.optional_capability_summary([{**base, "scanned_sessions": 3}])
+        self.assertEqual(unscanned["review_candidates"], [])
+        self.assertEqual(unscanned["unscanned_packs"], 1)
+        self.assertEqual(scanned["review_candidates"], [base["id"]])
+        self.assertEqual(scanned["unscanned_packs"], 0)
+
+    def test_claude_desktop_and_3p_logs_do_not_cover_claude_code_packs(self):
+        skill = {
+            "id": "skill:claude:custom@personal:custom", "name": "custom",
+            "runtime": "Claude", "source": "User-installed plugin",
+            "plugin_id": "custom@personal", "mutable": True, "enabled": True,
+            "used": False, "reviewable": True, "measurement": "measurable",
+            "unmeasurable": False, "activations": 0, "last_used": "Never",
+            "setting_path": "~/.claude/settings.json",
+        }
+        for runtime in ("Claude Desktop", "Claude-3P"):
+            with self.subTest(runtime=runtime):
+                waste = meter.global_tool_waste([{
+                    "id": runtime, "provider": "claude", "runtime": runtime,
+                    "project": "/repo", "_tool_evidence": {},
+                }])
+                with mock.patch.object(meter, "codex_mcp_states", return_value={}), \
+                        mock.patch.object(meter, "claude_mcp_states", return_value={}), \
+                        mock.patch.object(meter, "discovered_skills", return_value=[skill]), \
+                        mock.patch.object(meter, "claude_desktop_index", return_value={}), \
+                        mock.patch.object(meter, "claude_local_agent_sources", return_value=[]):
+                    capabilities = meter.capability_inventory(waste)
+                self.assertEqual(capabilities["control_groups"][0]["scanned_sessions"], 0)
+                self.assertEqual(
+                    capabilities["summary"]["optional"]["review_candidates"], []
+                )
 
     def test_bulk_disable_accepts_only_exact_review_candidates(self):
         capabilities = {

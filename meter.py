@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Token Meter - a live cost and efficiency instrument for Claude, Codex, and Cursor.
+Token Meter - a live cost and efficiency instrument for Claude, Codex, Cursor, and OpenCode.
 
 Tails local agent logs, parses each execution as it lands, and serves a
 localhost dashboard with Sessions and aggregate history views. Stdlib only. Trace analysis
 stays local; the optional menu-bar quota view makes read-only account-usage
-requests to the signed-in Claude, Codex, and Cursor provider services.
+requests to the signed-in Claude, Codex, and Cursor provider services. OpenCode
+usage is read from its local database and does not require a provider request.
 
   python3 meter.py     ->  http://localhost:8722
 
@@ -607,7 +608,7 @@ def normalize_model_price_provider(provider):
     if provider == "openai":
         provider = "codex"
     if provider not in MODEL_PRICE_PROVIDERS:
-        raise ValueError("Provider must be Claude, Codex / OpenAI, or Cursor.")
+        raise ValueError("Provider must be Claude, Codex / OpenAI, Cursor, or OpenCode.")
     return provider
 
 
@@ -6849,11 +6850,46 @@ def current_session_summaries(rows, now=None, max_age_s=CURRENT_SESSION_MAX_AGE_
     """Return recent card-safe summaries without trace paths or prompt-derived titles."""
     now = float(time.time() if now is None else now)
     result = []
-    for row in sorted(rows or [], key=lambda item: -float(item.get("mtime") or 0)):
+    activity_rank = {"recent": 0, "waiting": 1, "working": 2}
+    selected_by_id = {}
+    selected_without_id = []
+    for row in rows or []:
         mtime = float(row.get("mtime") or 0)
         idle_s = max(0, int(now - mtime))
         if not mtime or idle_s > max_age_s:
             continue
+        session_id = str(row.get("id") or "")[:240]
+        if idle_s > CURRENT_SESSION_WORKING_S:
+            activity_state = "recent"
+        elif row.get("terminal"):
+            activity_state = "waiting"
+        else:
+            activity_state = "working"
+        candidate = {
+            "row": row, "session_id": session_id, "mtime": mtime,
+            "idle_s": idle_s, "activity_state": activity_state,
+        }
+        if not session_id:
+            selected_without_id.append(candidate)
+            continue
+        previous = selected_by_id.get(session_id)
+        if previous is None or (
+            activity_rank[activity_state], mtime
+        ) > (
+            activity_rank[previous["activity_state"]], previous["mtime"]
+        ):
+            selected_by_id[session_id] = candidate
+
+    selected = sorted(
+        [*selected_by_id.values(), *selected_without_id],
+        key=lambda item: -item["mtime"],
+    )
+    for candidate in selected:
+        row = candidate["row"]
+        session_id = candidate["session_id"]
+        mtime = candidate["mtime"]
+        idle_s = candidate["idle_s"]
+        activity_state = candidate["activity_state"]
         context = row.get("context") if isinstance(row.get("context"), dict) else {}
         window = int(context.get("window") or 0) or None
         latest = int(context.get("latest") or 0)
@@ -6875,12 +6911,6 @@ def current_session_summaries(rows, now=None, max_age_s=CURRENT_SESSION_MAX_AGE_
         project = str(row.get("project") or "").strip().rstrip("/\\")
         project = project.replace("\\", "/").rsplit("/", 1)[-1] if project else "No project"
         project = compact_text(project or "No project", 52)
-        if idle_s > CURRENT_SESSION_WORKING_S:
-            activity_state = "recent"
-        elif row.get("terminal"):
-            activity_state = "waiting"
-        else:
-            activity_state = "working"
         models = [compact_text(str(model), 80) for model in (row.get("models") or [])[:4]]
         primary_model = compact_text(
             str(row.get("primary_model") or (models[0] if models else "unknown")),
@@ -6889,7 +6919,7 @@ def current_session_summaries(rows, now=None, max_age_s=CURRENT_SESSION_MAX_AGE_
         availability = row.get("availability") if isinstance(row.get("availability"), dict) else {}
         throughput = row.get("throughput") if isinstance(row.get("throughput"), dict) else {}
         result.append({
-            "id": str(row.get("id") or "")[:240],
+            "id": session_id,
             "provider": provider,
             "client": str(row.get("client") or provider)[:80],
             "runtime": compact_text(str(row.get("runtime") or row.get("label") or provider), 40),
@@ -6948,6 +6978,8 @@ def global_tool_waste(session_rows):
     }
     advertised_names = set()
     used_advertised_names = set()
+    provider_sessions = defaultdict(int)
+    runtime_sessions = defaultdict(int)
 
     def evidence_key(name, kind, provider):
         # Keep the existing cross-runtime MCP view unchanged. Plain tools are
@@ -6958,7 +6990,9 @@ def global_tool_waste(session_rows):
         evidence = session.get("_tool_evidence") or {}
         project = session.get("project") or "local"
         provider = session.get("provider") or "unknown"
+        provider_sessions[str(provider).lower()] += 1
         runtime = session.get("runtime") or source_runtime_label(session)
+        runtime_sessions[str(runtime)] += 1
         session_id = session.get("id") or session.get("path")
         for key in ("total_calls", "total_output_tokens", "flagged_tokens", "oversized_calls",
                     "oversized_tokens", "repeat_calls", "repeat_tokens", "errors", "error_tokens",
@@ -7167,6 +7201,8 @@ def global_tool_waste(session_rows):
     return {
         **dict(totals),
         "total_sessions": total_sessions,
+        "provider_sessions": dict(provider_sessions),
+        "runtime_sessions": dict(runtime_sessions),
         "sessions_with_tools": sum(1 for row in session_rows if (row.get("_tool_evidence") or {}).get("total_calls")),
         "by_name": (tool_rows[:20] + [
             row for row in tool_rows[20:] if row["recommendation"] in ("disable", "fix_or_disable")
@@ -7236,7 +7272,8 @@ def discovered_skills(skill_usage=None):
         rows.append({
             "id": skill_identity(runtime, name, origin_id, plugin_id),
             "type": "skill", "name": name, "runtime": runtime, "source": source,
-            "path": home_shorten(path), "enabled": bool(enabled), "plugin_id": plugin_id,
+            "path": home_shorten(path), "enabled": bool(enabled),
+            "configuration": "Enabled" if enabled else "Disabled", "plugin_id": plugin_id,
             "mutable": bool(mutable), "control_scope": control_scope,
             "origin": origin, "origin_id": origin_id, "reviewable": bool(reviewable),
             "setting_path": home_shorten(setting_path) if setting_path else "",
@@ -7365,7 +7402,13 @@ def optional_capability_summary(control_groups):
     enabled = [row for row in (control_groups or [])
                if row.get("enabled") and row.get("mutable") and row.get("reviewable", True)]
     used = [row for row in enabled if row.get("used")]
-    unused = [row for row in enabled if not row.get("used") and not row.get("unmeasurable")]
+    unscanned = [row for row in enabled if (
+        not row.get("used") and not row.get("unmeasurable") and
+        row.get("scanned_sessions") is not None and int(row.get("scanned_sessions") or 0) <= 0
+    )]
+    unused = [row for row in enabled if (
+        not row.get("used") and not row.get("unmeasurable") and row not in unscanned
+    )]
     unmeasurable_packs = [row for row in enabled if row.get("unmeasurable") and not row.get("used")]
     instruction_packs = [row for row in unmeasurable_packs if row.get("measurement") == "instruction"]
     unknown_evidence_packs = [row for row in unmeasurable_packs if row.get("measurement") != "instruction"]
@@ -7380,6 +7423,7 @@ def optional_capability_summary(control_groups):
         "unmeasurable_packs": len(unmeasurable_packs),
         "instruction_packs": len(instruction_packs),
         "unknown_evidence_packs": len(unknown_evidence_packs),
+        "unscanned_packs": len(unscanned),
         "utilization": len(used) / len(enabled) if enabled else 0.0,
         "mcp_enabled": len(mcp_enabled),
         "mcp_used": sum(1 for row in mcp_enabled if row.get("used")),
@@ -7394,6 +7438,14 @@ def optional_capability_summary(control_groups):
         "unmeasured_unused_groups": sum(1 for row in unused
                                          if not row.get("definition_tokens")),
     }
+
+
+def capability_content_revision(*parts):
+    """Return a stable revision for JSON-safe capability evidence."""
+    encoded = json.dumps(
+        parts, ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()[:20]
 
 
 def capability_inventory(waste=None):
@@ -7414,7 +7466,8 @@ def capability_inventory(waste=None):
             "name": row.get("display") or row.get("name"),
             "identity": row.get("name"), "runtime": row.get("runtime") or "Trace",
             "source": row.get("namespace") or "unknown", "state": state,
-            "enabled": True, "mutable": False, "used": bool(row.get("calls")),
+            "enabled": None, "configuration": "Unknown", "mutable": False,
+            "used": bool(row.get("calls")),
             "calls": int(row.get("calls") or 0), "returned_tokens": int(row.get("output_tokens") or 0),
             "advertised_sessions": advertised, "eager_sessions": eager, "deferred_sessions": deferred,
             "last_used": row.get("last_used") or "Never", "recommendation": row.get("recommendation") or "keep",
@@ -7450,6 +7503,7 @@ def capability_inventory(waste=None):
             "id": f"mcp:{name}", "type": "mcp", "name": name, "runtime": "Codex + Claude",
             "source": "trace/config",
             "state": "Enabled" if enabled else "Disabled", "enabled": enabled,
+            "configuration": "Enabled" if enabled else "Disabled",
             "mutable": False,
             "codex_enabled": codex_on, "claude_enabled": claude_on, "used": usage_row["used"],
             "calls": usage_row["calls"], "returned_tokens": usage_row["tokens"], "last_used": usage_row["last_used"],
@@ -7461,8 +7515,27 @@ def capability_inventory(waste=None):
 
     skill_items = discovered_skills(waste.get("skills") or [])
     control_groups = capability_control_groups(mcp_items, skill_items)
+    observed_runtimes = waste.get("runtime_sessions")
+    if observed_runtimes is not None:
+        runtime_sessions = {
+            "Codex": int(observed_runtimes.get("Codex") or 0),
+            "Claude": int(observed_runtimes.get("Claude") or 0)
+                      + int(observed_runtimes.get("Claude Code") or 0),
+            "Cursor": int(observed_runtimes.get("Cursor") or 0),
+        }
+    else:
+        # Compatibility for callers that provide a pre-runtime-count snapshot.
+        provider_sessions = waste.get("provider_sessions") or {}
+        runtime_sessions = {
+            "Codex": int(provider_sessions.get("codex") or 0),
+            "Claude": int(provider_sessions.get("claude") or 0),
+            "Cursor": int(provider_sessions.get("cursor") or 0),
+        }
+    for row in control_groups:
+        row["scanned_sessions"] = runtime_sessions.get(row.get("runtime"), 0)
     optional_summary = optional_capability_summary(control_groups)
     optional_summary["scanned_sessions"] = int(waste.get("total_sessions") or 0)
+    optional_summary["scanned_sessions_by_runtime"] = runtime_sessions
     review_ids = set(optional_summary["review_candidates"])
     for row in mcp_items:
         row["control_id"] = row["id"]
@@ -7472,6 +7545,7 @@ def capability_inventory(waste=None):
         row["review_candidate"] = bool(row["control_id"] and row["control_id"] in review_ids)
     tool_reported = sum(1 for row in tool_items if row["advertised_sessions"])
     tool_reported_used = sum(1 for row in tool_items if row["advertised_sessions"] and row["used"])
+    tools_observed = sum(1 for row in tool_items if row["used"])
     mcp_enabled = sum(1 for row in mcp_items if row["enabled"])
     mcp_enabled_used = sum(1 for row in mcp_items if row["enabled"] and row["used"])
     skills_enabled = sum(1 for row in skill_items if row["enabled"])
@@ -7481,33 +7555,65 @@ def capability_inventory(waste=None):
     traceable_agents = claude_local_agent_sources(desktop_index)
     latest_desktop = max((row.get("metadata_mtime") or 0 for row in local_agents), default=0)
     summary = {
-        "tools": {"available": len(tool_items), "reported": tool_reported, "enabled": tool_reported,
-                  "used": tool_reported_used, "utilization": tool_reported_used / tool_reported if tool_reported else 0.0,
+        "tools": {"available": len(tool_items), "reported": tool_reported, "enabled": None,
+                  "used": tool_reported_used, "observed": tools_observed,
+                  "utilization": tool_reported_used / tool_reported if tool_reported else 0.0,
                   "observed_only": sum(1 for row in tool_items if not row["advertised_sessions"])},
         "mcps": {"available": len(mcp_items), "enabled": mcp_enabled, "used": mcp_enabled_used,
                  "historically_used": sum(1 for row in mcp_items if row["used"]),
                  "utilization": mcp_enabled_used / mcp_enabled if mcp_enabled else 0.0},
         "skills": {"available": len(skill_items), "enabled": skills_enabled, "used": skills_used,
+                   "historically_used": sum(1 for row in skill_items if row["used"]),
                    "utilization": skills_used / skills_enabled if skills_enabled else 0.0},
         "optional": optional_summary,
         "definitions": {key: int(waste.get(key) or 0) for key in (
             "definition_tokens", "eager_definition_tokens", "deferred_definition_tokens", "unused_eager_definition_tokens"
         )},
     }
+    items = tool_items + mcp_items + skill_items
+    claude_desktop = {
+        "local_agent_sessions": len(local_agents),
+        "traceable_agent_sessions": len(traceable_agents),
+        "latest_local_agent": local_dt(latest_desktop) if latest_desktop else "Never",
+        "cloud_trace_available": False,
+        "roots": [home_shorten(root) for root in CLAUDE_DESKTOP_DATA_ROOTS if os.path.isdir(root)],
+        "note": "Scanning local Claude Desktop Agent/Cowork traces.",
+    }
+    review_revision = capability_content_revision(optional_summary, control_groups)
+    inventory_revision = capability_content_revision(summary, items, claude_desktop)
     return {
-        "summary": summary, "items": tool_items + mcp_items + skill_items,
-        "control_groups": control_groups,
-        "actions": capability_action_capability(),
-        "claude_desktop": {
-            "local_agent_sessions": len(local_agents),
-            "traceable_agent_sessions": len(traceable_agents),
-            "latest_local_agent": local_dt(latest_desktop) if latest_desktop else "Never",
-            "cloud_trace_available": False,
-            "roots": [home_shorten(root) for root in CLAUDE_DESKTOP_DATA_ROOTS if os.path.isdir(root)],
-            "note": "Scanning local Claude Desktop Agent/Cowork traces.",
-        },
+        "summary": summary, "items": items, "control_groups": control_groups,
+        "actions": capability_action_capability(), "claude_desktop": claude_desktop,
+        "review_revision": review_revision,
+        "inventory_revision": inventory_revision,
+        "revision": capability_content_revision(review_revision, inventory_revision),
         "generated_at": int(time.time()),
     }
+
+
+def capability_summary_payload(capabilities):
+    """Return decision evidence without the heavy inventory rows."""
+    capabilities = capabilities or {}
+    payload = {key: value for key, value in capabilities.items() if key != "items"}
+    payload["inventory_count"] = len(capabilities.get("items") or [])
+    return payload
+
+
+def dashboard_state_payload(state):
+    """Bound browser polling to data used by dashboard surfaces."""
+    if not isinstance(state, dict):
+        return state
+    payload = dict(state)
+    cross = state.get("xsession")
+    if isinstance(cross, dict):
+        public_cross = dict(cross)
+        public_cross.pop("tool_waste", None)
+        if isinstance(cross.get("capabilities"), dict):
+            public_cross["capabilities"] = capability_summary_payload(
+                cross.get("capabilities")
+            )
+        payload["xsession"] = public_cross
+    return payload
 
 
 def session_optional_capabilities(state, capabilities):
@@ -11179,7 +11285,7 @@ class H(BaseHTTPRequestHandler):
             else:
                 result = {"ok": False, "error": "Unsupported capability type."}
         if result.get("ok") or result.get("changed"):
-            result["capabilities"] = refresh_capability_state()
+            result["capabilities"] = capability_summary_payload(refresh_capability_state())
         status = 200 if result.get("ok") else (409 if result.get("partial") else
                  (503 if "not available" in result.get("error", "") else 400))
         self._send(json.dumps(result), "application/json", status=status)
@@ -11213,9 +11319,20 @@ class H(BaseHTTPRequestHandler):
                 st["selected_live"] = live
                 if st.get("timing"):
                     st["timing"]["end_label"] = "Last activity"
-            self._send(json.dumps(st or {}), "application/json")
+            self._send(json.dumps(dashboard_state_payload(st or {})), "application/json")
         elif req_path == "/state":
-            self._send(json.dumps(current_state()), "application/json")
+            self._send(json.dumps(dashboard_state_payload(current_state())), "application/json")
+        elif req_path == "/capabilities/inventory":
+            capabilities = cross_session().get("capabilities") or {}
+            items = capabilities.get("items") or []
+            self._send(json.dumps({
+                "ok": True,
+                "revision": capabilities.get("revision") or "",
+                "inventory_revision": capabilities.get("inventory_revision") or "",
+                "generated_at": capabilities.get("generated_at"),
+                "count": len(items),
+                "items": items,
+            }), "application/json")
         elif req_path == "/logs":
             self._send(json.dumps(log_sessions_state()), "application/json")
         elif req_path == "/model-stats":
@@ -11257,7 +11374,7 @@ if __name__ == "__main__":
     threading.Thread(target=software_update_watcher, daemon=True).start()
     srv = TokenMeterHTTPServer(("127.0.0.1", PORT), H)
     print(f"Token Meter live -> http://localhost:{PORT}")
-    print("Auto-following newest ~/.claude, ~/.codex, and ~/.cursor log. Ctrl-C to stop.")
+    print("Auto-following newest Claude, Codex, Cursor, and OpenCode sessions. Ctrl-C to stop.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

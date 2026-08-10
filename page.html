@@ -3466,10 +3466,12 @@ let capabilitySort=localStorage.getItem('tm_capability_sort')||'name';
 let capabilitySortDir=localStorage.getItem('tm_capability_sort_dir')||'asc';
 if(!CAPABILITY_SORT_KEYS.has(capabilitySort))capabilitySort='name';
 if(!['asc','desc'].includes(capabilitySortDir))capabilitySortDir='asc';
-function capabilityUseCount(row){ return row.type==='skill'?(row.unmeasurable?-(row.loaded_sessions||0):(row.activations||0)):(row.calls||0); }
-function capabilityStateText(row){ return row.type==='tool'?(row.state||'Observed'):row.unmeasurable?'Instruction':(row.enabled?'Enabled':'Disabled'); }
+function capabilityUseCount(row){ return row.type==='skill'?(row.activations||0):(row.calls||0); }
+function capabilityStateText(row){
+ if(row.type==='tool')return row.state||'Observed';
+ return row.enabled?'Enabled':'Disabled';
+}
 function capabilityControlText(row){
- if(row.unmeasurable)return 'not measurable';
  if(!row.mutable)return 'read-only';
  const action=row.enabled?'Disable':'Enable';
  return row.type==='skill'?`${action} pack`:action;
@@ -3518,12 +3520,10 @@ function setCapabilitySort(key){
  if(LATEST)renderCapabilityTable(LATEST.xsession?.capabilities);
 }
 function capabilityStateClass(row){
- if(row.unmeasurable) return 'prompt';
  if(row.type==='tool'&&/Deferred|Mixed/.test(row.state||'')) return 'lazy';
  return row.enabled?'on':'off';
 }
 function capabilityAction(row){
- if(row.unmeasurable) return '<span class=subline>not measurable</span>';
  if(!row.mutable) return '<span class=subline>read-only</span>';
  const next=!row.enabled;
  const label=row.type==='skill'?`${next?'Enable':'Disable'} pack`:(next?'Enable':'Disable');
@@ -3531,9 +3531,10 @@ function capabilityAction(row){
 }
 function renderCapabilityTable(cap){
  const inventory=cap?.items||[], reviewing=capabilityState==='review';
- const all=reviewing?(cap?.control_groups||[]).filter(row=>row.reviewable!==false&&row.enabled&&!row.used).map(group=>({
+ const reviewIds=new Set(cap?.summary?.optional?.review_candidates||[]);
+ const all=reviewing?(cap?.control_groups||[]).filter(row=>reviewIds.has(row.id)).map(group=>({
   ...group,source:group.source,
-  state:'Enabled',review_candidate:true
+  state:'Enabled',review_candidate:reviewIds.has(group.id)
  })):inventory;
  const runtimes=[...new Set(all.map(row=>row.runtime).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
  if(capabilityRuntime!=='all'&&!runtimes.includes(capabilityRuntime))capabilityRuntime='all';
@@ -3557,7 +3558,7 @@ function renderCapabilityTable(cap){
   const state=capabilityStateText(row);
   const typeLabel=row.control_type==='skill_pack'?'Skill pack':({tool:'Tool',mcp:'MCP',skill:'Skill'}[row.type]||row.type);
   const use=capabilityUseCount(row);
-  const useDisplay=row.unmeasurable?`Loaded · ${f(-use)} sessions`:f(use);
+  const useDisplay=row.unmeasurable?(row.measurement==='instruction'?'Instruction-only':'Evidence unavailable'):f(use);
   return `<tr><td class=nm>${esc(row.name)}${row.identity&&row.identity!==row.name?`<div class=capPath>${esc(row.identity)}</div>`:''}${identifier}</td><td><span class="chip ${row.type==='mcp'?'mcp':''}">${typeLabel}</span></td><td>${esc(source)}${detail}</td><td><span class="stateDot ${capabilityStateClass(row)}">${esc(state)}</span>${row.type==='mcp'?`<div class=capPath>Codex ${row.codex_enabled?'on':'off'} · Claude ${row.claude_enabled?'on':'off'}</div>`:''}</td><td class="num mono">${useDisplay}</td><td class="num mono">${row.type==='skill'?'—':f(row.returned_tokens||0)}</td><td>${esc(row.last_used||'Never')}</td><td>${capabilityAction(row)}</td></tr>`;
  }).join(''):'<tr><td colspan=8 style=color:var(--faint)>No tools, MCPs, or skills match these filters</td></tr>';
  paintCapabilitySort();
@@ -3700,8 +3701,8 @@ function renderCapabilities(cap){
   ? `${f(unusedGroups)} review ${countWord(unusedGroups,'candidate')}`
   : 'No review candidates';
  $('c-review-detail').textContent=unusedGroups
-  ? `${f(optional.skill_packs_enabled-optional.skill_packs_used)} skill ${countWord(optional.skill_packs_enabled-optional.skill_packs_used,'pack')} · ${f(optional.unmeasured_unused_groups)} without measured overhead`
-  : '';
+  ? `${f(unusedGroups)} positively measurable skill ${countWord(unusedGroups,'pack')} · ${f(optional.unmeasured_unused_groups)} without measured overhead`
+  : `${f(optional.instruction_packs||0)} instruction-only · ${f(optional.unknown_evidence_packs||0)} evidence unavailable`;
  $('c-review-filter').style.display=unusedGroups?'inline-block':'none';
  $('c-disable-unused').style.display=unusedGroups?'inline-block':'none';
  const eager=defs.eager_definition_tokens||0, unused=defs.unused_eager_definition_tokens||0, deferred=defs.deferred_definition_tokens||0, total=defs.definition_tokens||0, useful=Math.max(0,eager-unused);

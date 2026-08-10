@@ -2288,6 +2288,12 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertRegex(self.page, r"id=tab-capabilities[^>]*>.*?<span class=tabLabel>Tools</span>")
         self.assertIn("data-cstate=review", self.page)
         self.assertIn("They remain read-only in Token Meter", self.page)
+        self.assertIn("const reviewIds=new Set(cap?.summary?.optional?.review_candidates||[])", self.page)
+        self.assertIn("reviewIds.has(row.id)", self.page)
+        self.assertIn("row.measurement==='instruction'?'Instruction-only':'Evidence unavailable'", self.page)
+        self.assertIn("return row.enabled?'Enabled':'Disabled'", self.page)
+        self.assertNotIn("Loaded ·", self.page)
+        self.assertNotIn("if(row.unmeasurable) return '<span class=subline>not measurable</span>'", self.page)
 
     def test_fieldtips_are_portaled_and_viewport_bound(self):
         for marker in (
@@ -4206,38 +4212,105 @@ class ToolEvidenceTests(unittest.TestCase):
         finally:
             os.unlink(path)
 
-    def test_skill_has_measurable_capabilities_prompt_only(self):
+    def test_skill_without_capability_metadata_has_unknown_measurement(self):
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write("---\nname: caveman\ndescription: Be terse\n---\n\nbody")
             path = f.name
         try:
             self.assertFalse(meter._skill_has_measurable_capabilities(path))
+            self.assertEqual(meter._skill_measurability(path), "unknown")
         finally:
             os.unlink(path)
 
-    def test_prompt_only_skill_pack_excluded_from_review_candidates(self):
+    def test_skill_requires_mcp_block_is_measurable(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: sourcegraph-search\nrequires-mcp:\n  - sourcegraph\n---\n\nbody")
+            path = f.name
+        try:
+            self.assertEqual(meter._skill_measurability(path), "measurable")
+            self.assertTrue(meter._skill_has_measurable_capabilities(path))
+        finally:
+            os.unlink(path)
+
+    def test_skill_allowed_tools_block_is_measurable(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: firewall\nallowed-tools:\n  - Bash\n  - Read\n---\n\nbody")
+            path = f.name
+        try:
+            self.assertEqual(meter._skill_measurability(path), "measurable")
+        finally:
+            os.unlink(path)
+
+    def test_skill_empty_allowed_tools_is_instruction_only(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("---\nname: caveman\nallowed-tools: []\n---\n\nbody")
+            path = f.name
+        try:
+            self.assertEqual(meter._skill_measurability(path), "instruction")
+            self.assertFalse(meter._skill_has_measurable_capabilities(path))
+        finally:
+            os.unlink(path)
+
+    def test_instruction_only_skill_pack_excluded_from_review_candidates(self):
         skill_items = [
             {"id": "skill:claude:caveman:caveman", "name": "caveman", "runtime": "Claude",
              "plugin_id": "caveman@skills-marketplace", "mutable": True, "enabled": True,
-             "used": False, "activations": 0, "unmeasurable": True, "reviewable": True},
+             "used": False, "activations": 0, "measurement": "instruction", "reviewable": True},
         ]
         groups = meter.capability_control_groups([], skill_items)
         self.assertEqual(groups[0]["unmeasurable"], True)
+        self.assertEqual(groups[0]["measurement"], "instruction")
         summary = meter.optional_capability_summary(groups)
         self.assertEqual(summary["enabled"], 1)
         self.assertEqual(summary["unused"], 0)
         self.assertEqual(summary["unmeasurable_packs"], 1)
+        self.assertEqual(summary["instruction_packs"], 1)
+        self.assertEqual(summary["unknown_evidence_packs"], 0)
+        self.assertEqual(summary["review_candidates"], [])
+
+    def test_unknown_skill_pack_excluded_from_review_candidates(self):
+        skill_items = [
+            {"id": "skill:claude:unknown:unknown", "name": "unknown", "runtime": "Claude",
+             "plugin_id": "unknown@skills-marketplace", "mutable": True, "enabled": True,
+             "used": False, "activations": 0, "measurement": "unknown", "reviewable": True},
+        ]
+        groups = meter.capability_control_groups([], skill_items)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(groups[0]["measurement"], "unknown")
+        self.assertTrue(groups[0]["unmeasurable"])
+        self.assertEqual(summary["unused"], 0)
+        self.assertEqual(summary["unknown_evidence_packs"], 1)
+        self.assertEqual(summary["review_candidates"], [])
+
+    def test_mixed_measurement_pack_is_not_a_review_candidate(self):
+        skill_items = [
+            {"id": "instruction", "name": "caveman", "runtime": "Claude",
+             "plugin_id": "mixed@skills-marketplace", "mutable": True, "enabled": True,
+             "used": False, "activations": 0, "measurement": "instruction", "reviewable": True},
+            {"id": "tool", "name": "sourcegraph", "runtime": "Claude",
+             "plugin_id": "mixed@skills-marketplace", "mutable": True, "enabled": True,
+             "used": False, "activations": 0, "measurement": "measurable", "reviewable": True},
+        ]
+        groups = meter.capability_control_groups([], skill_items)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(groups[0]["measurement"], "unknown")
+        self.assertTrue(groups[0]["unmeasurable"])
+        self.assertEqual(summary["unused"], 0)
         self.assertEqual(summary["review_candidates"], [])
 
     def test_measurable_skill_pack_remains_review_candidate(self):
         skill_items = [
             {"id": "skill:codex:browser:browser", "name": "browser", "runtime": "Codex",
              "plugin_id": "browser@personal", "mutable": True, "enabled": True,
-             "used": False, "activations": 0, "unmeasurable": False, "reviewable": True},
+             "used": False, "activations": 0, "measurement": "measurable", "reviewable": True},
         ]
         groups = meter.capability_control_groups([], skill_items)
         self.assertEqual(groups[0]["unmeasurable"], False)
+        self.assertEqual(groups[0]["measurement"], "measurable")
         summary = meter.optional_capability_summary(groups)
         self.assertEqual(summary["unused"], 1)
         self.assertEqual(summary["unmeasurable_packs"], 0)
@@ -4247,9 +4320,11 @@ class ToolEvidenceTests(unittest.TestCase):
         skill_items = [
             {"id": "skill:claude:caveman:caveman", "name": "caveman", "runtime": "Claude",
              "plugin_id": "caveman@skills-marketplace", "mutable": True, "enabled": True,
-             "used": True, "activations": 3, "unmeasurable": True, "reviewable": True},
+             "used": True, "activations": 3, "measurement": "instruction", "reviewable": True},
         ]
-        summary = meter.optional_capability_summary(meter.capability_control_groups([], skill_items))
+        groups = meter.capability_control_groups([], skill_items)
+        summary = meter.optional_capability_summary(groups)
+        self.assertEqual(groups[0]["measurement"], "measurable")
         self.assertEqual(summary["used"], 1)
         self.assertEqual(summary["unused"], 0)
         self.assertEqual(summary["unmeasurable_packs"], 0)

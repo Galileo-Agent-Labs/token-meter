@@ -3696,45 +3696,86 @@ def argument_fingerprint(value):
 
 
 _SKILL_MEASURABLE_KEYS = frozenset({
-    "allowed-tools", "allowed_tools", "tools", "tool_schemas",
-    "mcpServers", "mcp_servers", "mcpServers", "mcp",
+    "allowed-tools", "tools", "tool-schemas", "mcp-servers", "mcpservers",
+    "mcp", "requires-mcp", "requiresmcp",
 })
+_SKILL_EMPTY_CAPABILITY_VALUES = frozenset({"", "false", "null", "none", "~"})
+
+
+def _skill_frontmatter_key(value):
+    return str(value or "").strip().casefold().replace("_", "-")
 
 
 def _skill_frontmatter(path):
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            raw = fh.read(len(path) + 65536)
+            raw = fh.read(65536)
     except OSError:
         return {}
-    parts = raw.split("---", 2)
-    if len(parts) < 3 or not parts[0].strip() == "":
+    lines = raw.splitlines()
+    if not lines or lines[0].lstrip("\ufeff").strip() != "---":
         return {}
-    fm_text = parts[1]
+    closing = next((idx for idx, line in enumerate(lines[1:], 1) if line.strip() == "---"), None)
+    if closing is None:
+        return {}
     fm = {}
-    for line in fm_text.splitlines():
-        line = line.rstrip()
-        if not line or line.startswith("#"):
+    current_key = None
+    for raw_line in lines[1:closing]:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        m = re.match(r"^([A-Za-z0-9_.@+-]+)\s*:\s*(.*)", line)
+        if raw_line[:1].isspace():
+            if current_key and fm.get(current_key) == "":
+                fm[current_key] = "<nested-value>"
+            continue
+        m = re.match(r"^([A-Za-z0-9_.@+-]+)\s*:\s*(.*)", raw_line.rstrip())
         if m:
             key = m.group(1).strip()
-            val = m.group(2).strip()
-            if val == "true":
+            val = re.sub(r"\s+#.*$", "", m.group(2)).strip()
+            normalized = val.casefold()
+            if normalized == "true":
                 fm[key] = True
-            elif val == "false":
+            elif normalized == "false":
                 fm[key] = False
             else:
                 fm[key] = val
+            current_key = key
+        else:
+            current_key = None
     return fm
 
 
-def _skill_has_measurable_capabilities(path):
-    fm = _skill_frontmatter(path)
-    if not fm:
+def _skill_capability_value_is_nonempty(value):
+    if value is True:
+        return True
+    if value is False or value is None:
         return False
-    measurable = bool(fm.keys() & _SKILL_MEASURABLE_KEYS)
-    return measurable
+    text = str(value).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        text = text[1:-1].strip()
+    if text.casefold() in _SKILL_EMPTY_CAPABILITY_VALUES:
+        return False
+    if re.fullmatch(r"\[\s*\]|\{\s*\}", text):
+        return False
+    return True
+
+
+def _skill_measurability(path):
+    """Classify whether trace evidence can observe this skill's capabilities."""
+    fm = _skill_frontmatter(path)
+    capability_values = [
+        value for key, value in fm.items()
+        if _skill_frontmatter_key(key) in _SKILL_MEASURABLE_KEYS
+    ]
+    if not capability_values:
+        return "unknown"
+    if any(_skill_capability_value_is_nonempty(value) for value in capability_values):
+        return "measurable"
+    return "instruction"
+
+
+def _skill_has_measurable_capabilities(path):
+    return _skill_measurability(path) == "measurable"
 
 
 def skill_names_from_value(value, tool_name=""):
@@ -5997,7 +6038,6 @@ def global_tool_waste(session_rows):
     by_skill = {}
     day_tokens = defaultdict(int)
     day_flagged = defaultdict(int)
-    runtime_sessions = defaultdict(int)
     totals = {
         "total_calls": 0, "total_output_tokens": 0, "flagged_tokens": 0,
         "oversized_calls": 0, "oversized_tokens": 0,
@@ -6020,7 +6060,6 @@ def global_tool_waste(session_rows):
         provider = session.get("provider") or "unknown"
         runtime = session.get("runtime") or source_runtime_label(session)
         session_id = session.get("id") or session.get("path")
-        runtime_sessions[runtime] += 1
         for key in ("total_calls", "total_output_tokens", "flagged_tokens", "oversized_calls",
                     "oversized_tokens", "repeat_calls", "repeat_tokens", "errors", "error_tokens",
                     "definition_tokens", "eager_definition_tokens", "deferred_definition_tokens",
@@ -6240,7 +6279,6 @@ def global_tool_waste(session_rows):
         "catalog_utilization": (catalog_used / catalog_count) if catalog_count else 0.0,
         "trend": trend,
         "insights": normalize_insights(insights, limit=8),
-        "runtime_sessions": dict(runtime_sessions),
     }
 
 
@@ -6282,9 +6320,8 @@ def skill_identity(runtime, name, origin_id, plugin_id=""):
     return f"skill:{runtime_key}:{owner}:{name}"
 
 
-def discovered_skills(skill_usage=None, runtime_sessions=None):
+def discovered_skills(skill_usage=None):
     usage = {str(row.get("name") or "").lower(): row for row in (skill_usage or [])}
-    runtime_sessions = runtime_sessions or {}
     rows = []
 
     def add(path, runtime, source, origin_id, origin="user", enabled=True, plugin_id="",
@@ -6295,12 +6332,7 @@ def discovered_skills(skill_usage=None, runtime_sessions=None):
         expected_provider = "codex" if runtime == "Codex" else "claude"
         if providers and expected_provider not in providers:
             used = {}
-        unmeasurable = not bool(used) and not _skill_has_measurable_capabilities(path)
-        loaded = 0
-        if unmeasurable:
-            loaded = runtime_sessions.get(runtime, 0)
-            if not loaded and runtime == "Claude":
-                loaded = runtime_sessions.get("Claude Code", 0)
+        measurement = "measurable" if used else _skill_measurability(path)
         rows.append({
             "id": skill_identity(runtime, name, origin_id, plugin_id),
             "type": "skill", "name": name, "runtime": runtime, "source": source,
@@ -6310,7 +6342,7 @@ def discovered_skills(skill_usage=None, runtime_sessions=None):
             "setting_path": home_shorten(setting_path) if setting_path else "",
             "used": bool(used), "activations": int(used.get("activations") or 0),
             "sessions_used": int(used.get("sessions_used") or 0), "last_used": used.get("last_used") or "Never",
-            "unmeasurable": unmeasurable, "loaded_sessions": loaded,
+            "measurement": measurement, "unmeasurable": measurement != "measurable",
         })
 
     codex_skills_root = os.path.expanduser("~/.codex/skills")
@@ -6387,8 +6419,10 @@ def capability_control_groups(_mcp_items, skill_items):
             "setting_path": row.get("setting_path") or "",
             "member_ids": set(),
             "measurable_members": 0,
+            "instruction_members": 0,
+            "unknown_members": 0,
+            "measurement": "unknown",
             "unmeasurable": False,
-            "loaded_sessions": 0,
         })
         name = row.get("name") or "?"
         pack["members"].add(name)
@@ -6398,10 +6432,14 @@ def capability_control_groups(_mcp_items, skill_items):
         if row.get("used"):
             pack["used_member_names"].add(name)
         pack["activations"] += int(row.get("activations") or 0)
-        if not row.get("unmeasurable"):
-            pack["measurable_members"] += 1
-        else:
-            pack["loaded_sessions"] = max(pack["loaded_sessions"], int(row.get("loaded_sessions") or 0))
+        measurement = str(row.get("measurement") or (
+            "unknown" if row.get("unmeasurable") else "measurable"
+        ))
+        if row.get("used"):
+            measurement = "measurable"
+        if measurement not in ("measurable", "instruction", "unknown"):
+            measurement = "unknown"
+        pack[f"{measurement}_members"] += 1
         last_used = row.get("last_used") or "Never"
         if last_used != "Never" and (pack["last_used"] == "Never" or last_used > pack["last_used"]):
             pack["last_used"] = last_used
@@ -6412,7 +6450,13 @@ def capability_control_groups(_mcp_items, skill_items):
         pack["member_ids"] = sorted(value for value in pack["member_ids"] if value)
         pack["member_count"] = len(members)
         pack["used_members"] = len(used_members)
-        pack["unmeasurable"] = pack["measurable_members"] == 0
+        if pack["used"] or pack["measurable_members"] == pack["member_count"]:
+            pack["measurement"] = "measurable"
+        elif pack["instruction_members"] == pack["member_count"]:
+            pack["measurement"] = "instruction"
+        else:
+            pack["measurement"] = "unknown"
+        pack["unmeasurable"] = pack["measurement"] != "measurable"
         groups.append(pack)
     return sorted(groups, key=lambda row: (row["control_type"], row["runtime"], row["name"]))
 
@@ -6423,6 +6467,8 @@ def optional_capability_summary(control_groups):
     used = [row for row in enabled if row.get("used")]
     unused = [row for row in enabled if not row.get("used") and not row.get("unmeasurable")]
     unmeasurable_packs = [row for row in enabled if row.get("unmeasurable") and not row.get("used")]
+    instruction_packs = [row for row in unmeasurable_packs if row.get("measurement") == "instruction"]
+    unknown_evidence_packs = [row for row in unmeasurable_packs if row.get("measurement") != "instruction"]
     mcp_enabled = [row for row in enabled if row.get("control_type") == "mcp"]
     skill_enabled = [row for row in enabled if row.get("control_type") == "skill_pack"]
     avoidable_tokens = sum(int(row.get("unused_eager_definition_tokens") or 0) for row in unused)
@@ -6432,6 +6478,8 @@ def optional_capability_summary(control_groups):
     return {
         "scope": "all_sessions", "enabled": len(enabled), "used": len(used), "unused": len(unused),
         "unmeasurable_packs": len(unmeasurable_packs),
+        "instruction_packs": len(instruction_packs),
+        "unknown_evidence_packs": len(unknown_evidence_packs),
         "utilization": len(used) / len(enabled) if enabled else 0.0,
         "mcp_enabled": len(mcp_enabled),
         "mcp_used": sum(1 for row in mcp_enabled if row.get("used")),
@@ -6511,7 +6559,7 @@ def capability_inventory(waste=None):
             "unused_eager_definition_tokens": usage_row["unused_eager_definition_tokens"],
         })
 
-    skill_items = discovered_skills(waste.get("skills") or [], waste.get("runtime_sessions") or {})
+    skill_items = discovered_skills(waste.get("skills") or [])
     control_groups = capability_control_groups(mcp_items, skill_items)
     optional_summary = optional_capability_summary(control_groups)
     optional_summary["scanned_sessions"] = int(waste.get("total_sessions") or 0)

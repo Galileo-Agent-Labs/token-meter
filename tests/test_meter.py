@@ -1,4 +1,5 @@
 import unittest
+import datetime
 import json
 import os
 import plistlib
@@ -48,6 +49,51 @@ class SourceDiscoveryCacheTests(unittest.TestCase):
         self.assertEqual(first["model"], "gpt-first")
         self.assertEqual(second["model"], "gpt-first")
         self.assertEqual(third["model"], "gpt-second")
+
+    def test_codex_index_rename_refreshes_cached_session_name_without_trace_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sessions = root / "sessions"
+            trace = sessions / "2026" / "08" / "10" / "session.jsonl"
+            trace.parent.mkdir(parents=True)
+            session_id = "codex-session"
+            trace.write_text(json.dumps({
+                "type": "session_meta",
+                "timestamp": "2026-08-10T10:00:00Z",
+                "payload": {"id": session_id, "cwd": "/repo"},
+            }) + "\n")
+            os.utime(trace, (1_784_548_800, 1_784_548_800))
+            index = root / "session_index.jsonl"
+            index.write_text(json.dumps({
+                "id": session_id, "thread_name": "Review token-meter PR 14",
+            }) + "\n")
+            empty_summary_cache = {}
+            with mock.patch.object(meter, "CODEX_SESSIONS", str(sessions)), \
+                    mock.patch.object(meter, "CODEX_INDEX", str(index)), \
+                    mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
+                    mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
+                    mock.patch.object(meter, "OPENCODE_DB", str(root / "no-opencode.db")), \
+                    mock.patch.object(meter, "claude_desktop_index", return_value={}), \
+                    mock.patch.object(meter, "_summary_cache", empty_summary_cache):
+                first_source = meter.all_session_sources()[0]
+                first_signature = meter.source_mtime_signature([first_source])
+                first_state_signature = meter.session_state_signature(first_source)
+                first_summary = meter.session_summary(first_source)
+                with index.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({
+                        "id": session_id, "thread_name": "Review token-meter PR 14 (2)",
+                    }) + "\n")
+                second_source = meter.all_session_sources()[0]
+                second_signature = meter.source_mtime_signature([second_source])
+                second_state_signature = meter.session_state_signature(second_source)
+                second_summary = meter.session_summary(second_source)
+
+        self.assertEqual(first_source["mtime"], second_source["mtime"])
+        self.assertEqual(first_summary["session_name"], "Review token-meter PR 14")
+        self.assertEqual(second_source["title"], "Review token-meter PR 14 (2)")
+        self.assertNotEqual(first_signature, second_signature)
+        self.assertNotEqual(first_state_signature, second_state_signature)
+        self.assertEqual(second_summary["session_name"], "Review token-meter PR 14 (2)")
 
 
 class CursorTraceTests(unittest.TestCase):
@@ -2420,8 +2466,8 @@ class DashboardLayoutTests(unittest.TestCase):
             "Spent this month</span><span>Budget (USD)",
             "@media(min-width:901px){.budgetDetailGrid{align-items:stretch}",
             ".budgetHistory .budgetChartInner{flex:1;display:grid",
-            "DEFAULT_RUNTIME_BUDGET=1000",
-            "value=1000",
+            "DEFAULT_RUNTIME_BUDGET=0",
+            "value=0",
         ):
             self.assertIn(marker, self.page)
         self.assertNotIn("class=budgetHero", self.page)
@@ -2698,6 +2744,9 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("event.stopPropagation()", self.page)
         self.assertIn("X-Token-Meter-Action", self.page)
         self.assertIn("Provider metadata and configuration are not changed", self.page)
+        self.assertIn("function sessionDeleteAvailable(target,actions)", self.page)
+        self.assertIn("actions?.read_only_providers", self.page)
+        self.assertIn("!sessionDeleteAvailable(target,actions)", self.page)
 
     def test_bulk_unused_action_has_confirmation_and_exact_control_ids(self):
         self.assertIn("id=c-disable-unused", self.page)
@@ -3233,12 +3282,20 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('NSMenuItem(title: "Provider limits", action: nil', self.source)
         self.assertIn('limitsItem.submenu = makeLimitsMenu()', self.source)
         self.assertIn('private func makeLimitsMenu() -> NSMenu', self.source)
-        self.assertIn('for provider in providerQuotas', self.source)
+        self.assertIn('providerQuotas.map(\\.id) + budgetScopes.map(\\.id)', self.source)
+        self.assertIn('for providerID in providerIDs', self.source)
         self.assertIn('for window in provider.windows', self.source)
         self.assertIn('"\\(window.label) · \\(window.percentLabel) used"', self.source)
         self.assertIn('window.resetLabel, window.pace?.summary, provider.freshnessLabel', self.source)
         self.assertIn('coverageNote: string(dict["coverage_note"]) ?? ""', self.source)
         self.assertIn('coverage=\\(coverage)', self.source)
+        self.assertIn('case "opencode": return "gearshape.2"', self.source)
+        self.assertIn('let budget = double(row["allocation"])', self.source)
+        self.assertIn('$0.budget > 0 ? " · \\(Int($0.percent.rounded()))% budget" : " · budget not set"', self.source)
+        self.assertIn(': "Monthly budget · Not set"', self.source)
+        self.assertIn('title: budgetTitle', self.source)
+        self.assertIn('action: #selector(openBudgetSettings)', self.source)
+        self.assertIn('Native Provider limits omitted the OpenCode monthly budget.', self.source)
 
     def test_menu_bar_settings_are_visible_and_quota_threshold_is_explicit(self):
         self.assertIn('NSMenuItem(title: "More", action: nil', self.source)
@@ -5017,14 +5074,14 @@ class MonthlyBudgetTests(unittest.TestCase):
             stored = json.loads(path.read_text())
         self.assertFalse(invalid["ok"])
         self.assertTrue(result["ok"])
-        self.assertEqual(stored["budgets"]["monthly_total"], 1080)
+        self.assertEqual(stored["budgets"]["monthly_total"], 80)
         self.assertEqual(
             stored["budgets"]["allocations"],
-            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 1000},
+            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 0},
         )
         self.assertIn("model_pricing", stored)
 
-    def test_missing_runtime_budgets_default_to_1000_and_explicit_zero_is_preserved(self):
+    def test_missing_runtime_budgets_default_to_zero_and_explicit_values_are_preserved(self):
         legacy = {
             "currency": "USD",
             "monthly_total": 100,
@@ -5041,16 +5098,16 @@ class MonthlyBudgetTests(unittest.TestCase):
                 "thresholds": [80, 90, 100],
                 "native_notifications": True,
             }, str(path))
-        self.assertEqual(loaded["monthly_total"], 4000)
+        self.assertEqual(loaded["monthly_total"], 0)
         self.assertEqual(
             loaded["allocations"],
-            {"claude": 1000, "codex": 1000, "cursor": 1000, "opencode": 1000},
+            {"claude": 0, "codex": 0, "cursor": 0, "opencode": 0},
         )
         self.assertTrue(saved["ok"])
-        self.assertEqual(saved["budgets"]["monthly_total"], 2490)
+        self.assertEqual(saved["budgets"]["monthly_total"], 1490)
         self.assertEqual(
             saved["budgets"]["allocations"],
-            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 1000},
+            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 0},
         )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
@@ -5106,13 +5163,13 @@ class MonthlyBudgetTests(unittest.TestCase):
             "native_notifications": True,
         }, now=meter.datetime.datetime(2026, 7, 10, tzinfo=meter.datetime.timezone.utc))
         self.assertEqual(status["spend"], 60)
-        self.assertEqual(status["budget"], 1080)
-        self.assertEqual(status["remaining"], 1020)
+        self.assertEqual(status["budget"], 80)
+        self.assertEqual(status["remaining"], 20)
         self.assertEqual(status["unallocated"], 0)
         self.assertAlmostEqual(status["projected_spend"], 186)
         self.assertTrue(status["lower_bound"])
-        self.assertEqual(status["thresholds_crossed"], [])
-        self.assertEqual(status["next_threshold"], 50)
+        self.assertEqual(status["thresholds_crossed"], [50])
+        self.assertEqual(status["next_threshold"], 80)
         claude = next(row for row in status["runtimes"] if row["provider"] == "claude")
         self.assertEqual(claude["percent"], 0.8)
 
@@ -5155,7 +5212,6 @@ class OpenCodeTests(unittest.TestCase):
                      "time_updated INTEGER, data TEXT)")
         conn.execute("CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, "
                      "time_created INTEGER, time_updated INTEGER, data TEXT)")
-        conn.execute("CREATE TABLE session_diff (id TEXT PRIMARY KEY, data TEXT)")
         conn.execute("CREATE TABLE todo (id TEXT PRIMARY KEY, session_id TEXT)")
         return conn
 
@@ -5232,6 +5288,75 @@ class OpenCodeTests(unittest.TestCase):
         found = meter.find_session("ses_top", sources)
         self.assertEqual(found["path"], "opencode:ses_top")
 
+    def test_discovery_signature_follows_message_and_part_updates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            base = 1_784_548_900_000
+            top = self._session_row("ses_top", "/repo", "Live", "model-a",
+                                    0, 0, 0, 0, 0, 0, base)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            conn.execute("INSERT INTO message VALUES (?,?,?,?,?)",
+                         ("m1", "ses_top", base, base + 10_000,
+                          json.dumps({"role": "user"})))
+            conn.execute("INSERT INTO part VALUES (?,?,?,?,?,?)",
+                         ("p1", "m1", "ses_top", base, base + 20_000,
+                          json.dumps({"type": "text"})))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
+                source = meter.opencode_session_sources()[0]
+        self.assertEqual(source["mtime"], base / 1000)
+        self.assertEqual(source["signature_mtime"], (base + 20_000) / 1000)
+
+    def test_discovery_reuses_idle_database_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Idle", "model-a",
+                                    0, 0, 0, 0, 0, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            conn.commit()
+            conn.close()
+            cache = {"path": None, "signature": None, "sources": []}
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_sources_cache", cache):
+                first = meter.opencode_session_sources()
+                with mock.patch.object(
+                    meter, "_opencode_db_connection",
+                    side_effect=AssertionError("unchanged database should use the inventory cache"),
+                ):
+                    second = meter.opencode_session_sources()
+        self.assertEqual(first, second)
+
+    def test_opencode_paths_and_model_catalog_are_xdg_aware_and_refreshable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_path = root / "models.json"
+            empty_cache = {"path": None, "signature": None, "models": {}}
+            with mock.patch.object(meter, "OPENCODE_DATA_ROOT", str(root / "data" / "opencode")), \
+                    mock.patch.object(meter, "OPENCODE_DB", "relative.db"):
+                self.assertEqual(
+                    meter.opencode_db_path(), str(root / "data" / "opencode" / "relative.db")
+                )
+            with mock.patch.object(meter, "OPENCODE_MODELS_PATH", str(models_path)), \
+                    mock.patch.object(meter, "_opencode_models_cache", empty_cache):
+                self.assertEqual(meter._load_opencode_models(), {})
+                models_path.write_text(json.dumps({
+                    "provider-a": {"models": {"shared": {"limit": {"context": 100}}}},
+                    "provider-b": {"models": {"shared": {"limit": {"context": 200}}}},
+                }))
+                self.assertEqual(meter._opencode_model_window("shared", "provider-a"), 100)
+                self.assertEqual(meter._opencode_model_window("shared", "provider-b"), 200)
+                self.assertIsNone(meter._opencode_model_window("shared"))
+                models_path.write_text(json.dumps({
+                    "provider-a": {"models": {"shared": {"limit": {"context": 300}}}},
+                }))
+                self.assertEqual(meter._opencode_model_window("shared", "provider-a"), 300)
+                self.assertEqual(meter._opencode_model_window("shared"), 300)
+
     def _sample_messages(self):
         base = 1_784_548_800_000
         return [
@@ -5268,6 +5393,9 @@ class OpenCodeTests(unittest.TestCase):
                           top["tokens_reasoning"], top["tokens_cache_read"], top["tokens_cache_write"]))
             for mid, sid, created, updated, data in self._sample_messages():
                 conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (mid, sid, created, updated, data))
+            conn.execute("INSERT INTO part VALUES ('p0','msg3','ses_top',1,1,?)", (json.dumps({
+                "type": "text", "text": "  Follow   up  ",
+            }),))
             conn.execute("INSERT INTO part VALUES ('p1','msg1','ses_top',1,1,?)", (json.dumps({
                 "type": "tool", "tool": "read", "callID": "call-1",
                 "state": {"status": "completed", "input": {"filePath": "/repo/a.py"},
@@ -5278,7 +5406,8 @@ class OpenCodeTests(unittest.TestCase):
             }),))
             conn.commit()
             conn.close()
-            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=200000):
                 state = meter.recompute_opencode({
                     "provider": "opencode", "id": "ses_top", "model": "deepseek-v4-pro",
                     "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
@@ -5287,7 +5416,7 @@ class OpenCodeTests(unittest.TestCase):
         self.assertEqual(state["provider"], "opencode")
         self.assertEqual(state["turns"], 2)
         self.assertEqual(state["tokens"], {"input": 1500, "cache_write": 0, "cache_read": 300, "output": 300})
-        self.assertEqual(state["total_tokens"], 2100)
+        self.assertEqual(state["total_tokens"], 2150)
         self.assertAlmostEqual(state["total_cost"], 0.015, places=6)
         self.assertEqual(state["primary_model"], "deepseek-v4-pro")
         self.assertTrue(state["availability"]["tokens"])
@@ -5303,7 +5432,12 @@ class OpenCodeTests(unittest.TestCase):
         self.assertEqual(state["executions"][0]["tools"][0]["name"], "read")
         self.assertGreater(state["executions"][0]["tools"][0]["output_tokens"], 0)
         self.assertEqual(state["executions"][0]["reasoning_tokens"], 50)
+        self.assertEqual(state["executions"][0]["context_tokens"], 1550)
         self.assertEqual(state["executions"][0]["duration_ms"], 5000)
+        self.assertEqual([row["user_message"] for row in state["series"]], ["", "Follow up"])
+        self.assertEqual([row["user_input"] for row in state["executions"]], ["", "Follow up"])
+        user_events = [event for event in state["trace"] if event["kind"] == "user"]
+        self.assertEqual([event["detail"] for event in user_events], ["Follow up"])
         self.assertGreater(state["throughput"]["available"], False)
 
     def test_recompute_dispatch_routes_opencode(self):
@@ -5336,7 +5470,79 @@ class OpenCodeTests(unittest.TestCase):
         self.assertIsNotNone(state)
         self.assertEqual(state["provider"], "opencode")
 
-    def test_remove_opencode_session_deletes_rows(self):
+    def test_recompute_handles_empty_and_zero_cost_sessions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            base = 1_784_548_900_000
+            top = self._session_row("ses_top", "/repo", "New session", "model-a",
+                                    0, 0, 0, 0, 0, 0, base)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", (
+                "u1", "ses_top", base, base,
+                json.dumps({"role": "user", "time": {"created": base}}),
+            ))
+            conn.commit()
+            conn.close()
+            source = {
+                "provider": "opencode", "id": "ses_top", "model": "model-a",
+                "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                "path": "opencode:ses_top", "project": "/repo",
+            }
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1000):
+                empty_state = meter.recompute_opencode(source)
+            self.assertEqual(empty_state["turns"], 0)
+            self.assertFalse(empty_state["timing"]["duration_available"])
+            self.assertTrue(empty_state["availability"]["cost"])
+
+            conn = sqlite3.connect(root / "opencode.db")
+            data = {
+                "role": "assistant", "modelID": "model-a", "providerID": "provider-a",
+                "tokens": {"input": 1, "output": 0, "reasoning": 1,
+                           "cache": {"read": 0, "write": 0}},
+                "cost": 0.0, "time": {"created": base + 1000, "completed": base + 2000},
+            }
+            conn.execute("INSERT INTO message VALUES (?,?,?,?,?)",
+                         ("a1", "ses_top", base + 1000, base + 2000, json.dumps(data)))
+            conn.execute("UPDATE session SET tokens_input=1,tokens_reasoning=1,time_updated=? WHERE id=?",
+                         (base, "ses_top"))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1000):
+                zero_state = meter.recompute_opencode(source)
+            self.assertTrue(zero_state["availability"]["cost"])
+            self.assertTrue(zero_state["executions"][0]["availability"]["cost"])
+            self.assertEqual(zero_state["total_cost"], 0)
+            self.assertEqual(zero_state["total_tokens"], 2)
+
+    def test_detail_history_reports_truncation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            top = self._session_row("ses_top", "/repo", "Long", "deepseek-v4-pro",
+                                    0.015, 1500, 300, 50, 300, 0, 1_784_548_900_000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            for row in self._sample_messages():
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", row)
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "OPENCODE_DETAIL_MESSAGE_LIMIT", 1), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=200000):
+                state = meter.recompute_opencode({
+                    "provider": "opencode", "id": "ses_top", "model": "deepseek-v4-pro",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo",
+                })
+        self.assertTrue(state["execution_history_truncated"])
+        self.assertEqual(state["execution_history_limit"], 1)
+        self.assertEqual(len(state["executions"]), 1)
+
+    def test_opencode_database_is_read_only_and_not_a_delete_target(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             conn = self._build_db(root)
@@ -5354,16 +5560,13 @@ class OpenCodeTests(unittest.TestCase):
             conn.commit()
             conn.close()
             with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")):
-                result = meter.remove_opencode_session("ses_top")
-                self.assertTrue(result["ok"])
-                self.assertEqual(result["provider"], "opencode")
                 conn = meter._opencode_db_connection()
-                rows = conn.execute("SELECT COUNT(*) FROM message").fetchone()[0]
+                with self.assertRaises(sqlite3.OperationalError):
+                    conn.execute("DELETE FROM session WHERE id='ses_top'")
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM message").fetchone()[0], 3)
                 conn.close()
-                self.assertEqual(rows, 0)
-                result = meter.remove_opencode_session("ses_top")
-                self.assertFalse(result["ok"])
-                self.assertEqual(result["error_code"], "not_found")
+        self.assertFalse(hasattr(meter, "remove_opencode_session"))
+        self.assertIn("opencode", meter.session_action_capability()["read_only_providers"])
 
     def test_opencode_summary_reports_latest_context_pct(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -5390,11 +5593,57 @@ class OpenCodeTests(unittest.TestCase):
                     "mtime": 1_784_548_900.0,
                 })
         self.assertEqual(row["context"]["window"], 200000)
-        self.assertEqual(row["context"]["latest"], 500)
-        self.assertAlmostEqual(row["context"]["latest_pct"], 500 / 200000)
+        self.assertEqual(row["context"]["latest"], 600)
+        self.assertAlmostEqual(row["context"]["latest_pct"], 600 / 200000)
         self.assertFalse(row["context"]["estimated"])
-        self.assertEqual(row["_context_samples"], [1300, 500])
+        self.assertEqual(row["_context_samples"], [1550, 600])
         self.assertTrue(row["availability"]["context"])
+
+    def test_opencode_summary_attributes_models_and_calendar_days_per_message(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            jan = int(datetime.datetime(2026, 1, 31, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            feb = int(datetime.datetime(2026, 2, 1, 12, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            top = self._session_row("ses_top", "/repo", "Across months", "model-b",
+                                    0.1, 30, 7, 5, 3, 2, feb + 1000)
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            messages = [
+                self._message("a1", "ses_top", {
+                    "role": "assistant", "modelID": "model-a", "providerID": "provider-a",
+                    "tokens": {"input": 10, "output": 4, "reasoning": 2,
+                               "cache": {"read": 3, "write": 0}},
+                    "cost": 0.1, "time": {"created": jan, "completed": jan + 1000},
+                }, jan),
+                self._message("a2", "ses_top", {
+                    "role": "assistant", "modelID": "model-b", "providerID": "provider-b",
+                    "tokens": {"input": 20, "output": 3, "reasoning": 3,
+                               "cache": {"read": 0, "write": 2}},
+                    "cost": 0.0, "time": {"created": feb, "completed": feb + 1000},
+                }, feb),
+            ]
+            for row in messages:
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", row)
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1000):
+                row = meter.opencode_summary({
+                    "provider": "opencode", "id": "ses_top", "model": "model-b",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo", "mtime": feb / 1000,
+                })
+        self.assertEqual(row["turns"], 2)
+        self.assertEqual(row["tokens"], 47)
+        self.assertEqual(row["_day_cost"], {"2026-01-31": 0.1, "2026-02-01": 0.0})
+        self.assertEqual(row["_model_tok"], {"model-a": 19, "model-b": 28})
+        self.assertEqual({item["model"]: item["executions"] for item in row["model_stats"]},
+                         {"model-a": 1, "model-b": 1})
+        model_b = next(item for item in row["model_stats"] if item["model"] == "model-b")
+        self.assertTrue(model_b["availability"]["cost"])
+        self.assertEqual({item["day"] for item in row["_model_daily"]},
+                         {"2026-01-31", "2026-02-01"})
 
     def test_opencode_budget_defaults_and_distribute_cost(self):
         with mock.patch.object(meter, "OPENCODE_DB", str(Path("/nonexistent/opencode.db"))):

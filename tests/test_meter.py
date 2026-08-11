@@ -2527,7 +2527,8 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertRegex(tools, r"<section class=\"card capInventory\" id=c-inventory")
         self.assertNotIn('class="card capInventory" id=c-inventory-details', tools)
         self.assertNotIn("id=c-catalog-details", tools)
-        self.assertNotIn("spectrumPageHead", tools)
+        self.assertIn('class="capPageHead spectrumPageHead"', tools)
+        self.assertIn("class=spectrumPageHeadCopy", tools)
         for removed in (
             "id=c-decision-panel", "id=c-opt-enabled", "id=c-opt-used",
             "id=c-opt-review", "id=c-mcp-observed",
@@ -3342,7 +3343,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "--spectrum-control:linear-gradient",
             "--spectrum-active:linear-gradient",
             '<div class="previewHead spectrumPageHead">',
-            "<header class=capPageHead>",
+            '<header class="capPageHead spectrumPageHead">',
             '<div class="modelHead spectrumPageHead">',
             '<div class="dailyHead spectrumPageHead">',
             '<div class="learnHead spectrumPageHead">',

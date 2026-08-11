@@ -413,29 +413,58 @@ struct BudgetNotificationState: Codable {
     var firedThresholds: Set<Int>
 }
 
+struct RuntimePresentation {
+    var label: String
+    var symbol: String
+
+    static func catalog(_ value: Any?) -> [String: RuntimePresentation] {
+        guard let rows = value as? [String: [String: Any]] else { return [:] }
+        var result: [String: RuntimePresentation] = [:]
+        for (runtimeID, row) in rows {
+            guard let label = string(row["label"]), !label.isEmpty else { continue }
+            result[runtimeID] = RuntimePresentation(
+                label: label,
+                symbol: string(row["symbol"]) ?? "runtime.generic"
+            )
+        }
+        return result
+    }
+
+    var menuSymbolName: String {
+        switch symbol {
+        case "runtime.codex": return "terminal"
+        case "runtime.cursor": return "cursorarrow"
+        case "runtime.opencode": return "gearshape.2"
+        case "runtime.claude": return "sparkles"
+        default: return "circle"
+        }
+    }
+}
+
 struct RecentSession {
     var id: String
     var provider: String
     var label: String
     var name: String
+    var providerName: String
+    var symbolName: String
 
-    static func fromJSON(_ dict: [String: Any]) -> RecentSession? {
+    static func fromJSON(
+        _ dict: [String: Any],
+        catalog: [String: RuntimePresentation]
+    ) -> RecentSession? {
         guard let id = string(dict["id"]), !id.isEmpty else { return nil }
+        let provider = string(dict["provider"]) ?? "unknown-runtime"
+        let rowLabel = string(dict["label"]) ?? ""
+        let presentation = catalog[provider] ?? catalog["unknown-runtime"]
         return RecentSession(
             id: id,
-            provider: string(dict["provider"]) ?? "",
-            label: string(dict["label"]) ?? "",
-            name: string(dict["name"]) ?? ""
+            provider: provider,
+            label: rowLabel,
+            name: string(dict["name"]) ?? "",
+            providerName: presentation?.label ?? (rowLabel.isEmpty ? "Unknown Runtime" : rowLabel),
+            symbolName: presentation?.menuSymbolName ?? "circle"
         )
-    }
-
-    var providerName: String {
-        switch provider.lowercased() {
-        case "codex": return "Codex"
-        case "cursor": return "Cursor"
-        case "opencode": return "OpenCode"
-        default: return "Claude"
-        }
     }
 
     var identifier: String {
@@ -459,14 +488,6 @@ struct RecentSession {
             .joined(separator: " · ")
     }
 
-    var symbolName: String {
-        switch provider.lowercased() {
-        case "codex": return "terminal"
-        case "cursor": return "cursorarrow"
-        case "opencode": return "gearshape.2"
-        default: return "sparkles"
-        }
-    }
 }
 
 struct MeterSnapshot {
@@ -808,6 +829,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var timer: Timer?
     private var pinnedSessionID = tokenMeterDefaults.string(forKey: pinnedSessionDefaultsKey)
     private var recentSessions: [RecentSession] = []
+    private var runtimeCatalog: [String: RuntimePresentation] = [:]
     private var providerQuotas: [ProviderQuota] = []
     private var statusDisplayMode = StatusDisplayMode(
         rawValue: tokenMeterDefaults.string(forKey: statusDisplayModeDefaultsKey) ?? StatusDisplayMode.text.rawValue
@@ -938,8 +960,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if bool(selection["missing"]) {
                     self.persistPinnedSession(nil)
                 }
+                self.runtimeCatalog = RuntimePresentation.catalog(dict["runtime_catalog"])
                 self.recentSessions = (dict["recent_sessions"] as? [[String: Any]] ?? [])
-                    .compactMap(RecentSession.fromJSON)
+                    .compactMap { RecentSession.fromJSON($0, catalog: self.runtimeCatalog) }
                 self.providerQuotas = (dict["provider_quotas"] as? [[String: Any]] ?? [])
                     .compactMap(ProviderQuota.fromJSON)
                 self.snapshot = MeterSnapshot.fromJSON(dict)
@@ -1323,8 +1346,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         monthlyBudget = MonthlyBudget.fromJSON(smokePayload["budget"] as? [String: Any])
         providerQuotas = (smokePayload["provider_quotas"] as? [[String: Any]] ?? [])
             .compactMap(ProviderQuota.fromJSON)
+        runtimeCatalog = RuntimePresentation.catalog(smokePayload["runtime_catalog"])
         recentSessions = (smokePayload["recent_sessions"] as? [[String: Any]] ?? [])
-            .compactMap(RecentSession.fromJSON)
+            .compactMap { RecentSession.fromJSON($0, catalog: runtimeCatalog) }
         rebuildMenu()
         let expectedTitle = selectedStatusTitle()
         let renderedTitle = statusItem.button?.accessibilityValue() as? String
@@ -1983,7 +2007,9 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         let snapshot = MeterSnapshot.fromJSON(dict)
         let budget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
         let quotas = (dict["provider_quotas"] as? [[String: Any]] ?? []).compactMap(ProviderQuota.fromJSON)
-        let sessions = (dict["recent_sessions"] as? [[String: Any]] ?? []).compactMap(RecentSession.fromJSON)
+        let runtimeCatalog = RuntimePresentation.catalog(dict["runtime_catalog"])
+        let sessions = (dict["recent_sessions"] as? [[String: Any]] ?? [])
+            .compactMap { RecentSession.fromJSON($0, catalog: runtimeCatalog) }
         let savedMetrics: Set<TitleMetric> = {
             if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
                 let parsed = Set(saved.compactMap(TitleMetric.init(rawValue:)))

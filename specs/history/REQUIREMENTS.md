@@ -1,5 +1,10 @@
 # Live Token Meter — Requirements & Research
 
+> **Historical record.** This document captures product evolution from the
+> original monolithic implementation and is not the current architecture or
+> validation authority. See [../ARCHITECTURE.md](../ARCHITECTURE.md), the current
+> feature specifications under `specs/`, and Git history for present behavior.
+
 A taxi-meter for Claude Code, Codex, and Cursor sessions. Sits in your browser, tails
 your active local agent session log, and shows in real time what the session is
 costing and doing — with notifications, trace events, and insights when

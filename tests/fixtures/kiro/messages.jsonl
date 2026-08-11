@@ -1,0 +1,5 @@
+{"id":"turn-1-user","timestamp":"2026-08-01T10:00:00Z","payload":{"type":"user","content":"[sanitized user text]"}}
+{"id":"turn-1-start","timestamp":"2026-08-01T10:00:01Z","payload":{"type":"turn_start","executionId":"exec-1"}}
+{"id":"turn-1-tool","timestamp":"2026-08-01T10:00:02Z","payload":{"type":"tool_call","toolCallId":"tool-1","toolName":"readFile","args":{"path":"[sanitized]"}}}
+{"id":"turn-1-result","timestamp":"2026-08-01T10:00:03Z","payload":{"type":"tool_result","toolCallId":"tool-1","content":"[sanitized tool result]","success":true}}
+{"id":"turn-1-assistant","timestamp":"2026-08-01T10:00:04Z","payload":{"type":"assistant","content":"[sanitized assistant text]"}}

@@ -28,24 +28,22 @@ class SourceDiscoveryCacheTests(unittest.TestCase):
             path.write_text(
                 json.dumps(session_meta) + "\n" + json.dumps(first_turn) + "\n"
             )
-            meter._codex_meta_cache.pop(str(path), None)
+            with mock.patch.object(meter, "_codex_native_adapters", {}):
+                first = meter.codex_meta(str(path))
+                with mock.patch(
+                    "builtins.open",
+                    side_effect=AssertionError("unchanged metadata should come from cache"),
+                ):
+                    second = meter.codex_meta(str(path))
 
-            first = meter.codex_meta(str(path))
-            with mock.patch(
-                "builtins.open",
-                side_effect=AssertionError("unchanged metadata should come from cache"),
-            ):
-                second = meter.codex_meta(str(path))
-
-            second_turn = {
-                "type": "turn_context",
-                "payload": {"model": "gpt-second"},
-            }
-            path.write_text(
-                json.dumps(session_meta) + "\n" + json.dumps(second_turn) + "\n"
-            )
-            third = meter.codex_meta(str(path))
-            meter._codex_meta_cache.pop(str(path), None)
+                second_turn = {
+                    "type": "turn_context",
+                    "payload": {"model": "gpt-second"},
+                }
+                path.write_text(
+                    json.dumps(session_meta) + "\n" + json.dumps(second_turn) + "\n"
+                )
+                third = meter.codex_meta(str(path))
 
         self.assertEqual(first["model"], "gpt-first")
         self.assertEqual(second["model"], "gpt-first")
@@ -74,6 +72,7 @@ class SourceDiscoveryCacheTests(unittest.TestCase):
                     mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
                     mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
                     mock.patch.object(meter, "OPENCODE_DB", str(root / "no-opencode.db")), \
+                    mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", []), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}), \
                     mock.patch.object(meter, "_summary_cache", empty_summary_cache):
                 first_source = meter.all_session_sources()[0]
@@ -197,6 +196,9 @@ class CursorTraceTests(unittest.TestCase):
                     mock.patch.object(meter, "CLAUDE_PROJECTS", str(root / "no-claude")), \
                     mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
                     mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
+                    mock.patch.object(meter, "KIRO_SESSIONS", str(root / "no-kiro")), \
+                    mock.patch.object(meter, "KIRO_AGENT_STORAGE", str(root / "no-kiro-agent")), \
+                    mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", []), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}):
                 sources = meter.all_session_sources()
             self.assertEqual({row["id"] for row in sources}, {"older", "newer"})
@@ -793,7 +795,7 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertFalse(unknown["ok"])
         self.assertIn(
             'elif req_path == "/model-stats":',
-            Path(meter.__file__).read_text(),
+            Path(meter.IMPLEMENTATION_FILE).read_text(),
         )
 
     def test_model_project_options_are_sorted_and_bounded(self):
@@ -852,6 +854,38 @@ class ModelPerformanceTests(unittest.TestCase):
                          "Claude Code")
         self.assertEqual(meter.source_runtime_label({"provider": "codex"}), "Codex")
         self.assertEqual(meter.source_runtime_label({"provider": "cursor"}), "Cursor")
+
+    def test_matched_pace_has_exact_today_and_yesterday_windows(self):
+        now = datetime.datetime(2026, 8, 11, 12, 0, 0).timestamp()
+
+        def samples(day, start):
+            return [{
+                "duration_s": 10, "ts": start + index, "day": day,
+                "input_tokens": 10000, "peak_input_tokens": 10000,
+                "cache_read_tokens": 0, "output_tokens": 1000,
+                "tool_calls": 0, "model_calls": 1,
+            } for index in range(20)]
+
+        groups = {
+            runtime: (
+                samples("2026-08-11", offset)
+                + samples("2026-08-10", offset + 100)
+                + samples("2026-07-01", offset + 200)
+            )
+            for runtime, offset in (("alpha", 0), ("beta", 1000))
+        }
+
+        windows = meter.matched_pace_windows(groups, now_ts=now)["windows"]
+
+        self.assertEqual(list(windows), ["today", "yesterday", "7", "30", "90", "all"])
+        for name in ("today", "yesterday"):
+            self.assertEqual(len(windows[name]), 1)
+            self.assertEqual(windows[name][0]["a_samples"], 20)
+            self.assertEqual(windows[name][0]["b_samples"], 20)
+        self.assertEqual(windows["7"][0]["a_samples"], 40)
+        self.assertEqual(windows["7"][0]["b_samples"], 40)
+        self.assertEqual(windows["all"][0]["a_samples"], 60)
+        self.assertEqual(windows["all"][0]["b_samples"], 60)
 
     def test_matched_pace_reports_ratio_confidence_and_coverage(self):
         def sample(duration, ts):
@@ -1375,7 +1409,7 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(row["periods"], 0)
 
     def test_model_pricing_http_action_forwards_bounded_scope_fields(self):
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.IMPLEMENTATION_FILE).read_text()
         self.assertIn(
             'apply_to_all_history=payload.get("apply_to_all_history") is True',
             source,
@@ -1759,6 +1793,28 @@ class SessionDeleteTests(unittest.TestCase):
 
 
 class LiveCrossSessionRefreshTests(unittest.TestCase):
+    def test_session_detail_reuses_cached_cross_session_snapshot(self):
+        handler = object.__new__(meter.H)
+        handler.path = "/session?id=session-1"
+        handler._send = lambda *_args, **_kwargs: None
+        cached = {"current_sessions": []}
+        rebuilder = mock.Mock(return_value={"current_sessions": []})
+        state = {"source": {"id": "session-1"}, "timing": {}}
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["data"] = cached
+            with mock.patch.object(meter, "find_session", return_value={"id": "session-1"}), \
+                    mock.patch.object(meter, "cached_session_state", return_value=state), \
+                    mock.patch.object(meter, "cross_session", rebuilder), \
+                    mock.patch.object(meter, "attach_cross_session") as attach:
+                handler.do_GET()
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        rebuilder.assert_not_called()
+        attach.assert_called_once_with(state, cached)
+
     def test_full_sse_queue_keeps_subscriber_and_coalesces_to_latest_state(self):
         q_ = meter.queue.Queue(maxsize=2)
         q_.put_nowait("stale-one")
@@ -2165,7 +2221,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "id=m-model-picker", "id=m-model-options", "id=m-model-summary",
             "tm_model_filters", "MODEL_COLORS", "buildModelTrend",
             "bars show output", "observed tok/s",
-            "modelTipMetrics", "<small>input</small>", "<small>executions</small>",
+            "modelTipMetrics",
             "Typical wait", "median wait", "human pause excluded",
             "modelWaitDistribution", "wait_durations_s", "p95_wait_s",
             "Matched pace", "renderMatchedPace", "modelRuntimeLabel",
@@ -2176,7 +2232,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
 
-    def test_model_trend_omits_legend_without_removing_hover_details(self):
+    def test_model_trend_omits_legend_and_limits_hover_to_relevant_metrics(self):
         self.assertNotIn("id=m-legend", self.page)
         self.assertNotIn("$('m-legend')", self.page)
         for marker in (
@@ -2193,13 +2249,23 @@ class DashboardLayoutTests(unittest.TestCase):
             'style="background:${item.color}"></i>${esc(item.model)}</div>',
             self.page,
         )
+        model_trend = self.page.split("function drawModelTrend(chart){", 1)[1].split(
+            "function renderMatchedPace", 1
+        )[0]
         for marker in (
-            "<small>input</small>", "<small>output</small>",
-            "<small>executions</small>", "<small>avg input</small>",
-            "<small>avg output</small>", "<small>tok/s</small>",
-            "<small>typical wait</small>",
+            "const outputAvailable=metricAvailable(item.row,'tokens')",
+            "const selectedAvailable=metric.available(item.row)",
+            "<small>output</small>", "<small>${esc(metric.note)}</small>",
+            "${outputAvailable?compactNumber(item.row.output_tokens||0):'--'}",
+            "${selectedAvailable?metric.format(metric.value(item.row)):'--'}",
         ):
-            self.assertIn(marker, self.page)
+            self.assertIn(marker, model_trend)
+        for marker in (
+            "<small>input</small>", "<small>executions</small>",
+            "<small>avg input</small>", "<small>avg output</small>",
+            "<small>tok/s</small>", "<small>typical wait</small>",
+        ):
+            self.assertNotIn(marker, model_trend)
 
     def test_model_stats_supports_project_scoped_average_io_trends(self):
         for marker in (
@@ -2210,7 +2276,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "MODEL_TREND_METRICS", "modelTokensPerExecution",
             "Model trends", "avg input / execution", "avg output / execution",
             "input / exec", "output / exec",
-            "<small>avg input</small>", "<small>avg output</small>",
             "Daily model ${metric.note} and output token volume",
         ):
             self.assertIn(marker, self.page)
@@ -2283,11 +2348,55 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("wait_time?.total_s", self.page)
         self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
+    def test_session_chart_only_offers_linear_and_cumulative_scales(self):
+        scale_controls = self.page.split('<div class=seg id=scale>', 1)[1].split(
+            "</div>", 1
+        )[0]
+        self.assertIn("data-scale=linear", scale_controls)
+        self.assertIn("data-scale=cumulative", scale_controls)
+        self.assertNotIn("data-scale=sqrt", scale_controls)
+        self.assertNotIn("data-scale=log", scale_controls)
+        self.assertIn("const CHART_SCALES=['linear','cumulative'];", self.page)
+        self.assertIn("if(!CHART_SCALES.includes(chartScale))", self.page)
+        self.assertIn("localStorage.setItem('tm_chart_scale',chartScale);", self.page)
+        self.assertNotIn("if(scale==='sqrt')", self.page)
+        self.assertNotIn("if(scale==='log')", self.page)
+
+    def test_models_history_supports_exact_local_days(self):
+        history = self.page.split(
+            'id=m-range aria-label="Models history range"', 1
+        )[1].split("</select>", 1)[0]
+        expected = (
+            '<option value=today>Today</option>',
+            '<option value=yesterday>Yesterday</option>',
+            '<option value=7>Last 7 days</option>',
+            '<option value=30 selected>Last 30 days</option>',
+            '<option value=90>Last 90 days</option>',
+            '<option value=all>All history</option>',
+        )
+        for option in expected:
+            self.assertIn(option, history)
+        self.assertEqual([history.index(option) for option in expected], sorted(
+            history.index(option) for option in expected
+        ))
+        for marker in (
+            "const MODEL_RANGES=['today','yesterday','7','30','90','all'];",
+            "if(!MODEL_RANGES.includes(modelRange))",
+            "function modelRangeWindow(range,now=new Date())",
+            "if(range==='today'||range==='yesterday')",
+            "function modelDayInRange(day,window)",
+            "mergeModelDays(selected,rangeWindow)",
+            "buildModelTrend(selected,rangeWindow,names)",
+            ".filter(row=>modelDayInRange(row.day,rangeWindow))",
+            "modelRangeLabel(modelRange)",
+        ):
+            self.assertIn(marker, self.page)
+
     def test_session_chart_supports_cumulative_cost_and_token_views(self):
         for marker in (
             "data-scale=cumulative",
             "Show running estimated cost or token totals through each execution.",
-            "const CHART_SCALES=['linear','sqrt','log','cumulative'];",
+            "const CHART_SCALES=['linear','cumulative'];",
             "if(!CHART_SCALES.includes(chartScale))",
             "b.setAttribute('aria-pressed',selected?'true':'false');",
             "function cumulativeChartParts(parts,mode)",
@@ -2297,7 +2406,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "const cumulativeCost=mode==='cost'&&chartScale==='cumulative';",
             "const cumulativeValues=cumulativeTokens||cumulativeCost;",
             "parts=cumulativeValues?cumulativeChartParts(rawParts,mode):rawParts",
-            "scaleMode=mode==='tokens'&&!cumulativeValues?chartScale:'linear'",
             "running estimated cost through each execution",
             "running token totals through each execution",
             "cumulative cost",
@@ -2572,12 +2680,12 @@ class DashboardLayoutTests(unittest.TestCase):
             "/settings/budgets", "tm_monthly_budget_alerts",
             "Partial cost coverage: recorded spend is a lower bound.",
             "Calculated budget",
-            "The sum of the Claude, Codex, Cursor, and OpenCode budgets.",
+            "The sum of the registered runtime budgets.",
             "Runtime budgets are added to calculate the monthly total.",
-            "Claude + Codex + Cursor + OpenCode",
+            "function ensureBudgetRuntimeRows()",
             "planJump.textContent=configured?'Edit budgets':'Set budgets'",
             "config.scrollIntoView({behavior:",
-            "const config=$('budget-config'),input=$('budget-input-claude')",
+            "const config=$('budget-config'),input=config.querySelector('.budgetRuntimeInput input')",
             "input.focus({preventScroll:true})",
             "function budgetAllocationsFromInputs()",
             "function previewCalculatedBudget()",
@@ -2802,8 +2910,8 @@ class DashboardLayoutTests(unittest.TestCase):
         for value in ("value=24h", "value=7d", "value=30d", "value=90d"):
             self.assertIn(value, self.page)
         self.assertIn("globalApp&&appFilterGroup(s)!==globalApp", self.page)
-        self.assertIn("['claude','claude_code','claude_desktop'].includes(client)?'claude':client", self.page)
-        self.assertIn("appFilterGroup(session)==='claude'?'Claude'", self.page)
+        self.assertIn("const appFilterGroup=session=>runtimeId(session)", self.page)
+        self.assertIn("const appFilterLabel=session=>runtimeMeta(session).label", self.page)
         self.assertIn("['claude_code','claude_desktop'].includes(globalApp)", self.page)
         self.assertIn("globalProject&&(s.project||'No project')!==globalProject", self.page)
         self.assertIn("Date.now()/1000-rangeSeconds", self.page)
@@ -2860,11 +2968,11 @@ class DashboardLayoutTests(unittest.TestCase):
 
     def test_current_sessions_keep_opencode_identity(self):
         self.assertIn(
-            "['claude','codex','cursor','gemini','opencode'].includes(row.provider)",
+            "const provider=runtimeId(row)",
             self.page,
         )
-        self.assertIn('class="card currentSessionCard provider-${provider}', self.page)
-        self.assertIn('Start Claude, Codex, Cursor, or OpenCode to see one here.', self.page)
+        self.assertIn('class="card currentSessionCard provider-${esc(provider)}', self.page)
+        self.assertIn("Object.entries(RUNTIME_CATALOG).filter(([id])=>id!=='unknown-runtime')", self.page)
 
     def test_session_delete_actions_require_confirmation_and_use_trash_endpoint(self):
         for marker in ("id=session-delete", "data-delete-session", "id=session-delete-dialog",
@@ -3107,11 +3215,17 @@ class DashboardLayoutTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.page)
 
-    def test_session_cards_show_context_sparklines(self):
+    def test_session_cards_show_context_pressure_or_window_fallback(self):
         for marker in (
             "function currentSessionContextSparkline(row)",
             "Array.isArray(context.samples)",
+            "if(!windowSize)return {",
+            "currentSessionContextUnavailable",
+            "window --",
+            "Context window unavailable;",
+            "Context window and latest token count unavailable.",
             "const plotted=samples.slice(-24)",
+            "const values=plotted.map(value=>value/windowSize)",
             "const width=96,height=22",
             "currentSessionContextBar",
             "value>=.85?' high':value>=.7?' watch'",
@@ -3122,6 +3236,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "const cardDescription=`${contextSpark.summary}",
         ):
             self.assertIn(marker, self.page)
+        self.assertNotIn("const values=windowSize?plotted.map(value=>value/windowSize):plotted", self.page)
         self.assertNotIn("currentSessionContextCaption", self.page)
         self.assertNotIn("currentSessionContextGuide", self.page)
 
@@ -3321,7 +3436,7 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
 
     def test_handler_swallows_browser_disconnects(self):
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.IMPLEMENTATION_FILE).read_text()
         self.assertIn("except (BrokenPipeError, ConnectionResetError):", source)
 
     def test_dashboard_live_updates_do_not_hold_event_stream_connections(self):
@@ -3329,7 +3444,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("const LIVE_STATE_POLL_MS=1000", self.page)
         self.assertIn("setInterval(refreshLiveState,LIVE_STATE_POLL_MS)", self.page)
         self.assertIn("if(statePollBusy)return", self.page)
-        source = Path(meter.__file__).read_text()
+        source = Path(meter.IMPLEMENTATION_FILE).read_text()
         events = source.index('elif req_path == "/events":')
         self.assertIn("self.send_response(204)", source[events:events + 700])
 
@@ -3404,8 +3519,8 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertNotIn('"Action"', rebuild)
 
     def test_cursor_uses_provider_identity_and_estimated_usage_labels(self):
-        self.assertIn('case "cursor": return "Cursor"', self.source)
-        self.assertIn('case "cursor": return "cursorarrow"', self.source)
+        self.assertIn('catalog[provider] ?? catalog["unknown-runtime"]', self.source)
+        self.assertIn('case "runtime.cursor": return "cursorarrow"', self.source)
         self.assertIn('let costAvailable = metricAvailable(availability, "cost")', self.source)
         self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
         self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
@@ -4894,6 +5009,7 @@ class InstallationTests(unittest.TestCase):
     def test_user_installer_waits_for_both_supervised_runtime_jobs_and_returns_control(self):
         root = Path(__file__).resolve().parents[1]
         script = (root / "scripts" / "install").read_text()
+        manifest = (root / "runtime-manifest.txt").read_text()
         server_start = script.index(
             '"$INSTALL_ROOT/scripts/install-launch-agent" server-only'
         )
@@ -4911,9 +5027,10 @@ class InstallationTests(unittest.TestCase):
         self.assertIn('launchctl print "gui/$UID/$MENUBAR_LABEL"', script)
         self.assertIn('"$INSTALL_ROOT/meter.py"', script)
         self.assertIn('"$INSTALL_ROOT/scripts/run-menubar"', script)
-        self.assertIn('ditto "$SOURCE_ROOT/assets" "$INSTALL_ROOT/assets"', script)
-        self.assertIn('assets/brand/logo-splunk-acc-rgb-w.png', script)
-        self.assertIn('menubar/Info.plist', script)
+        self.assertIn('ditto "$source_path" "$install_path"', script)
+        self.assertIn('python3 -m token_meter.packaging parity', script)
+        self.assertIn('assets/brand/logo-splunk-acc-rgb-w.png', manifest)
+        self.assertIn('menubar/Info.plist', manifest)
         self.assertIn(
             'printf \'%s\\n\' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"',
             script,
@@ -5338,7 +5455,7 @@ class CapabilityConfigTests(unittest.TestCase):
         self.assertIn("tool_waste", state["xsession"])
         self.assertIn(
             'elif req_path == "/capabilities/inventory":',
-            Path(meter.__file__).read_text(),
+            Path(meter.IMPLEMENTATION_FILE).read_text(),
         )
 
     def test_pack_without_runtime_logs_is_not_a_review_candidate(self):
@@ -5513,7 +5630,7 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(stored["budgets"]["monthly_total"], 80)
         self.assertEqual(
             stored["budgets"]["allocations"],
-            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 0},
+            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 0, "kiro": 0},
         )
         self.assertIn("model_pricing", stored)
 
@@ -5537,13 +5654,13 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(loaded["monthly_total"], 0)
         self.assertEqual(
             loaded["allocations"],
-            {"claude": 0, "codex": 0, "cursor": 0, "opencode": 0},
+            {"claude": 0, "codex": 0, "cursor": 0, "opencode": 0, "kiro": 0},
         )
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["budgets"]["monthly_total"], 1490)
         self.assertEqual(
             saved["budgets"]["allocations"],
-            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 0},
+            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 0, "kiro": 0},
         )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
@@ -5718,6 +5835,9 @@ class OpenCodeTests(unittest.TestCase):
                     mock.patch.object(meter, "CODEX_SESSIONS", str(root / "no-codex")), \
                     mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
                     mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
+                    mock.patch.object(meter, "KIRO_SESSIONS", str(root / "no-kiro")), \
+                    mock.patch.object(meter, "KIRO_AGENT_STORAGE", str(root / "no-kiro-agent")), \
+                    mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", []), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}):
                 sources = meter.all_session_sources()
         self.assertEqual([row["id"] for row in sources], ["ses_top"])
@@ -5756,12 +5876,11 @@ class OpenCodeTests(unittest.TestCase):
                          tuple(top.values()))
             conn.commit()
             conn.close()
-            cache = {"path": None, "signature": None, "sources": []}
             with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
-                    mock.patch.object(meter, "_opencode_sources_cache", cache):
+                    mock.patch.object(meter, "_opencode_native_adapters", {}):
                 first = meter.opencode_session_sources()
                 with mock.patch.object(
-                    meter, "_opencode_db_connection",
+                    meter.OpenCodeRuntimeAdapter, "connection",
                     side_effect=AssertionError("unchanged database should use the inventory cache"),
                 ):
                     second = meter.opencode_session_sources()
@@ -5771,14 +5890,13 @@ class OpenCodeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models_path = root / "models.json"
-            empty_cache = {"path": None, "signature": None, "models": {}}
             with mock.patch.object(meter, "OPENCODE_DATA_ROOT", str(root / "data" / "opencode")), \
                     mock.patch.object(meter, "OPENCODE_DB", "relative.db"):
                 self.assertEqual(
                     meter.opencode_db_path(), str(root / "data" / "opencode" / "relative.db")
                 )
             with mock.patch.object(meter, "OPENCODE_MODELS_PATH", str(models_path)), \
-                    mock.patch.object(meter, "_opencode_models_cache", empty_cache):
+                    mock.patch.object(meter, "_opencode_native_adapters", {}):
                 self.assertEqual(meter._load_opencode_models(), {})
                 models_path.write_text(json.dumps({
                     "provider-a": {"models": {"shared": {"limit": {"context": 100}}}},
@@ -6035,6 +6153,46 @@ class OpenCodeTests(unittest.TestCase):
         self.assertEqual(row["_context_samples"], [1550, 600])
         self.assertTrue(row["availability"]["context"])
 
+    def test_opencode_summary_processes_only_newest_500_messages_in_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            base = 1_784_548_800_000
+            top = self._session_row(
+                "ses_top", "/repo", "Long history", "model-a",
+                5.01, 501, 501, 0, 0, 0, base + 501_000,
+            )
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            for index in range(501):
+                created = base + index * 1_000
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", self._message(
+                    f"a{index:04d}", "ses_top", {
+                        "role": "assistant", "modelID": "model-a",
+                        "providerID": "provider-a",
+                        "tokens": {"input": 1, "output": 1, "reasoning": 0,
+                                   "cache": {"read": 0, "write": 0}},
+                        "cost": 0.01,
+                        "time": {"created": created, "completed": created + 500},
+                    }, created,
+                ))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1_000):
+                row = meter.opencode_summary({
+                    "provider": "opencode", "id": "ses_top", "model": "model-a",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo",
+                    "mtime": (base + 501_000) / 1_000,
+                })
+
+        self.assertEqual(row["turns"], 500)
+        self.assertEqual(len(row["_performance_samples"]), 500)
+        self.assertEqual(row["_performance_samples"][0]["ts"], (base + 1_500) / 1_000)
+        self.assertEqual(row["_performance_samples"][-1]["ts"], (base + 500_500) / 1_000)
+        self.assertEqual(row["tokens"], 1_002)
+
     def test_opencode_summary_attributes_models_and_calendar_days_per_message(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -6085,6 +6243,7 @@ class OpenCodeTests(unittest.TestCase):
         with mock.patch.object(meter, "OPENCODE_DB", str(Path("/nonexistent/opencode.db"))):
             settings = meter.normalize_budget_settings({"allocations": {}})
         self.assertEqual(settings["allocations"]["opencode"], meter.DEFAULT_RUNTIME_BUDGET)
+        self.assertEqual(settings["allocations"]["kiro"], meter.DEFAULT_RUNTIME_BUDGET)
         usage = {"input_tokens": 1000, "cache_creation_input_tokens": 0,
                  "cache_read_input_tokens": 500, "output_tokens": 100, "reasoning_tokens": 50}
         split = meter._opencode_distribute(0.02, usage)

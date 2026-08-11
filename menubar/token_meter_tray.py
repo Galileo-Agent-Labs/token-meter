@@ -125,13 +125,12 @@ def reset_label(reset_at):
     return f"resets in {format_compact_duration(remaining)}"
 
 
-def provider_name(provider):
-    value = str(provider or "").lower()
-    if value == "codex":
-        return "Codex"
-    if value == "cursor":
-        return "Cursor"
-    return "Claude"
+def provider_name(provider, catalog=None):
+    value = str(provider or "unknown-runtime")
+    catalog = catalog if isinstance(catalog, dict) else {}
+    presentation = catalog.get(value) or catalog.get("unknown-runtime") or {}
+    fallback = value.replace("-", " ").replace("_", " ").title()
+    return str(presentation.get("label") or fallback or "Unknown Runtime")
 
 
 def session_identifier(session):
@@ -145,8 +144,14 @@ def session_identifier(session):
     return session_id[:12]
 
 
-def session_menu_title(session):
-    label = str(session.get("label") or provider_name(session.get("provider")))
+def session_menu_title(session, catalog=None):
+    provider = str(session.get("provider") or "unknown-runtime")
+    catalog = catalog if isinstance(catalog, dict) else {}
+    label = (
+        provider_name(provider, catalog)
+        if provider in catalog else
+        str(session.get("label") or provider_name(provider, catalog))
+    )
     return f"{label} · {session_identifier(session)}"
 
 
@@ -1084,7 +1089,10 @@ class TokenMeterTray:
                 self._set_visible(item, False)
                 continue
             marker = "✓ " if session_id == self.pinned_session else ""
-            self._set_item_label(item, f"{marker}{session_menu_title(session)}")
+            self._set_item_label(
+                item,
+                f"{marker}{session_menu_title(session, state.get('runtime_catalog'))}",
+            )
             item.token_meter_session_id = session_id
             self._set_visible(item, True)
 

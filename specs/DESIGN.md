@@ -94,6 +94,10 @@ components:
 
 # Design System: Token Meter
 
+This document owns visual language and interaction design. For runtime,
+platform, data-flow, packaging, and privacy boundaries, see
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Overview
 
 **Creative North Star: "Spectrum Instrument Field"**

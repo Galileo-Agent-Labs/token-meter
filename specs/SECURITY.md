@@ -1,5 +1,8 @@
 # Security Policy
 
+The canonical component and privacy-boundary map is
+[ARCHITECTURE.md](ARCHITECTURE.md#privacy-and-security-invariants).
+
 ## Supported Versions
 
 Token Meter is a small local tool. Security fixes should target the current

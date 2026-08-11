@@ -30,11 +30,12 @@ DerivedData/
 # Local agent planning state, not public user docs
 PLAN.md
 /plan.md
-STATE.md
-research.md
+/STATE.md
+/research.md
 token-meter-insights-report.html
 .structured-dev-state
-implementation-log.md
+/implementation-log.md
 .agents
-PRODUCT.md
+/PRODUCT.md
+/specs/plans/active.md
 .superpowers/*

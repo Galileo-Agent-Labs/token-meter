@@ -1,0 +1,1 @@
+"""Native runtime adapter tests."""

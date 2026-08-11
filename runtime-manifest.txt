@@ -1,0 +1,25 @@
+# Token Meter staged runtime. Paths are relative to the repository root.
+required runtime-manifest.txt
+required meter.py
+required page.html
+required token_meter_mcp.py
+required menubar/TokenMeterMenuBar.swift
+required menubar/Info.plist
+required menubar/token_meter_tray.py
+required assets/brand/logo-splunk-acc-rgb-w.png
+required scripts/install
+required scripts/install-linux
+required scripts/install-launch-agent
+required scripts/install-systemd-user
+required scripts/run-menubar
+required scripts/run-token-meter-mcp
+required scripts/start-token-meter
+required scripts/uninstall-launch-agent
+required scripts/uninstall-systemd-user
+required scripts/update
+optional README.md
+optional LICENSE
+python-tree token_meter
+tree menubar
+tree scripts
+tree assets

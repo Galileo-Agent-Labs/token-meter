@@ -1,6 +1,11 @@
-# AGENTS.md
+# Coding-Agent Instructions
 
-AI-agent context for Token Meter, a local macOS dashboard and menu-bar instrument for Claude, Codex, and Cursor usage.
+This file moved under `specs/` so `README.md` can remain the only root Markdown
+entry point. It is not guaranteed to be auto-discovered: coding agents must open
+and follow it explicitly before editing. The current engineering map is
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
+AI-agent context for Token Meter, a local cross-platform dashboard and native companion for Claude, Codex, Cursor, OpenCode, and Kiro usage.
 
 ## Context
 
@@ -10,26 +15,36 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 
 | Path | Purpose |
 |---|---|
-| `meter.py` | Trace discovery/parsing, estimates, settings, aggregates, HTTP API |
+| `meter.py` | Small executable/import compatibility facade for `token_meter.app` |
+| `token_meter/app.py` | Composition, compatibility exports, settings, and application lifecycle |
+| `token_meter/runtimes/` | Registered runtime discovery, parsing, revisions, and safe projections |
+| `token_meter/platforms/` | Host paths, process/update policy, and trash behavior |
+| `token_meter/domain/` | Runtime-neutral usage, timing, tools, insights, and aggregates |
+| `token_meter/projections.py` | Explicit allowlisted public compatibility projections |
 | `page.html` | Entire browser dashboard: markup, styles, routing, and JavaScript |
 | `menubar/TokenMeterMenuBar.swift` | Native AppKit companion, preferences, notifications |
 | `token_meter_mcp.py` | Bounded read-only MCP interface |
 | `tests/test_meter.py` | Server, parser, UI-contract, installer, and Swift-source tests |
 | `tests/test_mcp_server.py` | MCP contract and privacy tests |
-| `scripts/install` | Stage user runtime and install both LaunchAgents |
+| `runtime-manifest.txt` | Shared source-to-runtime packaging contract |
+| `scripts/install` | Stage user runtime and install both macOS LaunchAgents |
+| `scripts/install-windows.ps1` | Stage the same manifest and install Windows lifecycle/tray launchers |
 | `README.md` | User installation and behavior documentation |
-| `CONTRIBUTING.md` | Contribution policy and complete validation commands |
+| `specs/ARCHITECTURE.md` | Canonical component boundaries, data flow, invariants, and extension budgets |
+| `specs/CONTRIBUTING.md` | Human contribution policy and extension recipes |
+| `specs/plans/active.md` | Ignored local execution state for multi-file work |
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `python3 -m unittest discover -s tests -v` | Run all unit and contract tests |
-| `PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py` | Compile Python without polluting the repo |
+| `PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py $(find token_meter -type f -name '*.py' -print)` | Compile Python without polluting the repo |
 | `node -e "const fs=require('fs');const h=fs.readFileSync('page.html','utf8');const m=h.match(/<script>([\\s\\S]*)<\\/script>/);new Function(m[1]);console.log('js ok')"` | Parse embedded dashboard JavaScript |
-| `bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent` | Check shell syntax |
+| `bash -n scripts/install scripts/install-linux scripts/install-launch-agent scripts/install-systemd-user scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent scripts/uninstall-systemd-user scripts/update` | Check shell syntax |
 | `swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar` | Compile the native companion |
 | `TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar` | Run deterministic native smoke output |
+| `powershell -NoProfile -Command "[void] [scriptblock]::Create((Get-Content -Raw scripts/install-windows.ps1))"` | Parse a Windows script on a Windows host |
 | `./scripts/install` | Stage and start the exact repository runtime |
 | `curl -fsS http://127.0.0.1:8722/health` | Verify server/page readiness |
 | `curl -fsS http://127.0.0.1:8722/menubar` | Verify compact native payload |
@@ -37,10 +52,11 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 
 ## Rules & Patterns
 
-- Treat `README.md` and `CONTRIBUTING.md` as human documentation; keep this file dense and agent-specific.
-- For multi-file or multi-milestone work, create or replace root `plan.md` before code edits.
-- Keep `plan.md` current with goal, decisions, progress, validation, and remaining work at every stopping point.
-- `plan.md` is local execution state: never stage or commit it.
+- Treat `README.md` and `specs/CONTRIBUTING.md` as human documentation; keep this file dense and agent-specific.
+- Treat `specs/ARCHITECTURE.md` as the canonical engineering map. Link to it instead of copying a second component inventory.
+- For multi-file or multi-milestone work, create or replace `specs/plans/active.md` before code edits.
+- Keep `specs/plans/active.md` current with goal, decisions, progress, validation, and remaining work at every stopping point.
+- `specs/plans/active.md` is ignored local execution state: never stage or commit it.
 - Preserve unrelated worktree changes. Do not reset, checkout, or rewrite user changes.
 - Keep `meter.py` and `token_meter_mcp.py` on the Python standard library.
 - Keep the dashboard local-only; do not add hosted assets, analytics, or telemetry.
@@ -62,7 +78,8 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 - Source-only success is insufficient: run `./scripts/install`, verify `/health` and `/menubar`, and confirm staged runtime parity.
 - Do not patch only `~/Library/Application Support/Token Meter/runtime`; change source, reinstall, then verify.
 - Never use `sudo` or disable macOS security controls for installation.
-- Do not commit local traces, settings, generated logs, caches, `.DS_Store`, `.build/`, `plan.md`, or `STATE.md`.
+- Keep `README.md` as the only tracked root Markdown file. Put maintained documents under `specs/`, and mark point-in-time research or state records historical.
+- Do not commit local traces, settings, generated logs, caches, `.DS_Store`, `.build/`, or `specs/plans/active.md`.
 
 ## Agent Workflow
 
@@ -72,6 +89,15 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 - Add or update tests with the implementation and run the relevant commands in this file.
 - Before handoff, report the files changed, exact validation results, installed-runtime checks when applicable, and anything not verified.
 - Do not push, open a pull request, publish, or otherwise send changes externally unless the user explicitly requests it.
+
+## Documentation and Release Hygiene
+
+- README owns installation, primary workflows, trust, updates, uninstall, and troubleshooting. Maintainer internals belong here or in `specs/ARCHITECTURE.md`.
+- Update links when documents move; verify relative Markdown links and referenced repository paths before committing.
+- Do not maintain a current-state ledger with copied test counts, process IDs, local paths, or installed revisions. Git history and fresh validation output are the evidence.
+- Before publishing, review staged files for traces, settings, credentials, logs, caches, generated binaries, `.DS_Store`, `.build/`, and temporary plans.
+- Keep `runtime-manifest.txt` authoritative for staged source. New imported runtime files must be covered by its expanded tree and parity checks.
+- Target-host claims require target-host evidence. macOS checks do not prove Linux tray or Windows PowerShell/NotifyIcon behavior.
 
 ## Change Boundaries
 

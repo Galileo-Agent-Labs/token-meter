@@ -64,10 +64,10 @@ It must also document runtime, platform, pricing, and telemetry extension budget
 
 Keep Quick Start, user workflows, requirements, privacy, update/uninstall, and troubleshooting. Remove the developer validation catalog, repository tree, and publishing checklist. Add direct links:
 
-    - [Architecture](specs/ARCHITECTURE.md)
-    - [Contributing](specs/CONTRIBUTING.md)
-    - [Security](specs/SECURITY.md)
-    - [Coding-agent instructions](specs/AGENTS.md)
+    - [Architecture](../ARCHITECTURE.md)
+    - [Contributing](../CONTRIBUTING.md)
+    - [Security](../SECURITY.md)
+    - [Coding-agent instructions](../AGENTS.md)
 
 Add one explicit sentence that root auto-discovery is intentionally unavailable and coding agents must read `specs/AGENTS.md` before editing.
 

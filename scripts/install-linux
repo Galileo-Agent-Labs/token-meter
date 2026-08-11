@@ -28,16 +28,11 @@ for command_name in "${required_commands[@]}"; do
   fi
 done
 
-required_paths=(
-  meter.py page.html token_meter_mcp.py menubar/token_meter_tray.py
-  scripts/install-linux scripts/install-systemd-user scripts/run-menubar
-  scripts/start-token-meter scripts/uninstall-systemd-user
-)
-
-for relative_path in "${required_paths[@]}"; do
-  [[ -e "$SOURCE_ROOT/$relative_path" ]] \
-    || fail "the repository checkout is incomplete: $SOURCE_ROOT/$relative_path is missing."
-done
+RUNTIME_MANIFEST="$SOURCE_ROOT/runtime-manifest.txt"
+[[ -f "$RUNTIME_MANIFEST" ]] \
+  || fail "the repository checkout is incomplete: $RUNTIME_MANIFEST is missing."
+PYTHONPATH="$SOURCE_ROOT" python3 -m token_meter.packaging manifest "$RUNTIME_MANIFEST" \
+  || fail "the runtime packaging manifest is invalid or incomplete."
 
 if ! "$SOURCE_ROOT/scripts/run-menubar" --check; then
   fail "the Linux tray dependencies are missing. Install the GTK/AppIndicator packages shown above, then retry."
@@ -103,19 +98,39 @@ echo "  $SOURCE_ROOT"
 echo "Runtime:"
 echo "  $INSTALL_ROOT"
 
-mkdir -p "$INSTALL_ROOT/menubar" "$INSTALL_ROOT/scripts"
+mkdir -p "$INSTALL_ROOT"
 printf '%s\n' "$UPDATE_SOURCE_ROOT" > "$INSTALL_ROOT/SOURCE_CHECKOUT"
-for runtime_file in meter.py page.html token_meter_mcp.py README.md LICENSE; do
-  [[ -f "$SOURCE_ROOT/$runtime_file" ]] || continue
-  cp -p "$SOURCE_ROOT/$runtime_file" "$INSTALL_ROOT/$runtime_file"
-done
-
-cp -Rp "$SOURCE_ROOT/menubar/." "$INSTALL_ROOT/menubar/"
-cp -Rp "$SOURCE_ROOT/scripts/." "$INSTALL_ROOT/scripts/"
-cp -Rp "$SOURCE_ROOT/assets/." "$INSTALL_ROOT/assets/"
+while read -r entry_kind relative_path _; do
+  [[ -z "$entry_kind" || "$entry_kind" == \#* ]] && continue
+  source_path="$SOURCE_ROOT/$relative_path"
+  install_path="$INSTALL_ROOT/$relative_path"
+  case "$entry_kind" in
+    required|optional)
+      [[ -e "$source_path" ]] || [[ "$entry_kind" == "optional" ]] || \
+        fail "the required runtime path is missing: $relative_path"
+      [[ -e "$source_path" ]] || continue
+      mkdir -p "$(dirname "$install_path")"
+      cp -p "$source_path" "$install_path"
+      ;;
+    python-tree)
+      while IFS= read -r package_file; do
+        package_relative="${package_file#"$SOURCE_ROOT/"}"
+        mkdir -p "$INSTALL_ROOT/$(dirname "$package_relative")"
+        cp -p "$package_file" "$INSTALL_ROOT/$package_relative"
+      done < <(find "$source_path" -type f -name '*.py' -print | LC_ALL=C sort)
+      ;;
+    tree)
+      mkdir -p "$install_path"
+      cp -Rp "$source_path/." "$install_path/"
+      ;;
+  esac
+done < "$RUNTIME_MANIFEST"
 chmod 755 "$INSTALL_ROOT"/scripts/*
 
 chmod 755 "$INSTALL_ROOT/menubar/token_meter_tray.py"
+PYTHONPATH="$SOURCE_ROOT" python3 -m token_meter.packaging parity \
+  "$SOURCE_ROOT" "$INSTALL_ROOT" "$RUNTIME_MANIFEST" \
+  || fail "the staged runtime does not match the source manifest."
 
 commit="$(git -C "$SOURCE_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 if [[ -n "$commit" ]]; then

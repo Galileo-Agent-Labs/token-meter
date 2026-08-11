@@ -1,6 +1,6 @@
 # Token Meter
 
-Claude, Codex, and Cursor make it easy to start an agent session. They make it much
+Claude, Codex, Cursor, OpenCode, and Kiro make it easy to start an agent session. They make it much
 harder to understand what happened during the run, what it cost, and whether
 your usage is changing over time. Token Meter reads their local traces and
 turns them into one live dashboard.
@@ -10,18 +10,18 @@ turns them into one live dashboard.
 | Area | What you get |
 | --- | --- |
 | **Follow a live run** | Open Sessions, choose a card, and follow tokens, estimated cost, context usage, wait time, response speed, tool calls, and budget alerts while an agent is working. |
-| **Understand past usage** | Search runs from Claude, Codex, and Cursor together. Filter by project or time, review daily trends, and see what is driving cost and delays. |
+| **Understand past usage** | Search runs from every supported runtime together. Filter by project or time, review daily trends, and see what is driving cost and delays. |
 | **Compare models** | See which app and model handled each run, compare similar workloads, and understand when there is not enough data for a reliable conclusion. |
 | **Review tools and skills** | Find tools that return a lot of data, fail, or repeat work. See which available tools and installed skills were used—or left unused. |
 | **Check provider limits** | Use the menu bar tabs—**Run · All · Claude · Codex · Cursor**—to see how much of each available Session, Weekly, named, or monthly limit you have used. It also shows reset times, likely run-out timing, data freshness, and notifications. If a provider does not report a limit, Token Meter says so instead of showing a misleading 0%. |
-| **Manage a monthly budget** | Claude, Codex, and Cursor each start with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in session detail and the menu bar. |
+| **Manage a monthly budget** | Every registered runtime starts with a $1,000 monthly budget. Token Meter adds them into one machine-wide limit, and keeps any runtime overrun visible in session detail and the menu bar. |
 | **Install updates explicitly** | Check the configured Git upstream every 10 minutes by default. Token Meter shows a bottom-right update button when a clean fast-forward update exists and does not change the checkout until you click it. |
 | **Ask your agent** | Let Codex or Claude check the current run, summarize usage, and point you to the relevant dashboard view through a local MCP. |
 | **Move around quickly** | Open common views with the command palette and keyboard shortcuts. Definitions appear as tooltips on the metrics they explain. |
 | **Keep data private** | Run analysis stays on your computer and Token Meter sends no telemetry. Limit checks use your existing account only to read usage from the matching provider. |
 
 Token Meter supports Claude Code, Claude Desktop Agent/Cowork, Codex CLI, the
-Codex desktop app, and Cursor Agent/Composer. It follows local agent logs as they are written and
+Codex desktop app, Cursor Agent/Composer, OpenCode, and Kiro. It follows local agent logs as they are written and
 combines live runs with cross-app history, so the answer is available while you
 are working and after the session ends.
 
@@ -51,6 +51,19 @@ It copies a stable runtime outside the clone: the macOS default is
 `~/Library/Application Support/Token Meter/runtime`; the Linux default is
 `~/.local/share/token-meter/runtime`. The clone is not used for automatic startup.
 
+On Windows, run the per-user PowerShell installer instead:
+
+```powershell
+git clone https://github.com/splunk/token-meter.git
+Set-Location .\token-meter
+powershell.exe -NoLogo -NoProfile -File .\scripts\install-windows.ps1
+```
+
+It stages the same manifest-owned runtime under
+`%LOCALAPPDATA%\Token Meter\runtime`, starts the local server and WinForms
+system-tray companion without console windows, and registers the current
+user's login startup entry. It does not require administrator access.
+
 Token Meter starts its local server and menu bar or desktop tray widget automatically after
 installation and after future logins. Open the dashboard at:
 
@@ -58,7 +71,7 @@ installation and after future logins. Open the dashboard at:
 http://localhost:8722
 ```
 
-Start a Claude, Codex, or Cursor run and Token Meter will follow its local log.
+Start a Claude, Codex, Cursor, OpenCode, or Kiro run and Token Meter will follow its local evidence.
 
 ### Run Without Installing
 
@@ -175,7 +188,7 @@ observation establishes a baseline and never sends a catch-up notification.
 
 ### A Good First Five Minutes
 
-1. Install or start Token Meter, then begin a Claude, Codex, or Cursor task.
+1. Install or start Token Meter, then begin a Claude, Codex, Cursor, OpenCode, or Kiro task.
 2. Open **Sessions**, choose a card, and check cost plus context pressure in
    **Run**.
 3. Set a session budget in **Run**, and configure browser budget notifications
@@ -195,12 +208,13 @@ observation establishes a baseline and never sends a catch-up notification.
 - macOS: the Swift toolchain, usually from Xcode Command Line Tools.
 - Linux: systemd user services, GTK 3, PyGObject, and Ayatana AppIndicator. KDE exposes AppIndicator items
   natively; GNOME requires an AppIndicator/KStatusNotifierItem shell extension (Ubuntu enables one by default).
-- `curl`, used by the helper scripts.
+- Windows: Windows PowerShell, Git, and a native Windows Python 3.8 or newer.
+- `curl`, used by the macOS and Linux helper scripts.
 
 The web dashboard has no third-party Python packages. `meter.py` uses only the
 Python standard library. Dashboard-only mode is available for development and
-troubleshooting, but the normal experience includes the macOS menu bar or Linux
-desktop tray companion.
+troubleshooting, but the normal experience includes the macOS menu bar, Linux
+desktop tray, or Windows notification-area companion.
 
 ## Ask From Codex Or Claude
 
@@ -294,6 +308,14 @@ Inspect either service with:
 systemctl --user status token-meter-server token-meter-tray
 ```
 
+On Windows, the current user's `Run` registry entry starts the server and tray.
+Remove that owned startup entry and stop both processes while retaining the
+staged runtime with:
+
+```powershell
+& "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
+```
+
 ## Dashboard-Only Mode
 
 For development, troubleshooting, or headless use, run only the local web
@@ -312,8 +334,9 @@ Provider tabs show only cached provider-reported quota snapshots; unavailable
 or stale data is never shown as zero. Recent sessions are labeled Claude, Codex,
 or Cursor and can be pinned; choose **Follow latest** to resume automatic tracking.
 On Linux, the AppIndicator tray exposes equivalent run, provider-limit, and
-settings flows. The companion does not parse logs or read provider credentials
-directly.
+settings flows. On Windows, the NotifyIcon tray consumes the same `/menubar`
+payload and runtime catalog, including the generic unknown-runtime fallback.
+Native companions do not parse logs or read provider credentials directly.
 
 ## How It Finds Logs
 
@@ -330,6 +353,10 @@ Cursor request timing (macOS):      ~/Library/Application Support/Cursor/logs/**
 Claude Desktop data (Linux):        ~/.config/{Claude,Claude-3p}/...
 Cursor conversation data (Linux):     ~/.config/Cursor/User/globalStorage/state.vscdb
 Cursor request timing (Linux):         ~/.config/Cursor/logs/**/cursor.requestTraces.log
+OpenCode data (macOS/Linux):            ${XDG_DATA_HOME:-~/.local/share}/opencode/opencode.db
+OpenCode data (Windows):                %LOCALAPPDATA%\opencode\opencode.db
+Kiro sessions:                          ~/.kiro/sessions/**
+Kiro Agent storage (Windows):           %LOCALAPPDATA%\Kiro\User\globalStorage\kiro.kiroagent\**
 ```
 
 Claude Desktop metadata contains the Desktop title, project directory, model,
@@ -524,7 +551,7 @@ does not send logs, prompts, responses, project paths, token counts, or
 costs to any external service.
 
 The menu-bar quota view makes read-only account-usage requests using credentials
-already stored by Claude, Codex, or Cursor. Codex uses its local app-server when
+already stored by Claude, Codex, Cursor, OpenCode, or Kiro. Codex uses its local app-server when
 available and otherwise its signed-in usage API; Claude uses Anthropic's OAuth
 usage API only for first-party OAuth accounts; Cursor uses its account usage
 summary. Third-party Claude authentication such as Bedrock is shown as
@@ -567,7 +594,7 @@ ls ~/.cursor/projects
 ls "$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
 ```
 
-Then run a supported Claude, Codex, or Cursor agent task and reload the
+Then run a supported Claude, Codex, Cursor, OpenCode, or Kiro agent task and reload the
 dashboard. A Cursor session needs its matching `agent-transcripts` JSONL; the
 SQLite database and request logs are optional enrichment.
 
@@ -665,7 +692,7 @@ node -e "const fs=require('fs'); const html=fs.readFileSync('page.html','utf8');
 python3 -c 'import meter; st=meter.recompute(meter.newest_source()); print(st["provider"], st["turns"], len(st["trace"]), st["tools"]["total_calls"])'
 ```
 
-The final command requires at least one supported local Claude, Codex, or Cursor log.
+The final command requires at least one supported local Claude, Codex, Cursor, OpenCode, or Kiro evidence source.
 
 ## Repository Layout
 

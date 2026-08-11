@@ -1,0 +1,67 @@
+{
+  "sessions": [
+    {
+      "runtime_id": "claude",
+      "client_id": "claude-code",
+      "session_id": "claude-fixture",
+      "label": "Claude Code",
+      "model_provider_id": "anthropic",
+      "model_id": "claude-fixture-model",
+      "account_provider_id": "anthropic",
+      "input": [10, "measured"],
+      "output": [0, "measured"],
+      "cache_read": [null, "unavailable"],
+      "cache_write": [null, "unavailable"],
+      "cost": [0.01, "estimated"]
+    },
+    {
+      "runtime_id": "codex",
+      "client_id": "codex",
+      "session_id": "codex-fixture",
+      "label": "Codex",
+      "model_provider_id": "openai",
+      "model_id": "gpt-fixture",
+      "account_provider_id": "openai",
+      "input": [20, "measured"],
+      "output": [5, "measured"],
+      "cache_read": [2, "measured"],
+      "cache_write": [0, "measured"],
+      "cost": [0.02, "estimated"]
+    },
+    {
+      "runtime_id": "cursor",
+      "client_id": "cursor",
+      "session_id": "cursor-fixture",
+      "label": "Cursor",
+      "model_provider_id": "openai",
+      "model_id": "cursor-fixture-model",
+      "account_provider_id": "cursor",
+      "input": [100, "estimated"],
+      "output": [25, "estimated"],
+      "cache_read": [null, "unavailable"],
+      "cache_write": [null, "unavailable"],
+      "cost": [0, "estimated"]
+    },
+    {
+      "runtime_id": "opencode",
+      "client_id": "opencode",
+      "session_id": "opencode-fixture",
+      "label": "OpenCode",
+      "model_provider_id": "models",
+      "model_id": "opencode-fixture-model",
+      "account_provider_id": null,
+      "input": [0, "measured"],
+      "output": [0, "measured"],
+      "cache_read": [0, "measured"],
+      "cache_write": [0, "measured"],
+      "cost": [null, "unavailable"]
+    }
+  ],
+  "forbidden_sentinels": [
+    "/private/sentinel/session.jsonl",
+    "private prompt",
+    "private response",
+    "private reasoning",
+    "secret-tool-result"
+  ]
+}

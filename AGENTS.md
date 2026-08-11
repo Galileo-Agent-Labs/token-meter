@@ -1,6 +1,6 @@
 # AGENTS.md
 
-AI-agent context for Token Meter, a local macOS dashboard and menu-bar instrument for Claude, Codex, and Cursor usage.
+AI-agent context for Token Meter, a local cross-platform dashboard and native companion for Claude, Codex, Cursor, OpenCode, and Kiro usage.
 
 ## Context
 
@@ -10,13 +10,20 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 
 | Path | Purpose |
 |---|---|
-| `meter.py` | Trace discovery/parsing, estimates, settings, aggregates, HTTP API |
+| `meter.py` | Small executable/import compatibility facade for `token_meter.app` |
+| `token_meter/app.py` | Composition, compatibility exports, settings, and application lifecycle |
+| `token_meter/runtimes/` | Registered runtime discovery, parsing, revisions, and safe projections |
+| `token_meter/platforms/` | Host paths, process/update policy, and trash behavior |
+| `token_meter/domain/` | Runtime-neutral usage, timing, tools, insights, and aggregates |
+| `token_meter/projections.py` | Explicit allowlisted public compatibility projections |
 | `page.html` | Entire browser dashboard: markup, styles, routing, and JavaScript |
 | `menubar/TokenMeterMenuBar.swift` | Native AppKit companion, preferences, notifications |
 | `token_meter_mcp.py` | Bounded read-only MCP interface |
 | `tests/test_meter.py` | Server, parser, UI-contract, installer, and Swift-source tests |
 | `tests/test_mcp_server.py` | MCP contract and privacy tests |
-| `scripts/install` | Stage user runtime and install both LaunchAgents |
+| `runtime-manifest.txt` | Shared source-to-runtime packaging contract |
+| `scripts/install` | Stage user runtime and install both macOS LaunchAgents |
+| `scripts/install-windows.ps1` | Stage the same manifest and install Windows lifecycle/tray launchers |
 | `README.md` | User installation and behavior documentation |
 | `CONTRIBUTING.md` | Contribution policy and complete validation commands |
 
@@ -25,11 +32,12 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 | Command | Purpose |
 |---|---|
 | `python3 -m unittest discover -s tests -v` | Run all unit and contract tests |
-| `PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py` | Compile Python without polluting the repo |
+| `PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py $(find token_meter -type f -name '*.py' -print)` | Compile Python without polluting the repo |
 | `node -e "const fs=require('fs');const h=fs.readFileSync('page.html','utf8');const m=h.match(/<script>([\\s\\S]*)<\\/script>/);new Function(m[1]);console.log('js ok')"` | Parse embedded dashboard JavaScript |
 | `bash -n scripts/install scripts/install-launch-agent scripts/run-menubar scripts/run-token-meter-mcp scripts/start-token-meter scripts/uninstall-launch-agent` | Check shell syntax |
 | `swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar` | Compile the native companion |
 | `TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar` | Run deterministic native smoke output |
+| `powershell -NoProfile -Command "[void] [scriptblock]::Create((Get-Content -Raw scripts/install-windows.ps1))"` | Parse a Windows script on a Windows host |
 | `./scripts/install` | Stage and start the exact repository runtime |
 | `curl -fsS http://127.0.0.1:8722/health` | Verify server/page readiness |
 | `curl -fsS http://127.0.0.1:8722/menubar` | Verify compact native payload |

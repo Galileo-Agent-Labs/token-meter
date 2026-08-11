@@ -1,0 +1,871 @@
+"""Native adapter for Claude Code and Claude Desktop JSONL evidence."""
+
+import glob
+import json
+import math
+import os
+import time
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+from token_meter.contracts import (
+    DeletionDisposition,
+    DeletionPlan,
+    DetailLevel,
+    EvidenceBasis,
+    EvidenceValue,
+    ModelRef,
+    NormalizedSession,
+    ParseWarning,
+    RuntimeDescriptor,
+    SessionSource,
+    SourceLocator,
+    SourceRevision,
+    TimingEvidence,
+    ToolEvent,
+    TurnSummary,
+    UsageEvidence,
+)
+
+
+DEFAULT_MODEL = "claude-sonnet-4-6"
+MAX_DETAIL_TURNS = 2_000
+MAX_TOOL_EVENTS = 2_000
+ACTIVITY_TAIL_BYTES = 1024 * 1024
+ACTIVITY_CACHE_LIMIT = 512
+
+
+def _file_signature(path):
+    try:
+        stat = os.stat(path)
+        return (str(stat.st_mtime_ns), str(stat.st_size))
+    except OSError:
+        return ("0", "0")
+
+
+def _mtime(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+def _timestamp(value):
+    if not isinstance(value, str):
+        return 0.0
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _datetime(value):
+    seconds = _timestamp(value) if isinstance(value, str) else float(value or 0)
+    return datetime.fromtimestamp(seconds).astimezone() if seconds else None
+
+
+def _safe_int(value):
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _compact(value, limit=90):
+    value = " ".join(str(value or "").split())
+    return value[:limit - 1] + "…" if len(value) > limit else value
+
+
+class ClaudeRuntimeAdapter:
+    """Own Claude discovery, logical-message deduplication, and projections."""
+
+    descriptor = RuntimeDescriptor(
+        "claude",
+        "Claude",
+        frozenset(("sessions", "models", "tools", "quota")),
+        "runtime.claude",
+        "runtime-claude",
+        "anthropic",
+    )
+
+    def __init__(self, projects_root, desktop_data_roots=(), project_resolver=None,
+                 project_decoder=None, compatibility=None, path_cache=None,
+                 default_model=DEFAULT_MODEL,
+                 max_detail_turns=MAX_DETAIL_TURNS,
+                 max_tool_events=MAX_TOOL_EVENTS):
+        self.projects_root = Path(os.path.abspath(os.path.expanduser(str(projects_root))))
+        self.desktop_data_roots = tuple(
+            Path(os.path.abspath(os.path.expanduser(str(path))))
+            for path in desktop_data_roots
+        )
+        self.project_resolver = project_resolver or (lambda value: value)
+        self.project_decoder = project_decoder or (lambda value: value.strip("-").replace("-", "/"))
+        self.compatibility = dict(compatibility or {})
+        self.path_cache = path_cache
+        self.default_model = str(default_model or DEFAULT_MODEL)
+        self.max_detail_turns = max(1, int(max_detail_turns))
+        self.max_tool_events = max(1, int(max_tool_events))
+        self._cwd_cache = {}
+        self._activity_cache = {}
+
+    def _glob(self, pattern, recursive=False):
+        if self.path_cache is not None:
+            return self.path_cache.paths(pattern, recursive=recursive)
+        return tuple(glob.glob(pattern, recursive=recursive))
+
+    def desktop_metadata_paths(self, root=None):
+        if root:
+            return self._glob(os.path.join(str(root), "**", "local_*.json"), recursive=True)
+        paths = []
+        for data_root in self.desktop_data_roots:
+            for session_dir in ("claude-code-sessions", "local-agent-mode-sessions"):
+                paths.extend(self._glob(
+                    str(data_root / session_dir / "**" / "local_*.json"),
+                    recursive=True,
+                ))
+        return tuple(paths)
+
+    def desktop_index(self, root=None):
+        result = {}
+        for path in self.desktop_metadata_paths(root):
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    row = json.load(handle)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if not isinstance(row, dict) or not row.get("cliSessionId"):
+                continue
+            cli_id = str(row["cliSessionId"])
+            title = _compact(row.get("title"), 90)
+            if title.lower() in ("untitled", "untitled session"):
+                title = ""
+            source_kind = (
+                "agent" if "{}local-agent-mode-sessions{}".format(os.sep, os.sep) in path
+                else "project"
+            )
+            origin_cwd = row.get("originCwd") or ""
+            selected = row.get("userSelectedFolders") or []
+            selected_cwd = next(
+                (folder for folder in selected
+                 if isinstance(folder, str) and folder.strip()), "",
+            ) if isinstance(selected, list) else ""
+            raw_cwd = origin_cwd or selected_cwd or row.get("cwd") or ""
+            no_project = bool(
+                source_kind == "agent" and not origin_cwd and not selected_cwd and
+                os.path.basename(raw_cwd) == "outputs"
+            )
+            candidate = {
+                "client": "claude_desktop",
+                "label": "Claude Desktop",
+                "desktop_session_id": row.get("sessionId") or
+                                      os.path.basename(path).rsplit(".", 1)[0],
+                "cli_session_id": cli_id,
+                "cwd": raw_cwd,
+                "project": "No project" if no_project else self.project_resolver(raw_cwd),
+                "source_kind": source_kind,
+                "title": title or None,
+                "model": row.get("model"),
+                "metadata_path": path,
+                "metadata_mtime": _mtime(path),
+                "last_activity_ms": _safe_int(row.get("lastActivityAt")),
+            }
+            previous = result.get(cli_id)
+            if not previous or (
+                candidate["last_activity_ms"], candidate["metadata_mtime"]
+            ) > (previous["last_activity_ms"], previous["metadata_mtime"]):
+                result[cli_id] = candidate
+        return result
+
+    def trace_cwd(self, path, max_lines=120):
+        signature = _file_signature(path)
+        key = (str(path), int(max_lines))
+        cached = self._cwd_cache.get(key)
+        if cached and cached["signature"] == signature:
+            return cached["cwd"]
+        cwd = ""
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for index, line in enumerate(handle):
+                    if index >= max_lines:
+                        break
+                    try:
+                        row = json.loads(line)
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        continue
+                    candidate = row.get("cwd") if isinstance(row, dict) else None
+                    if isinstance(candidate, str) and candidate.strip():
+                        cwd = candidate.strip()
+                        break
+        except OSError:
+            pass
+        self._cwd_cache[key] = {"signature": signature, "cwd": cwd}
+        return cwd
+
+    def trace_activity(self, path):
+        path = str(path)
+        signature = _file_signature(path)
+        cached = self._activity_cache.get(path)
+        if cached and cached["signature"] == signature:
+            return cached["activity"]
+        latest = 0.0
+        try:
+            size = os.path.getsize(path)
+            start = max(0, size - ACTIVITY_TAIL_BYTES)
+            with open(path, "rb") as handle:
+                handle.seek(start)
+                tail = handle.read(ACTIVITY_TAIL_BYTES)
+            if start:
+                _partial, separator, tail = tail.partition(b"\n")
+                if not separator:
+                    tail = b""
+            for line in tail.splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                if isinstance(row, dict):
+                    latest = max(latest, _timestamp(row.get("timestamp")))
+        except OSError:
+            latest = 0.0
+        self._activity_cache[path] = {
+            "signature": signature,
+            "activity": latest,
+        }
+        if len(self._activity_cache) > ACTIVITY_CACHE_LIMIT:
+            self._activity_cache.pop(next(iter(self._activity_cache)))
+        return latest
+
+    def desktop_activity(self, path, desktop):
+        reported = float(desktop.get("last_activity_ms") or 0)
+        if reported >= 100_000_000_000:
+            reported /= 1000.0
+        return max(self.trace_activity(path), reported)
+
+    def local_agent_sources(self, desktop_index):
+        sources = []
+        for desktop in desktop_index.values():
+            if desktop.get("source_kind") != "agent":
+                continue
+            metadata_path = desktop.get("metadata_path") or ""
+            session_root = metadata_path.rsplit(".json", 1)[0]
+            pattern = os.path.join(
+                session_root, ".claude", "projects", "*",
+                "{}.jsonl".format(desktop.get("cli_session_id")),
+            )
+            for path in self._glob(pattern):
+                sources.append({
+                    "provider": "claude",
+                    "client": "claude_desktop",
+                    "label": "Claude Desktop",
+                    "id": desktop.get("cli_session_id"),
+                    "desktop_session_id": desktop.get("desktop_session_id"),
+                    "session": os.path.basename(path),
+                    "path": path,
+                    "metadata_path": metadata_path,
+                    "project": desktop.get("project") or "No project",
+                    "mtime": self.desktop_activity(path, desktop),
+                    "signature_mtime": max(
+                        _mtime(path), float(desktop.get("metadata_mtime") or 0),
+                    ),
+                    "title": desktop.get("title"),
+                    "model": desktop.get("model"),
+                    "desktop_source_kind": "agent",
+                })
+        return sources
+
+    def _legacy_records(self):
+        records = []
+        desktop_index = self.desktop_index()
+        known_paths = set()
+        for path in self._glob(str(self.projects_root / "*" / "*.jsonl")):
+            session_id = os.path.basename(path).rsplit(".", 1)[0]
+            project_raw = os.path.basename(os.path.dirname(path))
+            desktop = desktop_index.get(session_id) or {}
+            trace_cwd = self.trace_cwd(path)
+            client = desktop.get("client") or "claude_code"
+            project = (
+                desktop.get("project") or self.project_resolver(trace_cwd) or
+                self.project_decoder(project_raw)
+            )
+            records.append({
+                "provider": "claude",
+                "client": client,
+                "label": desktop.get("label") or "Claude Code",
+                "id": session_id,
+                "desktop_session_id": desktop.get("desktop_session_id"),
+                "session": os.path.basename(path),
+                "path": path,
+                "metadata_path": desktop.get("metadata_path"),
+                "project": project,
+                "mtime": (
+                    self.desktop_activity(path, desktop)
+                    if client == "claude_desktop" else _mtime(path)
+                ),
+                "signature_mtime": max(
+                    _mtime(path), float(desktop.get("metadata_mtime") or 0),
+                ),
+                "title": desktop.get("title"),
+                "model": desktop.get("model"),
+            })
+            known_paths.add(path)
+        for source in self.local_agent_sources(desktop_index):
+            if source["path"] not in known_paths:
+                records.append(source)
+                known_paths.add(source["path"])
+        return tuple(records)
+
+    def discover(self, context):
+        del context
+        return tuple(SessionSource(
+            runtime_id="claude",
+            client_id=record["client"],
+            session_id=record["id"],
+            display_label=record["label"],
+            project=record["project"],
+            locator=SourceLocator("jsonl", record["path"]),
+            activity_mtime=record["mtime"],
+            revision=SourceRevision((
+                *_file_signature(record["path"]),
+                *_file_signature(record.get("metadata_path") or ""),
+                str(record.get("title") or ""),
+            )),
+            model_ref=ModelRef("anthropic", record.get("model") or self.default_model),
+            account_provider_id="anthropic",
+        ) for record in self._legacy_records())
+
+    def discover_legacy(self, context):
+        del context
+        return self._legacy_records()
+
+    def current_revision(self, source):
+        path = source.locator.value if isinstance(source, SessionSource) else source.get("path", "")
+        session_id = source.session_id if isinstance(source, SessionSource) else source.get("id", "")
+        desktop = self.desktop_index().get(str(session_id)) or {}
+        return SourceRevision((
+            *_file_signature(path),
+            *_file_signature(desktop.get("metadata_path") or ""),
+            str(desktop.get("title") or ""),
+        ))
+
+    def load_rows(self, path):
+        rows = []
+        corrupt = 0
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        corrupt += 1
+                        continue
+                    if isinstance(row, dict):
+                        rows.append(row)
+                    else:
+                        corrupt += 1
+        except OSError:
+            return (), 0, False
+        return tuple(rows), corrupt, True
+
+    def logical_messages(self, rows, timestamp_parser=None):
+        timestamp_parser = timestamp_parser or _timestamp
+        by_id = {}
+        order = []
+        for row in rows:
+            if row.get("type") != "assistant":
+                continue
+            message = row.get("message") if isinstance(row.get("message"), dict) else {}
+            message_id = message.get("id") or row.get("uuid")
+            logical = by_id.get(message_id)
+            if logical is None:
+                logical = {
+                    "id": message_id,
+                    "model": message.get("model", self.default_model),
+                    "usage": message.get("usage") or {},
+                    "stop_reason": message.get("stop_reason"),
+                    "ts": timestamp_parser(row.get("timestamp")) or 0,
+                    "last_ts": timestamp_parser(row.get("timestamp")) or 0,
+                    "side": bool(row.get("isSidechain")),
+                    "content": [],
+                }
+                by_id[message_id] = logical
+                order.append(message_id)
+            content = message.get("content")
+            if isinstance(content, list):
+                logical["content"].extend(
+                    block for block in content if isinstance(block, dict)
+                )
+            usage = message.get("usage") or {}
+            if _safe_int(usage.get("output_tokens")) >= _safe_int(
+                    logical["usage"].get("output_tokens")):
+                logical["usage"] = usage or logical["usage"]
+            if message.get("stop_reason"):
+                logical["stop_reason"] = message["stop_reason"]
+            logical["last_ts"] = max(
+                float(logical.get("last_ts") or 0),
+                timestamp_parser(row.get("timestamp")) or 0,
+            )
+        return tuple(by_id[message_id] for message_id in order)
+
+    @staticmethod
+    def _evidence(value, available):
+        return (EvidenceValue(value, EvidenceBasis.MEASURED)
+                if available else EvidenceValue.unavailable())
+
+    def load(self, source, detail):
+        if isinstance(source, dict):
+            return self.recompute_legacy(source)
+        if not isinstance(source, SessionSource):
+            raise TypeError("native load requires SessionSource")
+        if source.runtime_id != "claude":
+            raise ValueError("source belongs to another runtime")
+        rows, corrupt, available = self.load_rows(source.locator.value)
+        if not available:
+            return self._empty(source, detail, ("source_unavailable",))
+        messages = self.logical_messages(rows)
+        usage_available = False
+        counts = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+        turns = []
+        tools = []
+        for message in messages:
+            usage = message.get("usage") or {}
+            if usage:
+                usage_available = True
+                counts["input"] += _safe_int(usage.get("input_tokens"))
+                counts["output"] += _safe_int(usage.get("output_tokens"))
+                counts["cache_read"] += _safe_int(usage.get("cache_read_input_tokens"))
+                counts["cache_write"] += _safe_int(usage.get("cache_creation_input_tokens"))
+                if len(turns) < self.max_detail_turns:
+                    turns.append(TurnSummary(
+                        len(turns) + 1,
+                        _datetime(message.get("ts")),
+                        _datetime(message.get("last_ts")),
+                        EvidenceValue(
+                            _safe_int(usage.get("output_tokens")), EvidenceBasis.MEASURED
+                        ),
+                    ))
+            for block in message.get("content") or ():
+                if (block.get("type") == "tool_use" and block.get("name") and
+                        len(tools) < self.max_tool_events):
+                    tools.append(ToolEvent(str(block["name"]), "tool"))
+        durations = []
+        for row in rows:
+            if row.get("type") != "system" or row.get("subtype") != "turn_duration":
+                continue
+            value = row.get("durationMs")
+            if not isinstance(value, bool) and isinstance(value, (int, float)):
+                value = float(value)
+                if math.isfinite(value) and value >= 0:
+                    durations.append(value / 1000.0)
+        timestamps = [_timestamp(row.get("timestamp")) for row in rows]
+        timestamps = [value for value in timestamps if value]
+        warning_codes = []
+        if corrupt:
+            warning_codes.append("corrupt_rows")
+        if not usage_available:
+            warning_codes.append("usage_unavailable")
+        if len(turns) >= self.max_detail_turns or len(tools) >= self.max_tool_events:
+            warning_codes.append("history_truncated")
+        messages_by_code = {
+            "corrupt_rows": "Malformed Claude rows were ignored.",
+            "usage_unavailable": "Claude token evidence was unavailable.",
+            "history_truncated": "Detailed Claude history was bounded.",
+        }
+        return NormalizedSession(
+            source=source,
+            started_at=_datetime(min(timestamps)) if timestamps else None,
+            ended_at=_datetime(max(timestamps)) if timestamps else None,
+            usage=UsageEvidence(
+                self._evidence(counts["input"], usage_available),
+                self._evidence(counts["output"], usage_available),
+                self._evidence(counts["cache_read"], usage_available),
+                self._evidence(counts["cache_write"], usage_available),
+                EvidenceValue.unavailable(),
+            ),
+            timing=TimingEvidence(
+                self._evidence(sum(durations), bool(durations)),
+                self._evidence(sum(durations), bool(durations)),
+                EvidenceValue.unavailable(),
+            ),
+            tools=tuple(tools),
+            turns=tuple(turns) if detail is DetailLevel.FULL else (),
+            pricing_basis=None,
+            capabilities=self.descriptor.capabilities,
+            warnings=tuple(
+                ParseWarning(code, messages_by_code[code]) for code in warning_codes
+            ),
+            detail=detail,
+        )
+
+    def _empty(self, source, detail, warning_codes):
+        return NormalizedSession(
+            source, None, None, UsageEvidence.unavailable(), TimingEvidence.unavailable(),
+            (), (), None, self.descriptor.capabilities,
+            tuple(ParseWarning(code, "Claude evidence was unavailable.")
+                  for code in warning_codes), detail,
+        )
+
+    def _require_compatibility(self):
+        if not self.compatibility:
+            raise RuntimeError("legacy compatibility projection is unavailable")
+        return self.compatibility
+
+    def recompute_legacy(self, source):
+        compat = self._require_compatibility()
+        CHARS_PER_TOKEN = compat["chars_per_token"]
+        DEFAULT_CLAUDE_MODEL = compat["default_model"]
+        analysis_block = compat["analysis_block"]
+        build_insights = compat["build_insights"]
+        build_state = compat["build_state"]
+        claude_performance_samples = compat["claude_performance_samples"]
+        claude_tool_results = compat["claude_tool_results"]
+        claude_user_events = compat["claude_user_events"]
+        claude_wait_samples = compat["claude_wait_samples"]
+        cost_of = compat["cost_of"]
+        execution_timing = compat["execution_timing"]
+        parse_iso = compat["parse_iso"]
+        performance_summary = compat["performance_summary"]
+        price_for = compat["price_for"]
+        skill_names_from_value = compat["skill_names_from_value"]
+        tool_identity = compat["tool_identity"]
+        tool_summary = compat["tool_summary"]
+        trace_event = compat["trace_event"]
+        usage_tokens = compat["usage_tokens"]
+        user_prompt_preview = compat["user_prompt_preview"]
+        path = source["path"]
+        objs, _corrupt, _available = self.load_rows(path)
+        if not objs:
+            return None
+    
+        msgs = self.logical_messages(objs, timestamp_parser=parse_iso)
+        user_events = claude_user_events(objs)
+        user_event_idx = 0
+        pending_user_texts = []
+        result_chars, result_ts, result_errors = claude_tool_results(objs)
+        tool_name_by_id = {}
+        for rec in msgs:
+            for block in rec["content"]:
+                if block.get("type") == "tool_use":
+                    tool_name_by_id[block.get("id")] = block.get("name") or "?"
+    
+        tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+        cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
+        first_ts = last_ts = None
+        biggest = None
+        series, executions, trace = [], [], []
+        think_turns = think_out = routine_out = think_cost = 0
+        completed = 0
+        model_tok, model_cost = defaultdict(int), defaultdict(float)
+        side_cost = side_turns = 0
+        approx_cost = False
+    
+        for rec in msgs:
+            usage = rec["usage"]
+            if not usage:
+                continue
+            idx = len(series) + 1
+            model = rec["model"]
+            ts = rec["ts"]
+            if ts:
+                first_ts = ts if first_ts is None else min(first_ts, ts)
+                last_ts = ts if last_ts is None else max(last_ts, ts)
+                while user_event_idx < len(user_events) and user_events[user_event_idx]["ts"] <= ts:
+                    pending_user_texts.append(user_events[user_event_idx]["text"])
+                    user_event_idx += 1
+            user_input = user_prompt_preview(pending_user_texts)
+            pending_user_texts = []
+    
+            c = cost_of(usage, model, "claude", at=ts)
+            _, approx = price_for(model, "claude", at=ts)
+            approx_cost = approx_cost or approx
+            tc = sum(c.values())
+            for key in cost:
+                cost[key] += c[key]
+    
+            in_tok = (usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                      + usage.get("cache_creation_input_tokens", 0))
+            out_tok = usage.get("output_tokens", 0)
+            total = usage_tokens(usage)
+            tot["input"] += usage.get("input_tokens", 0)
+            tot["cache_write"] += usage.get("cache_creation_input_tokens", 0)
+            tot["cache_read"] += usage.get("cache_read_input_tokens", 0)
+            tot["output"] += out_tok
+            model_tok[model] += total
+            model_cost[model] += tc
+    
+            has_think = any(block.get("type") == "thinking" for block in rec["content"])
+            tool_blocks = [b for b in rec["content"] if b.get("type") == "tool_use"]
+            tools = []
+            for block in tool_blocks:
+                ident = tool_identity(block.get("name") or "?")
+                tid = block.get("id")
+                out_chars = result_chars.get(tid, 0)
+                tool = {
+                    **ident,
+                    "id": tid,
+                    "call_id": tid,
+                    "args_chars": len(json.dumps(block.get("input", ""))),
+                    "output_chars": out_chars,
+                    "output_tokens": out_chars // CHARS_PER_TOKEN,
+                    "error": bool(result_errors.get(tid)),
+                    "skills": skill_names_from_value(block.get("input"), block.get("name")),
+                }
+                tools.append(tool)
+    
+            if has_think:
+                think_turns += 1
+                think_out += out_tok
+                think_cost += out_tok * price_for(model, "claude", at=ts)[0]["output"] / 1e6
+                trace.append(trace_event(ts, "reasoning", "Reasoning", f"thinking turn #{idx}", idx,
+                                         tokens=out_tok, cost=think_cost, severity="reasoning",
+                                         model=model, output_tokens=out_tok))
+            else:
+                routine_out += out_tok
+            if rec["stop_reason"] == "end_turn":
+                completed += 1
+            if rec["side"]:
+                side_cost += tc
+                side_turns += 1
+                trace.append(trace_event(ts, "coordination", "Subagent turn", f"execution #{idx}", idx,
+                                         tokens=out_tok, cost=tc, severity="coordination",
+                                         model=model, output_tokens=out_tok))
+    
+            cache_tokens = usage.get("cache_read_input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+            fresh_input_tokens = usage.get("input_tokens", 0)
+            cache_read_tokens = usage.get("cache_read_input_tokens", 0)
+            cache_write_tokens = usage.get("cache_creation_input_tokens", 0)
+            trace.append(trace_event(
+                ts, "message", "Assistant turn",
+                f"{out_tok:,} out / {in_tok:,} in",
+                idx, tokens=total, cost=tc, severity="usage",
+                model=model, input_tokens=in_tok, output_tokens=out_tok,
+                cache_tokens=cache_tokens, context_tokens=in_tok,
+                fresh_input_tokens=fresh_input_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+                tool_count=len(tools), reasoning_tokens=out_tok if has_think else 0,
+            ))
+            for tool in tools:
+                trace.append(trace_event(ts, "tool_call", tool["display"], tool["namespace"], idx,
+                                         tool=tool["name"], severity="tool",
+                                         model=model, args_chars=tool["args_chars"]))
+                if tool["output_tokens"]:
+                    trace.append(trace_event(result_ts.get(tool["id"]) or ts, "tool_result", tool["display"],
+                                             f"~{tool['output_tokens']:,} returned tokens", idx,
+                                             tool=tool["name"], tokens=tool["output_tokens"],
+                                             severity="warn" if tool.get("error") else "retrieval",
+                                             model=model, output_chars=tool["output_chars"],
+                                             retrieval_tokens=tool["output_tokens"], error=tool.get("error")))
+    
+            series.append({
+                "i": idx,
+                "in": in_tok,
+                "out": out_tok,
+                "cost": round(tc, 4),
+                "fresh_input": fresh_input_tokens,
+                "cache": cache_tokens,
+                "cache_read": cache_read_tokens,
+                "cache_write": cache_write_tokens,
+                "think": has_think,
+                "tools": len(tools),
+                "side": rec["side"],
+                "reasoning": out_tok if has_think else 0,
+                "user_message": user_input,
+                "user_input": user_input,
+            })
+            executions.append({
+                "id": rec["id"],
+                "idx": idx,
+                "ts": ts or 0,
+                "time": time.strftime("%H:%M:%S", time.localtime(ts)) if ts else "",
+                "model": model,
+                "tokens": {"input": in_tok, "output": out_tok, "reasoning": out_tok if has_think else 0,
+                           "retrieval": sum(t["output_tokens"] for t in tools), "fresh_input": fresh_input_tokens,
+                           "cache": cache_tokens, "cache_read": cache_read_tokens, "cache_write": cache_write_tokens,
+                           "total": total},
+                "cost": round(tc, 6),
+                "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
+                "tools": tools,
+                "tool_count": len(tools),
+                "reasoning_tokens": out_tok if has_think else 0,
+                "context_tokens": in_tok,
+                "context_window": None,
+                "context_pct": None,
+                "duration_ms": None,
+                "summary": f"Turn {idx}: {out_tok:,} out / {in_tok:,} in",
+                "user_message": user_input,
+                "user_input": user_input,
+            })
+            if biggest is None or tc > biggest["cost"]:
+                biggest = {"cost": tc, "idx": idx}
+    
+        tool_data = tool_summary(executions)
+        retrieval_tokens = tool_data["total_output_tokens"]
+        total_tokens = sum(tot.values())
+        total_cost = sum(cost.values())
+        elapsed = (last_ts - first_ts) if (first_ts and last_ts) else 0
+        minutes = max(elapsed / 60.0, 1e-9)
+        cache_in = tot["cache_read"] + tot["cache_write"]
+        cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
+        idle = (time.time() - last_ts) if last_ts else 1e9
+        side_out = sum(s["out"] for s in series if s["side"])
+        semantic = {
+            "reasoning": think_out,
+            "output": max(0, routine_out),
+            "retrieval": retrieval_tokens,
+            "coordination": side_out,
+        }
+        primary_model = max(model_tok, key=model_tok.get) if model_tok else DEFAULT_CLAUDE_MODEL
+        analyses = analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_tok, model_cost,
+                                  tool_data, side_cost, side_turns, completed)
+        insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
+                                  "claude", primary_model, approx_cost, executions)
+    
+        wait_samples = claude_wait_samples(objs)
+        state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
+                            analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
+                            primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs),
+                            wait_samples)
+        state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
+        return state
+
+    def summarize_legacy(self, source, objs=None):
+        compat = self._require_compatibility()
+        if objs is None:
+            objs, _corrupt, _available = self.load_rows(source.get("path") or "")
+        CURRENT_SESSION_CONTEXT_SAMPLES = compat["context_sample_limit"]
+        DEFAULT_CLAUDE_MODEL = compat["default_model"]
+        add_model_daily = compat["add_model_daily"]
+        add_model_summary = compat["add_model_summary"]
+        analyze_language_signals = compat["analyze_language_signals"]
+        attach_language_signals = compat["attach_language_signals"]
+        claude_performance_samples = compat["claude_performance_samples"]
+        claude_tool_call_evidence = compat["claude_tool_call_evidence"]
+        claude_wait_samples = compat["claude_wait_samples"]
+        compact_text = compat["compact_text"]
+        cost_of = compat["cost_of"]
+        execution_timing = compat["execution_timing"]
+        parse_iso = compat["parse_iso"]
+        price_for = compat["price_for"]
+        summarize_tool_evidence = compat["summarize_tool_evidence"]
+        summary_row = compat["summary_row"]
+        text_from_content = compat["text_from_content"]
+        usage_tokens = compat["usage_tokens"]
+        msgs = self.logical_messages(objs, timestamp_parser=parse_iso)
+        cost = 0.0
+        tokens = 0
+        first_ts = last_ts = None
+        models = set()
+        model_cost, model_tok = defaultdict(float), defaultdict(int)
+        model_stats = {}
+        model_daily = {}
+        input_tokens = output_tokens = 0
+        day_cost = defaultdict(float)
+        approx = False
+        latest_context = 0
+        context_samples = []
+        primary_model = source.get("model") or DEFAULT_CLAUDE_MODEL
+        for rec in msgs:
+            usage = rec["usage"]
+            if not usage:
+                continue
+            primary_model = rec["model"] or primary_model
+            latest_context = (
+                int(usage.get("input_tokens") or 0)
+                + int(usage.get("cache_read_input_tokens") or 0)
+                + int(usage.get("cache_creation_input_tokens") or 0)
+            )
+            context_samples.append(latest_context)
+            c = sum(cost_of(usage, rec["model"], "claude", at=rec["ts"]).values())
+            _, missing = price_for(rec["model"], "claude", at=rec["ts"])
+            approx = approx or missing
+            toks = usage_tokens(usage)
+            cost += c
+            tokens += toks
+            models.add(rec["model"].replace("claude-", ""))
+            model_cost[rec["model"]] += c
+            model_tok[rec["model"]] += toks
+            input_count, output_count = add_model_summary(model_stats, rec["model"], usage, c)
+            add_model_daily(model_daily, rec["model"], usage, c, rec["ts"])
+            input_tokens += input_count
+            output_tokens += output_count
+            if rec["ts"]:
+                first_ts = rec["ts"] if first_ts is None else min(first_ts, rec["ts"])
+                last_ts = rec["ts"] if last_ts is None else max(last_ts, rec["ts"])
+                day = time.strftime("%Y-%m-%d", time.localtime(rec["ts"]))
+                day_cost[day] += c
+    
+        title = source.get("title")
+        if not title:
+            for obj in objs:
+                if obj.get("type") == "user":
+                    msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
+                    txt = text_from_content(msg.get("content")).strip()
+                    if txt and not txt.startswith("<") and "command-" not in txt[:20]:
+                        title = compact_text(txt, 60)
+                        break
+    
+        performance = claude_performance_samples(objs)
+        wait_samples = claude_wait_samples(objs)
+        row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
+                          execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
+                          list(model_daily.values()), performance, wait_samples)
+        row["primary_model"] = primary_model
+        row["context"] = {
+            "latest": latest_context,
+            "window": None,
+            "latest_pct": None,
+            "estimated": False,
+        }
+        row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
+        row["terminal"] = bool(msgs and msgs[-1].get("stop_reason") == "end_turn")
+        signal_rollups, signal_events = analyze_language_signals(
+            "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
+        )
+        attach_language_signals(row, signal_rollups, signal_events)
+        row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))
+        return row
+
+    def deletion_plan(self, source):
+        if isinstance(source, SessionSource) and source.locator.kind == "jsonl":
+            return DeletionPlan(
+                DeletionDisposition.TRASH,
+                "Move this Claude session trace to Trash.",
+                (source.locator,),
+            )
+        return DeletionPlan.deny("Claude deletion requires one owned session trace.")
+
+
+class ClaudeRuntimeAdapterProxy:
+    descriptor = ClaudeRuntimeAdapter.descriptor
+
+    def __init__(self, adapter_factory):
+        self._adapter_factory = adapter_factory
+
+    def _adapter(self):
+        adapter = self._adapter_factory()
+        if getattr(adapter, "load", None) is None or getattr(adapter, "discover", None) is None:
+            raise TypeError("adapter factory returned an invalid Claude adapter")
+        return adapter
+
+    def discover(self, context):
+        return self._adapter().discover(context)
+
+    def discover_legacy(self, context):
+        return self._adapter().discover_legacy(context)
+
+    def current_revision(self, source):
+        return self._adapter().current_revision(source)
+
+    def load(self, source, detail):
+        return self._adapter().load(source, detail)
+
+    def summarize_legacy(self, source, objs=None):
+        return self._adapter().summarize_legacy(source, objs)
+
+    def deletion_plan(self, source):
+        return self._adapter().deletion_plan(source)

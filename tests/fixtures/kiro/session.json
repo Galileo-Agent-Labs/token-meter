@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "kiro-session-1",
+  "title": "Sanitized Kiro session",
+  "agentMode": "spec",
+  "workspacePaths": ["/sanitized/workspace"],
+  "modelId": "claude-sonnet-4.6",
+  "autopilot": true,
+  "createdAt": "2026-08-01T10:00:00Z",
+  "lastModifiedAt": "2026-08-01T10:00:04Z"
+}

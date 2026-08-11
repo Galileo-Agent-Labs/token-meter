@@ -1,0 +1,4 @@
+{"kind":"Prompt","version":"1.0","data":{"message_id":"prompt-1","content":[{"kind":"text","data":"[sanitized CLI user text]"}]}}
+{"kind":"AssistantMessage","version":"1.0","data":{"message_id":"assistant-1","content":[{"kind":"text","data":"[sanitized CLI assistant text]"}],"meta":{"timestamp":1786096804000}}}
+{"kind":"Prompt","version":"1.0","data":{"message_id":"prompt-2","content":[{"kind":"text","data":"[sanitized CLI follow-up]"}]}}
+{"kind":"AssistantMessage","version":"1.0","data":{"message_id":"assistant-2","content":[{"kind":"text","data":"[sanitized CLI completion]"}],"meta":{"timestamp":1786096808000}}}

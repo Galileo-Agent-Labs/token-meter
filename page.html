@@ -175,7 +175,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:900px){.budgetLeadBody{grid-template-columns:1fr}.budgetReadouts{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:980px){.budgetForm{grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr)}.budgetActions{grid-column:1/-1;display:flex;align-items:center;justify-items:normal;padding-top:9px;border-top:1px solid var(--line)}}
 @media(max-width:1120px){.previewRunGrid{grid-template-columns:minmax(0,1.5fr) minmax(280px,.7fr)}.previewKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.currentSessionGrid{gap:11px}.currentSessionCard{min-height:190px;padding:16px 18px 14px}.currentSessionIdentity{margin-top:14px}.currentSessionIdentity h3{font-size:18px}.currentSessionMetrics{gap:12px;margin-top:14px;padding-top:12px}.currentSessionMetric b{margin-top:5px;font-size:17px}.currentSessionMetric b.mono{font-size:17px}.currentSessionFoot{padding-top:12px}.currentSessionContextValue{display:flex;align-items:flex-end;gap:8px;min-width:0}.currentSessionContextValue b{flex:0 0 auto}.currentSessionContextSpark{--context-tone:var(--harness);display:block;flex:1 1 44px;width:auto;min-width:30px;max-width:88px;height:20px;margin:0 0 1px;overflow:visible}.currentSessionContextSpark.watch{--context-tone:var(--warn)}.currentSessionContextSpark.high{--context-tone:var(--bad)}.currentSessionContextArea{fill:color-mix(in srgb,var(--context-tone) 12%,transparent)}.currentSessionContextLine{fill:none;stroke:var(--context-tone);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.currentSessionContextPoint{fill:var(--panel);stroke:var(--context-tone);stroke-width:1.7;vector-effect:non-scaling-stroke}
+.currentSessionGrid{gap:11px}.currentSessionCard{min-height:190px;padding:16px 18px 14px}.currentSessionIdentity{margin-top:14px}.currentSessionIdentity h3{font-size:18px}.currentSessionMetrics{gap:12px;margin-top:14px;padding-top:12px}.currentSessionMetric b{margin-top:5px;font-size:17px}.currentSessionMetric b.mono{font-size:17px}.currentSessionFoot{padding-top:12px}.currentSessionContextValue{display:flex;align-items:flex-end;gap:8px;min-width:0}.currentSessionContextValue b{flex:0 0 auto}.currentSessionContextUnavailable{display:block;min-width:0;margin:0 0 2px;color:var(--faint);font:700 11px/1.1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.02em;white-space:nowrap}.currentSessionContextSpark{--context-tone:var(--harness);display:block;flex:1 1 44px;width:auto;min-width:30px;max-width:88px;height:20px;margin:0 0 1px;overflow:visible}.currentSessionContextSpark.watch{--context-tone:var(--warn)}.currentSessionContextSpark.high{--context-tone:var(--bad)}.currentSessionContextArea{fill:color-mix(in srgb,var(--context-tone) 12%,transparent)}.currentSessionContextLine{fill:none;stroke:var(--context-tone);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.currentSessionContextPoint{fill:var(--panel);stroke:var(--context-tone);stroke-width:1.7;vector-effect:non-scaling-stroke}
 .currentSessionMetric b,.currentSessionMetric b.mono{font-size:19px}.currentSessionContextSpark{height:22px}.currentSessionContextBaseline{fill:none;stroke:rgba(255,255,255,.1);stroke-width:1;vector-effect:non-scaling-stroke}.currentSessionContextBar{fill:var(--harness);opacity:.42}.currentSessionContextBar.watch{fill:var(--warn);opacity:.78}.currentSessionContextBar.high{fill:var(--bad);opacity:.86}.currentSessionContextBar.latest{opacity:1;filter:drop-shadow(0 0 2px color-mix(in srgb,var(--harness) 60%,transparent))}.currentSessionContextBar.watch.latest{filter:drop-shadow(0 0 2px rgba(255,180,87,.48))}.currentSessionContextBar.high.latest{filter:drop-shadow(0 0 2px rgba(255,111,111,.52))}
 @media(max-width:1120px){.currentSessionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1120px) and (min-width:901px){.frustrationBreakdown{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.frustrationBreakdown .chatPanel{grid-column:1/-1}}
@@ -938,7 +938,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	     <div class=budgetSpend>
 	      <div class=budgetSpendSummary>
 	       <div><div class="label fieldtip" tabindex=0 title="Observed or locally estimated cost in the current local calendar month." data-tip="Observed or locally estimated cost in the current local calendar month.">Spent this month</div><div class="budgetSpendValue mono" id=budget-spend>$0.00</div><div class=subline id=budget-spend-note></div></div>
-	       <div class=budgetSpendLimit><div class="label fieldtip" tabindex=0 title="The sum of the Claude, Codex, Cursor, and OpenCode budgets." data-tip="The sum of the Claude, Codex, Cursor, and OpenCode budgets.">Calculated budget</div><div class="budgetSpendBudget mono" id=budget-total>Not set</div><div class=subline id=budget-total-note></div></div>
+	       <div class=budgetSpendLimit><div class="label fieldtip" tabindex=0 title="The sum of the registered runtime budgets." data-tip="The sum of the registered runtime budgets.">Calculated budget</div><div class="budgetSpendBudget mono" id=budget-total>Not set</div><div class=subline id=budget-total-note></div></div>
 	      </div>
 	      <div class=budgetProgress id=budget-progress role=progressbar aria-label="Monthly budget used" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i><span class=budgetProgressMarkers id=budget-progress-markers aria-hidden=true></span></div>
 	      <div class=budgetCoverage id=budget-coverage></div>
@@ -970,25 +970,25 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	       <legend>Runtime budgets · current spend</legend>
 	       <div class=budgetRuntimeList id=budget-runtimes>
 	        <div class=budgetRuntimeHead aria-hidden=true><span>Runtime</span><span>Spent this month</span><span>Budget (USD)</span></div>
-	        <div class=budgetRuntime id=budget-runtime-claude>
+	        <div class=budgetRuntime id=budget-runtime-claude data-runtime-id=claude>
 	         <span class=budgetRuntimeName>Claude</span>
 	         <span class=budgetRuntimeValue><b class=mono id=budget-runtime-spend-claude>$0.00</b><small id=budget-runtime-share-claude>0% of spend</small></span>
 	         <span class=budgetRuntimeTrack id=budget-runtime-track-claude><i></i></span>
 	         <label class=budgetRuntimeInput><span>Budget</span><input id=budget-input-claude aria-label="Claude budget" type=number min=0 max=100000000 step=any value=0></label>
 	        </div>
-	        <div class=budgetRuntime id=budget-runtime-codex>
+	        <div class=budgetRuntime id=budget-runtime-codex data-runtime-id=codex>
 	         <span class=budgetRuntimeName>Codex</span>
 	         <span class=budgetRuntimeValue><b class=mono id=budget-runtime-spend-codex>$0.00</b><small id=budget-runtime-share-codex>0% of spend</small></span>
 	         <span class=budgetRuntimeTrack id=budget-runtime-track-codex><i></i></span>
 	         <label class=budgetRuntimeInput><span>Budget</span><input id=budget-input-codex aria-label="Codex budget" type=number min=0 max=100000000 step=any value=0></label>
 	        </div>
-	        <div class=budgetRuntime id=budget-runtime-cursor>
+	        <div class=budgetRuntime id=budget-runtime-cursor data-runtime-id=cursor>
 	         <span class=budgetRuntimeName>Cursor</span>
 	         <span class=budgetRuntimeValue><b class=mono id=budget-runtime-spend-cursor>$0.00</b><small id=budget-runtime-share-cursor>0% of spend</small></span>
 	         <span class=budgetRuntimeTrack id=budget-runtime-track-cursor><i></i></span>
            <label class=budgetRuntimeInput><span>Budget</span><input id=budget-input-cursor aria-label="Cursor budget" type=number min=0 max=100000000 step=any value=0></label>
 	       </div>
-	       <div class=budgetRuntime id=budget-runtime-opencode>
+	       <div class=budgetRuntime id=budget-runtime-opencode data-runtime-id=opencode>
 	        <span class=budgetRuntimeName>OpenCode</span>
 	        <span class=budgetRuntimeValue><b class=mono id=budget-runtime-spend-opencode>$0.00</b><small id=budget-runtime-share-opencode>0% of spend</small></span>
 	        <span class=budgetRuntimeTrack id=budget-runtime-track-opencode><i></i></span>
@@ -1166,15 +1166,13 @@ const usageProvenance=row=>row?.provenance||{};
 const usageBasis=row=>usageProvenance(row).usage_basis||row?.usage_basis||(row?.token_estimate?'local_estimate':'reported');
 const hasLocalEstimate=row=>['local_estimate','mixed'].includes(usageBasis(row))||row?.provider==='cursor';
 const estimateSuffix=row=>usageBasis(row)==='local_estimate'?' est':usageBasis(row)==='mixed'?' incl. est':'';
-const appBadgeClass=session=>{
- const client=session?.client||session?.provider||'';
- return client==='codex'?'codex':client==='cursor'?'cursor':client==='opencode'?'opencode':client==='chatgpt_classic'?'chatgpt':'claude';
-};
-const appFilterGroup=session=>{
- const client=session?.client||session?.provider||'unknown';
- return ['claude','claude_code','claude_desktop'].includes(client)?'claude':client;
-};
-const appFilterLabel=session=>appFilterGroup(session)==='claude'?'Claude':session?.label||session?.runtime||session?.provider||'Unknown app';
+const runtimeId=session=>String(session?.provider||session?.runtime_id||session?.client||'unknown-runtime');
+const runtimeMeta=session=>RUNTIME_CATALOG[runtimeId(session)]||RUNTIME_CATALOG['unknown-runtime']||{label:'Unknown Runtime',symbol:'runtime.generic',color:'runtime-neutral',capabilities:['sessions']};
+const runtimeLabel=session=>session?.runtime||session?.label||runtimeMeta(session).label;
+const runtimeHarness=session=>({'runtime-claude':'#f59b45','runtime-codex':'#b08cff','runtime-cursor':'#e7edf4','runtime-opencode':'#f08cae'}[runtimeMeta(session).color]||'#dfe5ec');
+const appBadgeClass=session=>String(runtimeMeta(session).color||'runtime-neutral').replace(/^runtime-/,'');
+const appFilterGroup=session=>runtimeId(session);
+const appFilterLabel=session=>runtimeMeta(session).label||session?.label||session?.runtime||'Unknown app';
 const countWord=(n,one,many=one+'s')=>Number(n)===1?one:many;
 const speedFmt=n=>{n=Number(n)||0;if(n<=0)return'--';if(n>=100)return n.toFixed(0);if(n>=10)return n.toFixed(1);return n.toFixed(2);};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1234,7 +1232,7 @@ function costTipHtml(s,tok){
  const note=s.source?.pricing_note||(cursor?'Local Cursor estimate; cache and hidden model work are excluded.':`${s.cost_approx?'Estimated with public API rates. ':''}Cached input is priced separately from uncached input.`);
  return `<div class=h>${cursor?'Local cost estimate':'Cost calculation'}</div>${rows}<div class=total><span>Total</span><span>${money(s.total_cost||0)}${s.cost_approx?' est':''}</span></div><div class=note>${esc(note)}</div>`;
 }
-let LATEST=null, CURRENT=null, pinned=null, sessionRequest=0, selectedPollId='';
+let LATEST=null, CURRENT=null, pinned=null, sessionRequest=0, selectedPollId='', RUNTIME_CATALOG={};
 let AGENT_ACCESS=null, pendingAgentAccess=null, agentAccessLoading=false;
 const CURRENT_SESSION_ORDER_KEY='tm_current_session_order_v1';
 const CURRENT_SESSION_ORDER_MIGRATION_KEY='tm_current_session_newest_first_v1';
@@ -2108,6 +2106,18 @@ $('frustration-save').onclick=async()=>{
 const DEFAULT_RUNTIME_BUDGET=0;
 let budgetSettingsDirty=false;
 function budgetNumber(id){const raw=$(id).value.trim();return raw===''?0:Number(raw);}
+function budgetRuntimeIds(){
+ const catalogIds=Object.entries(RUNTIME_CATALOG).filter(([id])=>id!=='unknown-runtime').map(([id])=>id);
+ return catalogIds.length?catalogIds:[...document.querySelectorAll('.budgetRuntime[data-runtime-id]')].map(row=>row.dataset.runtimeId);
+}
+function ensureBudgetRuntimeRows(){
+ const list=$('budget-runtimes');
+ budgetRuntimeIds().forEach(provider=>{
+  if($(`budget-runtime-${provider}`))return;
+  const label=runtimeLabel({provider});
+  list.insertAdjacentHTML('beforeend',`<div class=budgetRuntime id="budget-runtime-${esc(provider)}" data-runtime-id="${esc(provider)}"><span class=budgetRuntimeName>${esc(label)}</span><span class=budgetRuntimeValue><b class=mono id="budget-runtime-spend-${esc(provider)}">$0.00</b><small id="budget-runtime-share-${esc(provider)}">0% of spend</small></span><span class=budgetRuntimeTrack id="budget-runtime-track-${esc(provider)}"><i></i></span><label class=budgetRuntimeInput><span>Budget</span><input id="budget-input-${esc(provider)}" aria-label="${esc(label)} budget" type=number min=0 max=100000000 step=any value=0></label></div>`);
+ });
+}
 function parsedBudgetThresholds(){
  const values=$('budget-input-thresholds').value.split(',').map(value=>Number(value.trim())).filter(value=>Number.isFinite(value));
  return [...new Set(values)].sort((a,b)=>a-b);
@@ -2115,10 +2125,8 @@ function parsedBudgetThresholds(){
 function paintBudgetSettings(settings){
   settings=settings||{monthly_total:0,allocations:{},thresholds:[80,90,100],native_notifications:true};
   if(budgetSettingsDirty)return;
-  $('budget-input-claude').value=Number(settings.allocations?.claude??DEFAULT_RUNTIME_BUDGET);
-  $('budget-input-codex').value=Number(settings.allocations?.codex??DEFAULT_RUNTIME_BUDGET);
-  $('budget-input-cursor').value=Number(settings.allocations?.cursor??DEFAULT_RUNTIME_BUDGET);
-  $('budget-input-opencode').value=Number(settings.allocations?.opencode??DEFAULT_RUNTIME_BUDGET);
+ ensureBudgetRuntimeRows();
+ budgetRuntimeIds().forEach(provider=>{$(`budget-input-${provider}`).value=Number(settings.allocations?.[provider]??DEFAULT_RUNTIME_BUDGET);});
  $('budget-input-thresholds').value=(settings.thresholds||[80,90,100]).join(', ');
  $('budget-input-notifications').checked=settings.native_notifications!==false;
 }
@@ -2177,7 +2185,8 @@ function renderBudgets(xs){
  $('budget-spend').textContent=`${lower}${money(status.spend||0)}`;
  $('budget-spend-note').textContent=`${status.active_days||0} active spend ${countWord(status.active_days||0,'day')} · ${status.month||'current month'}`;
  $('budget-total').textContent=configured?money(status.budget):'Not set';
- $('budget-total-note').textContent=allocatedTotal?'Claude + Codex + Cursor + OpenCode':configured?'Legacy total · set runtime budgets to replace':'Add runtime budgets to enable tracking';
+ const runtimeNames=budgetRuntimeIds().map(provider=>runtimeLabel({provider})).join(' + ');
+ $('budget-total-note').textContent=allocatedTotal?runtimeNames:configured?'Legacy total · set runtime budgets to replace':'Add runtime budgets to enable tracking';
  $('budget-remaining').textContent=configured?money(status.remaining||0):'--';
  $('budget-remaining').className=`v mono${configured&&Number(status.percent||0)>=.8?' warn':''}`;
  $('budget-remaining-note').textContent=status.lower_bound?'Coverage is partial; true remaining may be lower':configured?`${status.days_remaining||0} calendar days left`:'No monthly limit';
@@ -2203,9 +2212,10 @@ function renderBudgets(xs){
  $('budget-coverage').textContent=status.lower_bound?'Partial cost coverage: recorded spend is a lower bound.':status.estimated?'Includes labeled local cost estimates.':'Cost coverage is complete for discovered sessions.';
  const runtimes=status.runtimes||[],hasAllocations=runtimes.some(row=>Number(row.allocation||0)>0),runtimeSpend=Math.max(0,Number(status.spend||0));
  $('budget-allocation-note').textContent=hasAllocations?`${lower}${money(status.spend||0)} / ${money(status.budget)}`:'Add runtime budgets';
-const runtimeColors={claude:'#b78cff',codex:'var(--accent)',cursor:'var(--good)',opencode:'#f08cae'};
+ ensureBudgetRuntimeRows();
+ const runtimeColors={claude:'#b78cff',codex:'var(--accent)',cursor:'var(--good)',opencode:'#f08cae'};
   const runtimeRows=new Map(runtimes.map(row=>[row.provider,row]));
-  ['claude','codex','cursor','opencode'].forEach(provider=>{
+  budgetRuntimeIds().forEach(provider=>{
   const row=runtimeRows.get(provider)||{provider,spend:0,allocation:Number(allocations[provider]||0)};
   const spend=Number(row.spend||0),allocated=Number(row.allocation||0),percent=allocated?spend/allocated:(runtimeSpend?spend/runtimeSpend:0),over=row.exceeded===true||Boolean(allocated&&spend>=allocated);
   const shareLabel=allocated?`${pct(percent)} of budget`:`${pct(percent)} of spend`;
@@ -2235,7 +2245,7 @@ function renderSettings(xs){
  renderModelPricing(xs.model_pricing);
 }
 $('budget-plan-jump').onclick=()=>{
- const config=$('budget-config'),input=$('budget-input-claude');
+ const config=$('budget-config'),input=config.querySelector('.budgetRuntimeInput input');
  config.classList.remove('attention');
  void config.offsetWidth;
  config.classList.add('attention');
@@ -2246,13 +2256,13 @@ $('budget-plan-jump').onclick=()=>{
 };
 function budgetAllocationsFromInputs(){
  const allocations={};
- ['claude','codex','cursor','opencode'].forEach(provider=>{allocations[provider]=budgetNumber(`budget-input-${provider}`);});
+ budgetRuntimeIds().forEach(provider=>{allocations[provider]=budgetNumber(`budget-input-${provider}`);});
  return allocations;
 }
 function previewCalculatedBudget(){
  const total=Object.values(budgetAllocationsFromInputs()).reduce((sum,value)=>sum+(Number.isFinite(value)?Math.max(0,value):0),0);
  $('budget-total').textContent=total?money(total):'Not set';
- $('budget-total-note').textContent=total?'Draft total · Claude + Codex + Cursor + OpenCode':'Add runtime budgets to enable tracking';
+ $('budget-total-note').textContent=total?`Draft total · ${budgetRuntimeIds().map(provider=>runtimeLabel({provider})).join(' + ')}`:'Add runtime budgets to enable tracking';
  $('budget-config-summary').textContent=total?`${money(total)} / month`:'Add runtime budgets';
 }
 $('budget-form').addEventListener('input',event=>{budgetSettingsDirty=true;if(event.target.closest('.budgetRuntimeInput'))previewCalculatedBudget();$('budget-settings-status').className='settingsStatus warn';$('budget-settings-status').textContent='Unsaved changes';});
@@ -4613,23 +4623,30 @@ function currentSessionContextSparkline(row){
  const context=row?.context||{},windowSize=Math.max(0,Number(context.window)||0);
  const samples=(Array.isArray(context.samples)?context.samples:[])
   .map(value=>Math.max(0,Number(value)||0)).filter(value=>Number.isFinite(value));
+ const observed=Math.max(0,Number(context.latest)||0),hasObservedSamples=samples.some(value=>value>0);
+ if(!observed&&!hasObservedSamples)return {html:'',summary:'Context evidence unavailable.'};
+ if(!windowSize)return {
+  html:'<span class=currentSessionContextUnavailable aria-hidden=true>window --</span>',
+  summary:observed
+   ?`Context window unavailable; ${compactNumber(observed)} context tokens observed.`
+   :'Context window and latest token count unavailable.',
+ };
  if(!samples.length)return {html:'',summary:'Context trajectory unavailable.'};
  const plotted=samples.slice(-24);
- const values=windowSize?plotted.map(value=>value/windowSize):plotted;
- const peak=Math.max(...values),domain=windowSize?Math.max(1,peak*1.05):Math.max(1,peak*1.08);
+ const values=plotted.map(value=>value/windowSize);
+ const peak=Math.max(...values),domain=Math.max(1,peak*1.05);
  const width=96,height=22,padX=2,padY=2,plotHeight=height-padY*2,bottom=height-padY,gap=1;
  const barWidth=Math.max(1.5,(width-padX*2-gap*(values.length-1))/values.length);
  const bars=values.map((value,index)=>{
   const normalized=Math.min(domain,Math.max(0,value))/domain;
   const barHeight=Math.max(1.5,normalized*plotHeight);
   const x=padX+index*(barWidth+gap),y=bottom-barHeight;
-  const pressure=windowSize&&(value>=.85?' high':value>=.7?' watch':'');
+  const pressure=value>=.85?' high':value>=.7?' watch':'';
   const latest=index===values.length-1?' latest':'';
   return `<rect class="currentSessionContextBar${pressure}${latest}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" rx=".8"/>`;
  }).join('');
  const latest=values[values.length-1];
- const latestText=windowSize?pct(latest):compactNumber(plotted[plotted.length-1]);
- const peakText=windowSize?pct(peak):compactNumber(Math.max(...plotted));
+ const latestText=pct(latest),peakText=pct(peak);
  const countText=`${plotted.length} recent ${countWord(plotted.length,'execution')}`;
  const summary=`Context across ${countText}: ${latestText} latest, ${peakText} peak.`;
  return {
@@ -4702,13 +4719,13 @@ function renderCurrentSessions(state=LATEST){
  const currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');
  if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}
  currentGrid.innerHTML=count?rows.map(row=>{
-  const provider=['claude','codex','cursor','gemini','opencode'].includes(row.provider)?row.provider:'cursor';
+  const provider=runtimeId(row);
   const {state:activity,label:activityLabel}=currentSessionActivity(row);
   const costAvailable=row.availability?.cost!==false;
   const estimate=row.cost_approx||['local_estimate','mixed'].includes(row.usage_basis);
   const cost=costAvailable?money(row.cost)+(estimate?' est':''):'--';
   const context=currentSessionContext(row);
-  const runtime=row.runtime||row.label||provider,model=currentSessionModelName(row.primary_model);
+  const runtime=runtimeLabel(row),model=currentSessionModelName(row.primary_model);
   const effort=String(row.reasoning_effort||'').trim().replaceAll('_',' ');
   const runtimeLine=`${runtime} / ${model}${effort?` ${effort}`:''}`;
   const sessionName=row.session_name||row.project||'Untitled session';
@@ -4716,8 +4733,8 @@ function renderCurrentSessions(state=LATEST){
   const speed=speedAvailable?`${speedFmt(throughput.output_tps)} tok/s${row.token_estimate?' est':''}`:'--';
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
-  return `<button class="card currentSessionCard provider-${provider} activity-${activity}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
- }).join(''):'<section class="card currentSessionsEmpty"><h3>No recent sessions</h3><p>Start Claude, Codex, Cursor, or OpenCode to see one here.</p></section>';
+  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+ }).join(''):`<section class="card currentSessionsEmpty"><h3>No recent sessions</h3><p>Start ${esc(Object.entries(RUNTIME_CATALOG).filter(([id])=>id!=='unknown-runtime').slice(0,5).map(([,meta])=>meta.label).join(', ')||'a supported runtime')} to see one here.</p></section>`;
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }
 const currentSessionGrid=$('current-session-grid');
@@ -4844,6 +4861,7 @@ let statePollBusy=false;
 const LIVE_STATE_POLL_MS=1000;
 const SELECTED_SESSION_POLL_MS=2000;
 function applyLiveState(state){
+ RUNTIME_CATALOG=state?.runtime_catalog||RUNTIME_CATALOG;
  LATEST=state;
  renderCurrentSessions(LATEST);
  const sessionSurfaceActive=$('view-session').classList.contains('on');

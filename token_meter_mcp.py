@@ -151,17 +151,21 @@ def call_tool(name, arguments):
             allowed = {"focus", "execution", "session_id"}
             if set(arguments) - allowed:
                 raise ValueError("check received an unsupported argument")
-            data = meter.agent_check(caller=caller_context(), **arguments)
+            data = meter.application().agent_api.check(
+                caller=caller_context(), **arguments
+            )
         elif name == "usage":
             allowed = {"window", "focus"}
             if set(arguments) - allowed:
                 raise ValueError("usage received an unsupported argument")
-            data = meter.agent_usage(**arguments)
+            data = meter.application().agent_api.usage(**arguments)
         elif name == "capabilities":
             allowed = {"scope", "limit"}
             if set(arguments) - allowed:
                 raise ValueError("capabilities received an unsupported argument")
-            data = meter.agent_capabilities(caller=caller_context(), **arguments)
+            data = meter.application().agent_api.capabilities(
+                caller=caller_context(), **arguments
+            )
         else:
             return tool_error(f"Unknown tool: {name}")
     except ValueError as exc:

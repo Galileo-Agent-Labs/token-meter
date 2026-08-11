@@ -1,0 +1,109 @@
+import json
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import meter
+from token_meter.contracts import RuntimeDescriptor
+from token_meter.services.runtime_catalog import runtime_catalog
+from token_meter.runtimes.registry import RuntimeRegistry
+from tests.integration.test_application_composition import SyntheticAdapter
+
+
+def descriptor(runtime_id="synthetic", label="Synthetic",
+               capabilities=("sessions",)):
+    return RuntimeDescriptor(
+        runtime_id, label, frozenset(capabilities),
+        "runtime.generic", "runtime-neutral",
+    )
+
+
+class RuntimeCatalogTests(unittest.TestCase):
+    def test_synthetic_and_generic_unknown_runtimes_are_bounded_metadata(self):
+        catalog = runtime_catalog((descriptor(),))
+
+        self.assertEqual(list(catalog), ["synthetic", "unknown-runtime"])
+        self.assertEqual(catalog["synthetic"], {
+            "label": "Synthetic",
+            "symbol": "runtime.generic",
+            "color": "runtime-neutral",
+            "capabilities": ["sessions"],
+        })
+        encoded = json.dumps(catalog)
+        self.assertNotIn("private", encoded)
+        self.assertLess(len(encoded), 1024)
+
+    def test_rejects_urls_markup_executable_text_and_unknown_capabilities(self):
+        for label in (
+            "<b>Runtime</b>", "https://example.test", "javascript:alert(1)",
+            "Runtime; rm data", "Runtime `command`", "Runtime $(command)",
+        ):
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                runtime_catalog((descriptor(label=label),))
+        with self.assertRaises(ValueError):
+            runtime_catalog((descriptor(capabilities=("sessions", "execute")),))
+        with self.assertRaises(ValueError):
+            runtime_catalog((descriptor(runtime_id="unsafe/runtime"),))
+
+    def test_catalog_entry_count_is_hard_bounded(self):
+        values = tuple(descriptor("runtime-{}".format(index)) for index in range(16))
+
+        with self.assertRaises(ValueError):
+            runtime_catalog(values)
+
+    def test_state_and_menubar_contracts_include_registered_catalog(self):
+        registry = RuntimeRegistry((SyntheticAdapter(),))
+        with mock.patch.object(meter, "_RUNTIME_REGISTRY", registry):
+            state = meter.dashboard_state_payload({"ok": True})
+            with mock.patch.object(meter, "cached_session_sources", return_value=([], True)), \
+                    mock.patch.object(meter, "provider_quota_snapshots", return_value=[]), \
+                    mock.patch.object(meter, "budget_settings", return_value={}), \
+                    mock.patch.object(meter, "STATE", None), \
+                    mock.patch.object(meter, "_xsess", {}):
+                menubar = meter.menubar_state()
+
+        self.assertIn("synthetic", state["runtime_catalog"])
+        self.assertIn("synthetic", menubar["runtime_catalog"])
+        self.assertLess(len(json.dumps(menubar)), 64 * 1024)
+
+
+class CatalogAwareClientSourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(__file__).resolve().parents[2]
+        cls.page = (cls.root / "page.html").read_text()
+        cls.swift = (cls.root / "menubar" / "TokenMeterMenuBar.swift").read_text()
+        cls.tray = (cls.root / "menubar" / "token_meter_tray.py").read_text()
+
+    def test_browser_generic_surfaces_use_catalog_with_unknown_fallback(self):
+        for marker in (
+            "RUNTIME_CATALOG=state?.runtime_catalog||RUNTIME_CATALOG",
+            "const runtimeMeta=session=>RUNTIME_CATALOG[runtimeId(session)]",
+            "const appFilterLabel=session=>runtimeMeta(session).label",
+            "const runtime=runtimeLabel(row)",
+            "Object.entries(RUNTIME_CATALOG).filter(([id])=>id!=='unknown-runtime')",
+            "function ensureBudgetRuntimeRows()",
+            "budgetRuntimeIds().forEach(provider=>",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn(
+            "['claude','codex','cursor','gemini','opencode'].includes(row.provider)",
+            self.page,
+        )
+        self.assertNotIn("['claude','codex','cursor','opencode'].forEach(provider=>", self.page)
+
+    def test_native_recent_sessions_use_catalog_and_accessible_fallback(self):
+        recent = self.swift[
+            self.swift.index("struct RuntimePresentation"):
+            self.swift.index("struct MeterSnapshot")
+        ]
+        self.assertIn('catalog[provider] ?? catalog["unknown-runtime"]', recent)
+        self.assertIn('default: return "circle"', recent)
+        self.assertNotIn("switch provider.lowercased()", recent)
+        self.assertIn('RuntimePresentation.catalog(dict["runtime_catalog"])', self.swift)
+        self.assertIn("state.get('runtime_catalog')", self.tray)
+        self.assertNotIn('if value == "codex"', self.tray)
+
+
+if __name__ == "__main__":
+    unittest.main()

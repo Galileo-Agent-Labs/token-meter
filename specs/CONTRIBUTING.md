@@ -2,6 +2,10 @@
 
 Thanks for helping improve Token Meter.
 
+Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing component boundaries.
+Coding agents must also open [AGENTS.md](AGENTS.md) explicitly because it no
+longer lives at the repository root and may not be auto-discovered.
+
 ## Before you start
 
 - **New feature:** [Open a GitHub issue](https://github.com/splunk/token-meter/issues/new)
@@ -31,7 +35,7 @@ git switch -c fix/short-description
 
 Start the agent in the repository and give it a narrow bug report or an approved
 feature issue. Coding-agent instructions live in [AGENTS.md](AGENTS.md);
-Claude Code imports the same file through `CLAUDE.md`. Review the resulting
+`CLAUDE.md` in this directory references the same file. Review the resulting
 diff and validation evidence before asking the agent to push or open a pull
 request.
 
@@ -78,6 +82,9 @@ not, the app should still start; create a normal agent session and reload the
 dashboard to see live data.
 
 ## Where to make changes
+
+The authoritative ownership and data-flow explanation is
+[ARCHITECTURE.md](ARCHITECTURE.md). This table is only a quick change locator.
 
 | Path | Purpose |
 | --- | --- |

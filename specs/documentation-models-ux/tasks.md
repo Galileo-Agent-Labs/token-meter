@@ -2,7 +2,7 @@
 
 Status: approved for inline execution.
 
-- [ ] TASK-001: Establish the canonical documentation tree.
+- [x] TASK-001: Establish the canonical documentation tree.
   - Change: create `specs/ARCHITECTURE.md`; move every tracked root Markdown
     document except `README.md` under `specs/`; move safe historical local
     Markdown into `specs/history/`; update all internal links.
@@ -70,4 +70,3 @@ Status: approved for inline execution.
 | NFR-002 | UI Design | TASK-002, TASK-003, TASK-004, TASK-005 | full regression suite |
 | NFR-003 | UI Design | TASK-002, TASK-003, TASK-004, TASK-005 | responsive browser checks |
 | NFR-004 | Test Strategy | TASK-005 | full source/install validation |
-

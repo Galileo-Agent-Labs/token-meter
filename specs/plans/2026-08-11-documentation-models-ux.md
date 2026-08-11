@@ -38,7 +38,7 @@
 - Consumes: current package boundaries under `token_meter/`, `runtime-manifest.txt`, and validation commands from the former root `AGENTS.md`.
 - Produces: `specs/ARCHITECTURE.md` as the current engineering authority and `specs/AGENTS.md` as the explicit coding-agent runbook.
 
-- [ ] **Step 1: Record the complete reference inventory**
+- [x] **Step 1: Record the complete reference inventory**
 
 Run:
 
@@ -46,7 +46,7 @@ Run:
 
 Expected: a bounded list of root-document references to update after moves.
 
-- [ ] **Step 2: Move files with history and add the architecture authority**
+- [x] **Step 2: Move files with history and add the architecture authority**
 
 Use `git mv` for tracked files. `specs/ARCHITECTURE.md` must explain this flow:
 
@@ -60,7 +60,7 @@ Use `git mv` for tracked files. `specs/ARCHITECTURE.md` must explain this flow:
 
 It must also document runtime, platform, pricing, and telemetry extension budgets; the privacy denylist; cache/revision ownership; packaging manifest; and validation layers.
 
-- [ ] **Step 3: Make README the root index and user guide**
+- [x] **Step 3: Make README the root index and user guide**
 
 Keep Quick Start, user workflows, requirements, privacy, update/uninstall, and troubleshooting. Remove the developer validation catalog, repository tree, and publishing checklist. Add direct links:
 
@@ -71,11 +71,11 @@ Keep Quick Start, user workflows, requirements, privacy, update/uninstall, and t
 
 Add one explicit sentence that root auto-discovery is intentionally unavailable and coding agents must read `specs/AGENTS.md` before editing.
 
-- [ ] **Step 4: Correct and classify the remaining documents**
+- [x] **Step 4: Correct and classify the remaining documents**
 
 Update current references in `specs/AGENTS.md`, `specs/CONTRIBUTING.md`, `specs/DESIGN.md`, `specs/PRODUCT.md`, and `specs/SECURITY.md`. Add a visible historical banner to files under `specs/history/`. Replace the volatile contents of historical `STATE.md` with a short dated index linking current architecture and Git history.
 
-- [ ] **Step 5: Verify the documentation tree**
+- [x] **Step 5: Verify the documentation tree**
 
 Run a Python link/path checker over tracked Markdown. It must ignore HTTP links and anchors, resolve relative file targets, and print:
 
@@ -285,4 +285,3 @@ After confirming no uncommitted feature changes:
     git worktree remove .worktrees/documentation-models-ux
 
 Remove ignored root `plan.md` with a recoverable patch once no work remains.
-

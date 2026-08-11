@@ -45,7 +45,7 @@ class ArchitectureGuardTests(unittest.TestCase):
             self.assertNotRegex(source, r"(?:source|session|locator)\.__dict__", path)
 
     def test_contributor_guide_has_executable_extension_recipes(self):
-        guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        guide = (ROOT / "specs" / "CONTRIBUTING.md").read_text(encoding="utf-8")
         for heading in (
             "Adding a runtime",
             "Adding a model",

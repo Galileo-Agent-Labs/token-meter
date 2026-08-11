@@ -1,6 +1,6 @@
 # Documentation and Dashboard Cleanup Design
 
-Status: approved and planned for inline implementation.
+Status: implemented and merged into local `main` on 2026-08-11.
 
 Related requirements: [requirements.md](requirements.md).
 

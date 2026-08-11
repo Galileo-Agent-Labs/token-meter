@@ -1,6 +1,6 @@
 # Documentation and Dashboard Cleanup Tasks
 
-Status: approved for inline execution.
+Status: completed and merged into local `main` on 2026-08-11.
 
 - [x] TASK-001: Establish the canonical documentation tree.
   - Change: create `specs/ARCHITECTURE.md`; move every tracked root Markdown
@@ -44,15 +44,19 @@ Status: approved for inline execution.
   - Requirements: REQ-MODELS-002, NFR-002, NFR-003.
   - Depends on: TASK-003.
 
-- [ ] TASK-005: Validate, install, and integrate locally.
+- [x] TASK-005: Validate, install, and integrate locally.
   - Change: update task/spec outcomes, run the full validation matrix, install
     the exact commit, verify endpoints/services/listener/parity, merge the
     feature branch into local `main`, reinstall the merge commit, and remove the
     linked worktree plus temporary root plan.
   - Preserve: no push or pull request; Linux/Windows native gaps remain labelled
     honestly on macOS.
-  - Verify: complete suite and static checks pass; browser checks cover wide,
-    laptop, and narrow layouts; installed revision equals merged local main.
+  - Verify: complete suite and static checks pass; the installed 1280px browser
+    check covers controls, exact-day persistence/empty states, hover, table,
+    overflow, and console output. Existing responsive source contracts cover
+    narrower breakpoints because the secured in-app browser does not expose
+    viewport resizing or storage injection. Installed revision equals final
+    local `main`.
   - Requirements: NFR-001, NFR-002, NFR-003, NFR-004.
   - Depends on: TASK-001, TASK-002, TASK-003, TASK-004.
 

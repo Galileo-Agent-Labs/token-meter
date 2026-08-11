@@ -232,7 +232,7 @@ Expected: all three tests pass.
 - Consumes: all prior task commits.
 - Produces: verified local `main` containing the feature branch; no remote mutation.
 
-- [ ] **Step 1: Run complete source validation**
+- [x] **Step 1: Run complete source validation**
 
     python3 -m unittest discover -s tests -v
     PYTHONPYCACHEPREFIX=/private/tmp/token-meter-pycache python3 -m py_compile meter.py token_meter_mcp.py $(find token_meter -type f -name '*.py' -print | LC_ALL=C sort)
@@ -244,7 +244,7 @@ Expected: all three tests pass.
 
 Expected: zero test failures, only documented host-native skips, and all syntax/compile/smoke checks exit zero.
 
-- [ ] **Step 2: Install and validate the feature commit**
+- [x] **Step 2: Install and validate the feature commit**
 
 Run `./scripts/install`, then verify `/health`, `/menubar`, both LaunchAgents,
 `127.0.0.1:8722` listener ownership, `INSTALLED_REVISION`, and:
@@ -253,18 +253,25 @@ Run `./scripts/install`, then verify `/health`, `/menubar`, both LaunchAgents,
 
 Expected: healthy endpoints, no adapter failures, running services, loopback-only listener, exact revision, and silent parity success.
 
-- [ ] **Step 3: Perform responsive browser validation**
+- [x] **Step 3: Perform installed browser validation within the available viewport**
 
-Exercise Sessions and Models at 1280px, 1024px, and 390px. Verify Linear/Cumulative only, injected old `sqrt` storage migrates to Linear, Today and Yesterday persist across reload, exact-day empty state is honest, tooltip shows output plus the selected metric, chart/table are unchanged, there is no page-level horizontal overflow, and the console has no errors.
+Exercise Sessions and Models in the installed 1280px browser. Verify
+Linear/Cumulative only, Today and Yesterday persist across reload, the
+exact-day empty state is honest, the tooltip shows output plus the selected
+metric, chart/table structure is unchanged, there is no page-level horizontal
+overflow, and the console has no errors. The secured in-app browser fixes its
+viewport and blocks storage inspection/injection, so retain the regression
+contract for old `sqrt` migration and the existing responsive source contracts
+for the 1024px and 390px breakpoints rather than claiming those live checks.
 
-- [ ] **Step 4: Commit durable completion records**
+- [x] **Step 4: Commit durable completion records**
 
 Mark `specs/documentation-models-ux/tasks.md` complete, update plan outcomes with exact evidence, remove transient placeholders, run `git diff --check`, and commit:
 
     git add specs
     git commit -m "docs: record documentation and models UX validation"
 
-- [ ] **Step 5: Merge into local main**
+- [x] **Step 5: Merge into local main**
 
 From the primary checkout, confirm `main` is clean, then:
 
@@ -272,16 +279,32 @@ From the primary checkout, confirm `main` is clean, then:
 
 Do not push. Run the focused tests plus `git diff --check` on merged `main`.
 
-- [ ] **Step 6: Install and verify the merge commit**
+- [x] **Step 6: Install and verify the final local-main commit**
 
 Run `./scripts/install` from local `main` and repeat revision, health, services,
 listener, and manifest-parity checks. The installed revision must equal local
 `main` HEAD.
 
-- [ ] **Step 7: Clean the worktree and temporary execution state**
+- [x] **Step 7: Clean the worktree and temporary execution state**
 
 After confirming no uncommitted feature changes:
 
     git worktree remove .worktrees/documentation-models-ux
 
 Remove ignored root `plan.md` with a recoverable patch once no work remains.
+
+## Validation Outcome
+
+- Source and merged-main suites each passed 444 tests with two expected
+  host-specific skips. Python compile, embedded JavaScript parse, shell syntax,
+  Swift compile, native smoke output, and `git diff --check` all passed.
+- Feature revision `2b46cb8` installed with healthy `/health` and `/menubar`,
+  zero runtime-adapter failures, both LaunchAgents running, a listener only on
+  `127.0.0.1:8722`, and manifest parity.
+- Installed-browser checks at 1280px proved ordered Today/Yesterday choices,
+  one-day axes, reload persistence, honest empty states, the two-field dynamic
+  hover, eight table columns, no horizontal overflow, and no console errors.
+- Local `main` was first fast-forwarded to upstream PR commits `52d678c` and
+  `d14f932`, then merged without conflicts as `74c8b86`. A separate owned
+  worktree preserved an unrelated unstaged primary-checkout test edit.
+- No branch was pushed and no pull request was created.

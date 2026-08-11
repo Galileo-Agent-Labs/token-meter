@@ -1,6 +1,6 @@
 # Documentation and Dashboard Cleanup Requirements
 
-Status: approved for implementation on 2026-08-11.
+Status: implemented and merged into local `main` on 2026-08-11.
 
 ## Problem
 

@@ -122,6 +122,8 @@ independently interpreting `modelRange`:
 The existing Python `matched_pace_windows(sample_groups, now_ts=None)` helper
 adds `today` and `yesterday` entries. Those entries filter each eligible sample
 by its normalized local `day` key before running the existing pair matcher.
+Window membership is precomputed once per runtime, avoiding repeated date scans
+for every runtime pair as the number of models grows.
 Numeric and all-history windows retain their current timestamp behavior. The
 existing `matched_pace.windows` object therefore gains two keys without a new
 route or top-level payload.

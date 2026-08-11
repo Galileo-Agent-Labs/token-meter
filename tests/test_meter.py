@@ -855,6 +855,38 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(meter.source_runtime_label({"provider": "codex"}), "Codex")
         self.assertEqual(meter.source_runtime_label({"provider": "cursor"}), "Cursor")
 
+    def test_matched_pace_has_exact_today_and_yesterday_windows(self):
+        now = datetime.datetime(2026, 8, 11, 12, 0, 0).timestamp()
+
+        def samples(day, start):
+            return [{
+                "duration_s": 10, "ts": start + index, "day": day,
+                "input_tokens": 10000, "peak_input_tokens": 10000,
+                "cache_read_tokens": 0, "output_tokens": 1000,
+                "tool_calls": 0, "model_calls": 1,
+            } for index in range(20)]
+
+        groups = {
+            runtime: (
+                samples("2026-08-11", offset)
+                + samples("2026-08-10", offset + 100)
+                + samples("2026-07-01", offset + 200)
+            )
+            for runtime, offset in (("alpha", 0), ("beta", 1000))
+        }
+
+        windows = meter.matched_pace_windows(groups, now_ts=now)["windows"]
+
+        self.assertEqual(list(windows), ["today", "yesterday", "7", "30", "90", "all"])
+        for name in ("today", "yesterday"):
+            self.assertEqual(len(windows[name]), 1)
+            self.assertEqual(windows[name][0]["a_samples"], 20)
+            self.assertEqual(windows[name][0]["b_samples"], 20)
+        self.assertEqual(windows["7"][0]["a_samples"], 40)
+        self.assertEqual(windows["7"][0]["b_samples"], 40)
+        self.assertEqual(windows["all"][0]["a_samples"], 60)
+        self.assertEqual(windows["all"][0]["b_samples"], 60)
+
     def test_matched_pace_reports_ratio_confidence_and_coverage(self):
         def sample(duration, ts):
             return {
@@ -2189,7 +2221,7 @@ class DashboardLayoutTests(unittest.TestCase):
             "id=m-model-picker", "id=m-model-options", "id=m-model-summary",
             "tm_model_filters", "MODEL_COLORS", "buildModelTrend",
             "bars show output", "observed tok/s",
-            "modelTipMetrics", "<small>input</small>", "<small>executions</small>",
+            "modelTipMetrics",
             "Typical wait", "median wait", "human pause excluded",
             "modelWaitDistribution", "wait_durations_s", "p95_wait_s",
             "Matched pace", "renderMatchedPace", "modelRuntimeLabel",
@@ -2200,7 +2232,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
 
-    def test_model_trend_omits_legend_without_removing_hover_details(self):
+    def test_model_trend_omits_legend_and_limits_hover_to_relevant_metrics(self):
         self.assertNotIn("id=m-legend", self.page)
         self.assertNotIn("$('m-legend')", self.page)
         for marker in (
@@ -2217,13 +2249,23 @@ class DashboardLayoutTests(unittest.TestCase):
             'style="background:${item.color}"></i>${esc(item.model)}</div>',
             self.page,
         )
+        model_trend = self.page.split("function drawModelTrend(chart){", 1)[1].split(
+            "function renderMatchedPace", 1
+        )[0]
         for marker in (
-            "<small>input</small>", "<small>output</small>",
-            "<small>executions</small>", "<small>avg input</small>",
-            "<small>avg output</small>", "<small>tok/s</small>",
-            "<small>typical wait</small>",
+            "const outputAvailable=metricAvailable(item.row,'tokens')",
+            "const selectedAvailable=metric.available(item.row)",
+            "<small>output</small>", "<small>${esc(metric.note)}</small>",
+            "${outputAvailable?compactNumber(item.row.output_tokens||0):'--'}",
+            "${selectedAvailable?metric.format(metric.value(item.row)):'--'}",
         ):
-            self.assertIn(marker, self.page)
+            self.assertIn(marker, model_trend)
+        for marker in (
+            "<small>input</small>", "<small>executions</small>",
+            "<small>avg input</small>", "<small>avg output</small>",
+            "<small>tok/s</small>", "<small>typical wait</small>",
+        ):
+            self.assertNotIn(marker, model_trend)
 
     def test_model_stats_supports_project_scoped_average_io_trends(self):
         for marker in (
@@ -2234,7 +2276,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "MODEL_TREND_METRICS", "modelTokensPerExecution",
             "Model trends", "avg input / execution", "avg output / execution",
             "input / exec", "output / exec",
-            "<small>avg input</small>", "<small>avg output</small>",
             "Daily model ${metric.note} and output token volume",
         ):
             self.assertIn(marker, self.page)
@@ -2307,11 +2348,55 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("wait_time?.total_s", self.page)
         self.assertIn("CURRENT?.wait_time?.samples", self.page)
 
+    def test_session_chart_only_offers_linear_and_cumulative_scales(self):
+        scale_controls = self.page.split('<div class=seg id=scale>', 1)[1].split(
+            "</div>", 1
+        )[0]
+        self.assertIn("data-scale=linear", scale_controls)
+        self.assertIn("data-scale=cumulative", scale_controls)
+        self.assertNotIn("data-scale=sqrt", scale_controls)
+        self.assertNotIn("data-scale=log", scale_controls)
+        self.assertIn("const CHART_SCALES=['linear','cumulative'];", self.page)
+        self.assertIn("if(!CHART_SCALES.includes(chartScale))", self.page)
+        self.assertIn("localStorage.setItem('tm_chart_scale',chartScale);", self.page)
+        self.assertNotIn("if(scale==='sqrt')", self.page)
+        self.assertNotIn("if(scale==='log')", self.page)
+
+    def test_models_history_supports_exact_local_days(self):
+        history = self.page.split(
+            'id=m-range aria-label="Models history range"', 1
+        )[1].split("</select>", 1)[0]
+        expected = (
+            '<option value=today>Today</option>',
+            '<option value=yesterday>Yesterday</option>',
+            '<option value=7>Last 7 days</option>',
+            '<option value=30 selected>Last 30 days</option>',
+            '<option value=90>Last 90 days</option>',
+            '<option value=all>All history</option>',
+        )
+        for option in expected:
+            self.assertIn(option, history)
+        self.assertEqual([history.index(option) for option in expected], sorted(
+            history.index(option) for option in expected
+        ))
+        for marker in (
+            "const MODEL_RANGES=['today','yesterday','7','30','90','all'];",
+            "if(!MODEL_RANGES.includes(modelRange))",
+            "function modelRangeWindow(range,now=new Date())",
+            "if(range==='today'||range==='yesterday')",
+            "function modelDayInRange(day,window)",
+            "mergeModelDays(selected,rangeWindow)",
+            "buildModelTrend(selected,rangeWindow,names)",
+            ".filter(row=>modelDayInRange(row.day,rangeWindow))",
+            "modelRangeLabel(modelRange)",
+        ):
+            self.assertIn(marker, self.page)
+
     def test_session_chart_supports_cumulative_cost_and_token_views(self):
         for marker in (
             "data-scale=cumulative",
             "Show running estimated cost or token totals through each execution.",
-            "const CHART_SCALES=['linear','sqrt','log','cumulative'];",
+            "const CHART_SCALES=['linear','cumulative'];",
             "if(!CHART_SCALES.includes(chartScale))",
             "b.setAttribute('aria-pressed',selected?'true':'false');",
             "function cumulativeChartParts(parts,mode)",
@@ -2321,7 +2406,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "const cumulativeCost=mode==='cost'&&chartScale==='cumulative';",
             "const cumulativeValues=cumulativeTokens||cumulativeCost;",
             "parts=cumulativeValues?cumulativeChartParts(rawParts,mode):rawParts",
-            "scaleMode=mode==='tokens'&&!cumulativeValues?chartScale:'linear'",
             "running estimated cost through each execution",
             "running token totals through each execution",
             "cumulative cost",

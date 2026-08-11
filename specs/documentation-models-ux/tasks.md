@@ -13,7 +13,7 @@ Status: approved for inline execution.
   - Requirements: REQ-DOC-001, REQ-DOC-002, REQ-DOC-003, NFR-001.
   - Depends on: none.
 
-- [ ] TASK-002: Remove nonlinear Session chart scale choices.
+- [x] TASK-002: Remove nonlinear Session chart scale choices.
   - Change: add a failing dashboard contract, remove Sqrt/Log buttons, narrow
     the scale allowlist, and remove unreachable nonlinear scale branches.
   - Preserve: Linear default, stored-value fallback, Cumulative Tokens/Cost,
@@ -23,7 +23,7 @@ Status: approved for inline execution.
   - Requirements: REQ-SESSION-001, NFR-002, NFR-003.
   - Depends on: none.
 
-- [ ] TASK-003: Add exact Today and Yesterday Models windows.
+- [x] TASK-003: Add exact Today and Yesterday Models windows.
   - Change: add failing matched-pace and dashboard contracts; add exact-day
     options, one browser date-window predicate, and exact-day matched-pace map
     entries.
@@ -34,7 +34,7 @@ Status: approved for inline execution.
   - Requirements: REQ-MODELS-001, NFR-001, NFR-002, NFR-003.
   - Depends on: none.
 
-- [ ] TASK-004: Simplify only the Model trends hover card.
+- [x] TASK-004: Simplify only the Model trends hover card.
   - Change: revise the existing failing tooltip contract and render output plus
     the selected trend metric using `MODEL_TREND_METRICS`.
   - Preserve: chart/table structure, model filtering, swatches, availability,

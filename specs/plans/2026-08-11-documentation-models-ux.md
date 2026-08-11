@@ -84,7 +84,7 @@ Run a Python link/path checker over tracked Markdown. It must ignore HTTP links 
 
 Run `git diff --check` and inspect `git diff --stat` before committing.
 
-- [ ] **Step 6: Commit the documentation milestone**
+- [x] **Step 6: Commit the documentation milestone**
 
     git add README.md specs runtime-manifest.txt tests scripts
     git commit -m "docs: centralize architecture and repository guidance"
@@ -99,7 +99,7 @@ Run `git diff --check` and inspect `git diff --stat` before committing.
 - Consumes: `tm_chart_scale` local-storage preference.
 - Produces: supported values `linear | cumulative`; any other stored value is normalized and persisted as `linear`.
 
-- [ ] **Step 1: Write the failing UI contract**
+- [x] **Step 1: Write the failing UI contract**
 
 Add a test that slices the Session scale control and asserts `data-scale=linear` and `data-scale=cumulative` exist, `data-scale=sqrt` and `data-scale=log` do not, and the script contains:
 
@@ -107,24 +107,24 @@ Add a test that slices the Session scale control and asserts `data-scale=linear`
 
 The same test must assert the invalid-value branch writes the normalized value to `tm_chart_scale`.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
     python3 -m unittest tests.test_meter.DashboardLayoutTests.test_session_chart_only_offers_linear_and_cumulative_scales -v
 
 Expected: FAIL because Sqrt/Log and the four-value allowlist still exist.
 
-- [ ] **Step 3: Implement the minimal scale change**
+- [x] **Step 3: Implement the minimal scale change**
 
 Remove the two buttons, narrow `CHART_SCALES`, and reduce `scaledY`/`ticks` to their linear behavior. Do not change cumulative token/cost construction or other chart modes.
 
-- [ ] **Step 4: Verify GREEN and JavaScript syntax**
+- [x] **Step 4: Verify GREEN and JavaScript syntax**
 
     python3 -m unittest tests.test_meter.DashboardLayoutTests.test_session_chart_only_offers_linear_and_cumulative_scales -v
     node -e "const fs=require('fs');const h=fs.readFileSync('page.html','utf8');const m=h.match(/<script>([\\s\\S]*)<\\/script>/);new Function(m[1]);console.log('js ok')"
 
 Expected: focused test passes and output ends with `js ok`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit with the related Models behavior milestone**
 
     git add page.html tests/test_meter.py
     git commit -m "ui: simplify session chart scales"
@@ -137,18 +137,18 @@ Expected: focused test passes and output ends with `js ok`.
 - Modify: `page.html` Models History options and date filtering helpers
 
 **Interfaces:**
-- Produces: `modelRangeWindow(range, now = new Date()) -> {keys: Set<string> | null, days: string[] | null}` and `modelDayInRange(day, window) -> boolean` in dashboard JavaScript.
+- Produces: `modelRangeWindow(range, now = new Date()) -> {daySet: Set<string> | null, days: string[] | null}` and `modelDayInRange(day, window) -> boolean` in dashboard JavaScript.
 - Extends: `matched_pace.windows` with `today` and `yesterday`, preserving `7`, `30`, `90`, and `all`.
 
-- [ ] **Step 1: Write the failing Python exact-window test**
+- [x] **Step 1: Write the failing Python exact-window test**
 
 Build two model groups with 20 Today samples, 20 Yesterday samples, and one older sample each. Pass a deterministic local-noon `now_ts` to `matched_pace_windows`. Assert keys equal `today`, `yesterday`, `7`, `30`, `90`, `all`; Today and Yesterday comparisons each report 20 input samples; the 7-day comparison reports 40.
 
-- [ ] **Step 2: Write the failing dashboard exact-window contract**
+- [x] **Step 2: Write the failing dashboard exact-window contract**
 
 Assert the History selector orders `today`, `yesterday`, `7`, `30`, `90`, `all`; invalid stored values normalize to `30`; and KPI merge, trend construction, and table aggregation call the shared `modelDayInRange` predicate.
 
-- [ ] **Step 3: Run both tests and verify RED**
+- [x] **Step 3: Run both tests and verify RED**
 
     python3 -m unittest \
       tests.test_meter.ModelPerformanceTests.test_matched_pace_has_exact_today_and_yesterday_windows \
@@ -156,7 +156,7 @@ Assert the History selector orders `today`, `yesterday`, `7`, `30`, `90`, `all`;
 
 Expected: failures because exact windows/options/helpers do not exist.
 
-- [ ] **Step 4: Implement exact Python windows**
+- [x] **Step 4: Implement exact Python windows**
 
 In `matched_pace_windows`, derive:
 
@@ -165,11 +165,11 @@ In `matched_pace_windows`, derive:
 
 Filter exact windows by equality on sample `day`; retain the current lower-bound filtering for numeric windows and no filtering for all history. Reuse the existing per-pair distance cache.
 
-- [ ] **Step 5: Implement the shared browser window**
+- [x] **Step 5: Implement the shared browser window**
 
 Validate `modelRange` against `['today','yesterday','7','30','90','all']`, default invalid values to `30`, and persist the fallback. Use one render-time window object in `renderModelStats` for `mergeModelDays`, `buildModelTrend`, and table daily rows. For exact windows, the trend axis contains exactly the selected day even when it has no rows.
 
-- [ ] **Step 6: Verify GREEN and regressions**
+- [x] **Step 6: Verify GREEN and regressions**
 
     python3 -m unittest \
       tests.test_meter.ModelPerformanceTests.test_matched_pace_has_exact_today_and_yesterday_windows \
@@ -178,7 +178,7 @@ Validate `modelRange` against `['today','yesterday','7','30','90','all']`, defau
 
 Expected: focused tests and model-performance class pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit with the related dashboard behavior milestone**
 
     git add token_meter/app.py page.html tests/test_meter.py
     git commit -m "feat: filter models by today or yesterday"
@@ -193,31 +193,31 @@ Expected: focused tests and model-performance class pass.
 - Consumes: the selected `MODEL_TREND_METRICS[modelTrendMetric]` entry.
 - Produces: one tooltip row per active model with identity, total output, and selected metric; unavailable selected metrics render `--`.
 
-- [ ] **Step 1: Rewrite the tooltip contract and verify RED**
+- [x] **Step 1: Rewrite the tooltip contract and verify RED**
 
 Slice `drawModelTrend` through `renderMatchedPace`. Require model identity, `<small>output</small>`, and a dynamic selected-metric label. Reject the fixed `input`, `executions`, `avg input`, `avg output`, `tok/s`, and `typical wait` grid inside that slice. Run:
 
-    python3 -m unittest tests.test_meter.DashboardLayoutTests.test_model_trend_omits_legend_without_removing_hover_details -v
+    python3 -m unittest tests.test_meter.DashboardLayoutTests.test_model_trend_omits_legend_and_limits_hover_to_relevant_metrics -v
 
 Expected: FAIL because the tooltip still renders seven fixed fields.
 
-- [ ] **Step 2: Implement the focused tooltip**
+- [x] **Step 2: Implement the focused tooltip**
 
 Build the selected metric label from `metric.note` and its value from
 `metric.available(row) ? metric.format(metric.value(row)) : '--'`. Keep output
 availability based on token evidence and leave all event/geometry handlers
 unchanged.
 
-- [ ] **Step 3: Verify GREEN and adjacent Models contracts**
+- [x] **Step 3: Verify GREEN and adjacent Models contracts**
 
     python3 -m unittest \
-      tests.test_meter.DashboardLayoutTests.test_model_trend_omits_legend_without_removing_hover_details \
+      tests.test_meter.DashboardLayoutTests.test_model_trend_omits_legend_and_limits_hover_to_relevant_metrics \
       tests.test_meter.DashboardLayoutTests.test_model_stats_supports_multi_model_comparison \
       tests.test_meter.DashboardLayoutTests.test_model_stats_supports_project_scoped_average_io_trends -v
 
 Expected: all three tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit with the related dashboard behavior milestone**
 
     git add page.html tests/test_meter.py
     git commit -m "ui: focus model trend tooltips"

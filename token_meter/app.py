@@ -5485,27 +5485,37 @@ def matched_pace_comparison(a_id, a_samples, b_id, b_samples, distance_cache=Non
 def matched_pace_windows(sample_groups, now_ts=None):
     """Build pairwise matched-pace comparisons for every dashboard history window."""
     today = datetime.date.fromtimestamp(float(now_ts if now_ts is not None else time.time()))
-    windows = {"7": 7, "30": 30, "90": 90, "all": None}
-    result = {window: [] for window in windows}
-    ids = sorted(sample_groups)
-    cutoffs = {
-        window: (today - datetime.timedelta(days=days - 1)).isoformat() if days else ""
-        for window, days in windows.items()
+    rules = {
+        "today": ("exact", today.isoformat()),
+        "yesterday": ("exact", (today - datetime.timedelta(days=1)).isoformat()),
+        "7": ("since", (today - datetime.timedelta(days=6)).isoformat()),
+        "30": ("since", (today - datetime.timedelta(days=29)).isoformat()),
+        "90": ("since", (today - datetime.timedelta(days=89)).isoformat()),
+        "all": ("all", ""),
     }
+    result = {window: [] for window in rules}
+    ids = sorted(sample_groups)
+    windowed_samples = {}
+    for runtime_id in ids:
+        buckets = {window: [] for window in rules}
+        for sample in sample_groups[runtime_id]:
+            day = str(sample.get("day") or "")
+            for window, (match, boundary) in rules.items():
+                if (
+                    match == "all"
+                    or (match == "exact" and day == boundary)
+                    or (match == "since" and day >= boundary)
+                ):
+                    buckets[window].append(sample)
+        windowed_samples[runtime_id] = buckets
     for a_index, a_id in enumerate(ids):
         for b_id in ids[a_index + 1:]:
             distance_cache = {}
-            for window, cutoff in cutoffs.items():
-                a_rows = [
-                    sample for sample in sample_groups[a_id]
-                    if not cutoff or str(sample.get("day") or "") >= cutoff
-                ]
-                b_rows = [
-                    sample for sample in sample_groups[b_id]
-                    if not cutoff or str(sample.get("day") or "") >= cutoff
-                ]
+            for window in rules:
                 result[window].append(matched_pace_comparison(
-                    a_id, a_rows, b_id, b_rows, distance_cache=distance_cache,
+                    a_id, windowed_samples[a_id][window],
+                    b_id, windowed_samples[b_id][window],
+                    distance_cache=distance_cache,
                 ))
     return {
         "method": "nearest workload match on context, input, output, cache, model calls, tools, and recency",

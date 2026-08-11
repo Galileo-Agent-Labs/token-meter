@@ -6,6 +6,7 @@ import plistlib
 import re
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -889,6 +890,56 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertFalse(different["available"])
         self.assertEqual(different["matched_pairs"], 0)
         self.assertIn("comparable turns", different["reason"])
+
+    def test_matched_pace_completes_under_large_sample_volume(self):
+        def sample(idx, duration):
+            return {
+                "duration_s": duration, "ts": 1000000 + idx * 60,
+                "day": "2026-08-01",
+                "input_tokens": 100000, "peak_input_tokens": 100000,
+                "cache_read_tokens": 70000, "output_tokens": 2000,
+                "tool_calls": 4, "model_calls": 3,
+            }
+        left = [sample(i, 10) for i in range(2000)]
+        right = [sample(i, 20) for i in range(2000)]
+        session_rows = [
+            {
+                "id": f"ses_{i}", "provider": "opencode",
+                "runtime": "OpenCode", "project": f"project-{i % 10}",
+                "availability": {"cost": True, "tokens": True, "cache": True},
+                "model_stats": [
+                    {"model": f"model-{i % 3}", "cost": 1.0, "tokens": 5000,
+                     "input_tokens": 3000, "output_tokens": 2000,
+                     "executions": 10, "availability": {"cost": True, "tokens": True}},
+                ],
+                "_model_daily": [],
+                "_performance_samples": left if i == 0 else [],
+                "_wait_samples": [],
+                "_tool_evidence": meter.summarize_tool_evidence([]),
+            }
+            for i in range(50)
+        ]
+        session_rows.append({
+            "id": "ses_big", "provider": "opencode",
+            "runtime": "OpenCode", "project": "big-project",
+            "availability": {"cost": True, "tokens": True, "cache": True},
+            "model_stats": [
+                {"model": "model-0", "cost": 50.0, "tokens": 250000,
+                 "input_tokens": 150000, "output_tokens": 100000,
+                 "executions": 500, "availability": {"cost": True, "tokens": True}},
+            ],
+            "_model_daily": [],
+            "_performance_samples": right,
+            "_wait_samples": [],
+            "_tool_evidence": meter.summarize_tool_evidence([]),
+        })
+        start = time.time()
+        result = meter.aggregate_model_stats(session_rows)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 5.0,
+                        f"aggregate_model_stats took {elapsed:.1f}s with 4000 samples; "
+                        "matched_pace_comparison may be unbounded")
+        self.assertGreaterEqual(len(result.get("models", [])), 1)
 
 
 class FrustrationSignalTests(unittest.TestCase):

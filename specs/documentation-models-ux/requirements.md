@@ -13,11 +13,13 @@ Models history selector cannot isolate today or yesterday.
 
 ## Goals
 
-- Make one document the canonical current architecture reference.
+- Make `specs/ARCHITECTURE.md` the canonical current architecture reference.
 - Keep the README focused on installing, using, trusting, and troubleshooting
   Token Meter.
 - Put coding-agent workflow, validation, release hygiene, and implementation
-  constraints in AGENTS.md, with contributor-facing links in CONTRIBUTING.md.
+  constraints in `specs/AGENTS.md`, with contributor-facing links in
+  `specs/CONTRIBUTING.md`.
+- Keep `README.md` as the only tracked Markdown file at the repository root.
 - Prevent historical notes from being mistaken for current behavior.
 - Simplify the Session chart scale selector without breaking stored browser
   preferences.
@@ -48,7 +50,7 @@ Models history selector cannot isolate today or yesterday.
 
 ### REQ-DOC-001: Canonical architecture document
 
-THE repository SHALL contain `ARCHITECTURE.md` describing the current runtime,
+THE repository SHALL contain `specs/ARCHITECTURE.md` describing the current runtime,
 platform, model, domain, service, web, native-companion, MCP, packaging, caching,
 privacy, and testing boundaries.
 
@@ -66,19 +68,28 @@ WHEN a reader opens `README.md` THEN the repository SHALL prioritize product
 value, supported environments, installation, primary workflows, privacy,
 limitations, updates, uninstall, and troubleshooting.
 
-WHEN a coding agent opens `AGENTS.md` THEN the repository SHALL provide the
+WHEN a coding agent opens `specs/AGENTS.md` THEN the repository SHALL provide the
 current component map, architecture link, implementation invariants, complete
 validation commands, runtime installation checks, and release hygiene.
 
-WHEN a human contributor opens `CONTRIBUTING.md` THEN the repository SHALL link
+WHEN a human contributor opens `specs/CONTRIBUTING.md` THEN the repository SHALL link
 to both the architecture and agent runbook and SHALL retain contributor-oriented
 setup and pull-request guidance.
 
 ### REQ-DOC-003: Current versus historical documents
 
 WHEN a maintained document describes architecture or repository state THEN it
-SHALL link to `ARCHITECTURE.md` instead of duplicating a conflicting component
+SHALL link to `specs/ARCHITECTURE.md` instead of duplicating a conflicting component
 map.
+
+THE repository SHALL track `README.md` as its only root-level Markdown file;
+all other maintained or historical project Markdown documents SHALL live under
+`specs/` and internal links SHALL resolve from their new locations.
+
+WHEN README links to agent or contributor guidance THEN it SHALL disclose that
+moving `AGENTS.md` and `CLAUDE.md` out of the root may prevent automatic
+instruction discovery and SHALL tell coding agents to open `specs/AGENTS.md`
+explicitly before editing.
 
 IF a document records an earlier implementation or point-in-time validation
 THEN it SHALL be visibly labelled historical and SHALL direct readers to the
@@ -163,10 +174,13 @@ installed-runtime health checks, and manifest parity validation.
 
 ## Acceptance Criteria
 
-- `ARCHITECTURE.md` exists and maintained entry documents link to it.
+- `specs/ARCHITECTURE.md` exists and maintained entry documents link to it.
+- `git ls-files '*.md'` reports `README.md` as the only root-level Markdown
+  path.
 - README no longer contains the validation command catalog, repository tree, or
   publishing checklist.
-- Current developer commands and runtime checks are present in AGENTS.md.
+- Current developer commands and runtime checks are present in
+  `specs/AGENTS.md`.
 - Historical Markdown files cannot be mistaken for current architecture or
   validation status.
 - Session scale UI contains Linear and Cumulative but not Sqrt or Log.

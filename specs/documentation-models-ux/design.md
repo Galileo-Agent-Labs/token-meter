@@ -1,14 +1,14 @@
 # Documentation and Dashboard Cleanup Design
 
-Status: approved design, awaiting implementation planning.
+Status: approved and planned for inline implementation.
 
 Related requirements: [requirements.md](requirements.md).
 
 ## Overview
 
-This change makes `ARCHITECTURE.md` the stable engineering map, narrows
+This change makes `specs/ARCHITECTURE.md` the stable engineering map, narrows
 `README.md` to the user journey, and moves maintenance material into
-`AGENTS.md`. It also removes the two unwanted nonlinear Session scale choices,
+`specs/AGENTS.md`. It also removes the two unwanted nonlinear Session scale choices,
 adds exact-day Models filters, and makes the Model trends hover card reflect
 only what the chart currently encodes.
 
@@ -41,32 +41,41 @@ metric.
 
 ### Canonical documents
 
-- `README.md` owns user value, supported runtimes/platforms, installation,
+- Root `README.md` owns user value, supported runtimes/platforms, installation,
   workflows, privacy, limitations, updates, uninstall, and troubleshooting.
-- `ARCHITECTURE.md` owns current engineering boundaries, flow, invariants,
+- `specs/ARCHITECTURE.md` owns current engineering boundaries, flow, invariants,
   extension rules, and validation layers.
-- `AGENTS.md` owns coding-agent operating instructions: key paths, guarded
+- `specs/AGENTS.md` owns coding-agent operating instructions: key paths, guarded
   contracts, change workflow, commands, installed-runtime proof, and release
   hygiene.
-- `CONTRIBUTING.md` owns human contribution flow and links to the two technical
+- `specs/CONTRIBUTING.md` owns human contribution flow and links to the two technical
   authorities above.
-- `DESIGN.md` remains the visual design system and links to `ARCHITECTURE.md`
+- `specs/DESIGN.md` remains the visual design system and links to
+  `specs/ARCHITECTURE.md`
   for engineering structure.
-- `PRODUCT.md` remains the product/UX principles document and is updated to name
+- `specs/PRODUCT.md` remains the product/UX principles document and is updated to name
   all supported runtimes and platforms.
-- `SECURITY.md` remains the security and disclosure policy and points to the
+- `specs/SECURITY.md` remains the security and disclosure policy and points to the
   architecture privacy boundary where useful.
 
 ### Historical documents
 
-`REQUIREMENTS.md`, `STATE.md`, `research.md`, and `implementation-log.md` are
-retained as history. Each receives a prominent note explaining its date/scope
-and links to current authorities. `STATE.md` is reduced to a short historical
-index rather than trying to maintain a volatile inventory and validation
-ledger. This removes false current claims without destroying context.
+Root `REQUIREMENTS.md`, `STATE.md`, `research.md`, and `implementation-log.md`
+move under `specs/history/` and are retained as history. Each receives a
+prominent note explaining its date/scope and links to current authorities.
+`STATE.md` is reduced to a short historical index rather than trying to
+maintain a volatile inventory and validation ledger. This removes false current
+claims without destroying context.
 
-`CLAUDE.md` remains the existing `@AGENTS.md` import shim and should not
-duplicate instructions.
+`CLAUDE.md` moves to `specs/CLAUDE.md` and remains a small reference to
+`AGENTS.md` in the same directory. Because common coding-agent clients discover
+these files only at the repository root, README explicitly tells agents to open
+`specs/AGENTS.md` before editing. This is a deliberate consequence of the
+approved root-cleanliness rule, not an assumed preservation of auto-discovery.
+
+At completion, `README.md` is the only tracked Markdown file at root. The
+temporary ignored root `plan.md` may exist while current instructions require
+it as execution state, but it is removed when the work is complete.
 
 ### README movement
 
@@ -177,7 +186,7 @@ state, and console output.
 
 ## Decisions
 
-### DEC-001: Add `ARCHITECTURE.md` instead of expanding README or AGENTS
+### DEC-001: Add `specs/ARCHITECTURE.md` instead of expanding README or AGENTS
 
 Context: Architecture needs a durable home, while README and AGENTS serve
 different readers.
@@ -188,7 +197,7 @@ Options:
    mixes user and maintainer jobs.
 2. Put architecture in AGENTS. This helps agents but creates another large
    instruction file and hides the design from human contributors.
-3. Add `ARCHITECTURE.md` and link to it. This gives one shared authority without
+3. Add `specs/ARCHITECTURE.md` and link to it. This gives one shared authority without
    duplicating it.
 
 Decision: Option 3.
@@ -196,6 +205,21 @@ Decision: Option 3.
 Rationale: It best separates user, contributor, and implementation concerns.
 
 Consequences: Maintained docs must link instead of copying component maps.
+
+### DEC-005: Keep only README Markdown at the repository root
+
+Context: The user explicitly requested one root Markdown entry point after
+approving the original documentation design.
+
+Decision: Move every other tracked project Markdown file under `specs/`, move
+useful ignored historical Markdown there when it is safe to publish, and make
+README the index.
+
+Rationale: This follows the requested repository organization exactly and makes
+the documentation tree visible from one root entry point.
+
+Consequences: Root auto-discovery of `AGENTS.md` and `CLAUDE.md` is no longer
+available. README must disclose this and directly link the agent instructions.
 
 ### DEC-002: Label historical documents instead of continuously rewriting them
 

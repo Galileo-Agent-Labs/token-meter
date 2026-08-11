@@ -31,6 +31,7 @@ from token_meter.domain.usage import distribute_reported_cost_counts
 
 
 DETAIL_MESSAGE_LIMIT = 200
+SUMMARY_MESSAGE_LIMIT = 500
 
 
 def _compact_text(value, limit=90):
@@ -867,9 +868,10 @@ class OpenCodeRuntimeAdapter:
                 message_rows = conn.execute(
                     "SELECT data, time_created FROM message WHERE session_id=? "
                     "AND json_extract(data,'$.role') IN ('user','assistant') "
-                    "ORDER BY time_created ASC, id ASC",
-                    (sid,)
+                    "ORDER BY time_created DESC, id DESC LIMIT ?",
+                    (sid, SUMMARY_MESSAGE_LIMIT)
                 ).fetchall()
+                message_rows.reverse()
         except (OSError, sqlite3.Error):
             row = None
             te = []

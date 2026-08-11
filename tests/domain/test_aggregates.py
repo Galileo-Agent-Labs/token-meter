@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from token_meter.domain.aggregates import (
+    aggregate_model_stats,
     aggregate_cross_session_rows,
     current_session_summaries,
     metric_coverage,
@@ -33,6 +34,41 @@ def session(session_id, runtime, model, cost, tokens, *, available=True, mtime=0
 
 
 class AggregateDomainTests(unittest.TestCase):
+    def test_model_aggregation_bounds_derived_samples_without_truncating_totals(self):
+        samples = [{
+            "model": "model-1", "day": "", "ts": index,
+            "input_tokens": 100, "peak_input_tokens": 120,
+            "context_tokens": 110, "output_tokens": 20,
+            "cache_read_tokens": 50, "duration_s": 2,
+            "tool_calls": 1, "model_calls": 1,
+        } for index in range(2_100)]
+        captured_pace_groups = {}
+
+        def capture_pace(groups):
+            captured_pace_groups.update(groups)
+            return {"windows": {}}
+
+        result = aggregate_model_stats([{
+            "id": "session-1", "provider": "provider", "runtime": "runtime",
+            "availability": {"cost": True, "tokens": True, "cache": True},
+            "model_stats": [{
+                "model": "model-1", "cost": 21.0, "tokens": 252_000,
+                "input_tokens": 210_000, "output_tokens": 42_000,
+                "executions": 2_100,
+                "availability": {"cost": True, "tokens": True, "cache": True},
+            }],
+            "_model_daily": [], "_performance_samples": samples, "_wait_samples": [],
+        }], throughput_finalizer=lambda row: row, matched_pace=capture_pace)
+
+        row = result["models"][0]
+        self.assertEqual(row["executions"], 2_100)
+        self.assertEqual(row["input_tokens"], 210_000)
+        self.assertEqual(row["output_tokens"], 42_000)
+        self.assertEqual(row["timed_samples"], 2_100)
+        self.assertLessEqual(len(row["workload_peak_inputs"]), 2_000)
+        self.assertLessEqual(len(row["workload_outputs"]), 2_000)
+        self.assertLessEqual(len(captured_pace_groups["model-1::runtime"]), 500)
+
     def test_same_model_in_two_runtimes_stays_separate(self):
         result = aggregate_cross_session_rows([
             session("a", "runtime-a", "model-1", 1.0, 10),

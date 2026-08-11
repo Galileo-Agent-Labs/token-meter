@@ -18,6 +18,10 @@ from token_meter.domain.usage import (
 from token_meter.domain.insights import insight, normalize_insights
 
 
+WORKLOAD_SAMPLE_LIMIT = 2_000
+MATCHED_PACE_SAMPLE_LIMIT = 500
+
+
 def _compact_text(value, limit):
     value = " ".join(str(value or "").split())
     return value[:limit - 1] + "…" if len(value) > limit else value
@@ -1122,20 +1126,23 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
                     target["ttft_total_s"] += ttft_s
                     target["ttft_samples"] += 1
                 context_tokens = int(sample.get("context_tokens") or 0)
-                if context_tokens > 0:
+                if (context_tokens > 0
+                        and len(target["workload_peak_inputs"]) < WORKLOAD_SAMPLE_LIMIT):
                     target["workload_peak_inputs"].append(context_tokens)
                     target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
                     target["workload_model_calls"].append(
                         max(1, int(sample.get("model_calls") or 1))
                     )
-                target["workload_peak_inputs"].append(peak_input_tokens)
-                target["workload_outputs"].append(output_tokens)
-                target["workload_tool_calls"].append(tool_calls)
-                target["workload_model_calls"].append(model_calls)
-                if metric_available(session, "cache"):
-                    target["workload_cache_ratios"].append(cache_ratio)
+                if len(target["workload_peak_inputs"]) < WORKLOAD_SAMPLE_LIMIT:
+                    target["workload_peak_inputs"].append(peak_input_tokens)
+                    target["workload_outputs"].append(output_tokens)
+                    target["workload_tool_calls"].append(tool_calls)
+                    target["workload_model_calls"].append(model_calls)
+                    if metric_available(session, "cache"):
+                        target["workload_cache_ratios"].append(cache_ratio)
             if (not session.get("token_estimate") and duration_s > 0
-                    and input_tokens > 0 and output_tokens > 0):
+                    and input_tokens > 0 and output_tokens > 0
+                    and len(pace_groups[row["id"]]) < MATCHED_PACE_SAMPLE_LIMIT):
                 pace_groups[row["id"]].append({
                     "day": day, "ts": float(sample.get("ts") or 0),
                     "duration_s": duration_s, "input_tokens": input_tokens,
@@ -1171,7 +1178,8 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
                     target["ttft_total_s"] += ttft_s
                     target["ttft_samples"] += 1
                 context_tokens = int(sample.get("context_tokens") or 0)
-                if context_tokens > 0:
+                if (context_tokens > 0
+                        and len(target["workload_peak_inputs"]) < WORKLOAD_SAMPLE_LIMIT):
                     target["workload_peak_inputs"].append(context_tokens)
                     target["workload_tool_calls"].append(int(sample.get("tool_calls") or 0))
                     target["workload_model_calls"].append(

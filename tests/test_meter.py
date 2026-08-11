@@ -6,6 +6,7 @@ import plistlib
 import re
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -892,6 +893,56 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(different["matched_pairs"], 0)
         self.assertIn("comparable turns", different["reason"])
 
+    def test_matched_pace_completes_under_large_sample_volume(self):
+        def sample(idx, duration):
+            return {
+                "duration_s": duration, "ts": 1000000 + idx * 60,
+                "day": "2026-08-01",
+                "input_tokens": 100000, "peak_input_tokens": 100000,
+                "cache_read_tokens": 70000, "output_tokens": 2000,
+                "tool_calls": 4, "model_calls": 3,
+            }
+        left = [sample(i, 10) for i in range(2000)]
+        right = [sample(i, 20) for i in range(2000)]
+        session_rows = [
+            {
+                "id": f"ses_{i}", "provider": "opencode",
+                "runtime": "OpenCode", "project": f"project-{i % 10}",
+                "availability": {"cost": True, "tokens": True, "cache": True},
+                "model_stats": [
+                    {"model": f"model-{i % 3}", "cost": 1.0, "tokens": 5000,
+                     "input_tokens": 3000, "output_tokens": 2000,
+                     "executions": 10, "availability": {"cost": True, "tokens": True}},
+                ],
+                "_model_daily": [],
+                "_performance_samples": left if i == 0 else [],
+                "_wait_samples": [],
+                "_tool_evidence": meter.summarize_tool_evidence([]),
+            }
+            for i in range(50)
+        ]
+        session_rows.append({
+            "id": "ses_big", "provider": "opencode",
+            "runtime": "OpenCode", "project": "big-project",
+            "availability": {"cost": True, "tokens": True, "cache": True},
+            "model_stats": [
+                {"model": "model-0", "cost": 50.0, "tokens": 250000,
+                 "input_tokens": 150000, "output_tokens": 100000,
+                 "executions": 500, "availability": {"cost": True, "tokens": True}},
+            ],
+            "_model_daily": [],
+            "_performance_samples": right,
+            "_wait_samples": [],
+            "_tool_evidence": meter.summarize_tool_evidence([]),
+        })
+        start = time.time()
+        result = meter.aggregate_model_stats(session_rows)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 5.0,
+                        f"aggregate_model_stats took {elapsed:.1f}s with 4000 samples; "
+                        "matched_pace_comparison may be unbounded")
+        self.assertGreaterEqual(len(result.get("models", [])), 1)
+
 
 class FrustrationSignalTests(unittest.TestCase):
     def test_language_signal_settings_migrate_friction_and_preserve_other_settings(self):
@@ -1710,6 +1761,28 @@ class SessionDeleteTests(unittest.TestCase):
 
 
 class LiveCrossSessionRefreshTests(unittest.TestCase):
+    def test_session_detail_reuses_cached_cross_session_snapshot(self):
+        handler = object.__new__(meter.H)
+        handler.path = "/session?id=session-1"
+        handler._send = lambda *_args, **_kwargs: None
+        cached = {"current_sessions": []}
+        rebuilder = mock.Mock(return_value={"current_sessions": []})
+        state = {"source": {"id": "session-1"}, "timing": {}}
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["data"] = cached
+            with mock.patch.object(meter, "find_session", return_value={"id": "session-1"}), \
+                    mock.patch.object(meter, "cached_session_state", return_value=state), \
+                    mock.patch.object(meter, "cross_session", rebuilder), \
+                    mock.patch.object(meter, "attach_cross_session") as attach:
+                handler.do_GET()
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        rebuilder.assert_not_called()
+        attach.assert_called_once_with(state, cached)
+
     def test_full_sse_queue_keeps_subscriber_and_coalesces_to_latest_state(self):
         q_ = meter.queue.Queue(maxsize=2)
         q_.put_nowait("stale-one")
@@ -5995,6 +6068,46 @@ class OpenCodeTests(unittest.TestCase):
         self.assertFalse(row["context"]["estimated"])
         self.assertEqual(row["_context_samples"], [1550, 600])
         self.assertTrue(row["availability"]["context"])
+
+    def test_opencode_summary_processes_only_newest_500_messages_in_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            base = 1_784_548_800_000
+            top = self._session_row(
+                "ses_top", "/repo", "Long history", "model-a",
+                5.01, 501, 501, 0, 0, 0, base + 501_000,
+            )
+            conn.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         tuple(top.values()))
+            for index in range(501):
+                created = base + index * 1_000
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", self._message(
+                    f"a{index:04d}", "ses_top", {
+                        "role": "assistant", "modelID": "model-a",
+                        "providerID": "provider-a",
+                        "tokens": {"input": 1, "output": 1, "reasoning": 0,
+                                   "cache": {"read": 0, "write": 0}},
+                        "cost": 0.01,
+                        "time": {"created": created, "completed": created + 500},
+                    }, created,
+                ))
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1_000):
+                row = meter.opencode_summary({
+                    "provider": "opencode", "id": "ses_top", "model": "model-a",
+                    "label": "OpenCode", "runtime": "OpenCode", "session": "ses_top",
+                    "path": "opencode:ses_top", "project": "/repo",
+                    "mtime": (base + 501_000) / 1_000,
+                })
+
+        self.assertEqual(row["turns"], 500)
+        self.assertEqual(len(row["_performance_samples"]), 500)
+        self.assertEqual(row["_performance_samples"][0]["ts"], (base + 1_500) / 1_000)
+        self.assertEqual(row["_performance_samples"][-1]["ts"], (base + 500_500) / 1_000)
+        self.assertEqual(row["tokens"], 1_002)
 
     def test_opencode_summary_attributes_models_and_calendar_days_per_message(self):
         with tempfile.TemporaryDirectory() as tmp:

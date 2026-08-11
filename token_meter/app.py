@@ -7387,7 +7387,7 @@ class H(BaseHTTPRequestHandler):
             source = find_session(sid)
             st = cached_session_state(source) if source else None
             if st:
-                cross = cross_session()
+                cross = _xsess.get("data") or cross_session()
                 attach_cross_session(st, cross)
                 current_ids = {
                     str(row.get("id") or "")

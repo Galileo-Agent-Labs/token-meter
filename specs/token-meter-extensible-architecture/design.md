@@ -128,6 +128,35 @@ Consequences: the merge commit can retain both upstream commits in history even 
 
 Implementation note (2026-08-11): merge commit `c2a6f78` contains both upstream commits. `SUMMARY_MESSAGE_LIMIT`, `WORKLOAD_SAMPLE_LIMIT`, and `MATCHED_PACE_SAMPLE_LIMIT` enforce the new bounds in their owning modules; the `/session` handler reuses `_xsess["data"]` when present; and PR #15's select styling remains in `page.html`. Direct tests failed at 501 OpenCode turns, 4,200 workload observations, 2,100 pace observations, and one unnecessary rebuild before the port, then passed with the intended 500/2,000/500 bounds and unchanged exact totals.
 
+### DEC-012 — Consolidate local feature branches by behavioral equivalence
+
+Context: after the source migration, two older local lines still appeared to
+contain commits not reachable from `main`: 11 OpenCode commits on
+`codex/pr-14-opencode-fixes` and five Windows commits ending at `a1295c0`.
+Both lines predate the package extraction, so merging their `meter.py` changes
+would restore runtime and platform decisions to the compatibility facade.
+
+Decision: prove whether each line's behavior is already present before porting
+anything. Treat an aggregate stable patch-ID match as exact OpenCode retention.
+For Windows, compare every lifecycle artifact and map the remaining behavior to
+platform, quota, packaging, dashboard, and native-tray contracts. Port only an
+observable gap with a failing test; do not merge obsolete implementation text.
+
+Rationale: the aggregate patch from the OpenCode branch and mainline squash
+commit `7dcf8e7` have the same stable patch ID
+`4e2de2bd8b7f139ac1ca35ca8e1450bb8535eaf6`. The Windows launcher, starter,
+uninstaller, and updater are byte-identical to the detached branch. The current
+installer retains the old transactional per-user lifecycle while staging the
+shared manifest, and the current tray retains the custom icon and left-click
+behavior while obtaining labels from the runtime catalog. Windows paths,
+recoverable trash, detached process flags, and provider-CLI `CREATE_NO_WINDOW`
+behavior now live in their architectural owners and have direct contracts.
+
+Consequences: neither historical branch requires a textual merge or a new
+production port. Their behavior remains in `main` without reintroducing the
+monolith. The old refs may remain temporarily for review and recovery; ancestry
+alone is not used as evidence of a missing feature.
+
 ## 4. Target package structure
 
 ```text

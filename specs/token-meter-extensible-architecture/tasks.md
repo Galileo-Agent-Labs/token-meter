@@ -746,13 +746,15 @@ Completed 2026-08-11. The regression was observed live across six old Claude Des
 
 ### TASK-026 — Reconcile merged upstream PR #15 and PR #16
 
-- [ ] Change: merge current `origin/main`, preserve PR #15 Linux select readability, and port PR #16 OpenCode/message, derived-sample, and session-detail cache bounds into the extracted runtime/domain/application owners.
-- [ ] Preserve: the 16-line `meter.py` facade, exact cost/token/execution totals, chronological processing of retained messages, current runtime/platform/model boundaries, macOS styling, local-only privacy, and prior Kiro/Windows/Claude fixes.
-- [ ] Verify: watch focused bounds/cache tests fail before the port and pass afterward; run the full portable suite, language/native checks, installation, endpoints, service/listener checks, manifest parity, and responsive browser validation.
-- [ ] Requirements: REQ-002, REQ-004, REQ-008, REQ-009; NFR-001, NFR-003, NFR-004, NFR-006
-- [ ] Depends on: TASK-025
+- [x] Change: merged current `origin/main`, preserved PR #15 Linux select readability, and ported PR #16 OpenCode/message, derived-sample, and session-detail cache bounds into the extracted runtime/domain/application owners.
+- [x] Preserve: the 16-line `meter.py` facade, exact cost/token/execution totals, chronological processing of retained messages, current runtime/platform/model boundaries, macOS styling, local-only privacy, and prior Kiro/Windows/Claude fixes.
+- [x] Verify: watched focused bounds/cache tests fail before the port and pass afterward; ran the full portable suite, language/native checks, installation, endpoints, service/listener checks, manifest parity, and responsive browser validation.
+- [x] Requirements: REQ-002, REQ-004, REQ-008, REQ-009; NFR-001, NFR-003, NFR-004, NFR-006
+- [x] Depends on: TASK-025
 
 Exit condition: the reconciliation branch contains upstream commits `52d678c` and `d14f932`, all three PR #16 performance protections live behind the refactored boundaries, PR #15 select styling remains visible, and no prior behavior or architecture guard regresses.
+
+Completed 2026-08-11. The refactor was checkpointed as `68c1b96`, then `origin/main` was merged as `c2a6f78`; the only textual conflict was the old monolithic `meter.py`, which remained a 16-line facade while every incoming behavior was ported to its extracted owner. Three direct tests failed for the intended reasons before implementation and passed afterward, alongside PR #16's original large-volume timing test. The complete suite passes 441 tests with two expected non-host-native skips. Python, JavaScript, shell, Swift, native smoke, whitespace, installed manifest parity, both LaunchAgents, loopback-only listening, and live endpoints pass. The installed dashboard indexes 354 sources without adapter failures; wide 1280, laptop 1024, and narrow 390 visual checks show readable dark selects and no console errors. Native Linux visual confirmation remains a release-matrix check because this host is macOS.
 
 ## Delivery sequence
 

@@ -126,6 +126,8 @@ Rationale: a textual conflict choice would either discard production fixes or mo
 
 Consequences: the merge commit can retain both upstream commits in history even though conflicted monolith hunks are re-expressed in extracted modules. The full portable suite protects backend behavior; embedded JavaScript parsing and browser checks protect dashboard compatibility. Linux-native visual evidence remains a host-matrix item because this reconciliation host is macOS.
 
+Implementation note (2026-08-11): merge commit `c2a6f78` contains both upstream commits. `SUMMARY_MESSAGE_LIMIT`, `WORKLOAD_SAMPLE_LIMIT`, and `MATCHED_PACE_SAMPLE_LIMIT` enforce the new bounds in their owning modules; the `/session` handler reuses `_xsess["data"]` when present; and PR #15's select styling remains in `page.html`. Direct tests failed at 501 OpenCode turns, 4,200 workload observations, 2,100 pace observations, and one unnecessary rebuild before the port, then passed with the intended 500/2,000/500 bounds and unchanged exact totals.
+
 ## 4. Target package structure
 
 ```text

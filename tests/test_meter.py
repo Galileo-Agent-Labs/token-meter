@@ -5609,6 +5609,43 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual(days[0]["wait_time"]["avg_s"], 30)
         self.assertEqual(days[0]["wait_time"]["max_s"], 40)
 
+    def test_unbounded_daily_history_has_compact_spend_projection(self):
+        sessions = [{
+            "id": "one", "title": "Private title", "project": "/private/repo",
+            "provider": "codex", "label": "Codex",
+            "_day_cost": {
+                f"2026-07-{day:02d}": float(day) for day in range(1, 32)
+            },
+        }]
+        legacy = meter.daily_summaries(sessions)
+        complete = meter.daily_summaries(sessions, limit=None)
+        spend = meter.spend_projection(complete)
+        self.assertEqual(len(legacy), 30)
+        self.assertEqual(len(complete), 31)
+        self.assertEqual(spend[0]["day"], "2026-07-31")
+        self.assertEqual(spend[0]["providers"][0]["provider"], "codex")
+        self.assertEqual(spend[0]["providers"][0]["cost"], 31.0)
+        self.assertEqual(
+            set(spend[0]),
+            {"day", "cost", "providers", "coverage", "provenance",
+             "usage_basis", "availability"},
+        )
+        serialized = json.dumps(spend)
+        self.assertNotIn("Private title", serialized)
+        self.assertNotIn("/private/repo", serialized)
+        self.assertNotIn("top_sessions", serialized)
+
+    def test_cross_session_publishes_spend_history_and_keeps_daily(self):
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess.update({"data": None, "at": 0, "sessions": []})
+            result = meter.cross_session(sources=[])
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+        self.assertEqual(result["spend"], {"days": []})
+        self.assertEqual(result["daily"], [])
+
 
 class MonthlyBudgetTests(unittest.TestCase):
     def test_settings_derive_total_from_allocations_and_preserve_other_machine_settings(self):

@@ -5,6 +5,7 @@ outside this module. Runtime identifiers are opaque values and model keys are
 always scoped by runtime.
 """
 
+import copy
 import re
 import time
 from collections import defaultdict
@@ -517,8 +518,11 @@ def daily_summaries(session_rows, limit=30, availability_resolver=None):
             daily_session["wait_samples"] += 1
             daily_session["longest_wait_s"] = max(daily_session["longest_wait_s"], duration_s)
 
+    keys = sorted((value for value in days if value), reverse=True)
+    if limit is not None and limit > 0:
+        keys = keys[:limit]
     result = []
-    for day in sorted((value for value in days if value), reverse=True)[:limit]:
+    for day in keys:
         row = days[day]
         sessions = []
         for daily_session in row["sessions"].values():
@@ -615,6 +619,26 @@ def daily_summaries(session_rows, limit=30, availability_resolver=None):
             "top_sessions": sessions[:8],
         })
     return result
+
+
+def spend_projection(daily_rows):
+    """Project day-cost evidence without session or project identity."""
+    return [{
+        "day": row.get("day") or "",
+        "cost": float(row.get("cost") or 0),
+        "providers": [{
+            "provider": provider.get("provider") or "unknown",
+            "cost": float(provider.get("cost") or 0),
+            "coverage": copy.deepcopy(provider.get("coverage") or {}),
+            "provenance": copy.deepcopy(provider.get("provenance") or {}),
+            "usage_basis": provider.get("usage_basis") or "unavailable",
+            "availability": copy.deepcopy(provider.get("availability") or {}),
+        } for provider in (row.get("providers") or [])],
+        "coverage": copy.deepcopy(row.get("coverage") or {}),
+        "provenance": copy.deepcopy(row.get("provenance") or {}),
+        "usage_basis": row.get("usage_basis") or "unavailable",
+        "availability": copy.deepcopy(row.get("availability") or {}),
+    } for row in (daily_rows or [])]
 
 
 def monthly_summaries(session_rows, limit=12):

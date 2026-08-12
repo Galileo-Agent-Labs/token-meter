@@ -76,6 +76,7 @@ from token_meter.domain.aggregates import (
     metric_coverage as _domain_metric_coverage,
     monthly_summaries as _domain_monthly_summaries,
     rollup_language_signal_events as _domain_rollup_language_signal_events,
+    spend_projection as _domain_spend_projection,
 )
 from token_meter.domain.insights import (
     build_cost_insights as _domain_build_cost_insights,
@@ -5239,6 +5240,10 @@ def daily_summaries(session_rows, limit=30):
     )
 
 
+def spend_projection(daily_rows):
+    return _domain_spend_projection(daily_rows)
+
+
 def monthly_summaries(session_rows, limit=12):
     return _domain_monthly_summaries(session_rows, limit=limit)
 
@@ -5688,7 +5693,9 @@ def cross_session(sources=None):
     sessions = aggregate["sessions"]
     _xsess["sessions"] = sessions
     mm = aggregate["model_mix"]
-    daily = daily_summaries(internal_rows)
+    daily_all = daily_summaries(internal_rows, limit=None)
+    daily = daily_all[:30]
+    spend = {"days": spend_projection(daily_all)}
     monthly = monthly_summaries(internal_rows)
     budgets = budget_settings()
     budget = monthly_budget_status(monthly, budgets)
@@ -5742,6 +5749,7 @@ def cross_session(sources=None):
         "budget": budget,
         "tool_waste": tool_waste,
         "daily": daily,
+        "spend": spend,
         "monthly": monthly,
         "capabilities": capability_inventory(tool_waste),
         "session_actions": session_action_capability(),

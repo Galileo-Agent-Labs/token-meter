@@ -691,9 +691,9 @@ class TokenMeterTray:
             "Open Dashboard": self._action_item(
                 "Open Dashboard", lambda *_: self.open_dashboard(),
             ),
-            "Open Daily Brief": self._action_item(
-                "Open Daily Brief",
-                lambda *_: self.open_url("#daily", include_pinned_session=False),
+            "Open Spend": self._action_item(
+                "Open Spend",
+                lambda *_: self.open_url("#spend", include_pinned_session=False),
             ),
             "Open Budget Settings": self._action_item(
                 "Open Budget Settings",

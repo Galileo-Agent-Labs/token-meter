@@ -74,8 +74,9 @@ def performance_summary(samples, total_output_tokens=0):
         if row.get("output_tokens", 0) > 0 and row.get("duration_s", 0) > 0
     ]
     tool_free = [row for row in timed if int(row.get("tool_calls") or 0) == 0]
-    selected = tool_free or timed
-    basis = "tool_free" if tool_free else ("end_to_end" if timed else "unavailable")
+    all_tool_free = bool(timed) and len(tool_free) == len(timed)
+    selected = tool_free if all_tool_free else timed
+    basis = "tool_free" if all_tool_free else ("end_to_end" if timed else "unavailable")
 
     def seconds(row):
         if basis == "tool_free":

@@ -835,6 +835,7 @@ class CodexRuntimeAdapter:
         add_model_summary = compat["add_model_summary"]
         analyze_language_signals = compat["analyze_language_signals"]
         attach_language_signals = compat["attach_language_signals"]
+        codex_live_performance_summary = compat["codex_live_performance_summary"]
         codex_performance_samples = compat["codex_performance_samples"]
         codex_tool_call_evidence = compat["codex_tool_call_evidence"]
         codex_wait_samples = compat["codex_wait_samples"]
@@ -926,6 +927,7 @@ class CodexRuntimeAdapter:
         }
         row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
         row["terminal"] = terminal
+        row["live_throughput"] = codex_live_performance_summary(objs)
         signal_rollups, signal_events = analyze_language_signals(
             "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
         )

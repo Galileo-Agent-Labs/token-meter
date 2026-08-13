@@ -4,7 +4,9 @@ import json
 import os
 import plistlib
 import re
+import shutil
 import sqlite3
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -707,14 +709,15 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(row["daily"][0]["wait_durations_s"], [8, 12])
         self.assertEqual(row["daily"][0]["max_wait_s"], 12)
 
-    def test_tool_free_speed_coverage_counts_only_selected_output(self):
+    def test_mixed_speed_coverage_counts_all_completed_output(self):
         summary = meter.performance_summary([
             {"output_tokens": 10, "duration_s": 2, "generation_s": 1, "tool_calls": 0, "ts": 1},
             {"output_tokens": 90, "duration_s": 9, "generation_s": 8, "tool_calls": 1, "ts": 2},
         ], 100)
-        self.assertEqual(summary["basis"], "tool_free")
-        self.assertEqual(summary["output_tps"], 10)
-        self.assertEqual(summary["timing_coverage"], 0.1)
+        self.assertEqual(summary["basis"], "end_to_end")
+        self.assertAlmostEqual(summary["output_tps"], 100 / 11)
+        self.assertEqual(summary["sample_count"], 2)
+        self.assertEqual(summary["timing_coverage"], 1)
 
     def test_model_aggregation_omits_rows_without_io(self):
         result = meter.aggregate_model_stats([{
@@ -1487,6 +1490,26 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertTrue(row["terminal"])
         self.assertEqual(row["usage_basis"], "reported")
 
+    def test_codex_summary_carries_live_throughput_into_current_sessions(self):
+        objs = [
+            {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:04.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 200, "output_tokens": 40, "total_tokens": 240,
+                }},
+            }},
+        ]
+
+        row = meter.codex_summary(self.source("codex", "gpt-5.6"), objs)
+
+        self.assertFalse(row["throughput"]["available"])
+        self.assertIn("live_throughput", row)
+        self.assertEqual(row["live_throughput"]["output_tps"], 10)
+        self.assertEqual(row["live_throughput"]["completed_steps"], 1)
+
     def test_codex_summary_exposes_input_output_and_model_stats(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-02T00:00:00.000Z",
@@ -1982,6 +2005,32 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_active_session_surfaces_prefer_live_throughput(self):
+        match = re.search(
+            r"function sessionDisplayThroughput\(session\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs one shared speed selector")
+        script = match.group(0) + """
+const completed = {throughput:{available:true,output_tps:85.4},live_throughput:{available:false}};
+const active = {throughput:{available:true,output_tps:85.4},live_throughput:{available:true,output_tps:41.2}};
+console.log(JSON.stringify({
+  completed: sessionDisplayThroughput(completed).output_tps,
+  active: sessionDisplayThroughput(active).output_tps,
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "completed": 85.4,
+            "active": 41.2,
+        })
+        self.assertGreaterEqual(self.page.count("sessionDisplayThroughput(s)"), 2)
+        self.assertIn("sessionDisplayThroughput(row)", self.page)
+
     def test_codex_session_detail_links_to_the_desktop_thread(self):
         for marker in (
             'id=session-desktop-link',
@@ -2337,11 +2386,10 @@ class DashboardLayoutTests(unittest.TestCase):
             self.assertIn(marker, self.page)
         self.assertNotIn("hit.onpointerleave=()=>tip.style.display='none'", model_trend)
 
-    def test_wait_time_is_first_class_across_current_logs_models_and_daily(self):
+    def test_wait_time_is_first_class_across_current_logs_and_models(self):
         for marker in (
             "data-chart=wait", "drawWaitChart", "data-gsort=wait",
             "id=lf-wait", "id=m-wait", "id=m-metric", "data-model-metric=wait",
-            "id=d-wait", "id=d-trend-mode", "data-daily-trend=wait",
             "Prompt-to-completed-response", "lower is better",
         ):
             self.assertIn(marker, self.page)
@@ -2585,7 +2633,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn("row.reviewable!==false", self.page)
         self.assertNotIn("...group,id:group.item_id", self.page)
 
-    def test_sessions_all_daily_learn_and_settings_are_first_class_routes(self):
+    def test_sessions_all_spend_learn_and_settings_are_first_class_routes(self):
         for marker in (
             "id=session-scope-tabs", "id=session-scope-current", "id=session-scope-all",
             "id=all-session-history", "id=tab-daily", "id=view-daily",
@@ -2607,19 +2655,254 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn('<span class=tabLabel>All sessions</span>', self.page)
         self.assertIn("live · updated ${new Date(generatedAt*1000).toLocaleTimeString", self.page)
         self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-daily"))
-        self.assertIn("id=d-day-select", self.page)
+        self.assertIn("id=s-range", self.page)
         self.assertNotIn("id=learn-glossary", self.page)
         self.assertIn("Review loop", self.page)
-        self.assertIn("if(h==='daily')", self.page)
+        self.assertIn("if(h==='daily')setHashRoute('spend',{replace:true,apply:false})", self.page)
+        self.assertIn("if(h==='spend'||h==='daily')", self.page)
         self.assertIn("if(h==='learn')", self.page)
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'center'})", self.page)
 
+    def test_spend_route_and_shell_replace_daily_brief(self):
+        for marker in (
+            "data-label=Spend aria-label=Spend",
+            "<span class=tabLabel>Spend</span>",
+            "<h1>Spend</h1>",
+            "id=s-range", "data-spend-range=today", "data-spend-range=7",
+            "data-spend-range=30", "data-spend-range=month",
+            "data-spend-range=custom",
+            "id=s-from", "id=s-to", "id=s-total", "id=s-average",
+            "id=s-top-runtime", "id=s-highest-day", "id=s-chart",
+            "id=s-chart-tip", "id=s-legend", "id=s-platforms",
+            "if(h==='daily')setHashRoute('spend',{replace:true,apply:false})",
+            "if(h==='spend'||h==='daily')",
+            "openTopLevelRoute('spend')",
+            "{id:'spend',label:'Spend'",
+            "data-learn-route=spend>Open Spend",
+            "function renderSpend(xs)",
+        ):
+            self.assertIn(marker, self.page)
+        for removed in (
+            "<h1>Daily brief</h1>", "id=d-day-select", "id=d-trend-mode",
+            "data-daily-trend=wait", "id=d-sessions", "id=d-providers",
+            "renderDaily(",
+        ):
+            self.assertNotIn(removed, self.page)
+
+    def test_spend_fits_chart_and_restores_range_logs(self):
+        for marker in (
+            "class=spendEvidenceGrid",
+            "Highest-cost logs",
+            "id=s-log-day",
+            "id=s-log-count",
+            "id=s-logs",
+            "function spendAxisLabel(",
+            "function renderSpendLogs(payload,window)",
+            "function loadSpendLogs(window,generatedAt)",
+            "fetch(`/spend/logs?from=${encodeURIComponent(window.start)}&to=${encodeURIComponent(window.end)}`",
+            "data-spend-session=",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn(
+            ".spendChart{min-height:270px;margin-top:12px;overflow:hidden",
+            self.page,
+        )
+
+    def test_spend_hover_detail_is_transient_and_bars_stay_mounted(self):
+        for marker in (
+            ".spendChartTip{position:absolute;pointer-events:none",
+            ".spendDay:hover .spendBarValue{opacity:1}",
+            "function hideSpendTip()",
+            "$('s-chart-inner').addEventListener('pointerleave',hideSpendTip)",
+            "if(!same){",
+            "updateSpendBar(button,rows[index],index,rows.length,axisMax,chartWidth)",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn(
+            ".spendDay:hover .spendBarValue,.spendDay:focus-visible .spendBarValue,.spendDay.selected .spendBarValue",
+            self.page,
+        )
+        select_day = self.page.split("function selectSpendDay(day", 1)[1].split(
+            "function renderSpend(xs)", 1,
+        )[0]
+        self.assertNotIn("showSpendTip", select_day)
+        render_spend = self.page.split("function renderSpend(xs)", 1)[1].split(
+            "function validateSpendCustomDraft", 1,
+        )[0]
+        self.assertIn(
+            "const hovered=$('s-chart-inner').querySelector('.spendDay:hover');",
+            render_spend,
+        )
+        self.assertIn(
+            "if(hovered)showSpendTip(hovered.dataset.spendDay,hovered);else hideSpendTip();",
+            render_spend,
+        )
+
+    def test_spend_chart_uses_roving_focus_without_persistent_day_selection(self):
+        logic = self.page.split("// spend-range-logic-start", 1)[1].split(
+            "// spend-range-logic-end", 1
+        )[0]
+        script = logic + """
+const rows = [{day:'2026-08-10'}, {day:'2026-08-11'}, {day:'2026-08-12'}];
+console.log(JSON.stringify({
+  initial: spendDayNavigation(rows, ''),
+  moved: spendDayNavigation(rows, '2026-08-11'),
+  empty: spendDayNavigation([], ''),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "initial": {
+                "focusDay": "2026-08-12",
+                "buttons": [
+                    {"day": "2026-08-10", "tabIndex": -1, "selected": False},
+                    {"day": "2026-08-11", "tabIndex": -1, "selected": False},
+                    {"day": "2026-08-12", "tabIndex": 0, "selected": False},
+                ],
+            },
+            "moved": {
+                "focusDay": "2026-08-11",
+                "buttons": [
+                    {"day": "2026-08-10", "tabIndex": -1, "selected": False},
+                    {"day": "2026-08-11", "tabIndex": 0, "selected": False},
+                    {"day": "2026-08-12", "tabIndex": -1, "selected": False},
+                ],
+            },
+            "empty": {"focusDay": "", "buttons": []},
+        })
+
+    def test_spend_y_axis_and_range_logs_are_bounded(self):
+        for marker in (
+            "id=s-y-axis",
+            "function spendNiceMax(value)",
+            "function renderSpendAxis(axisMax)",
+            ".spendLogsCard{height:360px",
+            "overflow-y:auto",
+            "scrollbar-gutter:stable",
+            ".spendLogRow{height:68px",
+            ".spendLogValue{grid-column:2/4;grid-row:2",
+            ".spendLogRow .tbtn{grid-column:3;grid-row:1",
+            "$('s-log-count').textContent=`${f(rows.length)} logs`",
+        ):
+            self.assertIn(marker, self.page)
+        render_logs = self.page.split("function renderSpendLogs(payload,window)", 1)[1].split(
+            "function loadSpendLogs", 1,
+        )[0]
+        self.assertNotIn(".slice(", render_logs)
+
+        logic = self.page.split("// spend-range-logic-start", 1)[1].split(
+            "// spend-range-logic-end", 1,
+        )[0]
+        result = subprocess.run(
+            [
+                "node", "-e",
+                logic + "\nconsole.log(JSON.stringify([0,.7,18,189,200.00222974000008,458.253518,1000].map(spendNiceMax)));",
+            ],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), [1, 1, 20, 210, 220, 500, 1100])
+        self.assertIn("flex:1 1 0;min-width:0", self.page)
+        self.assertIn(
+            ".spendDayLabel{position:absolute;bottom:0;left:50%;width:max-content",
+            self.page,
+        )
+        self.assertIn(
+            ".spendDay[data-axis-edge=last] .spendDayLabel{right:0;left:auto;transform:none}",
+            self.page,
+        )
+        self.assertNotIn("inner.style.width=`max(100%", self.page)
+        self.assertNotIn(
+            ".spendChart{min-height:270px;margin-top:12px;overflow-x:auto",
+            self.page,
+        )
+
+    def test_spend_uses_exact_calendar_ranges_and_stacked_runtime_bars(self):
+        for marker in (
+            "// spend-range-logic-start",
+            "const SPEND_RUNTIME_COLORS={claude:'#f26722',codex:'#04a4b0',cursor:'#a974f7',opencode:'#fa5762',kiro:'#868ec2',unknown:'#889099'};",
+            "function spendRangeWindow(range,from='',to='',now=new Date())",
+            "function normalizeSpendRangeChoice(value)",
+            "function spendCalendarRows(days,window)",
+            "function spendRuntimeKey(provider)",
+            "function spendRuntimeTotals(rows)",
+            "class=spendStackSegment",
+            "data-spend-day=",
+            "function spendDayNavigation(rows,focusDay='')",
+            "function showSpendTip(",
+            "addEventListener('pointerover',handleSpendInspect)",
+            "xs?.spend?.days||xs?.daily||[]",
+        ):
+            self.assertIn(marker, self.page)
+
+        logic = self.page.split("// spend-range-logic-start", 1)[1].split(
+            "// spend-range-logic-end", 1
+        )[0]
+        script = logic + """
+const now = new Date(2026, 7, 12, 12, 0, 0);
+const today = spendRangeWindow('today', '', '', now);
+const seven = spendRangeWindow('7', '', '', now);
+const thirty = spendRangeWindow('30', '', '', now);
+const month = spendRangeWindow('month', '', '', now);
+const monthFirst = spendRangeWindow('month', '', '', new Date(2026, 8, 1, 12, 0, 0));
+const january = spendRangeWindow('month', '', '', new Date(2027, 0, 9, 12, 0, 0));
+const custom = spendRangeWindow('custom', '2026-08-01', '2026-08-03', now);
+const invalid = spendRangeWindow('custom', '2026-08-04', '2026-08-03', now);
+const rows = spendCalendarRows([
+  {day:'2026-08-03',cost:3,providers:[{provider:'claude',cost:3}]},
+  {day:'2026-08-01',cost:2,providers:[{provider:'codex',cost:2}]},
+], custom);
+console.log(JSON.stringify({
+  today, seven, thirty, month, monthFirst, january, custom, invalid,
+  savedRanges: ['today','7','30','month','custom','unexpected'].map(normalizeSpendRangeChoice),
+  rowDays: rows.map(row=>row.day),
+  rowCosts: rows.map(row=>row.cost),
+  keys: ['Claude Code','codex','Cursor IDE','OpenCode','Kiro CLI','other'].map(spendRuntimeKey),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["today"]["start"], "2026-08-12")
+        self.assertEqual(payload["today"]["end"], "2026-08-12")
+        self.assertEqual(payload["seven"]["start"], "2026-08-06")
+        self.assertEqual(payload["seven"]["end"], "2026-08-12")
+        self.assertEqual(payload["seven"]["dayCount"], 7)
+        self.assertEqual(payload["thirty"]["start"], "2026-07-14")
+        self.assertEqual(payload["thirty"]["dayCount"], 30)
+        self.assertEqual(payload["month"], {
+            "valid": True, "start": "2026-08-01", "end": "2026-08-12",
+            "dayCount": 12, "error": "",
+        })
+        self.assertEqual(payload["monthFirst"], {
+            "valid": True, "start": "2026-09-01", "end": "2026-09-01",
+            "dayCount": 1, "error": "",
+        })
+        self.assertEqual(payload["january"], {
+            "valid": True, "start": "2027-01-01", "end": "2027-01-09",
+            "dayCount": 9, "error": "",
+        })
+        self.assertEqual(
+            payload["savedRanges"],
+            ["today", "7", "30", "month", "custom", "7"],
+        )
+        self.assertEqual(payload["custom"]["dayCount"], 3)
+        self.assertFalse(payload["invalid"]["valid"])
+        self.assertEqual(payload["rowDays"], [
+            "2026-08-01", "2026-08-02", "2026-08-03",
+        ])
+        self.assertEqual(payload["rowCosts"], [2, 0, 3])
+        self.assertEqual(payload["keys"], [
+            "claude", "codex", "cursor", "opencode", "kiro", "unknown",
+        ])
+
     def test_non_current_views_keep_visible_copy_terse(self):
         boundaries = (
             ("models", "daily"),
-            ("daily", "learn"),
             ("learn", "capabilities"),
             ("capabilities", "settings"),
             ("settings", None),
@@ -2640,6 +2923,11 @@ class DashboardLayoutTests(unittest.TestCase):
                 f"{view} should not carry visible explanatory paragraphs",
             )
             self.assertNotIn("class=foot", section)
+
+        spend = self.page.split("id=view-daily", 1)[1].split("id=view-learn", 1)[0]
+        self.assertIn("Understand where estimated agent spend is going over time.", spend)
+        self.assertIn("Bar height is total daily spend; color is platform contribution.", spend)
+        self.assertNotIn("class=foot", spend)
 
         for marker in (
             'aria-description="Observed model output divided by attributable timing.',
@@ -3103,12 +3391,13 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertIn('return `class=fieldtip tabindex=0 aria-description="${safe}" data-tip="${safe}"`', self.page)
         self.assertNotIn('return `class=fieldtip tabindex=0 title="${safe}"', self.page)
 
-    def test_daily_omits_tool_result_health_and_uses_the_logs_open_path(self):
-        self.assertIn(".dailySpendCard:before{content:none}", self.page)
+    def test_spend_uses_session_routing_without_restoring_daily_wait_health(self):
         self.assertNotIn("Tool-result health", self.page)
         self.assertNotIn("Tool results need attention", self.page)
         self.assertNotIn("function openDailySession", self.page)
-        self.assertIn("button.onclick=()=>selectSession(button.dataset.dailySession)", self.page)
+        self.assertNotIn("data-daily-session", self.page)
+        self.assertIn("function renderSpend(xs)", self.page)
+        self.assertIn("data-spend-session=", self.page)
         self.assertIn("if(row)selectSession(row.dataset.id)", self.page)
 
     def test_selected_session_stays_pinned_while_other_live_state_changes(self):
@@ -3275,7 +3564,7 @@ class DashboardLayoutTests(unittest.TestCase):
             '<h1 id=session-page-title>Sessions</h1>',
             '<h2>All sessions</h2>',
             '<h1>Model performance</h1>',
-            '<h1>Daily brief</h1>',
+            '<h1>Spend</h1>',
             '<h1>Learn</h1>',
             '<h1>Tools</h1>',
             '<h1>Settings</h1>',
@@ -3364,7 +3653,6 @@ class DashboardLayoutTests(unittest.TestCase):
             "@media(max-width:760px){body.spectrumApp .wrap{display:block",
             "body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row",
             ".navPrimary,.navSecondary{display:contents}",
-            "class=dailyNavIcon",
             "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr))",
         ):
             self.assertIn(marker, self.page)
@@ -3467,10 +3755,10 @@ class MenubarSourceTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = Path(meter.__file__).with_name("menubar").joinpath("TokenMeterMenuBar.swift").read_text()
 
-    def test_daily_brief_action_opens_cross_session_daily_route(self):
-        self.assertIn('NSMenuItem(title: "Open Daily Brief", action: #selector(openDailyBrief)', self.source)
+    def test_spend_action_opens_cross_session_spend_route(self):
+        self.assertIn('NSMenuItem(title: "Open Spend", action: #selector(openDailyBrief)', self.source)
         self.assertIn('@objc private func openDailyBrief()', self.source)
-        self.assertIn('openDashboardPanel("daily", includePinnedSession: false)', self.source)
+        self.assertIn('openDashboardPanel("spend", includePinnedSession: false)', self.source)
 
     def test_dashboard_opens_sessions_unless_a_session_is_pinned(self):
         self.assertIn(
@@ -4801,6 +5089,7 @@ class AgentDataContractTests(unittest.TestCase):
         encoded = json.dumps(result)
         self.assertEqual(result["data_scope"], "anonymous_aggregate_history")
         self.assertLessEqual(len(result["categories"]), 5)
+        self.assertTrue(result["dashboard_url"].endswith("/#spend"))
         self.assertNotIn("private title", encoded)
         self.assertNotIn("/private/repo", encoded)
 
@@ -5580,6 +5869,65 @@ class CapabilityConfigTests(unittest.TestCase):
 
 
 class DailySummaryTests(unittest.TestCase):
+    def test_spend_logs_state_validates_and_returns_full_range(self):
+        sessions = (
+            {
+                "id": "multi-day", "title": "Multi day", "project": "/repo/a",
+                "provider": "codex", "label": "Codex",
+                "availability": {"cost": True},
+                "_day_cost": {
+                    "2026-08-01": 1.25,
+                    "2026-08-02": 2.75,
+                    "2026-08-03": 8.0,
+                },
+            },
+            {
+                "id": "second", "title": "Second", "project": "/repo/b",
+                "provider": "claude", "label": "Claude",
+                "availability": {"cost": True},
+                "_day_cost": {"2026-08-02": 2.0},
+            },
+        )
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["internal_rows"] = sessions
+            with mock.patch.object(
+                meter, "cross_session", return_value={"generated_at": 123},
+            ):
+                payload, status = meter.spend_logs_state(
+                    "2026-08-01", "2026-08-02",
+                )
+                missing, missing_status = meter.spend_logs_state("", "2026-08-02")
+                malformed, malformed_status = meter.spend_logs_state(
+                    "2026-08-01", "not-a-date",
+                )
+                reversed_range, reversed_status = meter.spend_logs_state(
+                    "2026-08-03", "2026-08-02",
+                )
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["generated_at"], 123)
+        self.assertEqual(payload["from"], "2026-08-01")
+        self.assertEqual(payload["to"], "2026-08-02")
+        self.assertEqual(payload["total_sessions"], 2)
+        self.assertEqual(payload["total_cost"], 6.0)
+        self.assertEqual(payload["sessions"][0]["id"], "multi-day")
+        for error, error_status in (
+            (missing, missing_status),
+            (malformed, malformed_status),
+            (reversed_range, reversed_status),
+        ):
+            self.assertEqual(error_status, 400)
+            self.assertFalse(error["ok"])
+        self.assertIn(
+            'elif req_path == "/spend/logs":',
+            Path(meter.IMPLEMENTATION_FILE).read_text(),
+        )
+
     def test_aggregates_daily_spend_providers_and_logs(self):
         sessions = [
             {"id": "one", "title": "One", "project": "/repo/a", "provider": "codex",

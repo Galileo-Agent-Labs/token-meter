@@ -48,9 +48,29 @@ class TimingDomainTests(unittest.TestCase):
             {"ts": 1, "output_tokens": 100, "duration_s": 10, "tool_calls": 0},
             {"ts": 2, "output_tokens": 50, "duration_s": 20, "tool_calls": 1},
         ], total_output_tokens=200)
-        self.assertEqual(throughput["basis"], "tool_free")
-        self.assertEqual(throughput["output_tps"], 10.0)
-        self.assertEqual(throughput["timing_coverage"], 0.5)
+        self.assertEqual(throughput["basis"], "end_to_end")
+        self.assertEqual(throughput["output_tps"], 5.0)
+        self.assertEqual(throughput["sample_count"], 2)
+        self.assertEqual(throughput["timing_coverage"], 0.75)
+
+    def test_later_tool_bearing_output_updates_completed_session_speed(self):
+        throughput = performance_summary([
+            {
+                "ts": 1, "output_tokens": 100, "duration_s": 10,
+                "generation_s": 5, "tool_calls": 0,
+            },
+            {
+                "ts": 2, "output_tokens": 300, "duration_s": 20,
+                "generation_s": 15, "tool_calls": 2,
+            },
+        ], total_output_tokens=400)
+
+        self.assertEqual(throughput["basis"], "end_to_end")
+        self.assertEqual(throughput["sample_count"], 2)
+        self.assertEqual(throughput["measured_output_tokens"], 400)
+        self.assertAlmostEqual(throughput["output_tps"], 400 / 30)
+        self.assertEqual(throughput["latest_output_tps"], 15)
+        self.assertEqual(throughput["timing_coverage"], 1)
 
 
 class ToolDomainTests(unittest.TestCase):

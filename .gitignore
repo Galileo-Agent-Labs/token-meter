@@ -39,3 +39,6 @@ token-meter-insights-report.html
 /PRODUCT.md
 /specs/plans/active.md
 .superpowers/*
+
+# Launch blog drafts, not public repo docs
+/blog-drafts/

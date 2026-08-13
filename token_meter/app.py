@@ -76,6 +76,7 @@ from token_meter.domain.aggregates import (
     metric_coverage as _domain_metric_coverage,
     monthly_summaries as _domain_monthly_summaries,
     rollup_language_signal_events as _domain_rollup_language_signal_events,
+    spend_log_summaries as _domain_spend_log_summaries,
     spend_projection as _domain_spend_projection,
 )
 from token_meter.domain.insights import (
@@ -5244,6 +5245,13 @@ def spend_projection(daily_rows):
     return _domain_spend_projection(daily_rows)
 
 
+def spend_log_summaries(session_rows, start_day, end_day):
+    return _domain_spend_log_summaries(
+        session_rows, start_day, end_day,
+        availability_resolver=metric_availability,
+    )
+
+
 def monthly_summaries(session_rows, limit=12):
     return _domain_monthly_summaries(session_rows, limit=limit)
 
@@ -5810,6 +5818,37 @@ def log_sessions_state():
     }
 
 
+def spend_logs_state(start_day, end_day):
+    """Return every spend-contributing session in one inclusive date range."""
+    try:
+        start = datetime.date.fromisoformat(str(start_day or ""))
+        end = datetime.date.fromisoformat(str(end_day or ""))
+    except (TypeError, ValueError):
+        return {
+            "ok": False,
+            "error": "From and to must be valid dates in YYYY-MM-DD format.",
+        }, 400
+    if start > end:
+        return {
+            "ok": False,
+            "error": "From cannot be later than to.",
+        }, 400
+    cross = cross_session()
+    start_key, end_key = start.isoformat(), end.isoformat()
+    sessions = spend_log_summaries(
+        _xsess.get("internal_rows") or (), start_key, end_key,
+    )
+    return {
+        "ok": True,
+        "generated_at": cross.get("generated_at"),
+        "from": start_key,
+        "to": end_key,
+        "sessions": sessions,
+        "total_sessions": len(sessions),
+        "total_cost": sum(float(row.get("cost") or 0) for row in sessions),
+    }, 200
+
+
 def enqueue_latest(q_, data):
     """Keep a slow SSE client subscribed by replacing queued stale snapshots."""
     try:
@@ -6278,7 +6317,7 @@ def agent_usage(window="7d", focus="changes"):
         assessment = "No data"
     elif delta is not None and delta >= 0.25:
         answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
-        action = "Review the Daily view and the largest model or tool category before the next phase."
+        action = "Review Spend and the largest model or tool category before the next phase."
         assessment = "Spend increased"
     elif flagged_tokens and flagged_tokens / max(1, tool_tokens) >= 0.25:
         answer = "Tool-result volume is the clearest efficiency signal in this window."
@@ -6302,7 +6341,7 @@ def agent_usage(window="7d", focus="changes"):
                    + ("Spend is partial because one or more traces lack pricing evidence."
                       if not cost_complete else "")),
         "coverage": {"cost_complete": cost_complete},
-        "dashboard_url": agent_dashboard_url(panel="daily"),
+        "dashboard_url": agent_dashboard_url(panel="spend"),
         "as_of": agent_as_of(),
         "data_scope": "anonymous_aggregate_history",
         "approximate_fields": ["cost"] if approximate else [],
@@ -7431,6 +7470,13 @@ class H(BaseHTTPRequestHandler):
             }), "application/json")
         elif req_path == "/logs":
             self._send(json.dumps(log_sessions_state()), "application/json")
+        elif req_path == "/spend/logs":
+            query = parse_qs(parsed.query)
+            payload, status = spend_logs_state(
+                (query.get("from") or [""])[0],
+                (query.get("to") or [""])[0],
+            )
+            self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/model-stats":
             project = (parse_qs(parsed.query).get("project") or [""])[0]
             payload, status = project_model_stats(project)

@@ -7,6 +7,7 @@ from token_meter.domain.aggregates import (
     current_session_summaries,
     metric_coverage,
     rollup_language_signal_events,
+    spend_log_summaries,
 )
 
 
@@ -34,6 +35,46 @@ def session(session_id, runtime, model, cost, tokens, *, available=True, mtime=0
 
 
 class AggregateDomainTests(unittest.TestCase):
+    def test_spend_logs_aggregate_every_session_in_inclusive_range(self):
+        rows = [
+            {
+                "id": "spanning", "title": "Zulu work", "project": "/repo/z",
+                "provider": "cursor", "label": "Cursor",
+                "path": "/private/logs/spanning.jsonl",
+                "availability": {"cost": True}, "token_estimate": True,
+                "_day_cost": {
+                    "2026-08-01": 1.0,
+                    "2026-08-02": 2.0,
+                    "2026-08-03": 4.0,
+                },
+            },
+            {
+                "id": "tie", "title": "Alpha work", "project": "/repo/a",
+                "provider": "codex", "label": "Codex",
+                "path": "/private/logs/tie.jsonl",
+                "availability": {"cost": True},
+                "_day_cost": {"2026-08-02": 3.0},
+            },
+            {
+                "id": "outside", "title": "Outside", "project": "/repo/o",
+                "provider": "claude", "label": "Claude",
+                "path": "/private/logs/outside.jsonl",
+                "availability": {"cost": True},
+                "_day_cost": {"2026-07-31": 20.0},
+            },
+        ]
+
+        result = spend_log_summaries(rows, "2026-08-01", "2026-08-02")
+
+        self.assertEqual([row["id"] for row in result], ["tie", "spanning"])
+        self.assertEqual(result[0]["cost"], 3.0)
+        self.assertEqual(result[0]["active_days"], 1)
+        self.assertEqual(result[1]["cost"], 3.0)
+        self.assertEqual(result[1]["active_days"], 2)
+        self.assertEqual(result[1]["usage_basis"], "local_estimate")
+        self.assertEqual(result[1]["provenance"]["estimated_cost"], 3.0)
+        self.assertNotIn("path", result[1])
+
     def test_model_aggregation_bounds_derived_samples_without_truncating_totals(self):
         samples = [{
             "model": "model-1", "day": "", "ts": index,
@@ -135,6 +176,36 @@ class AggregateDomainTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["activity_state"], "working")
         self.assertNotIn("path", result[0])
+
+    def test_current_session_projection_exposes_bounded_live_throughput(self):
+        row = {
+            **session("live", "runtime", "model", 1, 10, mtime=99),
+            "terminal": False,
+            "throughput": {
+                "available": False, "output_tps": 0, "basis": "unavailable",
+            },
+            "live_throughput": {
+                "available": True, "output_tps": 24.5,
+                "basis": "live_end_to_end", "completed_steps": 3,
+                "measured_output_tokens": 245, "measured_seconds": 10,
+                "private_trace_detail": "must not cross the card boundary",
+            },
+        }
+
+        result = current_session_summaries(
+            [row], now=100, max_age_s=30, limit=8,
+        )[0]
+
+        self.assertTrue(result["availability"]["throughput"])
+        self.assertEqual(result["live_throughput"], {
+            "available": True,
+            "output_tps": 24.5,
+            "basis": "live_end_to_end",
+            "completed_steps": 3,
+            "measured_output_tokens": 245,
+            "measured_seconds": 10.0,
+        })
+        self.assertNotIn("private_trace_detail", result["live_throughput"])
 
     def test_language_rollup_keeps_runtime_scoped_model_ids(self):
         result = rollup_language_signal_events([

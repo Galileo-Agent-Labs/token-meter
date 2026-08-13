@@ -442,8 +442,8 @@ $OpenDashboard.add_Click({ Open-TokenMeterUrl (Current-DashboardUrl) })
 $Menu.Items.Add($OpenDashboard) | Out-Null
 
 $OpenDaily = New-Object System.Windows.Forms.ToolStripMenuItem
-$OpenDaily.Text = "Open daily brief"
-$OpenDaily.add_Click({ Open-TokenMeterUrl "$($script:BaseUrl)/#daily" })
+$OpenDaily.Text = "Open Spend"
+$OpenDaily.add_Click({ Open-TokenMeterUrl "$($script:BaseUrl)/#spend" })
 $Menu.Items.Add($OpenDaily) | Out-Null
 
 $OpenBudgets = New-Object System.Windows.Forms.ToolStripMenuItem

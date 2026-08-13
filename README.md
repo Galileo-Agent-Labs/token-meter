@@ -78,7 +78,7 @@ python3 meter.py
 3. Set a browser-local session budget if the run needs a hard attention limit.
 4. Open **Sessions → All sessions** to search history and find expensive or
    slow runs.
-5. Use **Daily**, **Models**, and **Tools** after enough evidence accumulates.
+5. Use **Spend**, **Models**, and **Tools** after enough evidence accumulates.
 6. Configure the machine-wide monthly budget and optional agent connections in
    **Settings**.
 
@@ -99,13 +99,14 @@ Inside a session, **Run** holds usage and timing, **Activity** holds normalized
 events, **Tools** holds capability evidence, **Insights** holds derived signals,
 and **Alerts** holds budget and notification state.
 
-### Daily
+### Spend
 
-Daily compares a selected local day with recent pace and breaks it down by
-project, runtime, costly sessions, and completed-request wait.
+Spend compares Today, 7-day, 30-day, or custom calendar ranges. Its stacked
+daily bars and platform split show how much each runtime contributed while
+keeping partial and locally estimated cost evidence explicit.
 
 <p align="center">
-  <img src="images/daily.png" alt="Token Meter Daily brief with spend trend and runtime breakdown" width="900">
+  <img src="images/daily.png" alt="Token Meter Spend page with stacked daily runtime costs" width="900">
 </p>
 
 ### Models

@@ -148,6 +148,11 @@ def current_session_summaries(rows, now=None, max_age_s=30 * 60, limit=8,
         )
         availability = row.get("availability") if isinstance(row.get("availability"), dict) else {}
         throughput = row.get("throughput") if isinstance(row.get("throughput"), dict) else {}
+        live_throughput = (
+            row.get("live_throughput")
+            if isinstance(row.get("live_throughput"), dict) else {}
+        )
+        displayed_throughput = live_throughput if live_throughput.get("available") else throughput
         result.append({
             "id": candidate["session_id"],
             "provider": provider,
@@ -165,7 +170,7 @@ def current_session_summaries(rows, now=None, max_age_s=30 * 60, limit=8,
             "availability": {
                 "cost": availability.get("cost") is not False,
                 "context": availability.get("context") is not False,
-                "throughput": bool(throughput.get("available")),
+                "throughput": bool(displayed_throughput.get("available")),
             },
             "usage_basis": str(row.get("usage_basis") or
                                (row.get("provenance") or {}).get("usage_basis") or
@@ -178,6 +183,18 @@ def current_session_summaries(rows, now=None, max_age_s=30 * 60, limit=8,
                 "available": bool(throughput.get("available")),
                 "output_tps": float(throughput.get("output_tps") or 0),
                 "basis": str(throughput.get("basis") or "unavailable"),
+            },
+            "live_throughput": {
+                "available": bool(live_throughput.get("available")),
+                "output_tps": float(live_throughput.get("output_tps") or 0),
+                "basis": str(live_throughput.get("basis") or "unavailable"),
+                "completed_steps": int(live_throughput.get("completed_steps") or 0),
+                "measured_output_tokens": int(
+                    live_throughput.get("measured_output_tokens") or 0
+                ),
+                "measured_seconds": float(
+                    live_throughput.get("measured_seconds") or 0
+                ),
             },
             "token_estimate": bool(row.get("token_estimate")),
             "turns": int(row.get("turns") or 0),
@@ -639,6 +656,56 @@ def spend_projection(daily_rows):
         "usage_basis": row.get("usage_basis") or "unavailable",
         "availability": copy.deepcopy(row.get("availability") or {}),
     } for row in (daily_rows or [])]
+
+
+def spend_log_summaries(session_rows, start_day, end_day,
+                        availability_resolver=None):
+    """Aggregate every public session with covered spend in an inclusive range."""
+    availability_resolver = availability_resolver or (lambda _provider: {
+        "cost": True, "tokens": True, "input_tokens": True,
+        "output_tokens": True, "cache": True, "throughput": True,
+        "context": True, "timing": True, "tool_results": True,
+    })
+    result = []
+    for session in session_rows or []:
+        session_id = str(session.get("id") or "").strip()
+        if not session_id:
+            continue
+        matching = [
+            float(value or 0)
+            for day, value in (session.get("_day_cost") or {}).items()
+            if start_day <= str(day) <= end_day and float(value or 0) > 0
+        ]
+        cost = sum(matching)
+        if cost <= 0:
+            continue
+        provider = session.get("provider") or "unknown"
+        available = metric_available(session, "cost")
+        estimated = bool(session.get("token_estimate"))
+        provenance = make_usage_provenance(
+            {session_id},
+            {session_id} if estimated else (),
+            {session_id} if available else (),
+            cost if estimated and available else 0,
+        )
+        result.append({
+            "id": session_id,
+            "title": session.get("title") or session_id,
+            "project": session.get("project") or "No project",
+            "provider": provider,
+            "label": session.get("label") or provider,
+            "cost": cost,
+            "active_days": len(matching),
+            "availability": copy.deepcopy(
+                session.get("availability") or availability_resolver(provider)
+            ),
+            "provenance": provenance,
+            "usage_basis": provenance["usage_basis"],
+        })
+    result.sort(key=lambda row: (
+        -row["cost"], str(row["title"]).casefold(), row["id"],
+    ))
+    return result
 
 
 def monthly_summaries(session_rows, limit=12):

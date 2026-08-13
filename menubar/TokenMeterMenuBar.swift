@@ -1464,7 +1464,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func makeSettingsMenu() -> NSMenu {
         let settingsMenu = NSMenu(title: "Settings")
 
-        let dailyBrief = NSMenuItem(title: "Open Daily Brief", action: #selector(openDailyBrief), keyEquivalent: "")
+        let dailyBrief = NSMenuItem(title: "Open Spend", action: #selector(openDailyBrief), keyEquivalent: "")
         dailyBrief.target = self
         settingsMenu.addItem(dailyBrief)
         let tools = NSMenuItem(title: "Open Tools & Skills", action: #selector(openToolsAndSkills), keyEquivalent: "")
@@ -1806,7 +1806,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openDailyBrief() {
-        openDashboardPanel("daily", includePinnedSession: false)
+        openDashboardPanel("spend", includePinnedSession: false)
     }
 
     @objc private func openBudgetSettings() {

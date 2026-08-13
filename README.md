@@ -101,12 +101,12 @@ and **Alerts** holds budget and notification state.
 
 ### Spend
 
-Spend compares Today, 7-day, 30-day, or custom calendar ranges. Its stacked
-daily bars and platform split show how much each runtime contributed while
-keeping partial and locally estimated cost evidence explicit.
+Spend compares Today, 7-day, 30-day, This month, or custom calendar ranges. Its
+stacked daily bars and platform split show how much each runtime contributed
+while keeping partial and locally estimated cost evidence explicit.
 
 <p align="center">
-  <img src="images/daily.png" alt="Token Meter Spend page with stacked daily runtime costs" width="900">
+  <img src="images/spend.png" alt="Token Meter Spend page with selected-period totals, stacked daily runtime costs, highest-cost logs, and platform split" width="900">
 </p>
 
 ### Models

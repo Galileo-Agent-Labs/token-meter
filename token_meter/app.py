@@ -34,6 +34,7 @@ import selectors
 import shlex
 import shutil
 import sqlite3
+import stat
 import subprocess
 import statistics
 import time
@@ -302,7 +303,11 @@ _xsess = {
     "internal_rows": (), "project_model_stats": {},
 }
 _XSESS_TTL = 15.0
-_XSESS_LIVE_REFRESH_S = 1.0
+_XSESS_LIVE_REFRESH_S = _XSESS_TTL
+_CURRENT_SESSION_REBUILD_S = 1.5
+_SOURCE_MEMBERSHIP_PROBE_S = 2.0
+_SOURCE_MEMBERSHIP_FALLBACK_S = 4.0
+_SOURCE_DISCOVERY_REFRESH_S = 10.0
 CURRENT_SESSION_MAX_AGE_S = 30 * 60
 CURRENT_SESSION_WORKING_S = 90
 CURRENT_SESSION_LIMIT = 8
@@ -310,9 +315,12 @@ CURRENT_SESSION_CONTEXT_SAMPLES = 32
 SESSION_STATE_CACHE_LIMIT = 32
 MODEL_PROJECT_OPTION_LIMIT = 500
 _summary_cache = {}
+_summary_cache_lock = threading.Lock()
+_matched_pace_cache = {"signature": None, "data": None}
+_matched_pace_cache_lock = threading.Lock()
 _session_state_cache = {}
 _session_state_cache_lock = threading.Lock()
-_recursive_path_cache = BoundedPathCache(ttl_seconds=2.0, max_entries=32)
+_recursive_path_cache = BoundedPathCache(ttl_seconds=4.0, max_entries=64)
 _RUNTIME_DISCOVERY_FAILURES = ()
 _RUNTIME_LOAD_FAILURE = None
 _model_pricing_cache = {
@@ -331,6 +339,7 @@ AGENT_ACCESS_SERVER = "tokenmeter"
 AGENT_CURRENT_MAX_AGE_S = 6 * 60 * 60
 
 
+@functools.lru_cache(maxsize=65536)
 def parse_iso(ts):
     # Logs are UTC (trailing Z). calendar.timegm treats the struct as UTC, so
     # idle/elapsed line up with time.time().
@@ -2241,6 +2250,16 @@ def publish_source_inventory(sources):
     """Atomically publish a reusable discovery snapshot for lightweight endpoints."""
     global _SOURCE_INVENTORY
     source_rows = tuple(sources or ())
+    live_paths = {
+        str(source.get("path") or "")
+        for source in source_rows
+        if source.get("path")
+    }
+    if not _RUNTIME_DISCOVERY_FAILURES:
+        with _summary_cache_lock:
+            for path in tuple(_summary_cache):
+                if path not in live_paths:
+                    _summary_cache.pop(path, None)
     clients = defaultdict(int)
     for source in source_rows:
         clients[source.get("client") or source.get("provider") or "unknown"] += 1
@@ -2285,7 +2304,8 @@ def source_from_path(path):
         }
     if path and path.startswith(os.path.expanduser("~/.cursor/")):
         sid = os.path.basename(path).rsplit(".", 1)[0]
-        metadata = cursor_metadata_index().get(sid) or {}
+        adapter = _cursor_native_adapter()
+        metadata = adapter.metadata_index().get(sid) or {}
         project_dir = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(path))))
         metadata_mtime = max(
             float(metadata.get("updated_at") or 0) / 1000.0,
@@ -2298,7 +2318,8 @@ def source_from_path(path):
             "path": path,
             "project": home_shorten(metadata.get("project") or decode_cursor_project(project_dir)),
             "mtime": activity_mtime,
-            "signature_mtime": max(activity_mtime, cursor_enrichment_mtime()),
+            "signature_mtime": activity_mtime,
+            "request_revision": adapter.request_revision_index().get(sid, ""),
             "trace_mtime": safe_mtime(path), "title": metadata.get("title") or None,
             "model": metadata.get("model") or "unknown",
         }
@@ -3967,6 +3988,7 @@ def source_revision_signature(source):
     return (
         float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
         str(source.get("title") or ""),
+        str(source.get("request_revision") or ""),
     )
 
 
@@ -4463,8 +4485,9 @@ def kiro_summary(source, objs=None):
 
 
 def session_summary(source, opencode_conn=None):
-    cached = _summary_cache.get(source["path"])
     signature = source_revision_signature(source)
+    with _summary_cache_lock:
+        cached = _summary_cache.get(source["path"])
     if cached and cached.get("signature") == signature:
         return cached["row"]
     adapter = runtime_registry().get(source.get("provider"))
@@ -4474,7 +4497,8 @@ def session_summary(source, opencode_conn=None):
     else:
         row = summary_row(source, source.get("title"), 0.0, 0, 0, set(), None, None,
                           {}, {}, {}, False, availability=metric_availability("unknown"))
-    _summary_cache[source["path"]] = {"signature": signature, "row": row}
+    with _summary_cache_lock:
+        _summary_cache[source["path"]] = {"signature": signature, "row": row}
     return row
 
 
@@ -5498,44 +5522,68 @@ def matched_pace_comparison(a_id, a_samples, b_id, b_samples, distance_cache=Non
 def matched_pace_windows(sample_groups, now_ts=None):
     """Build pairwise matched-pace comparisons for every dashboard history window."""
     today = datetime.date.fromtimestamp(float(now_ts if now_ts is not None else time.time()))
-    rules = {
-        "today": ("exact", today.isoformat()),
-        "yesterday": ("exact", (today - datetime.timedelta(days=1)).isoformat()),
-        "7": ("since", (today - datetime.timedelta(days=6)).isoformat()),
-        "30": ("since", (today - datetime.timedelta(days=29)).isoformat()),
-        "90": ("since", (today - datetime.timedelta(days=89)).isoformat()),
-        "all": ("all", ""),
-    }
-    result = {window: [] for window in rules}
-    ids = sorted(sample_groups)
-    windowed_samples = {}
-    for runtime_id in ids:
-        buckets = {window: [] for window in rules}
+    digest = hashlib.sha256(today.isoformat().encode("utf-8"))
+    signature_fields = (
+        "duration_s", "ts", "day", "input_tokens", "peak_input_tokens",
+        "cache_read_tokens", "output_tokens", "tool_calls", "model_calls",
+    )
+    for runtime_id in sorted(sample_groups):
+        digest.update(b"\0runtime\0")
+        digest.update(str(runtime_id).encode("utf-8", errors="replace"))
         for sample in sample_groups[runtime_id]:
-            day = str(sample.get("day") or "")
-            for window, (match, boundary) in rules.items():
-                if (
-                    match == "all"
-                    or (match == "exact" and day == boundary)
-                    or (match == "since" and day >= boundary)
-                ):
-                    buckets[window].append(sample)
-        windowed_samples[runtime_id] = buckets
-    for a_index, a_id in enumerate(ids):
-        for b_id in ids[a_index + 1:]:
-            distance_cache = {}
-            for window in rules:
-                result[window].append(matched_pace_comparison(
-                    a_id, windowed_samples[a_id][window],
-                    b_id, windowed_samples[b_id][window],
-                    distance_cache=distance_cache,
-                ))
-    return {
-        "method": "nearest workload match on context, input, output, cache, model calls, tools, and recency",
-        "min_pairs": MATCHED_PACE_MIN_PAIRS,
-        "min_coverage": MATCHED_PACE_MIN_COVERAGE,
-        "windows": result,
-    }
+            values = tuple(sample.get(field) for field in signature_fields)
+            digest.update(b"\0sample\0")
+            digest.update(repr(values).encode("utf-8", errors="replace"))
+    signature = digest.hexdigest()
+
+    with _matched_pace_cache_lock:
+        if (
+            _matched_pace_cache.get("signature") == signature
+            and _matched_pace_cache.get("data") is not None
+        ):
+            return copy.deepcopy(_matched_pace_cache["data"])
+
+        rules = {
+            "today": ("exact", today.isoformat()),
+            "yesterday": ("exact", (today - datetime.timedelta(days=1)).isoformat()),
+            "7": ("since", (today - datetime.timedelta(days=6)).isoformat()),
+            "30": ("since", (today - datetime.timedelta(days=29)).isoformat()),
+            "90": ("since", (today - datetime.timedelta(days=89)).isoformat()),
+            "all": ("all", ""),
+        }
+        result = {window: [] for window in rules}
+        ids = sorted(sample_groups)
+        windowed_samples = {}
+        for runtime_id in ids:
+            buckets = {window: [] for window in rules}
+            for sample in sample_groups[runtime_id]:
+                day = str(sample.get("day") or "")
+                for window, (match, boundary) in rules.items():
+                    if (
+                        match == "all"
+                        or (match == "exact" and day == boundary)
+                        or (match == "since" and day >= boundary)
+                    ):
+                        buckets[window].append(sample)
+            windowed_samples[runtime_id] = buckets
+        for a_index, a_id in enumerate(ids):
+            for b_id in ids[a_index + 1:]:
+                distance_cache = {}
+                for window in rules:
+                    result[window].append(matched_pace_comparison(
+                        a_id, windowed_samples[a_id][window],
+                        b_id, windowed_samples[b_id][window],
+                        distance_cache=distance_cache,
+                    ))
+        data = {
+            "method": "nearest workload match on context, input, output, cache, model calls, tools, and recency",
+            "min_pairs": MATCHED_PACE_MIN_PAIRS,
+            "min_coverage": MATCHED_PACE_MIN_COVERAGE,
+            "windows": result,
+        }
+        _matched_pace_cache["signature"] = signature
+        _matched_pace_cache["data"] = data
+        return copy.deepcopy(data)
 
 
 def _finalize_throughput_fields(row):
@@ -5903,6 +5951,174 @@ def source_identity_signature(sources):
     ))
 
 
+def source_membership_probe_due(now, last_probe):
+    """Check cheap filesystem revisions every two seconds."""
+    return now - last_probe >= _SOURCE_MEMBERSHIP_PROBE_S
+
+
+def source_membership_fallback_due(now, last_fallback):
+    """Bound path-only session discovery to a four-second worst case."""
+    return now - last_fallback >= _SOURCE_MEMBERSHIP_FALLBACK_S
+
+
+def source_discovery_refresh_due(inventory_ready, now, last_refresh):
+    """Bound adapter-wide enumeration while keeping known-file checks fast."""
+    return bool(
+        not inventory_ready
+        or now - last_refresh >= _SOURCE_DISCOVERY_REFRESH_S
+    )
+
+
+def _source_inventory_roots():
+    return (
+        CLAUDE_PROJECTS,
+        *CLAUDE_DESKTOP_DATA_ROOTS,
+        CODEX_SESSIONS,
+        CURSOR_PROJECTS,
+        KIRO_SESSIONS,
+        KIRO_AGENT_STORAGE,
+    )
+
+
+def _physical_source_path(value):
+    value = str(value or "")
+    if not value or not os.path.isabs(os.path.expanduser(value)):
+        return ""
+    return os.path.abspath(os.path.expanduser(value))
+
+
+def source_inventory_probe_targets(sources, roots=None, extra_files=None):
+    """Build a bounded target set for cheap new/resumed-session detection."""
+    roots = tuple(
+        path for path in (
+            _physical_source_path(value)
+            for value in (_source_inventory_roots() if roots is None else roots)
+        ) if path
+    )
+    if extra_files is None:
+        database = opencode_db_path()
+        extra_files = (database, database + "-wal")
+    targets = set(roots)
+
+    def add_path_and_ancestors(value):
+        path = _physical_source_path(value)
+        if not path:
+            return
+        targets.add(path)
+        if os.path.isdir(path):
+            try:
+                with os.scandir(path) as entries:
+                    targets.update(
+                        entry.path for entry in entries
+                        if entry.is_file(follow_symlinks=False)
+                    )
+            except OSError:
+                pass
+            parent = path
+        else:
+            parent = os.path.dirname(path)
+        matching_roots = []
+        for root in roots:
+            try:
+                if os.path.commonpath((path, root)) == root:
+                    matching_roots.append(root)
+            except ValueError:
+                continue
+        boundary = max(matching_roots, key=len) if matching_roots else parent
+        while parent:
+            targets.add(parent)
+            if parent == boundary:
+                break
+            next_parent = os.path.dirname(parent)
+            if next_parent == parent:
+                break
+            parent = next_parent
+
+    for source in sources or ():
+        add_path_and_ancestors(source.get("path"))
+        add_path_and_ancestors(source.get("metadata_path"))
+    for value in extra_files or ():
+        add_path_and_ancestors(value)
+    return tuple(sorted(targets))
+
+
+def source_inventory_probe_signature(targets, current_path=""):
+    """Stat probe targets while ignoring ordinary growth of the active trace."""
+    current_path = _physical_source_path(current_path)
+    current_is_dir = bool(current_path and os.path.isdir(current_path))
+    signature = []
+    for value in targets or ():
+        path = _physical_source_path(value)
+        if not path:
+            continue
+        is_current = path == current_path or bool(
+            current_is_dir and path.startswith(current_path + os.sep)
+        )
+        if is_current:
+            signature.append((path, "active", 0, 0))
+            continue
+        try:
+            row = os.stat(path)
+        except OSError:
+            signature.append((path, "missing", 0, 0))
+            continue
+        is_directory = stat.S_ISDIR(row.st_mode)
+        signature.append((
+            path,
+            "directory" if is_directory else "file",
+            int(row.st_mtime_ns),
+            0 if is_directory else int(row.st_size),
+        ))
+    return tuple(signature)
+
+
+def runtime_candidate_paths():
+    """Enumerate path identities only, without parsing adapter metadata."""
+    paths = set()
+    claude = _claude_native_adapter()
+    paths.update(claude._glob(str(claude.projects_root / "*" / "*.jsonl")))
+    paths.update(claude.desktop_metadata_paths())
+    paths.update(_codex_native_adapter()._paths())
+    paths.update(_cursor_native_adapter()._transcript_paths())
+    kiro = _kiro_native_adapter()
+    paths.update(kiro._glob(str(kiro.sessions_root / "*" / "*" / "messages.jsonl")))
+    paths.update(kiro._glob(str(kiro.sessions_root / "cli" / "*.jsonl")))
+    if kiro.agent_storage_root is not None:
+        paths.update(kiro._glob(str(kiro.agent_storage_root / "*" / "*")))
+    return tuple(sorted(
+        path for path in (_physical_source_path(value) for value in paths)
+        if path
+    ))
+
+
+def refresh_known_source_activity(sources, current_path):
+    """Refresh the active file without rediscovering every adapter."""
+    current_path = str(current_path or "")
+    rows = sources or ()
+    refreshed = None
+    for index, source in enumerate(rows):
+        path = str(source.get("path") or "")
+        if (not path or path != current_path
+                or source.get("provider") == "opencode"):
+            continue
+        trace_mtime = safe_mtime(path)
+        current_mtime = float(source.get("mtime") or 0)
+        if trace_mtime <= current_mtime:
+            continue
+        row = dict(source)
+        row["mtime"] = trace_mtime
+        if "trace_mtime" in row:
+            row["trace_mtime"] = trace_mtime
+        if "signature_mtime" in row:
+            row["signature_mtime"] = max(
+                trace_mtime, float(row.get("signature_mtime") or 0),
+            )
+        if refreshed is None:
+            refreshed = list(rows)
+        refreshed[index] = row
+    return refreshed if refreshed is not None else sources
+
+
 def cross_session_refresh_due(dirty, membership_changed, now, last_refresh):
     """Refresh membership immediately while throttling ordinary log updates."""
     return bool(
@@ -5910,6 +6126,16 @@ def cross_session_refresh_due(dirty, membership_changed, now, last_refresh):
             membership_changed
             or now - last_refresh >= _XSESS_LIVE_REFRESH_S
         )
+    )
+
+
+def current_session_refresh_due(signature, last_signature, now, last_refresh):
+    """Observe revisions every watcher tick but coalesce whole-trace rebuilds."""
+    if signature == last_signature:
+        return False
+    return bool(
+        last_signature is None
+        or now - last_refresh >= _CURRENT_SESSION_REBUILD_S
     )
 
 
@@ -6955,7 +7181,13 @@ def menubar_state(session_id=None):
     # The watcher owns the first full recompute. Calling current_state() here
     # before it publishes would make every two-second native poll independently
     # rebuild all cross-session history and starve the cold-start worker.
-    st = recompute(selected_source) if selected_source and STATE else (STATE or {
+    published_source_id = str(((STATE or {}).get("source") or {}).get("id") or "")
+    if selected_source and STATE and str(selected_source.get("id") or "") == published_source_id:
+        st = STATE
+    elif selected_source and STATE:
+        st = cached_session_state(selected_source)
+    else:
+        st = STATE or {
         "ok": False,
         "message": "Token Meter is loading local session history.",
         "source": {},
@@ -6964,7 +7196,7 @@ def menubar_state(session_id=None):
         "throughput": {},
         "executions": [],
         "insights": [],
-    })
+        }
     if selected_source and STATE and not st:
         missing = True
         selected_source = None
@@ -7064,17 +7296,83 @@ def menubar_state(session_id=None):
 
 def watcher():
     cur, last_sig = None, None
+    last_current_refresh = 0.0
+    sources = []
+    inventory_ready = False
+    last_source_discovery = 0.0
+    probe_targets = ()
+    probe_signature = None
+    candidate_paths = ()
+    last_membership_probe = 0.0
+    last_membership_fallback = 0.0
     last_sources_sig = None
     last_source_identities = None
     cross_dirty = False
     last_cross_refresh = 0.0
     while True:
-        sources = all_session_sources()
-        publish_source_inventory(sources)
-        nf = max(sources, key=lambda source: source["mtime"]) if sources else None
-        sources_sig = source_mtime_signature(sources)
-        source_identities = source_identity_signature(sources)
-        membership_changed = source_identities != last_source_identities
+        observation_now = time.monotonic()
+        inventory_change_detected = False
+        inventory_refreshed = False
+        if inventory_ready and source_membership_probe_due(
+                observation_now, last_membership_probe):
+            next_probe_signature = source_inventory_probe_signature(
+                probe_targets, current_path=(cur or {}).get("path"),
+            )
+            inventory_change_detected = bool(
+                probe_signature is not None
+                and next_probe_signature != probe_signature
+            )
+            probe_signature = next_probe_signature
+            last_membership_probe = observation_now
+        if (inventory_ready and not inventory_change_detected
+                and source_membership_fallback_due(
+                    observation_now, last_membership_fallback)):
+            next_candidate_paths = runtime_candidate_paths()
+            inventory_change_detected = next_candidate_paths != candidate_paths
+            candidate_paths = next_candidate_paths
+            last_membership_fallback = observation_now
+        if (inventory_change_detected or source_discovery_refresh_due(
+                inventory_ready, observation_now, last_source_discovery)):
+            if inventory_change_detected:
+                _recursive_path_cache.clear()
+            sources = all_session_sources()
+            inventory_refreshed = True
+            inventory_ready = True
+            last_source_discovery = observation_now
+            candidate_paths = runtime_candidate_paths()
+            probe_targets = source_inventory_probe_targets(sources)
+            newest = max(
+                sources, key=lambda source: source.get("mtime") or 0,
+            ) if sources else None
+            probe_signature = source_inventory_probe_signature(
+                probe_targets, current_path=(newest or {}).get("path"),
+            )
+            last_membership_probe = observation_now
+            last_membership_fallback = observation_now
+        else:
+            refreshed_sources = refresh_known_source_activity(
+                sources, (cur or {}).get("path"),
+            )
+            inventory_refreshed = refreshed_sources is not sources
+            sources = refreshed_sources
+        if inventory_refreshed:
+            publish_source_inventory(sources)
+        nf = (
+            max(sources, key=lambda source: source["mtime"])
+            if inventory_refreshed and sources else cur
+        )
+        sources_sig = (
+            source_mtime_signature(sources)
+            if inventory_refreshed else last_sources_sig
+        )
+        source_identities = (
+            source_identity_signature(sources)
+            if inventory_refreshed else last_source_identities
+        )
+        membership_changed = bool(
+            inventory_change_detected
+            or source_identities != last_source_identities
+        )
         if sources_sig != last_sources_sig:
             cross_dirty = True
             last_sources_sig = sources_sig
@@ -7083,6 +7381,7 @@ def watcher():
             last_source_identities = source_identities
         if nf and (not cur or nf["path"] != cur["path"]):
             cur, last_sig = nf, None
+            last_current_refresh = 0.0
         elif nf and cur and nf["path"] == cur["path"]:
             cur = nf
         updated_state = None
@@ -7092,7 +7391,9 @@ def watcher():
                 cur = None
                 time.sleep(0.5)
                 continue
-            if sig != last_sig:
+            current_now = time.monotonic()
+            if current_session_refresh_due(
+                    sig, last_sig, current_now, last_current_refresh):
                 updated_state = recompute(cur)
                 if updated_state:
                     cache_at = _xsess.get("at") or 0.0
@@ -7104,6 +7405,7 @@ def watcher():
                         cross_dirty = False
                         last_cross_refresh = time.monotonic()
                     last_sig = sig
+                    last_current_refresh = current_now
         now = time.monotonic()
         if cross_session_refresh_due(
                 cross_dirty, membership_changed, now, last_cross_refresh):

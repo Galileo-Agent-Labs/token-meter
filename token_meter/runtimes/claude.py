@@ -116,14 +116,26 @@ class ClaudeRuntimeAdapter:
 
     def desktop_metadata_paths(self, root=None):
         if root:
-            return self._glob(os.path.join(str(root), "**", "local_*.json"), recursive=True)
+            return tuple(
+                path for path in self._glob(
+                    os.path.join(str(root), "**", "local_*.json"),
+                    recursive=True,
+                )
+                if "skills-plugin" not in Path(path).parts
+            )
         paths = []
         for data_root in self.desktop_data_roots:
             for session_dir in ("claude-code-sessions", "local-agent-mode-sessions"):
-                paths.extend(self._glob(
-                    str(data_root / session_dir / "**" / "local_*.json"),
-                    recursive=True,
-                ))
+                session_root = data_root / session_dir
+                paths.extend(self._glob(str(session_root / "local_*.json")))
+                for branch in self._glob(str(session_root / "*")):
+                    if (os.path.basename(branch) == "skills-plugin"
+                            or not os.path.isdir(branch)):
+                        continue
+                    paths.extend(self._glob(
+                        os.path.join(branch, "**", "local_*.json"),
+                        recursive=True,
+                    ))
         return tuple(paths)
 
     def desktop_index(self, root=None):

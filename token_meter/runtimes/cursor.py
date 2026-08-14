@@ -7,6 +7,7 @@ tool payloads through normalized contracts.
 """
 
 import glob
+import hashlib
 import json
 import math
 import os
@@ -316,7 +317,7 @@ class CursorRuntimeAdapter:
     def _legacy_records(self):
         metadata = self.metadata_index()
         by_id = {}
-        enrichment = self.enrichment_mtime()
+        request_revisions = self.request_revision_index()
         for path in self._transcript_paths():
             session_id = os.path.basename(path).rsplit(".", 1)[0]
             if os.path.basename(os.path.dirname(path)) != session_id:
@@ -339,8 +340,9 @@ class CursorRuntimeAdapter:
                 "path": path,
                 "project": self.project_resolver(project),
                 "mtime": activity_mtime,
-                "signature_mtime": max(activity_mtime, enrichment),
+                "signature_mtime": activity_mtime,
                 "trace_mtime": trace_mtime,
+                "request_revision": request_revisions.get(session_id, ""),
                 "title": row.get("title") or None,
                 "model": row.get("model") or "unknown",
             }
@@ -413,16 +415,42 @@ class CursorRuntimeAdapter:
         return rows
 
     def request_spans(self, session_id):
+        return sorted(
+            (row for row in self._request_rows()
+             if row.get("composer_id") == session_id),
+            key=lambda row: (row["end_ts"], row["name"]),
+        )
+
+    def _request_rows(self):
         paths = self._request_trace_paths()
         current = set(paths)
         for path in tuple(self._request_cache):
             if path not in current:
                 self._request_cache.pop(path, None)
-        return sorted(
-            (row for path in paths for row in self._request_file(path)
-             if row.get("composer_id") == session_id),
-            key=lambda row: (row["end_ts"], row["name"]),
-        )
+        return tuple(row for path in paths for row in self._request_file(path))
+
+    def request_revision_index(self):
+        """Return stable request-trace revisions scoped to Composer sessions."""
+        rows_by_session = defaultdict(list)
+        for row in self._request_rows():
+            session_id = str(row.get("composer_id") or "")
+            if not session_id:
+                continue
+            rows_by_session[session_id].append((
+                str(row.get("request_id") or ""),
+                str(row.get("trace_id") or ""),
+                str(row.get("name") or ""),
+                float(row.get("start_ts") or 0),
+                float(row.get("end_ts") or 0),
+                float(row.get("duration_s") or 0),
+                bool(row.get("error")),
+            ))
+        return {
+            session_id: hashlib.sha256(
+                repr(sorted(rows)).encode("utf-8", errors="replace")
+            ).hexdigest()
+            for session_id, rows in rows_by_session.items()
+        }
 
     def discover(self, context):
         del context
@@ -437,6 +465,7 @@ class CursorRuntimeAdapter:
             revision=SourceRevision((
                 str(record["signature_mtime"]),
                 str(record["trace_mtime"]),
+                str(record["request_revision"]),
             )),
             model_ref=ModelRef("cursor", record["model"]),
             account_provider_id=self.descriptor.account_provider_id,
@@ -456,6 +485,7 @@ class CursorRuntimeAdapter:
             "mtime": record["mtime"],
             "signature_mtime": record["signature_mtime"],
             "trace_mtime": record["trace_mtime"],
+            "request_revision": record["request_revision"],
             "title": record["title"],
             "model": record["model"],
         } for record in self._legacy_records())
@@ -481,10 +511,7 @@ class CursorRuntimeAdapter:
             path = str(source.get("path") or "")
         trace = self._file_signature(path)
         updated, checkpoint = self._session_revision(session_id)
-        spans = self.request_spans(session_id)
-        request_revision = str(max(
-            (float(row.get("end_ts") or 0) for row in spans), default=0.0
-        ))
+        request_revision = self.request_revision_index().get(session_id, "")
         return SourceRevision((
             trace[0], trace[1], updated, checkpoint, request_revision,
         ))

@@ -196,9 +196,22 @@ class CodexRuntimeAdapter:
 
     def metadata(self, path):
         path = os.path.abspath(os.path.expanduser(str(path)))
-        signature = _file_signature(path)
+        try:
+            stat = os.stat(path)
+            signature = (str(stat.st_mtime_ns), str(stat.st_size))
+            identity = (int(stat.st_dev), int(stat.st_ino))
+            size = int(stat.st_size)
+        except OSError:
+            signature = ("0", "0")
+            identity = (0, 0)
+            size = 0
         cached = self._metadata_cache.get(path)
         if cached and cached["signature"] == signature:
+            return dict(cached["metadata"])
+        if (cached and cached.get("prefix_complete")
+                and cached.get("identity") == identity
+                and size > int(cached.get("size") or 0)):
+            cached.update({"signature": signature, "size": size})
             return dict(cached["metadata"])
         metadata = {
             "session_id": None,
@@ -211,10 +224,12 @@ class CodexRuntimeAdapter:
             "tool_catalog": [],
             "tool_namespaces": [],
         }
+        prefix_complete = False
         try:
             with open(path, encoding="utf-8") as handle:
                 for index, line in enumerate(handle):
                     if index > 120:
+                        prefix_complete = True
                         break
                     try:
                         row = json.loads(line)
@@ -250,7 +265,11 @@ class CodexRuntimeAdapter:
         except OSError:
             pass
         self._metadata_cache[path] = {
-            "signature": signature, "metadata": dict(metadata),
+            "signature": signature,
+            "identity": identity,
+            "size": size,
+            "prefix_complete": prefix_complete,
+            "metadata": dict(metadata),
         }
         return metadata
 

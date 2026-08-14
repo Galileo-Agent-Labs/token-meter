@@ -16,6 +16,38 @@ import meter
 
 
 class SourceDiscoveryCacheTests(unittest.TestCase):
+    def test_codex_metadata_prefix_is_reused_after_large_trace_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            rows = [
+                {
+                    "type": "session_meta",
+                    "payload": {"id": "session", "cwd": "/repo"},
+                },
+                {
+                    "type": "turn_context",
+                    "payload": {"model": "gpt-stable"},
+                },
+            ]
+            rows.extend({"type": "event", "payload": {"index": idx}}
+                        for idx in range(121))
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+            with mock.patch.object(meter, "_codex_native_adapters", {}):
+                first = meter.codex_meta(str(path))
+                with path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps({"type": "event", "payload": {}}) + "\n")
+                with mock.patch(
+                    "builtins.open",
+                    side_effect=AssertionError(
+                        "append-only growth must reuse the completed metadata prefix"
+                    ),
+                ):
+                    second = meter.codex_meta(str(path))
+
+        self.assertEqual(first, second)
+        self.assertEqual(second["model"], "gpt-stable")
+
     def test_codex_metadata_is_reused_until_the_trace_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "session.jsonl"
@@ -96,6 +128,17 @@ class SourceDiscoveryCacheTests(unittest.TestCase):
         self.assertNotEqual(first_signature, second_signature)
         self.assertNotEqual(first_state_signature, second_state_signature)
         self.assertEqual(second_summary["session_name"], "Review token-meter PR 14 (2)")
+
+    def test_shared_path_cache_retains_one_complete_adapter_pattern_set(self):
+        cache = meter._recursive_path_cache
+        cache.clear()
+        try:
+            with mock.patch("glob.glob", return_value=[]):
+                for index in range(37):
+                    cache.paths(f"/nonexistent/runtime-pattern-{index}/*", now=1.0)
+            self.assertEqual(cache.entry_count, 37)
+        finally:
+            cache.clear()
 
 
 class CursorTraceTests(unittest.TestCase):
@@ -189,7 +232,10 @@ class CursorTraceTests(unittest.TestCase):
             conn.commit()
             conn.close()
             request_log = logs / "cursor.requestTraces.log"
-            request_log.write_text("shared enrichment\n")
+            request_log.write_text(
+                "2026-07-20T10:00:01Z span_completed name=client.ttft "
+                "composerId=newer durationMs=100 requestId=r1 traceId=t1 error=false\n"
+            )
             os.utime(request_log, (1_784_550_000, 1_784_550_000))
             with mock.patch.object(meter, "CURSOR_PROJECTS", str(projects)), \
                     mock.patch.object(meter, "CURSOR_STATE_DB", str(db_path)), \
@@ -210,7 +256,8 @@ class CursorTraceTests(unittest.TestCase):
             self.assertEqual(newer["path"], str(duplicate))
             self.assertEqual(newer["model"], "composer-2.5")
             self.assertEqual(newer["project"], "/repo")
-            self.assertGreater(newer["signature_mtime"], newer["mtime"])
+            self.assertEqual(newer["signature_mtime"], newer["mtime"])
+            self.assertTrue(newer["request_revision"])
 
     def test_cursor_recompute_exposes_context_tools_reasoning_wait_ttft_and_retries(self):
         with mock.patch.object(meter, "cursor_snapshot", return_value=self.snapshot()), \
@@ -505,6 +552,19 @@ class WaitTimeTests(unittest.TestCase):
 
 
 class ModelPerformanceTests(unittest.TestCase):
+    def test_parse_iso_reuses_bounded_timestamp_conversions(self):
+        meter.parse_iso.cache_clear()
+        timestamp = "2026-08-14T04:30:00.123Z"
+
+        first = meter.parse_iso(timestamp)
+        before = meter.parse_iso.cache_info()
+        second = meter.parse_iso(timestamp)
+        after = meter.parse_iso.cache_info()
+
+        self.assertEqual(first, second)
+        self.assertEqual(after.hits, before.hits + 1)
+        self.assertLessEqual(after.maxsize, 65536)
+
     def test_claude_tool_free_turn_uses_reported_turn_duration(self):
         objs = [
             {"type": "user", "timestamp": "2026-07-01T00:00:00.000Z",
@@ -889,6 +949,36 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(windows["7"][0]["b_samples"], 40)
         self.assertEqual(windows["all"][0]["a_samples"], 60)
         self.assertEqual(windows["all"][0]["b_samples"], 60)
+
+    def test_matched_pace_reuses_unchanged_inputs_and_invalidates_changed_samples(self):
+        now = datetime.datetime(2026, 8, 11, 12, 0, 0).timestamp()
+
+        def samples(duration, offset):
+            return [{
+                "duration_s": duration, "ts": now + offset + index,
+                "day": "2026-08-11", "input_tokens": 10000,
+                "peak_input_tokens": 10000, "cache_read_tokens": 0,
+                "output_tokens": 1000, "tool_calls": 0, "model_calls": 1,
+            } for index in range(20)]
+
+        groups = {"alpha": samples(10, 0), "beta": samples(20, 100)}
+        original = meter.matched_pace_comparison
+        with mock.patch.object(
+            meter, "matched_pace_comparison", wraps=original,
+        ) as comparison:
+            first = meter.matched_pace_windows(groups, now_ts=now)
+            first_call_count = comparison.call_count
+            second = meter.matched_pace_windows(groups, now_ts=now)
+            unchanged_call_count = comparison.call_count
+            changed_groups = {**groups, "beta": samples(30, 100)}
+            changed = meter.matched_pace_windows(changed_groups, now_ts=now)
+
+        self.assertGreater(first_call_count, 0)
+        self.assertEqual(unchanged_call_count, first_call_count)
+        self.assertEqual(second, first)
+        self.assertGreater(comparison.call_count, unchanged_call_count)
+        self.assertEqual(first["windows"]["today"][0]["pace_ratio"], 2)
+        self.assertEqual(changed["windows"]["today"][0]["pace_ratio"], 3)
 
     def test_matched_pace_reports_ratio_confidence_and_coverage(self):
         def sample(duration, ts):
@@ -1816,6 +1906,128 @@ class SessionDeleteTests(unittest.TestCase):
 
 
 class LiveCrossSessionRefreshTests(unittest.TestCase):
+    def test_membership_probe_uses_two_seconds_with_a_four_second_fallback(self):
+        self.assertFalse(meter.source_membership_probe_due(2.99, 1.0))
+        self.assertTrue(meter.source_membership_probe_due(3.0, 1.0))
+        self.assertFalse(meter.source_membership_fallback_due(4.99, 1.0))
+        self.assertTrue(meter.source_membership_fallback_due(5.0, 1.0))
+
+    def test_full_source_metadata_discovery_retains_the_ten_second_cadence(self):
+        self.assertTrue(meter.source_discovery_refresh_due(False, 1.0, 0.0))
+        self.assertFalse(meter.source_discovery_refresh_due(True, 10.99, 1.0))
+        self.assertTrue(meter.source_discovery_refresh_due(True, 11.0, 1.0))
+
+    def test_inventory_probe_ignores_active_growth_and_detects_a_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            active = root / "project" / "active.jsonl"
+            inactive = root / "project" / "inactive.jsonl"
+            active.parent.mkdir()
+            active.write_text("{}\n")
+            inactive.write_text("{}\n")
+            sources = [
+                {"path": str(active), "provider": "codex"},
+                {"path": str(inactive), "provider": "codex"},
+            ]
+            targets = meter.source_inventory_probe_targets(
+                sources, roots=[str(root)], extra_files=[],
+            )
+            before = meter.source_inventory_probe_signature(
+                targets, current_path=str(active),
+            )
+
+            with active.open("a") as handle:
+                handle.write("{}\n")
+            active_only = meter.source_inventory_probe_signature(
+                targets, current_path=str(active),
+            )
+            with inactive.open("a") as handle:
+                handle.write("{}\n")
+            resumed = meter.source_inventory_probe_signature(
+                targets, current_path=str(active),
+            )
+
+        self.assertEqual(active_only, before)
+        self.assertNotEqual(resumed, before)
+
+    def test_inventory_probe_detects_a_new_nested_session_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            existing = root / "project" / "existing.jsonl"
+            existing.parent.mkdir()
+            existing.write_text("{}\n")
+            targets = meter.source_inventory_probe_targets(
+                [{"path": str(existing), "provider": "claude"}],
+                roots=[str(root)], extra_files=[],
+            )
+            before = meter.source_inventory_probe_signature(targets)
+
+            new_session = root / "project" / "new.jsonl"
+            new_session.write_text("{}\n")
+            after = meter.source_inventory_probe_signature(targets)
+
+        self.assertNotEqual(after, before)
+
+    def test_known_source_activity_refreshes_without_adapter_discovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            active_path = Path(tmp) / "active.jsonl"
+            inactive_path = Path(tmp) / "inactive.jsonl"
+            active_path.write_text("{}\n")
+            inactive_path.write_text("{}\n")
+            os.utime(active_path, (20, 20))
+            os.utime(inactive_path, (20, 20))
+            sources = [
+                {
+                    "provider": "codex", "id": "active",
+                    "path": str(active_path), "mtime": 10,
+                },
+                {
+                    "provider": "codex", "id": "inactive",
+                    "path": str(inactive_path), "mtime": 10,
+                },
+            ]
+
+            refreshed = meter.refresh_known_source_activity(
+                sources, current_path=str(active_path),
+            )
+
+        self.assertEqual(refreshed[0]["mtime"], 20)
+        self.assertEqual(refreshed[1]["mtime"], 10)
+        self.assertEqual(sources[0]["mtime"], 10)
+
+    def test_unchanged_known_activity_reuses_the_inventory_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            active_path = Path(tmp) / "active.jsonl"
+            active_path.write_text("{}\n")
+            os.utime(active_path, (20, 20))
+            sources = [{
+                "provider": "codex", "id": "active",
+                "path": str(active_path), "mtime": 20,
+            }]
+
+            refreshed = meter.refresh_known_source_activity(
+                sources, current_path=str(active_path),
+            )
+
+        self.assertIs(refreshed, sources)
+
+    def test_current_session_rebuilds_immediately_then_coalesces_changes(self):
+        initial = (100, 20)
+        changed = (101, 21)
+
+        self.assertTrue(meter.current_session_refresh_due(
+            initial, None, 10.0, 0.0,
+        ))
+        self.assertFalse(meter.current_session_refresh_due(
+            changed, initial, 11.49, 10.0,
+        ))
+        self.assertTrue(meter.current_session_refresh_due(
+            changed, initial, 11.5, 10.0,
+        ))
+        self.assertFalse(meter.current_session_refresh_due(
+            initial, initial, 20.0, 10.0,
+        ))
+
     def test_session_detail_reuses_cached_cross_session_snapshot(self):
         handler = object.__new__(meter.H)
         handler.path = "/session?id=session-1"
@@ -1869,8 +2081,47 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
         self.assertNotEqual(before, after)
         self.assertTrue(meter.cross_session_refresh_due(True, True, 10.1, 10.0))
         self.assertFalse(meter.cross_session_refresh_due(True, False, 10.1, 10.0))
-        self.assertTrue(meter.cross_session_refresh_due(True, False, 11.0, 10.0))
-        self.assertLessEqual(meter._XSESS_LIVE_REFRESH_S, 1.0)
+        self.assertFalse(meter.cross_session_refresh_due(True, False, 24.9, 10.0))
+        self.assertTrue(meter.cross_session_refresh_due(True, False, 25.0, 10.0))
+
+    def test_publishing_inventory_evicts_only_disappeared_summary_paths(self):
+        cache = {
+            "/logs/live.jsonl": {"signature": (1, ""), "row": {"id": "live"}},
+            "/logs/stale.jsonl": {"signature": (1, ""), "row": {"id": "stale"}},
+        }
+        saved_inventory = dict(meter._SOURCE_INVENTORY)
+        try:
+            with mock.patch.object(meter, "_summary_cache", cache):
+                meter.publish_source_inventory([
+                    {"path": "/logs/live.jsonl", "provider": "codex"},
+                ])
+        finally:
+            meter._SOURCE_INVENTORY.clear()
+            meter._SOURCE_INVENTORY.update(saved_inventory)
+
+        self.assertEqual(list(cache), ["/logs/live.jsonl"])
+
+    def test_partial_discovery_failure_preserves_missing_summary_paths(self):
+        cache = {
+            "/logs/live.jsonl": {"signature": (1, ""), "row": {"id": "live"}},
+            "/logs/temporarily-missing.jsonl": {
+                "signature": (1, ""), "row": {"id": "missing"},
+            },
+        }
+        saved_inventory = dict(meter._SOURCE_INVENTORY)
+        try:
+            with mock.patch.object(meter, "_summary_cache", cache), \
+                    mock.patch.object(meter, "_RUNTIME_DISCOVERY_FAILURES", (object(),)):
+                meter.publish_source_inventory([
+                    {"path": "/logs/live.jsonl", "provider": "codex"},
+                ])
+        finally:
+            meter._SOURCE_INVENTORY.clear()
+            meter._SOURCE_INVENTORY.update(saved_inventory)
+
+        self.assertEqual(
+            list(cache), ["/logs/live.jsonl", "/logs/temporarily-missing.jsonl"],
+        )
 
     def test_cross_session_refresh_replaces_cached_snapshot_before_publish(self):
         saved_cache = dict(meter._xsess)
@@ -4428,6 +4679,31 @@ class HealthStateTests(unittest.TestCase):
 
 
 class MenubarSessionTests(unittest.TestCase):
+    def test_menubar_reuses_watcher_state_for_the_live_selected_session(self):
+        source = {
+            "id": "live", "provider": "codex", "label": "Codex",
+            "path": "/tmp/live.jsonl", "session": "live.jsonl",
+            "project": "/repo", "mtime": 1,
+        }
+        state = {
+            "provider": "codex", "source": source, "session": "live.jsonl",
+            "project": "/repo", "context": {}, "cache": {},
+            "executions": [], "insights": [],
+        }
+        with mock.patch.object(meter, "STATE", state), \
+                mock.patch.object(
+                    meter, "cached_session_sources", return_value=([source], True),
+                ), \
+                mock.patch.object(
+                    meter, "recompute",
+                    side_effect=AssertionError("menu poll must reuse watcher state"),
+                ), \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
+            payload = meter.menubar_state("live")
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["selection"]["selected_id"], "live")
+
     def test_context_pulse_is_bounded_numeric_only_and_does_not_leak_trace_content(self):
         state = {
             "executions": [
@@ -4479,7 +4755,7 @@ class MenubarSessionTests(unittest.TestCase):
         }
         with mock.patch.object(meter, "STATE", {"source": {"id": "live"}}), \
                 mock.patch.object(meter, "cached_session_sources", return_value=(sources, True)), \
-                mock.patch.object(meter, "recompute", return_value=state), \
+                mock.patch.object(meter, "cached_session_state", return_value=state), \
                 mock.patch.object(meter, "provider_quota_snapshots", return_value=[]):
             payload = meter.menubar_state("pinned")
 
@@ -4610,6 +4886,28 @@ class ClaudeDesktopDiscoveryTests(unittest.TestCase):
                 paths = set(meter.claude_desktop_metadata_paths())
 
         self.assertEqual(paths, {str(nested_metadata)})
+
+    def test_default_discovery_prunes_the_non_session_skills_plugin_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            standard = Path(tmp) / "Claude"
+            valid_metadata = (
+                standard / "local-agent-mode-sessions" / "account" /
+                "workspace" / "extra" / "local_session.json"
+            )
+            plugin_metadata = (
+                standard / "local-agent-mode-sessions" / "skills-plugin" /
+                "bundle" / "nested" / "local_not-a-session.json"
+            )
+            valid_metadata.parent.mkdir(parents=True)
+            plugin_metadata.parent.mkdir(parents=True)
+            valid_metadata.write_text(json.dumps({"cliSessionId": "session"}))
+            plugin_metadata.write_text(json.dumps({"cliSessionId": "plugin"}))
+
+            with mock.patch.object(
+                    meter, "CLAUDE_DESKTOP_DATA_ROOTS", [str(standard)]):
+                paths = set(meter.claude_desktop_metadata_paths())
+
+        self.assertEqual(paths, {str(valid_metadata)})
 
     def test_indexes_desktop_metadata_by_cli_session(self):
         with tempfile.TemporaryDirectory() as tmp:

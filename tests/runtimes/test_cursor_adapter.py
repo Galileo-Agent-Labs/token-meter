@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -64,6 +65,29 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def add_second_session(self):
+        other = (
+            self.projects / "Users-test-other" / "agent-transcripts" /
+            "session-2" / "session-2.jsonl"
+        )
+        other.parent.mkdir(parents=True)
+        other.write_text("{}\n")
+        os.utime(other, (2, 2))
+        with sqlite3.connect(self.database) as conn:
+            conn.execute(
+                "INSERT INTO composerHeaders VALUES (?,?,?,?,0,0,0,?)",
+                ("session-2", "workspace", 1000, 3000, json.dumps({
+                    "name": "Other", "workspaceIdentifier": {
+                        "uri": {"fsPath": "/work/other"}
+                    },
+                })),
+            )
+            conn.execute("INSERT INTO cursorDiskKV VALUES (?,?)", (
+                "composerData:session-2", json.dumps({
+                    "modelConfig": {"modelName": "model-2"},
+                }),
+            ))
+
     def test_discovers_database_enriched_transcript(self):
         sources = self.adapter.discover(DiscoveryContext(home=str(self.root)))
 
@@ -89,33 +113,10 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         self.assertNotEqual(after_transcript, after_database)
 
     def test_database_revision_invalidates_only_the_affected_session(self):
-        other = (
-            self.projects / "Users-test-other" / "agent-transcripts" /
-            "session-2" / "session-2.jsonl"
-        )
-        other.parent.mkdir(parents=True)
-        other.write_text("{}\n")
-        os.utime(other, (2, 2))
-        with sqlite3.connect(self.database) as conn:
-            conn.execute(
-                "INSERT INTO composerHeaders VALUES (?,?,?,?,0,0,0,?)",
-                ("session-2", "workspace", 1000, 3000, json.dumps({
-                    "name": "Other", "workspaceIdentifier": {
-                        "uri": {"fsPath": "/work/other"}
-                    },
-                })),
-            )
-            conn.execute("INSERT INTO cursorDiskKV VALUES (?,?)", (
-                "composerData:session-2", json.dumps({
-                    "modelConfig": {"modelName": "model-2"},
-                }),
-            ))
-        sources = {source.session_id: source for source in self.adapter.discover(
-            DiscoveryContext(home=str(self.root))
-        )}
+        self.add_second_session()
         before = {
-            session_id: self.adapter.current_revision(source)
-            for session_id, source in sources.items()
+            source.session_id: source.revision
+            for source in self.adapter.discover(DiscoveryContext(home=str(self.root)))
         }
 
         with sqlite3.connect(self.database) as conn:
@@ -124,8 +125,30 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
                 ("session-1",),
             )
         after = {
-            session_id: self.adapter.current_revision(source)
-            for session_id, source in sources.items()
+            source.session_id: source.revision
+            for source in self.adapter.discover(DiscoveryContext(home=str(self.root)))
+        }
+
+        self.assertNotEqual(before["session-1"], after["session-1"])
+        self.assertEqual(before["session-2"], after["session-2"])
+
+    def test_request_trace_revision_invalidates_only_the_affected_session(self):
+        self.add_second_session()
+        before = {
+            source.session_id: source.revision
+            for source in self.adapter.discover(DiscoveryContext(home=str(self.root)))
+        }
+        request_log = self.logs / "cursor.requestTraces.log"
+        request_log.write_text(
+            "2026-08-14T00:00:01Z span_completed name=client.ttft "
+            "composerId=session-1 durationMs=100 requestId=r1 traceId=t1 error=false\n"
+        )
+        future = time.time() + 10
+        os.utime(request_log, (future, future))
+
+        after = {
+            source.session_id: source.revision
+            for source in self.adapter.discover(DiscoveryContext(home=str(self.root)))
         }
 
         self.assertNotEqual(before["session-1"], after["session-1"])

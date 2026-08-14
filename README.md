@@ -42,15 +42,24 @@ for readiness, and configures automatic startup.
 ### Windows
 
 ```powershell
-git clone https://github.com/splunk/token-meter.git
-Set-Location .\token-meter
-powershell.exe -NoLogo -NoProfile -File .\scripts\install-windows.ps1
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '$p=Join-Path $env:TEMP "token-meter-bootstrap.ps1"; try { Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/splunk/token-meter/main/scripts/bootstrap-windows.ps1" -OutFile $p; & $p } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }'
 ```
 
-The Windows installer stages the runtime under
-`%LOCALAPPDATA%\Token Meter\runtime`, starts the hidden server and WinForms tray,
-and creates only the current user's login startup entry. Administrator access
-is not required.
+The bootstrap reuses compatible Git and Python installations. If either is
+missing, it installs Git and Python automatically with exact packages from
+WinGet, then verifies the executable before continuing. WinGet is provided by
+Microsoft's App Installer and must be available. Token Meter requests no
+administrator access.
+
+The managed source and runtime are stored under `%LOCALAPPDATA%\Token Meter`.
+The installer starts the hidden server and WinForms tray and creates only the
+current user's login startup entry. The bypass applies only to these PowerShell
+processes; it does not change the machine or user execution policy. The
+downloaded bootstrap file is removed when the command finishes.
+
+For a local rerun from an existing checkout, use
+`.\scripts\install-windows.cmd`. To keep an unattended bootstrap from opening
+the dashboard, pass `-NoOpenDashboard` to the downloaded script invocation.
 
 Open [http://127.0.0.1:8722](http://127.0.0.1:8722), start a normal agent run,
 and choose it from **Sessions**.
@@ -160,7 +169,8 @@ Settings.
 - macOS: Swift toolchain, normally from Xcode Command Line Tools.
 - Linux: `systemd --user`, GTK 3, PyGObject, and Ayatana AppIndicator. GNOME
   generally needs an AppIndicator/KStatusNotifierItem extension.
-- Windows: Windows PowerShell, Git, and native Windows Python 3.8 or newer.
+- Windows: Windows PowerShell and WinGet from Microsoft App Installer. The
+  bootstrap installs missing Git and native Windows Python 3.8 or newer.
 - `curl` for macOS and Linux lifecycle helpers.
 
 The browser dashboard has no third-party Python dependency. A machine with no
@@ -214,7 +224,7 @@ Linux installs separate server and tray `systemd --user` services:
 Windows installs one owned current-user startup entry:
 
 ```powershell
-& "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
 ```
 
 These uninstall helpers stop and remove Token Meter lifecycle entries. They do
@@ -310,7 +320,8 @@ curl -fsS http://127.0.0.1:8722/menubar
 
 Then rerun the platform installer. Linux users should also inspect the user
 services and AppIndicator dependencies; macOS users need the Swift toolchain;
-Windows users need native Windows Python available outside WSL.
+Windows users need native Windows Python outside WSL; rerun the Windows wrapper
+to install and verify it automatically when it is missing.
 
 ## Project Documentation
 

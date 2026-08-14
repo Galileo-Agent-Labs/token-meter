@@ -58,15 +58,20 @@ This starts the local server and menu bar or desktop tray companion. Open
 curl http://127.0.0.1:8722/health
 ```
 
-On Windows, use the per-user PowerShell installer:
+On Windows, use the per-user wrapper from a checkout:
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -File .\scripts\install-windows.ps1
+.\scripts\install-windows.cmd
 ```
 
-It stages the same manifest-owned Python server under
+The wrapper applies process-scoped execution-policy bypass and delegates to the
+PowerShell installer. It installs missing Git and Python through WinGet, then
+stages the same manifest-owned Python server under
 `%LOCALAPPDATA%\Token Meter\runtime`, starts the WinForms tray companion, and
-registers only the current user's login startup entry.
+registers only the current user's login startup entry. For a first-install
+smoke test, use the one-command bootstrap documented in `README.md`. For parser
+or installer debugging, invoke `scripts\install-windows.ps1` directly with
+`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File`.
 
 Rerun `./scripts/install` after source changes when you want to test the staged
 runtime. For dashboard-only development, when port 8722 is free, run:
@@ -214,12 +219,14 @@ swiftc menubar/TokenMeterMenuBar.swift -o /private/tmp/token-meter-menubar
 TOKEN_METER_MENUBAR_SMOKE=1 /private/tmp/token-meter-menubar
 ```
 
-On Windows, parse every PowerShell artifact and run the real NotifyIcon smoke:
+On Windows, parse every PowerShell artifact, exercise the CMD wrapper, and run
+the real NotifyIcon smoke:
 
 ```powershell
 Get-ChildItem .\scripts\*.ps1 | ForEach-Object {
   [void][scriptblock]::Create([IO.File]::ReadAllText($_.FullName))
 }
+.\scripts\install-windows.cmd
 powershell.exe -NoLogo -NoProfile -File .\scripts\run-tray.ps1 -SmokeTest
 ```
 

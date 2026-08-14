@@ -131,7 +131,8 @@ class PlatformServicesTests(unittest.TestCase):
         self.assertEqual(trash.destination_label, "Trash")
         self.assertEqual(update.script_path, r"C:\Token Meter\scripts\update-windows.ps1")
         self.assertEqual(update.command, (
-            "powershell.exe", "-NoLogo", "-NoProfile", "-WindowStyle", "Hidden",
+            "powershell.exe", "-NoLogo", "-NoProfile",
+            "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
             "-File", r"C:\Token Meter\scripts\update-windows.ps1",
             r"C:\Token Meter\source", r"C:\Token Meter\update-status.json",
         ))

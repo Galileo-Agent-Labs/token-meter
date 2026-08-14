@@ -99,7 +99,8 @@ class WindowsPlatformServices:
             supported=True,
             script_path=script,
             command=(
-                "powershell.exe", "-NoLogo", "-NoProfile", "-WindowStyle", "Hidden",
+                "powershell.exe", "-NoLogo", "-NoProfile",
+                "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                 "-File", script, str(checkout), str(status_path),
             ),
         )

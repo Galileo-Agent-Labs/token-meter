@@ -31,6 +31,167 @@ function Test-Python([string]$Path) {
     }
 }
 
+function Refresh-ProcessPath {
+    $MachinePath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine)
+    $UserPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::User)
+    $PathValues = @($MachinePath, $UserPath, $env:Path) |
+        Where-Object { $_ } |
+        Select-Object -Unique
+    $env:Path = [string]::Join(";", [string[]]$PathValues)
+}
+
+function Get-PythonFromLauncher([string]$LauncherPath) {
+    if (-not $LauncherPath -or
+        -not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
+        return
+    }
+    try {
+        $Inventory = @(& $LauncherPath -0p 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            return
+        }
+        foreach ($Line in $Inventory) {
+            if ([string]$Line -match '([A-Za-z]:\\.*?python(?:\d+(?:\.\d+)?)?\.exe)') {
+                $Matches[1].Trim()
+            }
+        }
+    } catch { }
+}
+
+function Get-RegisteredPythonCandidates {
+    $RegistryRoots = @(
+        "Registry::HKEY_CURRENT_USER\Software\Python",
+        "Registry::HKEY_LOCAL_MACHINE\Software\Python",
+        "Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Python"
+    )
+    foreach ($RegistryRoot in $RegistryRoots) {
+        if (-not (Test-Path -LiteralPath $RegistryRoot -PathType Container)) {
+            continue
+        }
+        Get-ChildItem -LiteralPath $RegistryRoot -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Get-ChildItem -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+            } |
+            ForEach-Object {
+                $InstallPathKey = Join-Path $_.PSPath "InstallPath"
+                if (Test-Path -LiteralPath $InstallPathKey -PathType Container) {
+                    try {
+                        $InstallKey = Get-Item -LiteralPath $InstallPathKey
+                        $ExecutablePath = [string]$InstallKey.GetValue("ExecutablePath")
+                        if ($ExecutablePath) {
+                            $ExecutablePath
+                        }
+                        $InstallDirectory = [string]$InstallKey.GetValue("")
+                        if ($InstallDirectory) {
+                            Join-Path $InstallDirectory "python.exe"
+                        }
+                    } catch { }
+                }
+            }
+    }
+}
+
+function Get-PythonCandidates {
+    $Candidates = [System.Collections.Generic.List[string]]::new()
+    if ($env:TOKEN_METER_PYTHON) {
+        $Candidates.Add($env:TOKEN_METER_PYTHON)
+    }
+    foreach ($Name in @("python3.exe", "python.exe")) {
+        $Command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue
+        if ($Command) {
+            $Candidates.Add($Command.Source)
+        }
+    }
+
+    $LauncherCandidates = [System.Collections.Generic.List[string]]::new()
+    foreach ($Name in @("py.exe", "pymanager.exe")) {
+        $Command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue
+        if ($Command) {
+            $LauncherCandidates.Add($Command.Source)
+        }
+    }
+    if ($env:LOCALAPPDATA) {
+        $LauncherCandidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\Launcher\py.exe"))
+    }
+    if ($env:WINDIR) {
+        $LauncherCandidates.Add((Join-Path $env:WINDIR "py.exe"))
+    }
+    $LauncherCandidates |
+        Select-Object -Unique |
+        ForEach-Object { Get-PythonFromLauncher $_ } |
+        ForEach-Object { $Candidates.Add($_) }
+    Get-RegisteredPythonCandidates |
+        ForEach-Object { $Candidates.Add($_) }
+
+    if ($env:LOCALAPPDATA) {
+        $LocalPythonBase = Join-Path $env:LOCALAPPDATA "Programs\Python"
+        if (Test-Path -LiteralPath $LocalPythonBase -PathType Container) {
+            Get-ChildItem -LiteralPath $LocalPythonBase -Filter python.exe -File -Recurse |
+                Sort-Object FullName -Descending |
+                ForEach-Object { $Candidates.Add($_.FullName) }
+        }
+    }
+    foreach ($ProgramFilesRoot in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not $ProgramFilesRoot -or
+            -not (Test-Path -LiteralPath $ProgramFilesRoot -PathType Container)) {
+            continue
+        }
+        Get-ChildItem -LiteralPath $ProgramFilesRoot -Filter "Python*" -Directory |
+            ForEach-Object {
+                Get-ChildItem -LiteralPath $_.FullName -Filter python.exe -File -Recurse
+            } |
+            Sort-Object FullName -Descending |
+            ForEach-Object { $Candidates.Add($_.FullName) }
+    }
+    return $Candidates
+}
+
+function Find-CompatiblePython {
+    return Get-PythonCandidates |
+        Select-Object -Unique |
+        Where-Object { Test-Python $_ } |
+        Select-Object -First 1
+}
+
+function Get-UsableGit {
+    $Command = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $Command) {
+        return $null
+    }
+    try {
+        & $Command.Source --version *> $null
+        if ($LASTEXITCODE -eq 0) {
+            return $Command
+        }
+    } catch { }
+    return $null
+}
+
+function Get-WinGet {
+    return Get-Command winget.exe -CommandType Application -ErrorAction SilentlyContinue
+}
+
+function Install-Prerequisite([string]$PackageId, [switch]$UserScope) {
+    $WinGet = Get-WinGet
+    if (-not $WinGet) {
+        Fail "WinGet is required to install $PackageId. Install or update Microsoft App Installer and rerun this command."
+    }
+    $Arguments = @(
+        "install", "--exact", "--id", $PackageId, "--source", "winget",
+        "--silent", "--accept-package-agreements", "--accept-source-agreements",
+        "--disable-interactivity"
+    )
+    if ($UserScope) {
+        $Arguments += @("--scope", "user")
+    }
+    Write-Host "Installing missing prerequisite: $PackageId"
+    & $WinGet.Source @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        Fail "WinGet could not install $PackageId."
+    }
+    Refresh-ProcessPath
+}
+
 function Stop-InstalledServer([string]$RuntimeRoot) {
     $PidPath = Join-Path $RuntimeRoot "meter.pid"
     if (-not (Test-Path -LiteralPath $PidPath -PathType Leaf)) {
@@ -134,33 +295,23 @@ if ($ReadinessTimeoutSeconds -le 0) {
     $ReadinessTimeoutSeconds = if ($ConfiguredTimeout -gt 0) { $ConfiguredTimeout } else { 600 }
 }
 
-$Git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
+$null = Refresh-ProcessPath
+$Git = Get-UsableGit
 if (-not $Git) {
-    Fail "Git is required but was not found."
-}
-
-$PythonCandidates = [System.Collections.Generic.List[string]]::new()
-if ($env:TOKEN_METER_PYTHON) {
-    $PythonCandidates.Add($env:TOKEN_METER_PYTHON)
-}
-foreach ($Name in @("python3.exe", "python.exe")) {
-    $Command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue
-    if ($Command) {
-        $PythonCandidates.Add($Command.Source)
+    Install-Prerequisite "Git.MinGit"
+    $Git = Get-UsableGit
+    if (-not $Git) {
+        Fail "Git could not be verified after WinGet reported success. Start a new terminal and rerun this command."
     }
 }
-$PythonBase = Join-Path $env:LOCALAPPDATA "Programs\Python"
-if (Test-Path -LiteralPath $PythonBase -PathType Container) {
-    Get-ChildItem -LiteralPath $PythonBase -Filter python.exe -File -Recurse |
-        Sort-Object FullName -Descending |
-        ForEach-Object { $PythonCandidates.Add($_.FullName) }
-}
-$PythonExe = $PythonCandidates |
-    Select-Object -Unique |
-    Where-Object { Test-Python $_ } |
-    Select-Object -First 1
+
+$PythonExe = Find-CompatiblePython
 if (-not $PythonExe) {
-    Fail "Python 3.8 or newer was not found. Install the native Windows build of Python and rerun this script."
+    Install-Prerequisite "Python.Python.3.14" -UserScope
+    $PythonExe = Find-CompatiblePython
+    if (-not $PythonExe) {
+        Fail "Python could not be verified after WinGet reported success. Start a new terminal and rerun this command."
+    }
 }
 $PythonExe = [System.IO.Path]::GetFullPath($PythonExe)
 $PythonwCandidate = Join-Path (Split-Path -Parent $PythonExe) "pythonw.exe"
@@ -349,7 +500,7 @@ try {
     $PowerShellCommand = Get-Command powershell.exe -CommandType Application -ErrorAction Stop
     $PowerShellExe = $PowerShellCommand.Source
     $StartScript = Join-Path $InstallRoot "scripts\start-token-meter.ps1"
-    $StartupCommand = "`"$PowerShellExe`" -NoLogo -NoProfile -WindowStyle Hidden -File `"$StartScript`""
+    $StartupCommand = "`"$PowerShellExe`" -NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$StartScript`""
     New-Item -Path $RunKey -Force | Out-Null
     New-ItemProperty -LiteralPath $RunKey -Name $RunName -PropertyType String -Value $StartupCommand -Force | Out-Null
 
@@ -418,4 +569,4 @@ Write-Host "Python: $PythonExe ($PythonArchitecture)"
 if ($Commit) {
     Write-Host "Installed commit: $Commit"
 }
-Write-Host "Uninstall: & `"$InstallRoot\scripts\uninstall-windows.ps1`""
+Write-Host "Uninstall: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$InstallRoot\scripts\uninstall-windows.ps1`""

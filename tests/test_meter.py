@@ -13,6 +13,8 @@ from pathlib import Path
 from unittest import mock
 
 import meter
+from token_meter.contracts import DiscoveryContext
+from token_meter.runtimes.codex import CodexRuntimeAdapter
 
 
 class SourceDiscoveryCacheTests(unittest.TestCase):
@@ -1656,6 +1658,251 @@ class SessionSummaryStatsTests(unittest.TestCase):
         for actual, expected in zip(sorted(row["_day_cost"].values()), (1.4, 3.5)):
             self.assertAlmostEqual(actual, expected)
         self.assertAlmostEqual(row["_model_cost"]["gpt-5.6-terra"], 4.9)
+
+
+class CodexLineageAccountingTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.sessions = self.root / "sessions"
+        self.trace_root = self.sessions / "2026" / "08" / "11"
+        self.trace_root.mkdir(parents=True)
+        self.index = self.root / "session_index.jsonl"
+        self.index.write_text("")
+        self.context = DiscoveryContext(home=str(self.root))
+        self.adapter = CodexRuntimeAdapter(
+            self.sessions,
+            self.index,
+            compatibility=meter._codex_compatibility(),
+            default_model="gpt-5.6",
+        )
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def write_trace(self, name, rows, mtime):
+        path = self.trace_root / f"rollout-{name}.jsonl"
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        os.utime(path, (mtime, mtime))
+        return path
+
+    @staticmethod
+    def meta(physical_id, logical_id="task-1", **extra):
+        return {
+            "timestamp": "2026-08-11T00:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": physical_id,
+                "session_id": logical_id,
+                "cwd": "/work/project",
+                **extra,
+            },
+        }
+
+    @staticmethod
+    def turn(timestamp):
+        return {
+            "timestamp": timestamp.replace("Z", ".000Z"),
+            "type": "turn_context",
+            "payload": {"model": "gpt-5.6", "cwd": "/work/project"},
+        }
+
+    @staticmethod
+    def tool(name, call_id, timestamp):
+        return {
+            "timestamp": timestamp.replace("Z", ".000Z"),
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "name": name,
+                "call_id": call_id,
+                "arguments": {},
+            },
+        }
+
+    @staticmethod
+    def tokens(input_tokens, output_tokens, total_input, total_output, timestamp):
+        return {
+            "timestamp": timestamp.replace("Z", ".000Z"),
+            "type": "event_msg",
+            "payload": {"type": "token_count", "info": {
+                "last_token_usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                },
+                "total_token_usage": {
+                    "input_tokens": total_input,
+                    "output_tokens": total_output,
+                    "total_tokens": total_input + total_output,
+                },
+            }},
+        }
+
+    def root_and_child_sources(self):
+        self.write_trace("root", [
+            self.meta("root-1"),
+            self.turn("2026-08-11T00:00:01Z"),
+            {"timestamp": "2026-08-11T00:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("inherited_tool", "inherited-call", "2026-08-11T00:00:02Z"),
+            self.tokens(100, 10, 100, 10, "2026-08-11T00:00:03Z"),
+            {"timestamp": "2026-08-11T00:00:04.000Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 3000}},
+        ], 10)
+        self.write_trace("child", [
+            self.meta("child-1", forked_from_id="root-1"),
+            self.meta("root-1"),
+            self.turn("2026-08-11T01:00:01Z"),
+            {"timestamp": "2026-08-11T01:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("inherited_tool", "inherited-call", "2026-08-11T01:00:02Z"),
+            self.tokens(100, 10, 100, 10, "2026-08-11T01:00:03Z"),
+            {"timestamp": "2026-08-11T01:00:04.000Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 3000}},
+            self.turn("2026-08-11T02:00:01Z"),
+            {"timestamp": "2026-08-11T02:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("child_tool", "child-call", "2026-08-11T02:00:02Z"),
+            self.tokens(50, 5, 150, 15, "2026-08-11T02:00:03Z"),
+        ], 20)
+        return {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+
+    def root_child_and_grandchild_sources(self):
+        self.root_and_child_sources()
+        self.write_trace("grandchild", [
+            self.meta("grandchild-1", forked_from_id="child-1"),
+            self.turn("2026-08-11T03:00:01Z"),
+            {"timestamp": "2026-08-11T03:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("inherited_tool", "inherited-call", "2026-08-11T03:00:02Z"),
+            self.tokens(100, 10, 100, 10, "2026-08-11T03:00:03Z"),
+            {"timestamp": "2026-08-11T03:00:04.000Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 3000}},
+            self.turn("2026-08-11T04:00:01Z"),
+            {"timestamp": "2026-08-11T04:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("child_tool", "child-call", "2026-08-11T04:00:02Z"),
+            self.tokens(50, 5, 150, 15, "2026-08-11T04:00:03Z"),
+            {"timestamp": "2026-08-11T04:00:04.000Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 3000}},
+            self.turn("2026-08-11T05:00:01Z"),
+            {"timestamp": "2026-08-11T05:00:01.000Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self.tool("grandchild_tool", "grandchild-call", "2026-08-11T05:00:02Z"),
+            self.tokens(20, 2, 170, 17, "2026-08-11T05:00:03Z"),
+        ], 30)
+        return {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+
+    def test_legacy_detail_and_summary_use_the_same_corrected_child_rows(self):
+        sources = self.root_and_child_sources()
+
+        detail = self.adapter.recompute_legacy(sources["child-1"])
+        summary = self.adapter.summarize_legacy(sources["child-1"])
+
+        self.assertEqual(detail["total_tokens"], 55)
+        self.assertEqual(summary["tokens"], 55)
+        self.assertEqual(detail["total_tokens"], summary["tokens"])
+        self.assertAlmostEqual(detail["total_cost"], summary["cost"])
+        self.assertEqual(len(detail["executions"]), 1)
+        self.assertEqual(summary["turns"], 1)
+        self.assertEqual(
+            [tool["name"] for tool in detail["executions"][0]["tools"]],
+            ["child_tool"],
+        )
+        self.assertNotIn("complete", [event["kind"] for event in detail["trace"]])
+
+    def test_live_and_completed_throughput_use_only_corrected_child_rows(self):
+        sources = self.root_and_child_sources()
+
+        summary = self.adapter.summarize_legacy(sources["child-1"])
+
+        self.assertFalse(summary["throughput"]["available"])
+        self.assertTrue(summary["live_throughput"]["available"])
+        self.assertEqual(summary["live_throughput"]["completed_steps"], 1)
+        self.assertEqual(summary["live_throughput"]["measured_output_tokens"], 5)
+        self.assertEqual(summary["live_throughput"]["measured_seconds"], 2)
+        self.assertEqual(summary["live_throughput"]["output_tps"], 2.5)
+
+    def test_cross_session_daily_models_spend_and_budget_share_corrected_totals(self):
+        sources = self.root_child_and_grandchild_sources()
+        saved_xsess = dict(meter._xsess)
+        saved_summaries = dict(meter._summary_cache)
+        try:
+            meter._xsess.update({
+                "data": None,
+                "at": 0,
+                "sessions": [],
+                "internal_rows": (),
+                "project_model_stats": {},
+            })
+            meter._summary_cache.clear()
+            with mock.patch.object(
+                meter, "_codex_native_adapter", return_value=self.adapter,
+            ):
+                result = meter.cross_session(sources=list(sources.values()))
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_xsess)
+            meter._summary_cache.clear()
+            meter._summary_cache.update(saved_summaries)
+
+        self.assertEqual(result["total_tokens"], 187)
+        self.assertEqual(result["total_executions"], 3)
+        self.assertAlmostEqual(
+            result["total_cost"],
+            sum(session["cost"] for session in result["sessions"]),
+        )
+        self.assertEqual(sum(
+            row["input_tokens"] + row["output_tokens"]
+            for row in result["model_stats"]["models"]
+        ), 187)
+        self.assertEqual(sum(row["tokens"] for row in result["daily"]), 187)
+        self.assertAlmostEqual(
+            sum(row["cost"] for row in result["daily"]),
+            result["total_cost"],
+        )
+        self.assertAlmostEqual(
+            sum(row["cost"] for row in result["spend"]["days"]),
+            result["total_cost"],
+        )
+        self.assertAlmostEqual(
+            sum(row["cost"] for row in result["monthly"]),
+            result["total_cost"],
+        )
+        self.assertAlmostEqual(result["budget"]["spend"], result["total_cost"])
+        encoded = json.dumps(result)
+        for private_field in (
+            "physical_trace_id",
+            "logical_session_id",
+            "forked_from_id",
+            "parent_thread_id",
+            "lineage_parent_id",
+            "lineage_revision",
+        ):
+            self.assertNotIn(private_field, encoded)
+
+    def test_legacy_cache_signature_changes_with_lineage_revision(self):
+        source = {
+            "path": str(self.trace_root / "rollout-child.jsonl"),
+            "mtime": 10,
+            "title": "Child",
+            "lineage_revision": ("unresolved", "parent-1"),
+        }
+
+        before = meter.source_revision_signature(source)
+        after = meter.source_revision_signature({
+            **source,
+            "lineage_revision": ("resolved", "parent-1", "1", "2"),
+        })
+
+        self.assertNotEqual(before, after)
 
 
 class CurrentSessionSummaryTests(unittest.TestCase):

@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
+from token_meter.runtimes import codex as codex_runtime
 from token_meter.runtimes.codex import CodexRuntimeAdapter
 
 
@@ -16,6 +17,7 @@ class CodexRuntimeAdapterTests(unittest.TestCase):
         self.index = self.root / "session_index.jsonl"
         self.trace = self.sessions / "2026" / "08" / "11" / "rollout-session-1.jsonl"
         self.trace.parent.mkdir(parents=True)
+        self.context = DiscoveryContext(home=str(self.root))
         self.rows = [
             {"timestamp": "2026-08-11T00:00:00Z", "type": "session_meta", "payload": {
                 "id": "session-1", "cwd": "/work/project", "model_provider": "openai",
@@ -61,6 +63,552 @@ class CodexRuntimeAdapterTests(unittest.TestCase):
 
     def _write(self, rows):
         self.trace.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    def _write_trace(self, name, rows, mtime=2):
+        path = self.trace.parent / f"rollout-{name}.jsonl"
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        os.utime(path, (mtime, mtime))
+        return path
+
+    @staticmethod
+    def _session_meta(physical_id, logical_id=None, **extra):
+        payload = {"id": physical_id, "cwd": "/work/project", **extra}
+        if logical_id is not None:
+            payload["session_id"] = logical_id
+        return {
+            "timestamp": "2026-08-11T00:00:00Z",
+            "type": "session_meta",
+            "payload": payload,
+        }
+
+    def test_first_session_meta_owns_physical_logical_and_parent_identity(self):
+        child_path = self._write_trace("child", [
+            self._session_meta(
+                "child-1", "task-1", forked_from_id="root-1",
+            ),
+            self._session_meta("root-1"),
+        ])
+
+        legacy_sources = self.adapter.discover_legacy(self.context)
+        child = next(
+            source for source in legacy_sources
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["id"], "task-1")
+        self.assertEqual(child["physical_trace_id"], "child-1")
+        self.assertEqual(child["logical_session_id"], "task-1")
+        self.assertEqual(child["forked_from_id"], "root-1")
+        self.assertIsNone(child["parent_thread_id"])
+        self.assertEqual(child["lineage_parent_id"], "root-1")
+        native_ids = {
+            source.locator.value: source.session_id
+            for source in self.adapter.discover(self.context)
+        }
+        self.assertEqual(native_ids[str(child_path)], "task-1")
+
+    def test_numeric_usage_signature_keeps_only_finite_numeric_fields(self):
+        signature = getattr(codex_runtime, "_numeric_usage_signature", None)
+
+        self.assertIsNotNone(signature)
+        self.assertEqual(signature({
+            "output_tokens": 5,
+            "input_tokens": 10.5,
+            "cached_input_tokens": True,
+            "label": "10",
+            "nested": {"input_tokens": 3},
+            "infinite": float("inf"),
+            "not_a_number": float("nan"),
+        }), (
+            ("input_tokens", 10.5),
+            ("output_tokens", 5),
+        ))
+
+    def test_token_fingerprints_use_model_and_usage_but_not_timestamps(self):
+        token_events = getattr(codex_runtime, "_token_events", None)
+        rows = (
+            {"timestamp": "2026-08-11T00:00:00Z", "type": "turn_context",
+             "payload": {"model": "gpt-test"}},
+            {"timestamp": "2026-08-11T00:00:01Z", "type": "event_msg",
+             "payload": {"type": "token_count", "info": {
+                 "last_token_usage": {"input_tokens": 10, "output_tokens": 5},
+                 "total_token_usage": {"input_tokens": 100, "output_tokens": 50},
+                 "provider_note": "ignored",
+             }}},
+        )
+        restamped = (
+            {**rows[0], "timestamp": "2026-08-11T01:00:00Z"},
+            {**rows[1], "timestamp": "2026-08-11T01:00:01Z"},
+        )
+
+        self.assertIsNotNone(token_events)
+        self.assertEqual(token_events(rows), (
+            (
+                1,
+                "gpt-test",
+                (("input_tokens", 10), ("output_tokens", 5)),
+                (("input_tokens", 100), ("output_tokens", 50)),
+            ),
+        ))
+        self.assertEqual(token_events(rows), token_events(restamped))
+
+    def test_token_fingerprint_match_requires_exact_model_last_and_total_shape(self):
+        matches = getattr(codex_runtime, "_token_events_match", None)
+        last = (("input_tokens", 10), ("output_tokens", 5))
+        total = (("input_tokens", 100), ("output_tokens", 50))
+        base = (1, "gpt-test", last, total)
+
+        self.assertIsNotNone(matches)
+        self.assertTrue(matches(base, (8, "gpt-test", last, total)))
+        self.assertFalse(matches(base, (8, "gpt-other", last, total)))
+        self.assertFalse(matches(base, (
+            8, "gpt-test", (("input_tokens", 11), ("output_tokens", 5)), total,
+        )))
+        self.assertFalse(matches(base, (8, "gpt-test", last, ())))
+        self.assertFalse(matches((1, "gpt-test", last, ()), base))
+        self.assertTrue(matches(
+            (1, "gpt-test", last, ()),
+            (8, "gpt-test", last, ()),
+        ))
+
+    def test_token_fingerprint_cache_is_lru_bounded_and_prunes_deleted_paths(self):
+        def token_rows(value):
+            return (
+                {"type": "turn_context", "payload": {"model": "gpt-test"}},
+                {"type": "event_msg", "payload": {
+                    "type": "token_count", "info": {
+                        "last_token_usage": {
+                            "input_tokens": value, "output_tokens": 1,
+                        },
+                        "total_token_usage": {
+                            "input_tokens": value, "output_tokens": 1,
+                        },
+                    },
+                }},
+            )
+
+        paths = [
+            self._write_trace(f"cache-{value}", token_rows(value), mtime=value)
+            for value in (10, 20, 30)
+        ]
+        try:
+            adapter = CodexRuntimeAdapter(
+                self.sessions, self.index, token_event_cache_limit=2,
+            )
+        except TypeError:
+            self.fail("CodexRuntimeAdapter must accept a bounded token event cache")
+        events_for_path = getattr(adapter, "_token_events_for_path", None)
+
+        self.assertIsNotNone(events_for_path)
+        events_for_path(paths[0])
+        events_for_path(paths[1])
+        events_for_path(paths[0])
+        events_for_path(paths[2])
+
+        self.assertEqual(
+            tuple(adapter._token_event_cache),
+            (str(paths[0]), str(paths[2])),
+        )
+        paths[0].unlink()
+        adapter.discover(self.context)
+        self.assertNotIn(str(paths[0]), adapter._token_event_cache)
+
+    @staticmethod
+    def _turn(model="gpt-test", timestamp="2026-08-11T00:00:01Z"):
+        return {
+            "timestamp": timestamp,
+            "type": "turn_context",
+            "payload": {"model": model, "cwd": "/work/project"},
+        }
+
+    @staticmethod
+    def _token_event(input_tokens, output_tokens, total_input=None,
+                     total_output=None, timestamp="2026-08-11T00:00:02Z"):
+        info = {
+            "last_token_usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        }
+        if total_input is not None and total_output is not None:
+            info["total_token_usage"] = {
+                "input_tokens": total_input,
+                "output_tokens": total_output,
+            }
+        return {
+            "timestamp": timestamp,
+            "type": "event_msg",
+            "payload": {"type": "token_count", "info": info},
+        }
+
+    @staticmethod
+    def _tool_call(name, timestamp="2026-08-11T00:00:01.500Z"):
+        return {
+            "timestamp": timestamp,
+            "type": "response_item",
+            "payload": {"type": "function_call", "name": name},
+        }
+
+    def _native_load(self, path):
+        source = next(
+            source for source in self.adapter.discover(self.context)
+            if source.locator.value == str(path)
+        )
+        return self.adapter.load(source, DetailLevel.FULL)
+
+    def test_direct_child_native_load_removes_inherited_execution_chunk(self):
+        root_path = self._write_trace("root", [
+            self._session_meta("root-1", "task-1"),
+            self._turn(),
+            {"timestamp": "2026-08-11T00:00:01Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self._tool_call("inherited_tool"),
+            self._token_event(100, 10, 100, 10),
+            {"timestamp": "2026-08-11T00:00:03Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 2000}},
+        ], mtime=10)
+        child_path = self._write_trace("child", [
+            self._session_meta("child-1", "task-1", forked_from_id="root-1"),
+            self._session_meta("root-1", "task-1"),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            {"timestamp": "2026-08-11T01:00:01Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self._tool_call("inherited_tool", "2026-08-11T01:00:01.500Z"),
+            self._token_event(100, 10, 100, 10, "2026-08-11T01:00:02Z"),
+            {"timestamp": "2026-08-11T01:00:03Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 2000}},
+            self._turn(timestamp="2026-08-11T02:00:01Z"),
+            {"timestamp": "2026-08-11T02:00:01Z", "type": "event_msg",
+             "payload": {"type": "task_started"}},
+            self._tool_call("child_tool", "2026-08-11T02:00:01.500Z"),
+            self._token_event(50, 5, 150, 15, "2026-08-11T02:00:02Z"),
+            {"timestamp": "2026-08-11T02:00:03Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 2000}},
+        ], mtime=20)
+
+        sources = {
+            source.locator.value: source
+            for source in self.adapter.discover(self.context)
+        }
+        root = self.adapter.load(sources[str(root_path)], DetailLevel.FULL)
+        child = self.adapter.load(sources[str(child_path)], DetailLevel.FULL)
+
+        self.assertEqual(root.usage.input_tokens.value, 100)
+        self.assertEqual(root.usage.output_tokens.value, 10)
+        self.assertEqual(child.usage.input_tokens.value, 50)
+        self.assertEqual(child.usage.output_tokens.value, 5)
+        self.assertEqual([tool.name for tool in child.tools], ["child_tool"])
+        self.assertEqual(len(child.turns), 1)
+
+    def test_nested_child_keeps_only_work_added_after_its_direct_parent(self):
+        root_path = self._write_trace("nested-root", [
+            self._session_meta("nested-root-1", "task-nested"),
+            self._turn(),
+            self._token_event(100, 10, 100, 10),
+        ], mtime=10)
+        child_path = self._write_trace("nested-child", [
+            self._session_meta(
+                "nested-child-1", "task-nested",
+                forked_from_id="nested-root-1",
+            ),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(100, 10, 100, 10, "2026-08-11T01:00:02Z"),
+            self._turn(timestamp="2026-08-11T02:00:01Z"),
+            self._token_event(50, 5, 150, 15, "2026-08-11T02:00:02Z"),
+        ], mtime=20)
+        grandchild_path = self._write_trace("nested-grandchild", [
+            self._session_meta(
+                "nested-grandchild-1", "task-nested",
+                forked_from_id="nested-child-1",
+            ),
+            self._turn(timestamp="2026-08-11T03:00:01Z"),
+            self._token_event(100, 10, 100, 10, "2026-08-11T03:00:02Z"),
+            self._turn(timestamp="2026-08-11T04:00:01Z"),
+            self._token_event(50, 5, 150, 15, "2026-08-11T04:00:02Z"),
+            self._turn(timestamp="2026-08-11T05:00:01Z"),
+            self._token_event(25, 3, 175, 18, "2026-08-11T05:00:02Z"),
+        ], mtime=30)
+
+        sources = {
+            source.locator.value: source
+            for source in self.adapter.discover(self.context)
+        }
+        usage = {}
+        for path in (root_path, child_path, grandchild_path):
+            result = self.adapter.load(sources[str(path)], DetailLevel.FULL)
+            usage[str(path)] = (
+                result.usage.input_tokens.value,
+                result.usage.output_tokens.value,
+            )
+
+        self.assertEqual(usage[str(root_path)], (100, 10))
+        self.assertEqual(usage[str(child_path)], (50, 5))
+        self.assertEqual(usage[str(grandchild_path)], (25, 3))
+        self.assertEqual(
+            sum(input_tokens + output_tokens
+                for input_tokens, output_tokens in usage.values()),
+            193,
+        )
+
+    def test_lineage_cycle_retains_all_usage(self):
+        first_path = self._write_trace("cycle-first", [
+            self._session_meta(
+                "cycle-first-1", "cycle-task",
+                forked_from_id="cycle-second-1",
+            ),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        second_path = self._write_trace("cycle-second", [
+            self._session_meta(
+                "cycle-second-1", "cycle-task",
+                forked_from_id="cycle-first-1",
+            ),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(10, 2, 10, 2, "2026-08-11T01:00:02Z"),
+        ], mtime=20)
+
+        sources = {
+            source.locator.value: source
+            for source in self.adapter.discover(self.context)
+        }
+        first = self.adapter.load(sources[str(first_path)], DetailLevel.FULL)
+        second = self.adapter.load(sources[str(second_path)], DetailLevel.FULL)
+
+        self.assertEqual(first.usage.input_tokens.value, 10)
+        self.assertEqual(first.usage.output_tokens.value, 2)
+        self.assertEqual(second.usage.input_tokens.value, 10)
+        self.assertEqual(second.usage.output_tokens.value, 2)
+
+    def test_adjacent_exact_cumulative_snapshot_counts_once(self):
+        path = self._write_trace("adjacent-total", [
+            self._session_meta("adjacent-total-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+            {"timestamp": "2026-08-11T00:00:02.500Z", "type": "event_msg",
+             "payload": {"type": "task_complete", "duration_ms": 1000}},
+            self._token_event(10, 2, 10, 2, "2026-08-11T00:00:03Z"),
+        ])
+        source = next(
+            source for source in self.adapter.discover(self.context)
+            if source.locator.value == str(path)
+        )
+
+        result = self.adapter.load(source, DetailLevel.FULL)
+
+        self.assertEqual(result.usage.input_tokens.value, 10)
+        self.assertEqual(result.usage.output_tokens.value, 2)
+        self.assertEqual(len(result.turns), 1)
+
+    def test_adjacent_same_last_usage_without_totals_counts_twice(self):
+        path = self._write_trace("adjacent-no-total", [
+            self._session_meta("adjacent-no-total-1"),
+            self._turn(),
+            self._token_event(10, 2),
+            self._token_event(10, 2, timestamp="2026-08-11T00:00:03Z"),
+        ])
+        source = next(
+            source for source in self.adapter.discover(self.context)
+            if source.locator.value == str(path)
+        )
+
+        result = self.adapter.load(source, DetailLevel.FULL)
+
+        self.assertEqual(result.usage.input_tokens.value, 20)
+        self.assertEqual(result.usage.output_tokens.value, 4)
+        self.assertEqual(len(result.turns), 2)
+
+    def test_missing_parent_retains_all_usage(self):
+        path = self._write_trace("missing-parent", [
+            self._session_meta(
+                "missing-child-1", forked_from_id="absent-parent-1",
+            ),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ])
+
+        result = self._native_load(path)
+
+        self.assertEqual(result.usage.input_tokens.value, 10)
+        self.assertEqual(result.usage.output_tokens.value, 2)
+
+    def test_duplicate_parent_identity_retains_all_usage(self):
+        for suffix, mtime in (("first", 10), ("second", 20)):
+            self._write_trace(f"duplicate-parent-{suffix}", [
+                self._session_meta("duplicate-parent-1"),
+                self._turn(),
+                self._token_event(10, 2, 10, 2),
+            ], mtime=mtime)
+        child_path = self._write_trace("duplicate-parent-child", [
+            self._session_meta(
+                "duplicate-child-1", forked_from_id="duplicate-parent-1",
+            ),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(10, 2, 10, 2, "2026-08-11T01:00:02Z"),
+        ], mtime=30)
+
+        result = self._native_load(child_path)
+
+        self.assertEqual(result.usage.input_tokens.value, 10)
+        self.assertEqual(result.usage.output_tokens.value, 2)
+
+    def test_self_parent_retains_all_usage(self):
+        path = self._write_trace("self-parent", [
+            self._session_meta("self-parent-1", forked_from_id="self-parent-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ])
+
+        result = self._native_load(path)
+
+        self.assertEqual(result.usage.input_tokens.value, 10)
+        self.assertEqual(result.usage.output_tokens.value, 2)
+
+    def test_model_or_usage_mismatch_prevents_prefix_removal(self):
+        self._write_trace("mismatch-parent", [
+            self._session_meta("mismatch-parent-1"),
+            self._turn(model="gpt-parent"),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        cases = (
+            ("model", "gpt-child", 10, 10),
+            ("usage", "gpt-parent", 11, 11),
+        )
+        for offset, (name, model, input_tokens, total_input) in enumerate(cases, 20):
+            path = self._write_trace(f"mismatch-child-{name}", [
+                self._session_meta(
+                    f"mismatch-child-{name}-1",
+                    forked_from_id="mismatch-parent-1",
+                ),
+                self._turn(model=model, timestamp="2026-08-11T01:00:01Z"),
+                self._token_event(
+                    input_tokens, 2, total_input, 2,
+                    "2026-08-11T01:00:02Z",
+                ),
+            ], mtime=offset)
+            with self.subTest(name=name):
+                result = self._native_load(path)
+                self.assertEqual(result.usage.input_tokens.value, input_tokens)
+                self.assertEqual(result.usage.output_tokens.value, 2)
+
+    def test_nested_source_parent_thread_id_is_used_when_fork_id_is_absent(self):
+        child_path = self._write_trace("nested-parent-field", [
+            self._session_meta("nested-source-child-1", source={
+                "subagent": {"thread_spawn": {
+                    "parent_thread_id": "nested-source-parent-1",
+                }},
+            }),
+        ])
+
+        child = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["parent_thread_id"], "nested-source-parent-1")
+        self.assertEqual(child["lineage_parent_id"], "nested-source-parent-1")
+
+    def test_parent_appearance_changes_child_lineage_revision(self):
+        child_path = self._write_trace("revision-child", [
+            self._session_meta(
+                "revision-child-1", forked_from_id="revision-parent-1",
+            ),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        before_source = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        native_source = next(
+            source for source in self.adapter.discover(self.context)
+            if source.locator.value == str(child_path)
+        )
+
+        self.assertIn("lineage_revision", before_source)
+        before = before_source["lineage_revision"]
+        native_before = self.adapter.current_revision(native_source)
+        self._write_trace("revision-parent", [
+            self._session_meta("revision-parent-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=20)
+        after = next(
+            source["lineage_revision"]
+            for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        native_after = self.adapter.current_revision(native_source)
+
+        self.assertNotEqual(before, after)
+        self.assertNotEqual(native_before, native_after)
+        self.assertEqual(before[0], "unresolved")
+        self.assertEqual(after[:2], ("resolved", "revision-parent-1"))
+
+    def test_parent_append_does_not_change_child_lineage_revision(self):
+        parent_path = self._write_trace("append-parent", [
+            self._session_meta("append-parent-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        child_path = self._write_trace("append-child", [
+            self._session_meta(
+                "append-child-1", forked_from_id="append-parent-1",
+            ),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(10, 2, 10, 2, "2026-08-11T01:00:02Z"),
+        ], mtime=20)
+        before = next(
+            source["lineage_revision"]
+            for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        with parent_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"type": "event_msg", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 5, "output_tokens": 1,
+                }},
+            }}) + "\n")
+        os.utime(parent_path, (30, 30))
+
+        after = next(
+            source["lineage_revision"]
+            for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(before, after)
+
+    def test_parent_replacement_changes_child_lineage_revision(self):
+        parent_path = self._write_trace("replace-parent", [
+            self._session_meta("replace-parent-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        child_path = self._write_trace("replace-child", [
+            self._session_meta(
+                "replace-child-1", forked_from_id="replace-parent-1",
+            ),
+            self._turn(timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(10, 2, 10, 2, "2026-08-11T01:00:02Z"),
+        ], mtime=20)
+        before = next(
+            source["lineage_revision"]
+            for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        replacement = parent_path.with_suffix(".replacement")
+        replacement.write_text(parent_path.read_text())
+        os.replace(replacement, parent_path)
+        os.utime(parent_path, (30, 30))
+
+        after = next(
+            source["lineage_revision"]
+            for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertNotEqual(before, after)
 
     def test_discovers_identity_model_provider_and_external_title(self):
         sources = self.adapter.discover(DiscoveryContext(home=str(self.root)))

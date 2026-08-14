@@ -6,7 +6,7 @@ import math
 import os
 import re
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +33,7 @@ from token_meter.contracts import (
 DEFAULT_MODEL = "gpt-5.6-sol"
 MAX_DETAIL_TURNS = 2_000
 MAX_TOOL_EVENTS = 2_000
+TOKEN_EVENT_CACHE_LIMIT = 2_048
 UUID_RE = re.compile(
     r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
 )
@@ -42,6 +43,14 @@ def _file_signature(path):
     try:
         stat = os.stat(path)
         return (str(stat.st_mtime_ns), str(stat.st_size))
+    except OSError:
+        return ("0", "0")
+
+
+def _file_identity(path):
+    try:
+        stat = os.stat(path)
+        return (str(stat.st_dev), str(stat.st_ino))
     except OSError:
         return ("0", "0")
 
@@ -65,6 +74,99 @@ def _safe_int(value):
         return max(0, int(value or 0))
     except (TypeError, ValueError, OverflowError):
         return 0
+
+
+def _numeric_usage_signature(value):
+    if not isinstance(value, dict):
+        return ()
+    fields = []
+    for key, raw in value.items():
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            continue
+        if isinstance(raw, float) and not math.isfinite(raw):
+            continue
+        fields.append((str(key), raw))
+    return tuple(sorted(fields))
+
+
+def _token_events(rows, default_model=DEFAULT_MODEL):
+    model = default_model
+    events = []
+    for row_index, row in enumerate(rows):
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        if row.get("type") == "turn_context":
+            model = str(payload.get("model") or model)
+        if payload.get("type") != "token_count":
+            continue
+        info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+        last = _numeric_usage_signature(info.get("last_token_usage"))
+        if not last:
+            continue
+        events.append((
+            row_index,
+            model,
+            last,
+            _numeric_usage_signature(info.get("total_token_usage")),
+        ))
+    return tuple(events)
+
+
+def _token_events_match(left, right):
+    if left[1] != right[1] or left[2] != right[2]:
+        return False
+    left_total = left[3]
+    right_total = right[3]
+    if bool(left_total) != bool(right_total):
+        return False
+    return not left_total or left_total == right_total
+
+
+def _inherited_token_prefix(child_events, parent_events):
+    count = 0
+    for child, parent in zip(child_events, parent_events):
+        if not _token_events_match(child, parent):
+            break
+        count += 1
+    return count
+
+
+def _corrected_rows(rows, inherited_count, default_model=DEFAULT_MODEL):
+    rows = tuple(rows)
+    events = _token_events(rows, default_model)
+    inherited_count = max(0, min(int(inherited_count), len(events)))
+    first_meta = next((
+        index for index, row in enumerate(rows)
+        if row.get("type") == "session_meta"
+    ), None)
+    drop = set()
+    chunk_start = 0
+    for row_index, _model, _last, _total in events[:inherited_count]:
+        drop.update(range(chunk_start, row_index + 1))
+        chunk_end = row_index
+        while chunk_end + 1 < len(rows):
+            trailing = rows[chunk_end + 1]
+            payload = (
+                trailing.get("payload")
+                if isinstance(trailing.get("payload"), dict)
+                else {}
+            )
+            if payload.get("type") != "task_complete":
+                break
+            chunk_end += 1
+            drop.add(chunk_end)
+        chunk_start = chunk_end + 1
+    if first_meta is not None:
+        drop.discard(first_meta)
+    previous = None
+    for event in events:
+        row_index = event[0]
+        if row_index in drop:
+            continue
+        if previous and event[3] and _token_events_match(previous, event):
+            drop.add(row_index)
+            continue
+        previous = event
+    return tuple(row for index, row in enumerate(rows) if index not in drop)
 
 
 def codex_usage(raw):
@@ -147,7 +249,8 @@ class CodexRuntimeAdapter:
                  compatibility=None, path_cache=None,
                  max_detail_turns=MAX_DETAIL_TURNS,
                  max_tool_events=MAX_TOOL_EVENTS,
-                 default_model=DEFAULT_MODEL):
+                 default_model=DEFAULT_MODEL,
+                 token_event_cache_limit=TOKEN_EVENT_CACHE_LIMIT):
         self.sessions_root = Path(os.path.abspath(os.path.expanduser(str(sessions_root))))
         self.index_path = Path(os.path.abspath(os.path.expanduser(str(index_path))))
         self.project_resolver = project_resolver or (lambda value: value)
@@ -156,9 +259,13 @@ class CodexRuntimeAdapter:
         self.max_detail_turns = max(1, int(max_detail_turns))
         self.max_tool_events = max(1, int(max_tool_events))
         self.default_model = str(default_model or DEFAULT_MODEL)
+        self.token_event_cache_limit = max(1, int(token_event_cache_limit))
         self._metadata_cache = {}
+        self._token_event_cache = OrderedDict()
         self._index_signature = None
         self._index_rows = {}
+        self._records_by_path = {}
+        self._record_by_physical_id = {}
 
     def _paths(self):
         pattern = str(self.sessions_root / "*" / "*" / "*" / "*.jsonl")
@@ -187,12 +294,29 @@ class CodexRuntimeAdapter:
         return dict(rows)
 
     @staticmethod
-    def _id_from_path(path, metadata=None):
-        if metadata and metadata.get("session_id"):
-            return str(metadata["session_id"])
+    def _physical_id_from_path(path):
         base = os.path.basename(path).rsplit(".", 1)[0]
         match = UUID_RE.search(base)
         return match.group(1) if match else base
+
+    @classmethod
+    def _id_from_path(cls, path, metadata=None):
+        if metadata and metadata.get("logical_session_id"):
+            return str(metadata["logical_session_id"])
+        if metadata and metadata.get("session_id"):
+            return str(metadata["session_id"])
+        return cls._physical_id_from_path(path)
+
+    @staticmethod
+    def _parent_thread_id(payload):
+        source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+        subagent = source.get("subagent") if isinstance(source.get("subagent"), dict) else {}
+        spawn = (
+            subagent.get("thread_spawn")
+            if isinstance(subagent.get("thread_spawn"), dict)
+            else {}
+        )
+        return payload.get("parent_thread_id") or spawn.get("parent_thread_id")
 
     def metadata(self, path):
         path = os.path.abspath(os.path.expanduser(str(path)))
@@ -215,6 +339,11 @@ class CodexRuntimeAdapter:
             return dict(cached["metadata"])
         metadata = {
             "session_id": None,
+            "physical_trace_id": None,
+            "logical_session_id": None,
+            "forked_from_id": None,
+            "parent_thread_id": None,
+            "lineage_parent_id": None,
             "cwd": None,
             "model": None,
             "model_provider": None,
@@ -225,6 +354,7 @@ class CodexRuntimeAdapter:
             "tool_namespaces": [],
         }
         prefix_complete = False
+        identity_seen = False
         try:
             with open(path, encoding="utf-8") as handle:
                 for index, line in enumerate(handle):
@@ -239,10 +369,24 @@ class CodexRuntimeAdapter:
                         continue
                     payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
                     if row.get("type") == "session_meta":
-                        metadata["session_id"] = (
-                            payload.get("session_id") or payload.get("id") or
-                            metadata["session_id"]
-                        )
+                        if not identity_seen and (
+                            payload.get("id") or payload.get("session_id")
+                        ):
+                            physical = str(
+                                payload.get("id") or self._physical_id_from_path(path)
+                            )
+                            logical = str(payload.get("session_id") or physical)
+                            forked = str(payload.get("forked_from_id") or "") or None
+                            parent = str(self._parent_thread_id(payload) or "") or None
+                            metadata.update({
+                                "session_id": logical,
+                                "physical_trace_id": physical,
+                                "logical_session_id": logical,
+                                "forked_from_id": forked,
+                                "parent_thread_id": parent,
+                                "lineage_parent_id": forked or parent,
+                            })
+                            identity_seen = True
                         metadata["cwd"] = payload.get("cwd") or metadata["cwd"]
                         metadata["model_provider"] = (
                             payload.get("model_provider") or metadata["model_provider"]
@@ -264,6 +408,13 @@ class CodexRuntimeAdapter:
                         metadata["model"] = payload.get("model") or metadata["model"]
         except OSError:
             pass
+        if not metadata["physical_trace_id"]:
+            physical = self._physical_id_from_path(path)
+            metadata.update({
+                "session_id": physical,
+                "physical_trace_id": physical,
+                "logical_session_id": physical,
+            })
         self._metadata_cache[path] = {
             "signature": signature,
             "identity": identity,
@@ -281,10 +432,21 @@ class CodexRuntimeAdapter:
             current.add(path)
             metadata = self.metadata(path)
             session_id = self._id_from_path(path, metadata)
+            physical_id = str(
+                metadata.get("physical_trace_id") or self._physical_id_from_path(path)
+            )
             cwd = metadata.get("cwd") or os.path.dirname(path)
-            title = (index.get(session_id) or {}).get("thread_name")
+            title = (
+                (index.get(session_id) or {}).get("thread_name")
+                or (index.get(physical_id) or {}).get("thread_name")
+            )
             records.append({
                 "id": session_id,
+                "physical_trace_id": physical_id,
+                "logical_session_id": session_id,
+                "forked_from_id": metadata.get("forked_from_id"),
+                "parent_thread_id": metadata.get("parent_thread_id"),
+                "lineage_parent_id": metadata.get("lineage_parent_id"),
                 "path": path,
                 "project": self.project_resolver(cwd),
                 "mtime": os.path.getmtime(path) if os.path.exists(path) else 0.0,
@@ -299,6 +461,34 @@ class CodexRuntimeAdapter:
             })
         for stale in set(self._metadata_cache) - current:
             self._metadata_cache.pop(stale, None)
+        for stale in set(self._token_event_cache) - current:
+            self._token_event_cache.pop(stale, None)
+        records_by_physical_id = defaultdict(list)
+        for record in records:
+            records_by_physical_id[record["physical_trace_id"]].append(record)
+        self._record_by_physical_id = {
+            physical_id: matches[0]
+            for physical_id, matches in records_by_physical_id.items()
+            if len(matches) == 1
+        }
+        self._records_by_path = {record["path"]: record for record in records}
+        for record in records:
+            parent_id = record.get("lineage_parent_id")
+            parent = self._record_by_physical_id.get(parent_id)
+            if (
+                not parent
+                or parent.get("path") == record.get("path")
+                or self._has_lineage_cycle(record)
+            ):
+                record["lineage_revision"] = (
+                    "unresolved", str(parent_id or ""),
+                )
+            else:
+                record["lineage_revision"] = (
+                    "resolved",
+                    str(parent_id),
+                    *_file_identity(parent["path"]),
+                )
         return tuple(records)
 
     def discover(self, context):
@@ -316,6 +506,7 @@ class CodexRuntimeAdapter:
                 *_file_signature(record["path"]),
                 *index_signature,
                 str(record["title"] or ""),
+                *record["lineage_revision"],
             )),
             model_ref=ModelRef(record["model_provider"], record["model"]),
             account_provider_id="openai",
@@ -327,6 +518,12 @@ class CodexRuntimeAdapter:
             "provider": "codex",
             "label": "Codex",
             "id": record["id"],
+            "physical_trace_id": record["physical_trace_id"],
+            "logical_session_id": record["logical_session_id"],
+            "forked_from_id": record["forked_from_id"],
+            "parent_thread_id": record["parent_thread_id"],
+            "lineage_parent_id": record["lineage_parent_id"],
+            "lineage_revision": record["lineage_revision"],
             "session": os.path.basename(record["path"]),
             "path": record["path"],
             "project": record["project"],
@@ -342,9 +539,28 @@ class CodexRuntimeAdapter:
 
     def current_revision(self, source):
         path = source.locator.value if isinstance(source, SessionSource) else source.get("path", "")
-        session_id = source.session_id if isinstance(source, SessionSource) else source.get("id", "")
-        title = (self._read_index().get(str(session_id)) or {}).get("thread_name") or ""
-        return SourceRevision((*_file_signature(path), *_file_signature(self.index_path), str(title)))
+        path = os.path.abspath(os.path.expanduser(str(path)))
+        record = next(
+            (candidate for candidate in self._records() if candidate["path"] == path),
+            None,
+        )
+        if record:
+            title = record.get("title") or ""
+            lineage_revision = record.get("lineage_revision") or ()
+        else:
+            session_id = (
+                source.session_id
+                if isinstance(source, SessionSource)
+                else source.get("id", "")
+            )
+            title = (self._read_index().get(str(session_id)) or {}).get("thread_name") or ""
+            lineage_revision = ()
+        return SourceRevision((
+            *_file_signature(path),
+            *_file_signature(self.index_path),
+            str(title),
+            *lineage_revision,
+        ))
 
     @staticmethod
     def _usage_evidence(value, available):
@@ -372,6 +588,68 @@ class CodexRuntimeAdapter:
             return (), 0, False
         return tuple(rows), corrupt, True
 
+    def _token_events_for_path(self, path, rows=None):
+        path = os.path.abspath(os.path.expanduser(str(path)))
+        signature = _file_signature(path)
+        cached = self._token_event_cache.get(path)
+        if cached and cached["signature"] == signature:
+            self._token_event_cache.move_to_end(path)
+            return cached["events"]
+        if rows is None:
+            rows, _corrupt, available = self.load_rows(path)
+            if not available:
+                return ()
+        events = _token_events(rows, self.default_model)
+        self._token_event_cache[path] = {
+            "signature": signature,
+            "events": events,
+        }
+        self._token_event_cache.move_to_end(path)
+        while len(self._token_event_cache) > self.token_event_cache_limit:
+            self._token_event_cache.popitem(last=False)
+        return events
+
+    def _record_for_path(self, path):
+        path = os.path.abspath(os.path.expanduser(str(path)))
+        record = self._records_by_path.get(path)
+        if record is None:
+            self._records()
+            record = self._records_by_path.get(path)
+        return record
+
+    def _has_lineage_cycle(self, record):
+        seen = set()
+        current = record
+        while current:
+            physical_id = current.get("physical_trace_id")
+            if physical_id in seen:
+                return True
+            seen.add(physical_id)
+            parent_id = current.get("lineage_parent_id")
+            if not parent_id:
+                return False
+            current = self._record_by_physical_id.get(parent_id)
+        return False
+
+    def _accounting_rows(self, source, rows):
+        path = (
+            source.locator.value
+            if isinstance(source, SessionSource)
+            else source.get("path", "")
+        )
+        path = os.path.abspath(os.path.expanduser(str(path)))
+        record = self._record_for_path(path)
+        if not record or self._has_lineage_cycle(record):
+            return _corrected_rows(rows, 0, self.default_model)
+        parent_id = record.get("lineage_parent_id")
+        parent = self._record_by_physical_id.get(parent_id)
+        if not parent or parent.get("path") == path:
+            return _corrected_rows(rows, 0, self.default_model)
+        child_events = _token_events(rows, self.default_model)
+        parent_events = self._token_events_for_path(parent["path"])
+        inherited_count = _inherited_token_prefix(child_events, parent_events)
+        return _corrected_rows(rows, inherited_count, self.default_model)
+
     def load(self, source, detail):
         if isinstance(source, dict):
             return self.recompute_legacy(source)
@@ -382,6 +660,7 @@ class CodexRuntimeAdapter:
         rows, corrupt, available = self.load_rows(source.locator.value)
         if not available:
             return self._empty(source, detail, ("source_unavailable",))
+        rows = self._accounting_rows(source, rows)
 
         counts = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
         usage_available = False
@@ -521,6 +800,7 @@ class CodexRuntimeAdapter:
         objs, _corrupt, _available = self.load_rows(path)
         if not objs:
             return None
+        objs = self._accounting_rows(source, objs)
     
         model = source.get("model") or DEFAULT_OPENAI_MODEL
         meta_cwd = source.get("project")
@@ -848,6 +1128,7 @@ class CodexRuntimeAdapter:
         compat = self._require_compatibility()
         if objs is None:
             objs, _corrupt, _available = self.load_rows(source.get("path") or "")
+        objs = self._accounting_rows(source, tuple(objs or ()))
         CURRENT_SESSION_CONTEXT_SAMPLES = compat["context_sample_limit"]
         DEFAULT_OPENAI_MODEL = compat["default_model"]
         add_model_daily = compat["add_model_daily"]

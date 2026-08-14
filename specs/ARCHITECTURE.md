@@ -87,6 +87,13 @@ reopens raw traces; it consumes cached summaries. OpenCode database access and
 Cursor shared-state enrichment are query-only. Claude Desktop joins metadata to
 its authoritative trace rather than counting a second session.
 
+Codex child rollout files may copy an exact prefix of a direct parent's
+execution history. The Codex adapter keeps physical and logical identities
+private, resolves only one unique cycle-free direct parent, and removes exact
+model-and-numeric-usage prefixes before native load, legacy detail, or legacy
+summary parsing. Ambiguous lineage retains all evidence. Runtime-neutral
+aggregation never reopens traces or performs a second deduplication.
+
 ## Domain and Model Flow
 
 `token_meter/domain/usage.py` and `token_meter/models/` resolve token counts,
@@ -116,6 +123,12 @@ Filesystem modification time is a revision signal, not automatically user/model
 activity. Adapters derive semantic activity from trace events or authoritative
 metadata so merely opening a historical session does not promote it into
 Current sessions.
+
+Codex token fingerprints are compact, content-free, and held in a bounded
+in-memory LRU. A child's lineage revision distinguishes unresolved from
+resolved parentage and uses the direct parent's stable filesystem identity.
+Parent appearance or replacement invalidates the child; append-only parent
+growth does not invalidate an unchanged child summary.
 
 Settings use bounded validation and atomic JSON replacement. Browser-local
 navigation and presentation preferences remain in local storage. Mutation

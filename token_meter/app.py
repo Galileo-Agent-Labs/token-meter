@@ -3989,6 +3989,7 @@ def source_revision_signature(source):
         float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
         str(source.get("title") or ""),
         str(source.get("request_revision") or ""),
+        tuple(source.get("lineage_revision") or ()),
     )
 
 

@@ -1,30 +1,53 @@
-# Token Meter
+<p align="center">
+  <img src="images/token-meter-header.png" alt="Token Meter — local-first observability for AI coding agents" width="900">
+</p>
 
-Claude, Codex, Cursor, OpenCode, and Kiro make it easy to start an agent
-session. They make it harder to understand what happened, what it cost, and
-whether usage is changing over time. Token Meter reads their local evidence and
-turns it into one live dashboard.
+Token Meter is a local-first observability dashboard for AI coding agents. It
+turns local session evidence from Claude, Codex, Cursor, OpenCode, and Kiro into
+one live view of what happened, what it cost, where time went, and how usage is
+changing. Use it to decide whether to continue, intervene, compare approaches,
+or investigate a run.
 
-Local-first. Python standard library only. No API keys for trace analysis. No
-Token Meter analytics or telemetry leaves your machine.
+Python standard library only. No API keys for trace analysis. No Token Meter
+analytics or telemetry leaves your machine.
 
-## What You Can Do
+## Capabilities
 
-| Area | What you get |
+| Area | What you can do |
 | --- | --- |
-| **Follow a live run** | Watch estimated cost, tokens, context pressure, wait, output pace, tool calls, and session-budget alerts. |
-| **Review session history** | Search supported runtimes together and filter by project, application, or activity window. |
-| **Understand daily usage** | Explain spend and wait by day, project, runtime, and session. |
-| **Compare model runtimes** | Review input, output, pace, wait, workload shape, and honestly withheld comparisons when evidence is insufficient. |
-| **Review tools and skills** | Find high-output, failing, repeated, unused, or deferred capabilities from bounded trace evidence. |
-| **Check provider limits** | View available Claude, Codex, and Cursor quota windows, resets, freshness, and unavailable states. |
-| **Manage a monthly budget** | Configure one machine-wide budget with per-runtime allocations and threshold notifications. |
-| **Ask an agent** | Let Codex or Claude query bounded, read-only current-run or aggregate evidence through the local MCP. |
+| **Live run visibility** | Decide whether to continue or intervene using estimated cost, tokens, context pressure, wait, output pace, tool calls, execution evidence, and session-budget alerts. |
+| **History and spend** | Find expensive or slow work across sessions, projects, runtimes, platforms, and calendar ranges, from today to a custom period. |
+| **Models and execution** | Compare input, output, pace, wait, and workload shape by model runtime; workload-matched comparisons appear only when the evidence is sufficient. |
+| **Tools and skills** | Investigate high-output, failing, repeated, unobserved, or deferred capabilities using bounded trace evidence without treating incomplete coverage as a safe disable recommendation. |
+| **Provider limits and budgets** | Check available Claude, Codex, and Cursor quota windows, resets, and freshness; set a machine-wide monthly budget with per-runtime allocations and threshold notifications. |
+| **Read-only agent access** | Let Codex or Claude query bounded current-run or aggregate evidence through the local MCP without exposing prompts, responses, reasoning, or tool contents. |
+| **Native desktop experience** | Keep the local server and platform companion available at login, check a current or pinned run, receive supported notifications, and install managed updates from the dashboard. |
 
-Supported evidence sources include Claude Code, Claude Desktop Agent/Cowork,
-Codex CLI and desktop, Cursor Agent/Composer, OpenCode, and Kiro. Evidence
-varies by runtime. Token Meter keeps unavailable values unavailable instead of
-displaying a misleading zero.
+Estimated evidence stays labeled. Values a runtime does not report remain
+unavailable instead of appearing as a misleading zero.
+
+## Coverage
+
+### Runtimes
+
+| Runtime | Local evidence |
+| --- | --- |
+| **Claude** | Claude Code and Claude Desktop Agent/Cowork sessions |
+| **Codex** | Codex CLI and desktop sessions |
+| **Cursor** | Cursor Agent/Composer sessions, with read-only local enrichment when available |
+| **OpenCode** | OpenCode session evidence |
+| **Kiro** | Kiro session evidence |
+
+Evidence varies by runtime, client version, and the local data each client
+records. Not every metric or capability is available for every runtime.
+
+### Platforms
+
+| Platform | Status | Experience |
+| --- | --- | --- |
+| **macOS** | Supported | Browser dashboard and native menu-bar companion |
+| **Linux** | Supported | Browser dashboard and AppIndicator tray companion |
+| **Windows** | **Beta** | Browser dashboard and notification-area extension |
 
 ## Quick Start
 
@@ -40,6 +63,8 @@ runtime outside the clone, starts the local server and native companion, waits
 for readiness, and configures automatic startup.
 
 ### Windows
+
+> **Beta:** The Windows extension is still in beta.
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '$p=Join-Path $env:TEMP "token-meter-bootstrap.ps1"; try { Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/splunk/token-meter/main/scripts/bootstrap-windows.ps1" -OutFile $p; & $p } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }'
@@ -148,9 +173,10 @@ and local agent connections.
 
 ## Native Companions
 
-The macOS menu bar, Linux AppIndicator tray, and Windows notification-area
-companion read the compact local `/menubar` payload. They do not parse traces or
-read provider credentials directly.
+The macOS menu bar and Linux AppIndicator tray are supported. The Windows
+notification-area extension is beta. All three read the compact local
+`/menubar` payload; they do not parse traces or read provider credentials
+directly.
 
 The macOS companion provides **Run**, **Claude**, **Codex**, and **Cursor**
 scopes. Run shows the current or pinned session; provider scopes show only the
@@ -169,8 +195,9 @@ Settings.
 - macOS: Swift toolchain, normally from Xcode Command Line Tools.
 - Linux: `systemd --user`, GTK 3, PyGObject, and Ayatana AppIndicator. GNOME
   generally needs an AppIndicator/KStatusNotifierItem extension.
-- Windows: Windows PowerShell and WinGet from Microsoft App Installer. The
-  bootstrap installs missing Git and native Windows Python 3.8 or newer.
+- Windows extension (beta): Windows PowerShell and WinGet from Microsoft App
+  Installer. The bootstrap installs missing Git and native Windows Python 3.8
+  or newer.
 - `curl` for macOS and Linux lifecycle helpers.
 
 The browser dashboard has no third-party Python dependency. A machine with no
@@ -221,7 +248,7 @@ Linux installs separate server and tray `systemd --user` services:
 "${XDG_DATA_HOME:-$HOME/.local/share}/token-meter/runtime/scripts/uninstall-systemd-user"
 ```
 
-Windows installs one owned current-user startup entry:
+The Windows extension (beta) installs one owned current-user startup entry:
 
 ```powershell
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
@@ -320,8 +347,8 @@ curl -fsS http://127.0.0.1:8722/menubar
 
 Then rerun the platform installer. Linux users should also inspect the user
 services and AppIndicator dependencies; macOS users need the Swift toolchain;
-Windows users need native Windows Python outside WSL; rerun the Windows wrapper
-to install and verify it automatically when it is missing.
+Windows beta users need native Windows Python outside WSL; rerun the Windows
+wrapper to install and verify it automatically when it is missing.
 
 ## Project Documentation
 

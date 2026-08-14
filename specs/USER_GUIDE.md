@@ -1,0 +1,277 @@
+# Token Meter User Guide
+
+This guide covers installation, daily use, updates, evidence semantics, and
+troubleshooting. For a product overview, start with the
+[README](../README.md). For the canonical security boundary, see
+[SECURITY.md](SECURITY.md).
+
+## Requirements
+
+- Python 3.8 or newer.
+- At least one supported runtime if you want trace data.
+- macOS: Swift toolchain, normally from Xcode Command Line Tools.
+- Linux: `systemd --user`, GTK 3, PyGObject, and Ayatana AppIndicator. GNOME
+  generally needs an AppIndicator/KStatusNotifierItem extension.
+- Windows extension (beta): Windows PowerShell and WinGet from Microsoft App
+  Installer. The bootstrap installs missing Git and native Windows Python 3.8
+  or newer.
+- `curl` for macOS and Linux lifecycle helpers.
+
+The browser dashboard uses only the Python standard library. A machine with no
+supported evidence still starts normally and shows an empty state.
+
+## Install and Run
+
+### macOS or Linux
+
+```bash
+git clone https://github.com/splunk/token-meter.git
+./token-meter/scripts/install
+```
+
+The installer selects the current operating system, stages a stable per-user
+runtime outside the clone, starts the local server and native companion, waits
+for readiness, and configures automatic startup.
+
+### Windows
+
+> **Beta:** The Windows extension is still in beta.
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '$p=Join-Path $env:TEMP "token-meter-bootstrap.ps1"; try { Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/splunk/token-meter/main/scripts/bootstrap-windows.ps1" -OutFile $p; & $p } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }'
+```
+
+The bootstrap reuses compatible Git and Python installations. If either is
+missing, it installs exact packages through WinGet and verifies the executable
+before continuing. WinGet is part of Microsoft's App Installer. Token Meter
+requests no administrator access.
+
+The managed source and runtime are stored under `%LOCALAPPDATA%\Token Meter`.
+The installer starts the hidden server and WinForms tray and creates only the
+current user's login startup entry. The process-scoped bypass does not change
+the machine or user execution policy, and the downloaded bootstrap file is
+removed when the command finishes.
+
+For a local rerun from an existing checkout, use
+`.\scripts\install-windows.cmd`. Pass `-NoOpenDashboard` to the downloaded
+script invocation when an unattended bootstrap should not open the dashboard.
+
+### Run without installing
+
+For development or troubleshooting:
+
+```bash
+cd token-meter
+./scripts/start-token-meter
+```
+
+To run only the web server:
+
+```bash
+python3 meter.py
+```
+
+Open [http://127.0.0.1:8722](http://127.0.0.1:8722), start a normal agent run,
+and select it from **Sessions**.
+
+## Daily Workflows
+
+### Sessions
+
+**Current sessions** shows recently active runs. **All sessions** searches
+history by project, application, or activity window. Selecting a session opens
+a durable local URL such as `/sessions/<id>#summary`.
+
+Within a session:
+
+- **Run** shows usage and timing.
+- **Activity** shows normalized events.
+- **Tools** shows capability evidence.
+- **Insights** shows bounded derived signals.
+- **Alerts** shows session-budget and notification state.
+
+Session deletion is available only where the runtime and platform expose a
+safe, recoverable target.
+
+### Spend
+
+Spend supports Today, 7-day, 30-day, This month, and custom calendar ranges.
+Use its daily bars, platform split, projects, runtimes, and highest-cost logs to
+understand where usage accumulated. Partial and locally estimated costs remain
+explicitly labeled.
+
+### Models
+
+Models keeps identical model names separate across applications. Filter by
+project, model runtime, or history. Workload-matched pace is withheld when
+sample count, coverage, token authority, or workload similarity is
+insufficient.
+
+### Tools and skills
+
+Tools shows observed calls, returned-text estimates, failures, repeats, catalog
+exposure, skill-pack activation, and review candidates. Incomplete evidence,
+built-in packs, default tools, and read-only runtimes are not treated as safe
+disable recommendations.
+
+### Settings
+
+Settings contains monthly budget allocations, thresholds, effective-dated
+model pricing, software updates, menu-bar preferences, experimental language
+signals, and local agent connections.
+
+## Native Companions
+
+The macOS menu bar and Linux AppIndicator tray are supported. The Windows
+notification-area extension is beta. All three read the compact local
+`/menubar` payload; they do not parse traces or read provider credentials
+directly.
+
+The macOS companion provides **Run**, **Claude**, **Codex**, and **Cursor**
+scopes. Run shows the current or pinned session. Provider scopes show only
+quota windows reported by that provider. Missing means unavailable, not 0%.
+Menu-bar title fields and quota notifications are configurable in Settings.
+
+## Ask From Codex or Claude
+
+Open **Settings → Agent connections** to connect the read-only local MCP entry
+named `tokenmeter`. Start a new agent session after connecting.
+
+The bounded tools are:
+
+- `mcp__tokenmeter__check` for the caller-matched current run and optional
+  execution drill-down;
+- `mcp__tokenmeter__usage` for aggregate spend, model, tool, or change review;
+- `mcp__tokenmeter__capabilities` for named user-installed skill-pack evidence.
+
+Current detail is runtime/project matched. Historical output is aggregate-only.
+Prompts, responses, reasoning, tool arguments/results, credentials, environment
+values, settings, and trace paths are excluded. Results returned to an
+explicitly connected agent may be processed by that client's model provider
+under its own terms.
+
+## Software Updates
+
+Update checks are enabled by default and run every 10 minutes while the server
+is active. A check fetches revision metadata; it does not merge, reinstall, or
+modify the development checkout.
+
+When the managed update checkout is clean, non-diverged, and behind upstream,
+the dashboard offers **New update available**. Applying it performs a
+fast-forward update, reruns the installer, and reloads after the local server
+returns. Dirty or diverged checkouts remain untouched with an explanation.
+
+## Automatic Startup and Uninstall
+
+macOS installs separate per-user LaunchAgents for the server and menu bar:
+
+```bash
+"$HOME/Library/Application Support/Token Meter/runtime/scripts/uninstall-launch-agent"
+```
+
+Linux installs separate server and tray `systemd --user` services:
+
+```bash
+"${XDG_DATA_HOME:-$HOME/.local/share}/token-meter/runtime/scripts/uninstall-systemd-user"
+```
+
+The Windows extension (beta) installs one owned current-user startup entry:
+
+```powershell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"
+```
+
+These helpers stop and remove Token Meter lifecycle entries. They do not
+require `sudo` or security-control changes.
+
+## Data and Evidence
+
+Token Meter reads local runtime stores: JSONL traces for Claude, Codex, Cursor,
+and Kiro; read-only SQLite enrichment for Cursor and OpenCode; and
+runtime-owned metadata needed to join a visible session to its trace.
+
+Discovery and parsing are runtime adapters. Operating-system paths are platform
+services. Optional enrichment falls back to the authoritative base trace when
+its source is missing, locked, corrupt, or unsupported. Opening a historical
+session without new trace activity does not make it current. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for path precedence, data flow, cache
+invalidation, and extension contracts.
+
+### Costs and estimates
+
+Token Meter uses effective-dated provider/model price periods. Reinstalling
+after a price update does not rewrite estimates for events before the price's
+effective time. Manual overrides can start a new period or explicitly apply to
+all history.
+
+Codex costs use public API-equivalent rates and remain estimates because
+subscription billing can differ. Cursor input, output, pace, and cost are local
+proxies derived from persisted evidence and remain labeled `est`; cache and
+hidden model work may be unavailable. Token Meter reports recorded evidence,
+not a pre-flight prediction.
+
+## Privacy
+
+Token Meter binds to `127.0.0.1`. It does not upload traces, prompts, responses,
+project paths, token counts, costs, or derived analytics. Do not expose the
+localhost dashboard publicly.
+
+Claude, Codex, and Cursor quota views make bounded read-only requests using the
+matching provider's existing sign-in. Credentials and raw responses are not
+persisted, returned through localhost, included in logs/errors, or sent to a
+different provider. Third-party Claude authentication such as Bedrock fails
+closed as unavailable.
+
+The dashboard can display local project paths, runtime/model names, capability
+names, and derived metrics. See [SECURITY.md](SECURITY.md) and the
+[architecture privacy invariants](ARCHITECTURE.md#privacy-and-security-invariants)
+for the complete boundary.
+
+## Troubleshooting
+
+### Port 8722 is already in use
+
+```bash
+lsof -nP -iTCP:8722 -sTCP:LISTEN
+```
+
+Stop only the process you recognize, then rerun the installer or foreground
+server. Do not start multiple Token Meter servers on the same port.
+
+### No logs were found
+
+Start a normal supported agent session and reload. Confirm the runtime uses its
+standard local store and that Token Meter can read it. A regular Claude Desktop
+cloud chat is not measurable unless Agent/Cowork produces joined local metadata
+and a trace.
+
+### Claude Desktop appears under another Claude label
+
+Desktop attribution depends on current metadata containing a joinable session
+identifier. If metadata is missing or uses an unknown schema, Token Meter keeps
+the authoritative trace and uses the narrower label rather than guessing.
+
+### Source changes do not appear
+
+Run `./scripts/install` from the intended checkout. Do not patch only the
+staged Application Support or XDG runtime. The installer validates and stages
+the manifest-owned source together.
+
+### Notifications do not appear
+
+Check browser/system notification permission and the relevant Settings toggle.
+Unavailable or denied browser delivery still leaves in-app alert history.
+
+### The native companion does not start
+
+Check server readiness first:
+
+```bash
+curl -fsS http://127.0.0.1:8722/health
+curl -fsS http://127.0.0.1:8722/menubar
+```
+
+Then rerun the platform installer. Linux users should inspect the user services
+and AppIndicator dependencies; macOS users need the Swift toolchain. Windows
+beta users need native Windows Python outside WSL; rerun the Windows wrapper to
+install and verify it when missing.

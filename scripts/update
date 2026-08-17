@@ -45,6 +45,12 @@ record = {
     "available": phase not in {"complete", "current"},
     "can_update": False,
 }
+if phase == "failed":
+    record["failed_revision"] = (
+        record["current_revision"]
+        or record["latest_revision"]
+        or previous.get("failed_revision", "")
+    )
 if phase == "complete":
     record["installed_at"] = int(time.time())
 elif previous.get("installed_at"):
@@ -68,6 +74,7 @@ fail_update() {
 current_revision=""
 latest_revision=""
 previous_revision=""
+retry_revision="${TOKEN_METER_UPDATE_RETRY_REVISION:-}"
 
 sleep 1
 
@@ -85,6 +92,16 @@ previous_revision="$current_revision"
 upstream="$(git -C "$SOURCE_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
 if [[ ! "$upstream" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$ || "$upstream" != */* ]]; then
   fail_update "upstream_unavailable"
+fi
+branch="$(git -C "$SOURCE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ "$branch" != "main" || "${upstream##*/}" != "main" ]]; then
+  fail_update "unsupported_update_branch"
+fi
+if [[ -n "$retry_revision" && ! "$retry_revision" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+  retry_revision=""
+fi
+if [[ -n "$retry_revision" ]]; then
+  previous_revision=""
 fi
 remote="${upstream%%/*}"
 
@@ -107,15 +124,17 @@ fi
 if (( ahead > 0 )); then
   fail_update "diverged_checkout"
 fi
-if (( behind == 0 )); then
+if (( behind == 0 )) && [[ "$current_revision" != "$retry_revision" ]]; then
   write_status "current" "" "$current_revision" "$latest_revision" "$previous_revision"
   exit 0
 fi
 
-if ! git -C "$SOURCE_ROOT" merge --ff-only '@{upstream}' >/dev/null 2>&1; then
-  fail_update "diverged_checkout"
+if (( behind > 0 )); then
+  if ! git -C "$SOURCE_ROOT" merge --ff-only '@{upstream}' >/dev/null 2>&1; then
+    fail_update "diverged_checkout"
+  fi
+  current_revision="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
-current_revision="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || true)"
 
 write_status "installing" "" "$current_revision" "$latest_revision" "$previous_revision"
 if ! TOKEN_METER_INSTALL_ROOT="$RUNTIME_ROOT" "$SOURCE_ROOT/scripts/install"; then

@@ -117,8 +117,11 @@ disable recommendations.
 ### Settings
 
 Settings contains monthly budget allocations, thresholds, effective-dated
-model pricing, software updates, menu-bar preferences, experimental language
-signals, and local agent connections.
+model pricing, software updates, menu-bar preferences, language signals, and
+local agent connections. Model pricing shows the review date and provider
+sources for bundled rates. Select the models to change, edit their prices,
+choose **From now**, **From date**, or **All history**, and save them together.
+Unselected models are not changed.
 
 ## Native Companions
 
@@ -152,14 +155,27 @@ under its own terms.
 
 ## Software Updates
 
-Update checks are enabled by default and run every 10 minutes while the server
-is active. A check fetches revision metadata; it does not merge, reinstall, or
-modify the development checkout.
+**Check for updates every 10 minutes** and **Automatically install available
+updates** are both enabled by default. They are separate controls: turning off
+automatic installation keeps checks running, while turning off checks also
+turns off automatic installation. The interval is fixed at 10 minutes while
+the server is active. Checks fetch revision metadata without modifying the
+checkout.
 
-When the managed update checkout is clean, non-diverged, and behind upstream,
-the dashboard offers **New update available**. Applying it performs a
-fast-forward update, reruns the installer, and reloads after the local server
-returns. Dirty or diverged checkouts remain untouched with an explanation.
+Automatic installation is limited to a managed checkout that is on `main`,
+tracks a remote `main`, is clean and non-diverged, and is behind upstream. A
+safe update fast-forwards the checkout, reruns the installer, and returns after
+the local server restarts. Other branches, dirty checkouts, and diverged
+history remain untouched and report that the update needs attention.
+
+Normal automatic updates do not require the dashboard. When automatic
+installation is off and a safe update is available, the native menu shows
+**New update available** as an install action. During installation it shows
+**Updating Token Meter...**; a blocked or failed update shows **Update needs
+attention** and opens the Software updates settings. **Check now** remains
+available in Settings. After correcting the reported condition, retry the
+available update from the native menu or dashboard; an explicitly retried
+failed revision is allowed to reinstall.
 
 ## Automatic Startup and Uninstall
 

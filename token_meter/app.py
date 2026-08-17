@@ -105,6 +105,8 @@ from token_meter.domain.tools import (
 from token_meter.models.catalog import (
     ANTHROPIC_PRICE as CLAUDE_PRICE,
     BUILTIN_MODEL_PRICE_HISTORY as _CANONICAL_BUILTIN_MODEL_PRICE_HISTORY,
+    BUILTIN_PRICE_REVIEWED_ON,
+    BUILTIN_PRICE_SOURCES,
     CURSOR_PRICE,
     DEFAULT_MODELS as _DEFAULT_MODELS,
     GPT_56_LONG_CONTEXT_TOKENS,
@@ -249,6 +251,7 @@ MAX_FRUSTRATION_TERM_LENGTH = 40
 MODEL_PRICE_PROVIDERS = ("claude", "codex", "cursor", "opencode")
 MAX_CUSTOM_MODEL_PRICES = 100
 MAX_MODEL_PRICE_PERIODS = 256
+MAX_MODEL_PRICE_CHANGES = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICING_MTIME_TTL_S = 0.25
 BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode", "kiro")
@@ -953,6 +956,8 @@ def model_pricing_settings(path=None):
         "models": rows,
         "currency": "USD",
         "unit": "per 1M tokens",
+        "reviewed_on": BUILTIN_PRICE_REVIEWED_ON,
+        "sources": [dict(source) for source in BUILTIN_PRICE_SOURCES],
         "overrides": sum(
             1 for row in rows if row["builtin"] and row["overridden"]
         ),
@@ -964,85 +969,137 @@ def model_pricing_settings(path=None):
     }
 
 
-def set_model_price(provider, model, prices=None, remove=False, path=None,
-                    apply_to_all_history=False, effective_from=None):
-    """Start one price period, or deliberately replace its complete history."""
+def _normalize_model_price_scope(apply_to_all_history, effective_from, now):
+    if not isinstance(apply_to_all_history, bool):
+        raise ValueError("Apply to all history must be true or false.")
+    if effective_from is not None:
+        if isinstance(effective_from, bool) or not isinstance(effective_from, (int, float)):
+            raise ValueError("Model price effective time must be a Unix timestamp.")
+        effective_from = float(effective_from)
+        if not math.isfinite(effective_from) or effective_from < 0:
+            raise ValueError("Model price effective time must be a Unix timestamp.")
+        if effective_from > now + 300:
+            raise ValueError("Model price effective time cannot be in the future.")
+    if apply_to_all_history and effective_from is not None:
+        raise ValueError("Choose either an effective time or all history, not both.")
+    return (
+        None if apply_to_all_history else (
+            effective_from if effective_from is not None else now
+        ),
+        "all_history" if apply_to_all_history else (
+            "selected_time" if effective_from is not None else "now"
+        ),
+    )
+
+
+def _normalize_model_price_change(change):
+    if not isinstance(change, dict):
+        raise ValueError("Each model price change must be an object.")
+    provider = normalize_model_price_provider(change.get("provider"))
+    model = normalize_model_price_id(change.get("model"))
+    remove = change.get("remove", False)
+    if not isinstance(remove, bool):
+        raise ValueError("Remove must be true or false.")
+    if remove and "prices" in change:
+        raise ValueError("A model price change cannot set and remove prices together.")
+    prices = None if remove else normalize_model_price(change.get("prices"))
+    return {
+        "provider": provider,
+        "model": model,
+        "prices": prices,
+        "remove": remove,
+    }
+
+
+def _apply_model_price_change(
+        histories, change, apply_to_all_history, applied_from):
+    provider = change["provider"]
+    model = change["model"]
+    normalized = change["prices"]
+    remove = change["remove"]
+    builtin = builtin_model_price_tables()[provider].get(model)
+    periods = histories[provider].get(model) or []
+    if apply_to_all_history and (remove or (builtin is not None and builtin == normalized)):
+        return histories[provider].pop(model, None) is not None
+    if apply_to_all_history:
+        replacement = [{"effective_from": None, "prices": normalized}]
+        changed = periods != replacement
+        histories[provider][model] = replacement
+        return changed
+
+    if remove:
+        action = ({"use_builtin": True} if builtin is not None else {"inactive": True})
+    elif builtin is not None and builtin == normalized:
+        action = {"use_builtin": True}
+    else:
+        action = {"prices": normalized}
+    current = _model_price_revision_at(periods, applied_from)
+    if current is None:
+        current = ({"use_builtin": True} if builtin is not None else {"inactive": True})
+    if _same_model_price_action(current, action):
+        return False
+    replacement = {"effective_from": applied_from, **action}
+    by_effective = {item["effective_from"]: item for item in periods}
+    by_effective[applied_from] = replacement
+    updated = sorted(
+        by_effective.values(),
+        key=lambda revision: (-1 if revision["effective_from"] is None
+                              else revision["effective_from"]),
+    )
+    if len(updated) > MAX_MODEL_PRICE_PERIODS:
+        raise ValueError(
+            f"Use at most {MAX_MODEL_PRICE_PERIODS} saved periods per model."
+        )
+    histories[provider][model] = updated
+    return True
+
+
+def set_model_prices(changes, path=None, apply_to_all_history=False,
+                     effective_from=None):
+    """Validate and persist a bounded set of model price changes atomically."""
     path = path or TOKEN_METER_SETTINGS
     try:
-        provider = normalize_model_price_provider(provider)
-        model = normalize_model_price_id(model)
-        normalized = None if remove else normalize_model_price(prices)
-        if not isinstance(apply_to_all_history, bool):
-            raise ValueError("Apply to all history must be true or false.")
-        if effective_from is not None:
-            if isinstance(effective_from, bool) or not isinstance(effective_from, (int, float)):
-                raise ValueError("Model price effective time must be a Unix timestamp.")
-            effective_from = float(effective_from)
-            if not math.isfinite(effective_from) or effective_from < 0:
-                raise ValueError("Model price effective time must be a Unix timestamp.")
-            if effective_from > time.time() + 300:
-                raise ValueError("Model price effective time cannot be in the future.")
-        if apply_to_all_history and effective_from is not None:
-            raise ValueError("Choose either an effective time or all history, not both.")
+        if (not isinstance(changes, list) or not changes
+                or len(changes) > MAX_MODEL_PRICE_CHANGES):
+            raise ValueError(
+                f"Provide 1–{MAX_MODEL_PRICE_CHANGES} model price changes."
+            )
+        applied_from, effective_scope = _normalize_model_price_scope(
+            apply_to_all_history, effective_from, time.time()
+        )
+        normalized_changes = [_normalize_model_price_change(change) for change in changes]
+        keys = [(change["provider"], change["model"]) for change in normalized_changes]
+        if len(keys) != len(set(keys)):
+            raise ValueError("A model price batch cannot contain duplicate models.")
     except ValueError as error:
         return {"ok": False, "error": str(error)}
 
     histories = copy.deepcopy(_load_model_price_histories(path))
-    builtin = builtin_model_price_tables()[provider].get(model)
-    periods = histories[provider].get(model) or []
-    changed = False
-    applied_from = None if apply_to_all_history else (
-        effective_from if effective_from is not None else time.time()
-    )
-    if apply_to_all_history and (remove or (builtin is not None and builtin == normalized)):
-        changed = histories[provider].pop(model, None) is not None
-    elif apply_to_all_history:
-        replacement = [{"effective_from": None, "prices": normalized}]
-        changed = periods != replacement
-        histories[provider][model] = replacement
-    else:
-        if remove:
-            action = ({"use_builtin": True} if builtin is not None else {"inactive": True})
-        elif builtin is not None and builtin == normalized:
-            action = {"use_builtin": True}
-        else:
-            action = {"prices": normalized}
-        current = _model_price_revision_at(periods, applied_from)
-        if current is None:
-            current = ({"use_builtin": True} if builtin is not None else {"inactive": True})
-        if not _same_model_price_action(current, action):
-            replacement = {"effective_from": applied_from, **action}
-            by_effective = {item["effective_from"]: item for item in periods}
-            by_effective[applied_from] = replacement
-            updated = sorted(
-                by_effective.values(),
-                key=lambda revision: (-1 if revision["effective_from"] is None
-                                      else revision["effective_from"]),
+    results = []
+    try:
+        for change in normalized_changes:
+            changed = _apply_model_price_change(
+                histories, change, apply_to_all_history, applied_from,
             )
-            if len(updated) > MAX_MODEL_PRICE_PERIODS:
-                return {
-                    "ok": False,
-                    "error": f"Use at most {MAX_MODEL_PRICE_PERIODS} saved periods per model.",
-                }
-            histories[provider][model] = updated
-            changed = True
-
-    custom_count = sum(
-        1
-        for item_provider, rows in histories.items()
-        for item_model in rows
-        if item_model not in builtin_model_price_tables()[item_provider]
-    )
-    if custom_count > MAX_CUSTOM_MODEL_PRICES:
-        if builtin is None and model not in _load_model_price_histories(path)[provider]:
-            return {
-                "ok": False,
-                "error": f"Use at most {MAX_CUSTOM_MODEL_PRICES} custom model prices.",
-            }
-        return {
-            "ok": False,
-            "error": f"Remove an archived custom model before adding another; the limit is {MAX_CUSTOM_MODEL_PRICES}.",
-        }
+            results.append({
+                "provider": change["provider"],
+                "model": change["model"],
+                "removed": change["remove"],
+                "changed": changed,
+            })
+        custom_count = sum(
+            1
+            for item_provider, rows in histories.items()
+            for item_model in rows
+            if item_model not in builtin_model_price_tables()[item_provider]
+        )
+        if custom_count > MAX_CUSTOM_MODEL_PRICES:
+            raise ValueError(
+                "Remove an archived custom model before adding another; "
+                f"the limit is {MAX_CUSTOM_MODEL_PRICES}."
+            )
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
 
     settings = load_json(path, {})
     if not isinstance(settings, dict):
@@ -1070,18 +1127,36 @@ def set_model_price(provider, model, prices=None, remove=False, path=None,
     })
     return {
         "ok": True,
-        "changed": changed,
-        "provider": provider,
-        "model": model,
-        "removed": bool(remove),
+        "changed": any(result["changed"] for result in results),
+        "changes": results,
         "apply_to_all_history": apply_to_all_history,
         "effective_from": applied_from,
-        "effective_scope": (
-            "all_history" if apply_to_all_history else
-            ("selected_time" if effective_from is not None else "now")
-        ),
+        "effective_scope": effective_scope,
         "model_pricing": model_pricing_settings(path),
     }
+
+
+def set_model_price(provider, model, prices=None, remove=False, path=None,
+                    apply_to_all_history=False, effective_from=None):
+    """Compatibility wrapper for one model price change."""
+    change = {
+        "provider": provider,
+        "model": model,
+        "remove": remove,
+    }
+    if not remove:
+        change["prices"] = prices
+    result = set_model_prices([change], path=path, apply_to_all_history=apply_to_all_history,
+        effective_from=effective_from)
+    if not result.get("ok"):
+        return result
+    change = result["changes"][0]
+    result.update({
+        "provider": change["provider"],
+        "model": change["model"],
+        "removed": change["removed"],
+    })
+    return result
 
 
 def normalize_budget_settings(values):
@@ -1176,22 +1251,26 @@ def set_budget_settings(values, path=None):
 
 
 def normalize_update_settings(values):
-    """Validate the machine-wide software-update preference."""
+    """Validate the machine-wide software-update preferences."""
     if values is None:
         values = {}
     if not isinstance(values, dict):
         raise ValueError("Update settings must be an object.")
     enabled = values.get("enabled", True)
-    if not isinstance(enabled, bool):
-        raise ValueError("Automatic update checks must be on or off.")
+    auto_install = values.get("auto_install", True)
+    if not isinstance(enabled, bool) or not isinstance(auto_install, bool):
+        raise ValueError("Update preferences must be on or off.")
+    if not enabled:
+        auto_install = False
     return {
         "enabled": enabled,
+        "auto_install": auto_install,
         "interval_seconds": UPDATE_CHECK_INTERVAL_S,
     }
 
 
 def update_settings(path=None):
-    """Load the default-on 10-minute update-check preference."""
+    """Load the default-on update-check and installation preferences."""
     path = path or TOKEN_METER_SETTINGS
     settings = load_json(path, {})
     raw = settings.get("updates") if isinstance(settings, dict) else {}
@@ -1202,7 +1281,7 @@ def update_settings(path=None):
 
 
 def set_update_settings(values, path=None):
-    """Persist the update-check preference without changing the checkout."""
+    """Persist update preferences without changing the checkout."""
     path = path or TOKEN_METER_SETTINGS
     try:
         normalized = normalize_update_settings(values)
@@ -1211,7 +1290,10 @@ def set_update_settings(values, path=None):
     settings = load_json(path, {})
     if not isinstance(settings, dict):
         settings = {}
-    stored = {"enabled": normalized["enabled"]}
+    stored = {
+        "enabled": normalized["enabled"],
+        "auto_install": normalized["auto_install"],
+    }
     changed = settings.get("updates") != stored
     settings["updates"] = stored
     try:
@@ -1275,7 +1357,7 @@ def _persist_update_status(values, path=None):
     allowed = {
         "phase", "error_code", "current_revision", "latest_revision",
         "previous_revision", "checked_at", "started_at", "installed_at",
-        "available", "can_update", "dirty", "ahead", "behind",
+        "failed_revision", "available", "can_update", "dirty", "ahead", "behind",
     }
     record = {
         key: values[key]
@@ -1314,6 +1396,7 @@ def _update_message(state, error_code="", latest_revision=""):
         "source_unavailable": "The installed source checkout is unavailable.",
         "git_unavailable": "Git is unavailable, so Token Meter cannot check for updates.",
         "upstream_unavailable": "The source checkout has no usable tracking upstream.",
+        "unsupported_update_branch": "Automatic updates require a main checkout tracking a remote main branch.",
         "fetch_failed": "Token Meter could not fetch the configured Git upstream.",
         "inspect_failed": "Token Meter could not compare the installed and upstream revisions.",
         "dirty_checkout": "An update exists, but the source checkout has local changes.",
@@ -1353,6 +1436,7 @@ def software_update_status(settings_path=None, status_path=None):
     checked_at = _safe_update_int(raw.get("checked_at"))
     return {
         "enabled": enabled,
+        "auto_install": settings["auto_install"],
         "interval_seconds": UPDATE_CHECK_INTERVAL_S,
         "state": state,
         "checking": state == "checking",
@@ -1420,6 +1504,15 @@ def check_for_software_update(
             )
             if not UPDATE_REF_RE.fullmatch(upstream) or "/" not in upstream:
                 raise ValueError("invalid upstream")
+            branch = _run_update_git(
+                checkout, ["rev-parse", "--abbrev-ref", "HEAD"], runner,
+            )
+            if branch != "main" or upstream.rsplit("/", 1)[-1] != "main":
+                _persist_update_status({
+                    "phase": "error", "error_code": "unsupported_update_branch",
+                    "checked_at": now,
+                }, status_path)
+                return software_update_status(settings_path, status_path)
             remote = upstream.split("/", 1)[0]
         except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
             _persist_update_status({
@@ -1508,9 +1601,17 @@ def trigger_software_update_check(settings_path=None, status_path=None):
 def start_software_update(popen=None, settings_path=None, status_path=None):
     """Launch the detached fast-forward-and-reinstall helper."""
     status = software_update_status(settings_path, status_path)
+    raw = _update_status_record(status_path)
     if not status["enabled"]:
         return {"ok": False, "error": "Enable automatic update checks first."}
-    if not status["available"] or not status["can_update"]:
+    failed_target = _safe_update_revision(raw.get("failed_revision"))
+    retry_failed = bool(
+        str(raw.get("phase") or "") == "failed"
+        and str(raw.get("error_code") or "") in {"install_failed", "launch_failed"}
+        and failed_target
+        and failed_target == _safe_update_revision(raw.get("latest_revision"))
+    )
+    if (not status["available"] or not status["can_update"]) and not retry_failed:
         return {"ok": False, "error": "No safely installable update is available."}
     checkout = source_checkout_path()
     target_status_path = status_path or TOKEN_METER_UPDATE_STATUS
@@ -1538,6 +1639,7 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
         "latest_revision": status["latest_revision"],
         "available": True,
         "can_update": False,
+        "failed_revision": failed_target if retry_failed else "",
     }, status_path)
     popen = popen or subprocess.Popen
     process_options = _PLATFORM_SERVICES.process_options(ProcessPurpose.DETACHED)
@@ -1547,6 +1649,7 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
             "checked_at": status["checked_at"],
             "current_revision": status["current_revision"],
             "latest_revision": status["latest_revision"],
+            "failed_revision": status["latest_revision"],
         }, status_path)
         return {"ok": False, "error": "Token Meter could not start the updater."}
     try:
@@ -1560,6 +1663,11 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
             launch_options["start_new_session"] = True
         if process_options.creation_flags:
             launch_options["creationflags"] = process_options.creation_flags
+        if retry_failed:
+            launch_options["env"] = {
+                **os.environ,
+                "TOKEN_METER_UPDATE_RETRY_REVISION": failed_target,
+            }
         popen(list(update_plan.command), **launch_options)
     except OSError:
         _persist_update_status({
@@ -1567,27 +1675,35 @@ def start_software_update(popen=None, settings_path=None, status_path=None):
             "checked_at": status["checked_at"],
             "current_revision": status["current_revision"],
             "latest_revision": status["latest_revision"],
+            "failed_revision": status["latest_revision"],
         }, status_path)
         return {"ok": False, "error": "Token Meter could not start the updater."}
     return {"ok": True, "status": software_update_status(settings_path, status_path)}
 
 
 def software_update_watcher():
-    """Run an immediate enabled check, then wait 10 minutes between fetches."""
+    """Run checks every 10 minutes and install safe results when enabled."""
     while True:
         _update_wake.clear()
         settings = update_settings()
         if not settings["enabled"]:
             _update_wake.wait(60)
             continue
-        phase = str(_update_status_record().get("phase") or "")
+        previous = _update_status_record()
+        phase = str(previous.get("phase") or "")
         if phase in {"starting", "fetching", "installing"}:
             _update_wake.wait(5)
             continue
         if phase in {"complete", "failed"}:
             if _update_wake.wait(UPDATE_CHECK_INTERVAL_S):
                 continue
-        check_for_software_update()
+        status = check_for_software_update()
+        target = _safe_update_revision(status.get("latest_revision"))
+        failed_target = _safe_update_revision(previous.get("failed_revision"))
+        if (settings["auto_install"] and status.get("available") is True
+                and status.get("can_update") is True
+                and target and target != failed_target):
+            start_software_update()
         _update_wake.wait(UPDATE_CHECK_INTERVAL_S)
 
 
@@ -7171,6 +7287,35 @@ def menubar_context_pulse(st, limit=18):
     return values[-max(1, limit):]
 
 
+def menubar_software_update(status=None):
+    """Project update state into the native menu without local checkout details."""
+    status = status if isinstance(status, dict) else software_update_status()
+    state = str(status.get("state") or "waiting")
+    allowed_states = {
+        "disabled", "waiting", "checking", "current",
+        "available", "updating", "updated", "attention",
+    }
+    if state not in allowed_states:
+        state = "attention"
+    actions = status.get("actions") if isinstance(status.get("actions"), dict) else {}
+    action_token = str(actions.get("token") or "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", action_token):
+        action_token = ""
+    return {
+        "enabled": status.get("enabled") is True,
+        "auto_install": status.get("auto_install") is True,
+        "state": state,
+        "available": status.get("available") is True,
+        "can_update": status.get("can_update") is True,
+        "current_revision": _safe_update_revision(status.get("current_revision")),
+        "latest_revision": _safe_update_revision(status.get("latest_revision")),
+        "actions": {
+            "token": action_token,
+            "install": actions.get("install") is True,
+        },
+    }
+
+
 def menubar_state(session_id=None):
     requested_id = str(session_id or "").strip()
     sources, inventory_ready = cached_session_sources()
@@ -7291,6 +7436,7 @@ def menubar_state(session_id=None):
         "context_pulse": menubar_context_pulse(st),
         "provider_quotas": provider_quota_snapshots(),
         "budget": budget,
+        "software_update": menubar_software_update(),
         "ts": st.get("ts"),
     }
 
@@ -7634,14 +7780,21 @@ class H(BaseHTTPRequestHandler):
                        status=200 if result.get("ok") else 400)
             return
         if req_path == "/settings/model-pricing":
-            result = set_model_price(
-                payload.get("provider"),
-                payload.get("model"),
-                payload.get("prices"),
-                remove=payload.get("remove") is True,
-                apply_to_all_history=payload.get("apply_to_all_history") is True,
-                effective_from=payload.get("effective_from"),
-            )
+            if isinstance(payload.get("changes"), list):
+                result = set_model_prices(
+                    payload["changes"],
+                    apply_to_all_history=payload.get("apply_to_all_history") is True,
+                    effective_from=payload.get("effective_from"),
+                )
+            else:
+                result = set_model_price(
+                    payload.get("provider"),
+                    payload.get("model"),
+                    payload.get("prices"),
+                    remove=payload.get("remove") is True,
+                    apply_to_all_history=payload.get("apply_to_all_history") is True,
+                    effective_from=payload.get("effective_from"),
+                )
             if result.get("ok"):
                 _summary_cache.clear()
                 _xsess["data"], _xsess["at"] = None, 0.0

@@ -16,6 +16,24 @@ MODEL_PROVIDER_TO_SETTINGS_PROVIDER = {
     for legacy_provider, model_provider in LEGACY_PROVIDER_TO_MODEL_PROVIDER.items()
 }
 MODEL_PRICE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+-]{0,159}$")
+BUILTIN_PRICE_REVIEWED_ON = "2026-08-17"
+BUILTIN_PRICE_SOURCES = (
+    {
+        "provider": "anthropic",
+        "label": "Anthropic API pricing",
+        "url": "https://platform.claude.com/docs/en/about-claude/pricing",
+    },
+    {
+        "provider": "openai",
+        "label": "OpenAI model pricing",
+        "url": "https://developers.openai.com/api/docs/models/compare",
+    },
+    {
+        "provider": "cursor",
+        "label": "Cursor Composer 2.5 pricing",
+        "url": "https://cursor.com/changelog/composer-2-5",
+    },
+)
 
 
 ANTHROPIC_PRICE = {
@@ -23,10 +41,10 @@ ANTHROPIC_PRICE = {
         "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50,
     },
     "claude-opus-4-8": {
-        "input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50,
+        "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50,
     },
     "claude-fable-5": {
-        "input": 15.0, "output": 75.0, "cache_write": 18.75, "cache_read": 1.50,
+        "input": 10.0, "output": 50.0, "cache_write": 12.50, "cache_read": 1.0,
     },
     # Introductory pricing through 2026-08-31; standard pricing is $3/$15 afterward.
     "claude-sonnet-5": {

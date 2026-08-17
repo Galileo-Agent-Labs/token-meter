@@ -48,6 +48,17 @@ function Write-UpdateStatus(
     } elseif ($PreviousStatus.ContainsKey("installed_at")) {
         $Record.installed_at = $PreviousStatus.installed_at
     }
+    if ($Phase -eq "failed") {
+        $Record.failed_revision = if ($CurrentRevision) {
+            $CurrentRevision
+        } elseif ($LatestRevision) {
+            $LatestRevision
+        } elseif ($PreviousStatus.ContainsKey("failed_revision")) {
+            [string]$PreviousStatus.failed_revision
+        } else {
+            ""
+        }
+    }
     $Parent = Split-Path -Parent $StatusPath
     New-Item -ItemType Directory -Path $Parent -Force | Out-Null
     $Temporary = "$StatusPath.tmp-$PID"
@@ -66,6 +77,7 @@ function Fail-Update([string]$Code) {
 
 $script:CurrentRevision = ""
 $script:LatestRevision = ""
+$RetryRevision = [string]$env:TOKEN_METER_UPDATE_RETRY_REVISION
 $script:PreviousRevision = if ($PreviousStatus.ContainsKey("previous_revision")) {
     [string]$PreviousStatus.previous_revision
 } else {
@@ -84,6 +96,13 @@ if (-not $Git) {
 $Upstream = (& $Git.Source -C $SourceRoot rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>$null | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $Upstream -notlike "*/*") {
     Fail-Update "upstream_unavailable"
+}
+$Branch = (& $Git.Source -C $SourceRoot rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
+if ($Branch -ne "main" -or $Upstream.Substring($Upstream.LastIndexOf('/') + 1) -ne "main") {
+    Fail-Update "unsupported_update_branch"
+}
+if ($RetryRevision -and $RetryRevision -notmatch '^[0-9a-fA-F]{7,40}$') {
+    $RetryRevision = ""
 }
 $Remote = $Upstream.Substring(0, $Upstream.IndexOf('/'))
 Write-UpdateStatus "fetching" "" $script:CurrentRevision $script:LatestRevision $script:PreviousRevision
@@ -104,16 +123,19 @@ $Dirty = (& $Git.Source -C $SourceRoot status --porcelain 2>$null | Out-String).
 if ($Dirty) {
     Fail-Update "dirty_checkout"
 }
-if ($script:CurrentRevision -eq $script:LatestRevision) {
+if ($script:CurrentRevision -eq $script:LatestRevision -and
+    $script:CurrentRevision -ne $RetryRevision) {
     Write-UpdateStatus "complete" "" $script:CurrentRevision $script:LatestRevision $script:PreviousRevision
     exit 0
 }
 
-& $Git.Source -C $SourceRoot merge --ff-only '@{upstream}'
-if ($LASTEXITCODE -ne 0) {
-    Fail-Update "diverged_checkout"
+if ($script:CurrentRevision -ne $script:LatestRevision) {
+    & $Git.Source -C $SourceRoot merge --ff-only '@{upstream}'
+    if ($LASTEXITCODE -ne 0) {
+        Fail-Update "diverged_checkout"
+    }
+    $script:CurrentRevision = (& $Git.Source -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
 }
-$script:CurrentRevision = (& $Git.Source -C $SourceRoot rev-parse HEAD 2>$null | Out-String).Trim()
 Write-UpdateStatus "installing" "" $script:CurrentRevision $script:LatestRevision $script:PreviousRevision
 try {
     & (Join-Path $SourceRoot "scripts\install-windows.ps1") -InstallRoot $RuntimeRoot

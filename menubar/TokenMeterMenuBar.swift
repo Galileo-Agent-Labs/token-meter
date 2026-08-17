@@ -5,6 +5,8 @@ import Foundation
 private let tokenMeterMenubarURL = URL(string: "http://127.0.0.1:8722/menubar")!
 private let tokenMeterDashboardURL = URL(string: "http://127.0.0.1:8722/#sessions")!
 private let tokenMeterBudgetSettingsURL = URL(string: "http://127.0.0.1:8722/#settings-budgets")!
+private let tokenMeterUpdateSettingsURL = URL(string: "http://127.0.0.1:8722/#settings-updates")!
+private let tokenMeterInstallUpdateURL = URL(string: "http://127.0.0.1:8722/updates/install")!
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
 private let titleModeDefaultsKey = "TokenMeterTitleMode"
 private let titleMetricsDefaultsKey = "TokenMeterTitleMetrics"
@@ -411,6 +413,49 @@ struct BudgetNotificationState: Codable {
     var month: String
     var lastPercent: Double
     var firedThresholds: Set<Int>
+}
+
+struct SoftwareUpdateSnapshot {
+    var enabled: Bool
+    var autoInstall: Bool
+    var state: String
+    var available: Bool
+    var canUpdate: Bool
+    var actionToken: String
+    var installAllowed: Bool
+
+    static func fromJSON(_ dict: [String: Any]?) -> SoftwareUpdateSnapshot {
+        let dict = dict ?? [:]
+        let actions = dict["actions"] as? [String: Any] ?? [:]
+        return SoftwareUpdateSnapshot(
+            enabled: bool(dict["enabled"]),
+            autoInstall: bool(dict["auto_install"]),
+            state: string(dict["state"]) ?? "waiting",
+            available: bool(dict["available"]),
+            canUpdate: bool(dict["can_update"]),
+            actionToken: string(actions["token"]) ?? "",
+            installAllowed: bool(actions["install"])
+        )
+    }
+
+    static var waiting: SoftwareUpdateSnapshot {
+        SoftwareUpdateSnapshot(
+            enabled: true,
+            autoInstall: true,
+            state: "waiting",
+            available: false,
+            canUpdate: false,
+            actionToken: "",
+            installAllowed: false
+        )
+    }
+
+    var isUpdating: Bool { state == "updating" }
+    var shouldOfferInstall: Bool {
+        enabled && !autoInstall && state == "available" && available && canUpdate
+            && installAllowed && !actionToken.isEmpty
+    }
+    var needsAttention: Bool { enabled && state == "attention" }
 }
 
 struct RuntimePresentation {
@@ -884,6 +929,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var menuRefreshPending = false
     private var snapshot = MeterSnapshot.disconnected("Waiting for http://127.0.0.1:8722/menubar")
     private var monthlyBudget: MonthlyBudget?
+    private var softwareUpdate = SoftwareUpdateSnapshot.waiting
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -943,6 +989,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self = self else { return }
                 guard requestedSessionID == self.pinnedSessionID else { return }
                 if let error = error {
+                    if self.softwareUpdate.isUpdating {
+                        self.refreshMenu()
+                        return
+                    }
                     self.snapshot = MeterSnapshot.disconnected(error.localizedDescription)
                     self.refreshMenu()
                     return
@@ -952,6 +1002,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let obj = try? JSONSerialization.jsonObject(with: data),
                     let dict = obj as? [String: Any]
                 else {
+                    if self.softwareUpdate.isUpdating {
+                        self.refreshMenu()
+                        return
+                    }
                     self.snapshot = MeterSnapshot.disconnected("Token Meter returned unreadable state.")
                     self.refreshMenu()
                     return
@@ -967,6 +1021,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     .compactMap(ProviderQuota.fromJSON)
                 self.snapshot = MeterSnapshot.fromJSON(dict)
                 self.monthlyBudget = MonthlyBudget.fromJSON(dict["budget"] as? [String: Any])
+                self.softwareUpdate = SoftwareUpdateSnapshot.fromJSON(
+                    dict["software_update"] as? [String: Any]
+                )
                 self.evaluateQuotaNotifications()
                 self.evaluateBudgetNotifications()
                 self.refreshMenu()
@@ -1004,6 +1061,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addHeader()
         menu.addItem(.separator())
         addAction("Open Dashboard", #selector(openDashboard))
+        addSoftwareUpdateItem()
         menu.addItem(.separator())
 
         addSessionPicker()
@@ -1055,6 +1113,36 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(moreItem)
         menu.addItem(.separator())
         addAction("Quit Token Meter", #selector(quit))
+    }
+
+    private func addSoftwareUpdateItem() {
+        let item: NSMenuItem
+        if softwareUpdate.shouldOfferInstall {
+            item = NSMenuItem(
+                title: "New update available",
+                action: #selector(installSoftwareUpdate),
+                keyEquivalent: ""
+            )
+            item.image = menuSymbol("arrow.down.circle", description: "Install Token Meter update")
+            item.toolTip = "Install the latest commit from the tracked main branch."
+        } else if softwareUpdate.isUpdating {
+            item = NSMenuItem(title: "Updating Token Meter...", action: nil, keyEquivalent: "")
+            item.image = menuSymbol("arrow.triangle.2.circlepath", description: "Updating Token Meter")
+            item.toolTip = "Token Meter will reconnect after the update finishes."
+            item.isEnabled = false
+        } else if softwareUpdate.needsAttention {
+            item = NSMenuItem(
+                title: "Update needs attention",
+                action: #selector(openUpdateSettings),
+                keyEquivalent: ""
+            )
+            item.image = menuSymbol("exclamationmark.triangle", description: "Update needs attention")
+            item.toolTip = "Open update settings for details and recovery."
+        } else {
+            return
+        }
+        item.target = self
+        menu.addItem(item)
     }
 
     private func addHeader() {
@@ -1326,8 +1414,10 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func runMenuSmoke() throws {
         let originalTitleMetrics = titleMetrics
+        let originalSoftwareUpdate = softwareUpdate
         defer {
             titleMetrics = originalTitleMetrics
+            softwareUpdate = originalSoftwareUpdate
             timer?.invalidate()
             menu.cancelTracking()
             statusItem = nil
@@ -1344,6 +1434,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         snapshot = MeterSnapshot.fromJSON(smokePayload)
         monthlyBudget = MonthlyBudget.fromJSON(smokePayload["budget"] as? [String: Any])
+        softwareUpdate = SoftwareUpdateSnapshot.fromJSON(
+            smokePayload["software_update"] as? [String: Any]
+        )
         providerQuotas = (smokePayload["provider_quotas"] as? [[String: Any]] ?? [])
             .compactMap(ProviderQuota.fromJSON)
         runtimeCatalog = RuntimePresentation.catalog(smokePayload["runtime_catalog"])
@@ -1367,6 +1460,34 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 userInfo: [NSLocalizedDescriptionKey: "Native menu did not expose direct session following and compact submenus."]
             )
         }
+        softwareUpdate = SoftwareUpdateSnapshot(
+            enabled: true,
+            autoInstall: false,
+            state: "available",
+            available: true,
+            canUpdate: true,
+            actionToken: "smoke-action-token",
+            installAllowed: true
+        )
+        rebuildMenu()
+        let availableItem = menu.items.first { $0.title == "New update available" }
+        softwareUpdate.state = "updating"
+        rebuildMenu()
+        let updatingItem = menu.items.first { $0.title == "Updating Token Meter..." }
+        softwareUpdate.state = "attention"
+        rebuildMenu()
+        let attentionItem = menu.items.first { $0.title == "Update needs attention" }
+        guard availableItem?.action == #selector(installSoftwareUpdate),
+              updatingItem?.isEnabled == false,
+              attentionItem?.action == #selector(openUpdateSettings)
+        else {
+            throw NSError(
+                domain: "TokenMeterMenuBar",
+                code: 14,
+                userInfo: [NSLocalizedDescriptionKey: "Native update rows did not expose install, progress, and recovery states."]
+            )
+        }
+        print("native-update=available updating attention")
         if monthlyBudget?.scopes.contains(where: { $0.id == "opencode" }) == true {
             let limitsMenu = menu.items.first { $0.title == "Provider limits" }?.submenu
             let openCodeItem = limitsMenu?.items.first { $0.title.hasPrefix("OpenCode") }
@@ -1811,6 +1932,38 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openBudgetSettings() {
         NSWorkspace.shared.open(tokenMeterBudgetSettingsURL)
+    }
+
+    @objc private func openUpdateSettings() {
+        NSWorkspace.shared.open(tokenMeterUpdateSettingsURL)
+    }
+
+    @objc private func installSoftwareUpdate() {
+        guard softwareUpdate.shouldOfferInstall else {
+            openUpdateSettings()
+            return
+        }
+        var request = URLRequest(
+            url: tokenMeterInstallUpdateURL,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 5.0
+        )
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(softwareUpdate.actionToken, forHTTPHeaderField: "X-Token-Meter-Action")
+        request.httpBody = Data("{}".utf8)
+        softwareUpdate.state = "updating"
+        refreshMenu()
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if error != nil || !(200..<300).contains(statusCode) {
+                    self.softwareUpdate.state = "attention"
+                }
+                self.refreshMenu()
+            }
+        }.resume()
     }
 
     @objc private func openTrace() {

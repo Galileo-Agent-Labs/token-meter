@@ -108,8 +108,9 @@ skill-pack activation, and bounded review candidates.
 
 ### Configure budgets and agent access
 
-Manage monthly budgets, thresholds, updates, native preferences, and local
-read-only connections for Codex and Claude.
+Manage monthly budgets, model pricing, language signals, native preferences,
+and local read-only connections for Codex and Claude. Software update checks
+and automatic installation are separate settings; both are on by default.
 
 <p align="center">
   <img src="images/mcp.png" alt="Token Meter Settings view for local read-only agent connections" width="900">
@@ -119,7 +120,10 @@ read-only connections for Codex and Claude.
 
 Use the macOS menu bar, Linux tray, or beta Windows extension to reach the
 current or pinned run. The native clients read a compact local payload and do
-not parse traces or read provider credentials directly.
+not parse traces or read provider credentials directly. Token Meter checks for
+updates every 10 minutes and installs safe `main` updates automatically by
+default, so normal updates do not require opening the dashboard. If automatic
+installation is off, the native menu shows **New update available** instead.
 
 <p align="center">
   <img src="images/menu-bar-widget.png" alt="Token Meter macOS menu bar companion" width="420">

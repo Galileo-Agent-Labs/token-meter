@@ -1218,6 +1218,32 @@ class FrustrationSignalTests(unittest.TestCase):
 
 
 class PricingTests(unittest.TestCase):
+    def test_builtin_pricing_exposes_reviewed_primary_sources(self):
+        pricing = meter.model_pricing_settings()
+        self.assertEqual(pricing["reviewed_on"], "2026-08-17")
+        self.assertEqual(
+            [source["provider"] for source in pricing["sources"]],
+            ["anthropic", "openai", "cursor"],
+        )
+        self.assertEqual(
+            [source["url"] for source in pricing["sources"]],
+            [
+                "https://platform.claude.com/docs/en/about-claude/pricing",
+                "https://developers.openai.com/api/docs/models/compare",
+                "https://cursor.com/changelog/composer-2-5",
+            ],
+        )
+
+    def test_current_anthropic_builtin_prices_match_primary_source(self):
+        self.assertEqual(meter.CLAUDE_PRICE["claude-fable-5"], {
+            "input": 10.0, "output": 50.0,
+            "cache_write": 12.5, "cache_read": 1.0,
+        })
+        self.assertEqual(meter.CLAUDE_PRICE["claude-opus-4-8"], {
+            "input": 5.0, "output": 25.0,
+            "cache_write": 6.25, "cache_read": 0.5,
+        })
+
     def test_opus_5_uses_published_api_rates(self):
         price, approximate = meter.price_for("claude-opus-5", "claude")
         self.assertEqual(price, {
@@ -1324,6 +1350,73 @@ class PricingTests(unittest.TestCase):
         self.assertIsNotNone(
             saved["model_pricing"]["codex"]["gpt-custom-1"][0]["effective_from"]
         )
+
+    def test_model_price_batch_persists_multiple_rows_with_one_atomic_write(self):
+        changes = [
+            {
+                "provider": "claude", "model": "claude-opus-5",
+                "prices": {"input": 6, "output": 30, "cache_write": 7.5, "cache_read": 0.6},
+            },
+            {
+                "provider": "codex", "model": "gpt-5.4",
+                "prices": {"input": 3, "output": 18, "cache_write": 0, "cache_read": 0.3},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            original_write = meter.atomic_write_text
+            with mock.patch.object(
+                    meter, "atomic_write_text", side_effect=original_write) as write:
+                result = meter.set_model_prices(
+                    changes, path=str(path), effective_from=100,
+                )
+            saved = json.loads(path.read_text())
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["effective_scope"], "selected_time")
+        self.assertEqual(len(result["changes"]), 2)
+        self.assertEqual(write.call_count, 1)
+        self.assertEqual(
+            saved["model_pricing"]["claude"]["claude-opus-5"][0]["effective_from"],
+            100.0,
+        )
+        self.assertEqual(
+            saved["model_pricing"]["codex"]["gpt-5.4"][0]["effective_from"],
+            100.0,
+        )
+
+    def test_invalid_model_price_batch_is_rejected_without_any_write(self):
+        changes = [
+            {
+                "provider": "codex", "model": "gpt-valid",
+                "prices": {"input": 1, "output": 4, "cache_write": 0, "cache_read": 0.1},
+            },
+            {
+                "provider": "codex", "model": "gpt-invalid",
+                "prices": {"input": -1, "output": 4, "cache_write": 0, "cache_read": 0.1},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text('{"keep": "unchanged"}\n')
+            before = path.read_text()
+            with mock.patch.object(meter, "atomic_write_text") as write:
+                result = meter.set_model_prices(changes, path=str(path))
+            after = path.read_text()
+        self.assertFalse(result["ok"])
+        self.assertEqual(before, after)
+        write.assert_not_called()
+
+    def test_model_price_batch_rejects_duplicate_provider_model_entries(self):
+        price = {"input": 1, "output": 4, "cache_write": 0, "cache_read": 0.1}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            result = meter.set_model_prices([
+                {"provider": "openai", "model": "gpt-duplicate", "prices": price},
+                {"provider": "codex", "model": "gpt-duplicate", "prices": price},
+            ], path=str(path))
+        self.assertFalse(result["ok"])
+        self.assertIn("duplicate", result["error"].lower())
+        self.assertFalse(path.exists())
 
     def test_builtin_override_can_be_restored_without_losing_other_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1505,6 +1598,8 @@ class PricingTests(unittest.TestCase):
 
     def test_model_pricing_http_action_forwards_bounded_scope_fields(self):
         source = Path(meter.IMPLEMENTATION_FILE).read_text()
+        self.assertIn('if isinstance(payload.get("changes"), list)', source)
+        self.assertIn('set_model_prices(', source)
         self.assertIn(
             'apply_to_all_history=payload.get("apply_to_all_history") is True',
             source,
@@ -3007,28 +3102,42 @@ console.log(JSON.stringify({
     def test_model_pricing_is_editable_and_supports_new_models_in_settings(self):
         for marker in (
             "id=model-pricing-settings", "id=model-pricing-rows",
-            "id=model-price-scope", "id=model-price-all-history",
+            "id=model-price-scope", "id=model-price-scope-from-now",
+            "id=model-price-scope-from-date", "id=model-price-scope-all-history",
+            "value=from_now", "value=from_date", "value=all_history",
             "id=model-price-effective-from", "id=model-price-scope-note",
+            "id=model-pricing-reviewed", "id=model-pricing-sources",
             "id=model-price-add-form", "id=model-price-provider",
             "id=model-price-model", "id=model-price-input",
             "id=model-price-output", "id=model-price-cache-write",
-            "id=model-price-cache-read", "data-model-price-save",
-            "data-model-price-remove", "function renderModelPricing",
+            "id=model-price-cache-read", "id=model-price-save-changes",
+            "id=model-price-save-changes type=button disabled",
+            "data-model-price-select", "data-model-price-lifecycle",
+            "function renderModelPricing",
             "function modelPriceEffectiveFrom", "function updateModelPriceScope",
             "function confirmModelPriceHistory",
-            "function postModelPrice", "/settings/model-pricing",
-            "apply_to_all_history", "Save from now", "Use default from now",
-            "Add from now", "Delete all history",
+            "function saveModelPriceChanges", "/settings/model-pricing",
+            "apply_to_all_history", "From now", "From date", "All history",
+            "Save models", "Restore built-in price", "Remove custom model",
+            "changes",
         ):
             self.assertIn(marker, self.page)
         self.assertIn("USD per 1 million tokens", self.page)
-        self.assertIn("Blank date means now", self.page)
-        self.assertIn("selected past time", self.page)
+        self.assertIn("Changes start when you save", self.page)
+        self.assertIn("Choose the date", self.page)
         self.assertIn("older session estimates", self.page)
         self.assertIn(".modelPriceScope.history", self.page)
         self.assertIn("badge.hidden=!hasCustomPricing", self.page)
         self.assertIn("source==='built-in'?'':source", self.page)
         self.assertIn("sourceLabel?`<span class=modelPriceSource>", self.page)
+        self.assertIn("row.overridden", self.page)
+        self.assertIn("pricing.sources", self.page)
+        self.assertIn("pricing.reviewed_on", self.page)
+        self.assertIn("modelPriceSelectionState(modelPricingSelected.size)", self.page)
+        self.assertIn("@media(max-width:700px){.modelPriceTableWrap{overflow:visible", self.page)
+        self.assertIn(".modelPriceTable{display:block;min-width:0", self.page)
+        self.assertIn("data-label=", self.page)
+        self.assertNotIn("data-model-price-save", self.page)
         self.assertNotIn("Built-in defaults", self.page)
         self.assertLess(
             self.page.index("id=model-pricing-settings"),
@@ -3039,6 +3148,61 @@ console.log(JSON.stringify({
         self.assertNotIn("function renderCursorSourceStatus", self.page)
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("$('model-pricing-settings').scrollIntoView", self.page)
+
+    def test_model_pricing_uses_explicit_row_selection_without_an_actions_column(self):
+        pricing = self.page.split("id=model-pricing-settings", 1)[1].split(
+            "id=frustration-settings", 1,
+        )[0]
+        for marker in (
+            "Apply to selected models",
+            "id=model-price-selection-count",
+            "No models selected",
+        ):
+            self.assertIn(marker, pricing)
+        for marker in (
+            "data-model-price-select",
+            "data-model-price-lifecycle",
+            "function setModelPriceSelected",
+            "function updateModelPriceSelectionState",
+            "modelPricingSelected",
+            "setModelPriceSelected(root,true,false)",
+            "keys=[...modelPricingSelected]",
+            "Restore built-in price",
+            "Remove custom model",
+            "Select ${row.model} for price update",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("<th class=num>Actions</th>", pricing)
+        self.assertNotIn('data-label="Action"', pricing)
+        self.assertNotIn("class=modelPriceActions", self.page)
+        self.assertIn(
+            ".modelPriceTable tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))",
+            self.page,
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_model_price_selection_copy_tracks_the_selected_count(self):
+        match = re.search(
+            r"function modelPriceSelectionState\(count\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs one selection-copy helper")
+        script = match.group(0) + """
+console.log(JSON.stringify([
+  modelPriceSelectionState(0),
+  modelPriceSelectionState(1),
+  modelPriceSelectionState(3),
+]));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), [
+            {"summary": "No models selected", "button": "Save models", "disabled": True},
+            {"summary": "1 model selected", "button": "Save 1 model", "disabled": False},
+            {"summary": "3 models selected", "button": "Save 3 models", "disabled": False},
+        ])
 
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
@@ -3158,7 +3322,7 @@ console.log(JSON.stringify({
         self.assertIn("Review loop", self.page)
         self.assertIn("if(h==='daily')setHashRoute('spend',{replace:true,apply:false})", self.page)
         self.assertIn("if(h==='spend'||h==='daily')", self.page)
-        self.assertIn("if(h==='learn')", self.page)
+        self.assertIn("if(h==='learn'||h==='learn-agent-access')", self.page)
         self.assertIn("h==='settings-budgets'||h==='budgets'", self.page)
         self.assertIn("if(h==='budgets')setHashRoute('settings-budgets'", self.page)
         self.assertIn("activeTop.scrollIntoView({block:'nearest',inline:'center'})", self.page)
@@ -3508,13 +3672,16 @@ console.log(JSON.stringify({
         self.assertLess(settings.index(">Monthly spend</h2>"), settings.index("id=budget-config"))
         self.assertLess(settings.index("id=budget-settings"), settings.index("id=agent-access"))
 
-    def test_software_updates_are_default_on_ten_minute_checks_with_an_explicit_install(self):
+    def test_software_updates_keep_checks_and_install_preferences_independent(self):
         for marker in (
             "data-settings-target=update-settings",
+            "settings-updates",
             "id=update-settings",
             "id=update-enabled",
             "id=update-enabled type=checkbox checked",
+            "id=update-auto-install type=checkbox checked",
             "Check for updates every 10 minutes",
+            "Automatically install available updates",
             "Enabled by default",
             "id=update-check",
             "id=update-notice",
@@ -3529,7 +3696,9 @@ console.log(JSON.stringify({
             "softwareUpdateTarget&&state==='attention'",
             "setTimeout(()=>location.reload(),350)",
             "Checks fetch revision metadata only",
-            "Explicit install",
+            "const autoInstall=enabled&&$('update-auto-install').checked",
+            "{enabled,auto_install:autoInstall}",
+            "$('update-auto-install').disabled=!enabled",
         ):
             self.assertIn(marker, self.page)
         self.assertIn(".updateNotice{position:fixed;right:18px;bottom:18px", self.page)
@@ -3545,6 +3714,7 @@ console.log(JSON.stringify({
         self.assertIn(".softwareUpdateActions .tbtn:disabled{opacity:.45;cursor:not-allowed}", self.page)
         self.assertIn("body.classList.toggle('updateReady',showNotice)", self.page)
         self.assertNotIn("setInterval(()=>postSoftwareUpdate('/updates/install'", self.page)
+        self.assertIn("if(h==='settings-updates')requestAnimationFrame(()=>$('update-settings').scrollIntoView({block:'start'}))", self.page)
         settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
             "</div>\n</div>\n<dialog class=commandPalette", 1
         )[0]
@@ -3555,6 +3725,43 @@ console.log(JSON.stringify({
         self.assertLess(
             settings.index("id=frustration-settings"),
             settings.index("id=update-settings"),
+        )
+
+    def test_settings_sections_use_matching_titles_and_compact_supporting_copy(self):
+        settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
+            "</div>\n</div>\n<dialog class=commandPalette", 1
+        )[0]
+        for title, target in (
+            ("Monthly budget", "budget-settings"),
+            ("Agent connection", "agent-access"),
+            ("Model pricing", "model-pricing-settings"),
+            ("Language signals", "frustration-settings"),
+            ("Software updates", "update-settings"),
+        ):
+            self.assertIn(
+                f"data-settings-target={target}><b>{title}</b>", settings,
+            )
+            self.assertIn(f">{title}</h2>", settings)
+        for removed in (
+            "id=agent-access-badge", "class=mcpMark", "class=agentPromise",
+            "class=agentTools", "class=agentPrivacy", "id=frustration-term-count",
+            "<div class=softwareUpdatePromise",
+        ):
+            self.assertNotIn(removed, settings)
+        self.assertIn('href="#learn-agent-access"', settings)
+        self.assertIn("id=learn-agent-access", self.page)
+        self.assertIn("Connections stay local and read-only.", settings)
+        self.assertIn('aria-describedby=positive-terms-count', settings)
+        self.assertIn('aria-describedby=frustration-terms-count', settings)
+        self.assertIn('id=positive-terms-count>0 of 64 phrases · 64 remaining', settings)
+        self.assertIn('id=frustration-terms-count>0 of 64 phrases · 64 remaining', settings)
+        language = settings.split("id=frustration-settings", 1)[1].split(
+            "id=update-settings", 1
+        )[0]
+        self.assertNotIn("Machine-wide", language)
+        self.assertIn(
+            ".settingsMap:before,.agentAccess:before,.budgetLead:before{display:none}",
+            self.page,
         )
 
     def test_current_surfaces_runtime_budget_overruns(self):
@@ -3820,9 +4027,11 @@ console.log(JSON.stringify({
                        "id=agent-dialog", "/agent-access/status", "/agent-access/toggle",
                        "class=\"card settingsMap\"", "class=settingsSignalGrid"):
             self.assertIn(marker, self.page)
+        self.assertIn("id=learn-agent-access", self.page)
+        self.assertIn("Prompts, messages, reasoning, tool content", self.page)
         for tool in ("mcp__tokenmeter__check", "mcp__tokenmeter__usage",
                      "mcp__tokenmeter__capabilities"):
-            self.assertIn(tool, self.page)
+            self.assertNotIn(tool, self.page)
         self.assertLess(self.page.index("id=view-capabilities"), self.page.index("id=view-settings"))
         self.assertLess(self.page.index("id=view-settings"), self.page.index("id=agent-access"))
         self.assertIn("setHashRoute('settings')", self.page)
@@ -4318,6 +4527,39 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")', self.source)
         self.assertIn('request.setValue("no-cache", forHTTPHeaderField: "Pragma")', self.source)
+
+    def test_native_menu_surfaces_updates_and_installs_without_the_dashboard(self):
+        for marker in (
+            "struct SoftwareUpdateSnapshot",
+            'dict["software_update"] as? [String: Any]',
+            'title: "New update available",',
+            'action: #selector(installSoftwareUpdate),',
+            'NSMenuItem(title: "Updating Token Meter...", action: nil',
+            'title: "Update needs attention",',
+            'action: #selector(openUpdateSettings),',
+            '@objc private func installSoftwareUpdate()',
+            'request.httpMethod = "POST"',
+            'request.setValue("application/json", forHTTPHeaderField: "Content-Type")',
+            'request.setValue(softwareUpdate.actionToken, forHTTPHeaderField: "X-Token-Meter-Action")',
+            'request.httpBody = Data("{}".utf8)',
+            '@objc private func openUpdateSettings()',
+            'tokenMeterUpdateSettingsURL',
+        ):
+            self.assertIn(marker, self.source)
+        rebuild = self.source[
+            self.source.index("    private func rebuildMenu()"):
+            self.source.index("    private var activeShortcutKeyCode")
+        ]
+        self.assertLess(
+            rebuild.index('addAction("Open Dashboard", #selector(openDashboard))'),
+            rebuild.index("addSoftwareUpdateItem()"),
+        )
+        self.assertLess(
+            rebuild.index("addSoftwareUpdateItem()"),
+            rebuild.index("addSessionPicker()"),
+        )
+        self.assertIn("if self.softwareUpdate.isUpdating", self.source)
+        self.assertIn('print("native-update=available updating attention")', self.source)
 
     def test_status_item_owns_a_clean_native_menu(self):
         app = self.source[
@@ -5689,22 +5931,84 @@ class SoftwareUpdateTests(unittest.TestCase):
             path.write_text(json.dumps({"model_pricing": {"claude": {}}}))
             initial = meter.update_settings(str(path))
             invalid = meter.set_update_settings({"enabled": "yes"}, str(path))
-            result = meter.set_update_settings({"enabled": False}, str(path))
+            result = meter.set_update_settings(
+                {"enabled": False, "auto_install": True}, str(path)
+            )
             stored = json.loads(path.read_text())
             explicit = meter.update_settings(str(path))
         self.assertTrue(initial["enabled"])
+        self.assertTrue(initial["auto_install"])
         self.assertEqual(initial["interval_seconds"], 600)
         self.assertFalse(invalid["ok"])
         self.assertTrue(result["ok"])
         self.assertFalse(explicit["enabled"])
-        self.assertEqual(stored["updates"], {"enabled": False})
+        self.assertFalse(explicit["auto_install"])
+        self.assertEqual(
+            stored["updates"], {"enabled": False, "auto_install": False}
+        )
         self.assertIn("model_pricing", stored)
+
+    def test_auto_install_can_be_disabled_without_disabling_update_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"keep": "value"}))
+            result = meter.set_update_settings(
+                {"enabled": True, "auto_install": False}, str(path)
+            )
+            stored = json.loads(path.read_text())
+            explicit = meter.update_settings(str(path))
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            explicit,
+            {"enabled": True, "auto_install": False, "interval_seconds": 600},
+        )
+        self.assertEqual(
+            stored,
+            {"keep": "value", "updates": {"enabled": True, "auto_install": False}},
+        )
+
+    def test_menubar_update_projection_is_bounded_and_actionable(self):
+        status = {
+            "enabled": True,
+            "auto_install": False,
+            "state": "available",
+            "available": True,
+            "can_update": True,
+            "current_revision": "a" * 40,
+            "latest_revision": "b" * 40,
+            "message": "/private/source checkout has an update",
+            "path": "/private/source",
+            "actions": {
+                "token": "local_action_token-123",
+                "check": True,
+                "install": True,
+            },
+        }
+        projected = meter.menubar_software_update(status)
+        self.assertEqual(projected, {
+            "enabled": True,
+            "auto_install": False,
+            "state": "available",
+            "available": True,
+            "can_update": True,
+            "current_revision": "a" * 40,
+            "latest_revision": "b" * 40,
+            "actions": {
+                "token": "local_action_token-123",
+                "install": True,
+            },
+        })
+        self.assertNotIn("message", projected)
+        self.assertNotIn("path", projected)
 
     def test_update_watcher_preserves_terminal_result_for_one_interval_then_checks(self):
         wake = mock.Mock()
         wake.wait.side_effect = [False, RuntimeError("stop watcher")]
         with (mock.patch.object(meter, "_update_wake", wake),
-              mock.patch.object(meter, "update_settings", return_value={"enabled": True}),
+              mock.patch.object(
+                  meter, "update_settings",
+                  return_value={"enabled": True, "auto_install": False},
+              ),
               mock.patch.object(meter, "_update_status_record", return_value={"phase": "complete"}),
               mock.patch.object(meter, "check_for_software_update") as check):
             with self.assertRaisesRegex(RuntimeError, "stop watcher"):
@@ -5715,6 +6019,76 @@ class SoftwareUpdateTests(unittest.TestCase):
         )
         check.assert_called_once_with()
 
+    def test_update_watcher_starts_a_safe_available_update_when_enabled(self):
+        wake = mock.Mock()
+        wake.wait.side_effect = [RuntimeError("stop watcher")]
+        available = {
+            "available": True,
+            "can_update": True,
+            "latest_revision": "b" * 40,
+        }
+        with (mock.patch.object(meter, "_update_wake", wake),
+              mock.patch.object(
+                  meter, "update_settings",
+                  return_value={"enabled": True, "auto_install": True},
+              ),
+              mock.patch.object(meter, "_update_status_record", return_value={"phase": "current"}),
+              mock.patch.object(
+                  meter, "check_for_software_update", return_value=available,
+              ) as check,
+              mock.patch.object(meter, "start_software_update") as start):
+            with self.assertRaisesRegex(RuntimeError, "stop watcher"):
+                meter.software_update_watcher()
+        check.assert_called_once_with()
+        start.assert_called_once_with()
+
+    def test_update_watcher_keeps_checking_when_auto_install_is_disabled(self):
+        wake = mock.Mock()
+        wake.wait.side_effect = [RuntimeError("stop watcher")]
+        available = {
+            "available": True,
+            "can_update": True,
+            "latest_revision": "b" * 40,
+        }
+        with (mock.patch.object(meter, "_update_wake", wake),
+              mock.patch.object(
+                  meter, "update_settings",
+                  return_value={"enabled": True, "auto_install": False},
+              ),
+              mock.patch.object(meter, "_update_status_record", return_value={"phase": "current"}),
+              mock.patch.object(
+                  meter, "check_for_software_update", return_value=available,
+              ) as check,
+              mock.patch.object(meter, "start_software_update") as start):
+            with self.assertRaisesRegex(RuntimeError, "stop watcher"):
+                meter.software_update_watcher()
+        check.assert_called_once_with()
+        start.assert_not_called()
+
+    def test_update_watcher_does_not_repeat_the_same_failed_revision(self):
+        wake = mock.Mock()
+        wake.wait.side_effect = [RuntimeError("stop watcher")]
+        target = "b" * 40
+        available = {
+            "available": True,
+            "can_update": True,
+            "latest_revision": target,
+        }
+        record = {"phase": "available", "failed_revision": target}
+        with (mock.patch.object(meter, "_update_wake", wake),
+              mock.patch.object(
+                  meter, "update_settings",
+                  return_value={"enabled": True, "auto_install": True},
+              ),
+              mock.patch.object(meter, "_update_status_record", return_value=record),
+              mock.patch.object(
+                  meter, "check_for_software_update", return_value=available,
+              ),
+              mock.patch.object(meter, "start_software_update") as start):
+            with self.assertRaisesRegex(RuntimeError, "stop watcher"):
+                meter.software_update_watcher()
+        start.assert_not_called()
+
     def test_automatic_check_fetches_and_reports_a_clean_fast_forward_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = self.enabled_settings(tmp)
@@ -5723,6 +6097,7 @@ class SoftwareUpdateTests(unittest.TestCase):
             outputs = {
                 ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
                     "origin/main\n",
+                ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
                 ("fetch", "--quiet", "--prune", "--no-tags", "origin"): "",
                 ("rev-parse", "HEAD"): "a" * 40,
                 ("rev-parse", "@{upstream}"): "b" * 40,
@@ -5754,6 +6129,7 @@ class SoftwareUpdateTests(unittest.TestCase):
             outputs = {
                 ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
                     "origin/main\n",
+                ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
                 ("fetch", "--quiet", "--prune", "--no-tags", "origin"): "",
                 ("rev-parse", "HEAD"): "a" * 40,
                 ("rev-parse", "@{upstream}"): "b" * 40,
@@ -5773,6 +6149,27 @@ class SoftwareUpdateTests(unittest.TestCase):
         self.assertFalse(status["can_update"])
         self.assertTrue(status["dirty"])
         self.assertIn("local changes", status["message"])
+
+    def test_automatic_update_rejects_a_checkout_not_on_main(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            outputs = {
+                ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"):
+                    "origin/feature\n",
+                ("rev-parse", "--abbrev-ref", "HEAD"): "feature\n",
+            }
+            with mock.patch.object(meter.shutil, "which", return_value="/usr/bin/git"):
+                status = meter.check_for_software_update(
+                    checkout=tmp,
+                    runner=self.runner(outputs, []),
+                    now=1234,
+                    settings_path=str(settings_path),
+                    status_path=str(status_path),
+                )
+        self.assertEqual(status["state"], "attention")
+        self.assertFalse(status["can_update"])
+        self.assertIn("main", status["message"])
 
     def test_explicit_install_starts_only_the_bounded_detached_helper(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -5806,6 +6203,37 @@ class SoftwareUpdateTests(unittest.TestCase):
         self.assertTrue(kwargs["start_new_session"])
         self.assertTrue(kwargs["close_fds"])
         self.assertNotIn(tmp, json.dumps(result))
+
+    def test_explicit_install_retries_a_failed_current_revision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = self.enabled_settings(tmp)
+            status_path = Path(tmp) / "update-status.json"
+            target = "b" * 40
+            meter._persist_update_status({
+                "phase": "failed",
+                "error_code": "install_failed",
+                "current_revision": target,
+                "latest_revision": target,
+                "previous_revision": "a" * 40,
+                "failed_revision": target,
+                "checked_at": 1234,
+                "available": False,
+                "can_update": False,
+            }, str(status_path))
+            popen = mock.Mock()
+            with (mock.patch.object(meter, "source_checkout_path", return_value=tmp),
+                  mock.patch.object(meter.os.path, "isfile", return_value=True),
+                  mock.patch.object(meter.os, "access", return_value=True)):
+                result = meter.start_software_update(
+                    popen=popen,
+                    settings_path=str(settings_path),
+                    status_path=str(status_path),
+                )
+            retry_environment = popen.call_args.kwargs["env"]
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            retry_environment["TOKEN_METER_UPDATE_RETRY_REVISION"], target
+        )
 
     def test_manual_check_cannot_overwrite_an_install_in_progress(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -5894,12 +6322,24 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("git -C \"$SOURCE_ROOT\" fetch --quiet --prune --no-tags", script)
         self.assertIn("git -C \"$SOURCE_ROOT\" status --porcelain", script)
         self.assertIn("git -C \"$SOURCE_ROOT\" merge --ff-only '@{upstream}'", script)
+        self.assertIn('branch="$(git -C "$SOURCE_ROOT" rev-parse --abbrev-ref HEAD', script)
+        self.assertIn('[[ "$branch" != "main" || "${upstream##*/}" != "main" ]]', script)
+        self.assertIn('TOKEN_METER_UPDATE_RETRY_REVISION', script)
+        self.assertIn('record["failed_revision"]', script)
         self.assertIn(
             'TOKEN_METER_INSTALL_ROOT="$RUNTIME_ROOT" "$SOURCE_ROOT/scripts/install"',
             script,
         )
         self.assertNotIn("reset --hard", script)
         self.assertNotIn("sudo ", script)
+
+    def test_windows_update_helper_requires_main_and_supports_failed_retry(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "update-windows.ps1").read_text()
+        self.assertIn('$Branch = (& $Git.Source -C $SourceRoot rev-parse --abbrev-ref HEAD', script)
+        self.assertIn('$Branch -ne "main"', script)
+        self.assertIn('$env:TOKEN_METER_UPDATE_RETRY_REVISION', script)
+        self.assertIn('failed_revision =', script)
 
     def test_launch_agents_supervise_server_and_menu_bar_independently(self):
         root = Path(__file__).resolve().parents[1]

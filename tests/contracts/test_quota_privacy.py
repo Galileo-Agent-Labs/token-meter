@@ -23,15 +23,18 @@ class _Response:
 class QuotaPrivacyTests(unittest.TestCase):
     def test_http_error_does_not_expose_url_headers_or_response_body(self):
         sentinels = ("secret-token", "/Users/private/quota", "raw-provider-body")
+        errors = []
 
         def opener(request, timeout):
-            raise HTTPError(
+            error = HTTPError(
                 request.full_url,
                 500,
                 "raw-provider-body",
                 hdrs=None,
                 fp=io.BytesIO(b"/Users/private/quota secret-token"),
             )
+            errors.append(error)
+            raise error
 
         with self.assertRaises(QuotaUnavailable) as raised:
             quota_http_json(
@@ -44,6 +47,7 @@ class QuotaPrivacyTests(unittest.TestCase):
         self.assertEqual(message, "Provider quota request failed (HTTP 500).")
         for sentinel in sentinels:
             self.assertNotIn(sentinel, message)
+        self.assertTrue(errors[0].closed)
 
     def test_http_response_is_bounded_before_json_parsing(self):
         oversized = b"{" + (b"x" * MAX_RESPONSE_BYTES) + b"}"

@@ -2241,6 +2241,31 @@ class SessionDeleteTests(unittest.TestCase):
         self.assertEqual(meter.trash_session_log("alias.jsonl", sources=[source])["error_code"], "not_found")
         self.assertEqual(meter.trash_session_log("missing", sources=[source])["error_code"], "not_found")
 
+    def test_rejects_ambiguous_logical_id_without_deleting_either_trace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            canonical = root / "canonical.jsonl"
+            duplicate = root / "duplicate.jsonl"
+            canonical.write_text('{}\n')
+            duplicate.write_text('{}\n')
+            source = {
+                "id": "shared", "session": canonical.name,
+                "path": str(canonical), "provider": "claude",
+                "project": "/repo", "mtime": 2,
+                "_aggregation_key": "claude:shared",
+                "_aggregation_canonical": True,
+                "_duplicate_paths": (str(canonical), str(duplicate)),
+            }
+
+            result = meter.trash_session_log(
+                "shared", sources=[source], trash_dir=str(root / "Trash")
+            )
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["error_code"], "ambiguous_id")
+            self.assertTrue(canonical.exists())
+            self.assertTrue(duplicate.exists())
+
     def test_cursor_delete_moves_only_transcript_and_preserves_shared_database(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -2586,6 +2611,61 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
         self.assertEqual(result["estimated_cost"], 2.0)
         self.assertEqual(result["trend"][0]["reported_cost"], 1.0)
         self.assertEqual(result["trend"][0]["anomaly_basis"], "reported_only")
+
+    def test_cross_session_counts_adapter_owned_duplicate_identity_once(self):
+        def row(source):
+            return {
+                **source, "turns": 1, "cost": 1.0, "tokens": 100,
+                "input_tokens": 90, "output_tokens": 10,
+                "models": ["claude-test"], "token_estimate": False,
+                "availability": meter.metric_availability(
+                    "claude", cost=True, tokens=True,
+                    input_tokens=True, output_tokens=True,
+                ),
+                "_model_cost": {"claude-test": 1.0},
+                "_model_tok": {"claude-test": 100},
+                "_day_cost": {"2026-08-18": 1.0}, "model_stats": [],
+                "_model_daily": [], "_performance_samples": [],
+                "_wait_samples": [], "_tool_evidence": {},
+                "frustration": {}, "_frustration_events": [],
+            }
+
+        canonical_path = "/tmp/claude-canonical.jsonl"
+        duplicate_path = "/tmp/claude-duplicate.jsonl"
+        sources = [
+            {
+                "id": "shared", "path": canonical_path, "provider": "claude",
+                "runtime": "Claude", "label": "Claude Desktop",
+                "project": "/repo", "mtime": 2,
+                "_aggregation_key": "claude:shared",
+                "_aggregation_canonical": True,
+            },
+            {
+                "id": "shared", "path": duplicate_path, "provider": "claude",
+                "runtime": "Claude", "label": "Claude Desktop",
+                "project": "/repo", "mtime": 1,
+                "_aggregation_key": "claude:shared",
+            },
+        ]
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess["data"], meter._xsess["at"] = None, 0
+            with mock.patch.object(meter, "session_summary", side_effect=row), \
+                    mock.patch.object(meter, "capability_inventory", return_value={}), \
+                    mock.patch.object(
+                        meter, "aggregate_language_signals",
+                        wraps=meter.aggregate_language_signals,
+                    ) as language_signals:
+                result = meter.cross_session(sources=sources)
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        self.assertEqual(result["total_sessions"], 1)
+        self.assertEqual(result["total_cost"], 1.0)
+        self.assertEqual(result["total_tokens"], 100)
+        self.assertNotIn(duplicate_path, json.dumps(result))
+        self.assertEqual(language_signals.call_count, 1)
 
 
 class DashboardLayoutTests(unittest.TestCase):
@@ -4630,9 +4710,9 @@ class MenubarSourceTests(unittest.TestCase):
             self.source.index("    private var activeShortcutKeyCode")
         ]
         self.assertNotIn('addMetricRow("Output', rebuild)
-        self.assertIn('Output speed: \(outputSpeedLabel)', self.source)
+        self.assertIn(r'Output speed: \(outputSpeedLabel)', self.source)
         self.assertIn('snapshot.outputSpeedTooltip', self.source)
-        self.assertIn('· \(outputSpeedLabel) · \(model)', self.source)
+        self.assertIn(r'· \(outputSpeedLabel) · \(model)', self.source)
         self.assertIn('formatTokenRate(rate)', self.source)
         self.assertIn('Tool execution time may be included.', self.source)
         self.assertIn(
@@ -4732,7 +4812,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('NSMenuItem(title: session.menuTitle, action: #selector(pinSession(_:))', self.source)
         self.assertIn('item.state = pinnedSessionID == session.id ? .on : .off', self.source)
         self.assertIn('item.representedObject = session.id', self.source)
-        self.assertIn('item.toolTip = "Follow this session · \(session.toolTip)"', self.source)
+        self.assertIn(r'item.toolTip = "Follow this session · \(session.toolTip)"', self.source)
         self.assertIn('@objc private func followLatest()', self.source)
         self.assertIn('@objc private func pinSession(_ sender: NSMenuItem)', self.source)
         self.assertIn('let maximumNameLength = 36', self.source)
@@ -4866,7 +4946,7 @@ class MenubarSourceTests(unittest.TestCase):
         for marker in (
             'struct MonthlyBudget',
             'let prefix = budget.anyExceeded ? "Budget alert" : "Monthly budget"',
-            'title: "\(prefix) · \(budget.compactLabel)"',
+            r'title: "\(prefix) · \(budget.compactLabel)"',
             'tokenMeterBudgetSettingsURL',
             'action: #selector(openBudgetSettings)', 'private func evaluateBudgetNotifications()',
             'budgetNotificationStatesDefaultsKey', 'previous.month == budget.month',
@@ -6838,6 +6918,43 @@ class AgentAccessTests(unittest.TestCase):
 
 
 class CapabilityConfigTests(unittest.TestCase):
+    def test_skill_catalog_cache_avoids_rescanning_but_refreshes_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = Path(tmp) / "custom" / "SKILL.md"
+            skill.parent.mkdir()
+            skill.write_text("---\nname: custom\n---\n")
+            codex_pattern = os.path.join(
+                os.path.expanduser("~/.codex/skills"), "**", "SKILL.md",
+            )
+
+            def matching_glob(pattern, recursive=False):
+                del recursive
+                return [str(skill)] if pattern == codex_pattern else []
+
+            meter.invalidate_discovered_skill_cache()
+            try:
+                with mock.patch.object(meter.glob, "glob", side_effect=matching_glob), \
+                        mock.patch.object(
+                            meter, "_skill_measurability", return_value="unknown",
+                        ) as measurability:
+                    first = meter.discovered_skills([{
+                        "name": "custom", "providers": ["codex"],
+                        "activations": 1, "sessions_used": 1,
+                        "last_used": "2026-08-18",
+                    }])
+                    second = meter.discovered_skills([{
+                        "name": "custom", "providers": ["codex"],
+                        "activations": 2, "sessions_used": 2,
+                        "last_used": "2026-08-19",
+                    }])
+            finally:
+                meter.invalidate_discovered_skill_cache()
+
+        self.assertEqual(measurability.call_count, 1)
+        self.assertEqual(first[0]["activations"], 1)
+        self.assertEqual(second[0]["activations"], 2)
+        self.assertEqual(second[0]["measurement"], "measurable")
+
     def test_skill_identity_separates_runtime_origin_and_plugin(self):
         identities = {
             meter.skill_identity("Codex", "browser", "codex:built-in"),

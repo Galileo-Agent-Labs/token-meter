@@ -6,6 +6,7 @@ adapter treats both as read-only evidence and never exposes message content or
 tool payloads through normalized contracts.
 """
 
+import contextlib
 import glob
 import hashlib
 import json
@@ -251,7 +252,7 @@ class CursorRuntimeAdapter:
 
     def _query_metadata(self):
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 headers = connection.execute(
                     "SELECT composerId, workspaceId, createdAt, lastUpdatedAt, "
                     "isArchived, isSubagent, checkpointAt, value FROM composerHeaders"
@@ -492,7 +493,7 @@ class CursorRuntimeAdapter:
 
     def _session_revision(self, session_id):
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 row = connection.execute(
                     "SELECT lastUpdatedAt, checkpointAt FROM composerHeaders "
                     "WHERE composerId=?",
@@ -519,7 +520,7 @@ class CursorRuntimeAdapter:
     def snapshot(self, session_id):
         """Read one ordered conversation and discard malformed bubble values."""
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 row = connection.execute(
                     "SELECT workspaceId, createdAt, lastUpdatedAt, isArchived, "
                     "isSubagent, checkpointAt, value FROM composerHeaders "

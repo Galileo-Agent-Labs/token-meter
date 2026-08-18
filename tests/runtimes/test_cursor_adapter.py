@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import sqlite3
@@ -5,6 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.runtimes.cursor import CursorRuntimeAdapter
@@ -25,7 +27,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         self.transcript.parent.mkdir(parents=True)
         self.transcript.write_text(json.dumps({"role": "user", "text": "private"}) + "\n")
         os.utime(self.transcript, (2, 2))
-        with sqlite3.connect(self.database) as conn:
+        with contextlib.closing(sqlite3.connect(self.database)) as conn, conn:
             conn.execute(
                 "CREATE TABLE composerHeaders (composerId TEXT, workspaceId TEXT, "
                 "createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, "
@@ -73,7 +75,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         other.parent.mkdir(parents=True)
         other.write_text("{}\n")
         os.utime(other, (2, 2))
-        with sqlite3.connect(self.database) as conn:
+        with contextlib.closing(sqlite3.connect(self.database)) as conn, conn:
             conn.execute(
                 "INSERT INTO composerHeaders VALUES (?,?,?,?,0,0,0,?)",
                 ("session-2", "workspace", 1000, 3000, json.dumps({
@@ -105,7 +107,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         self.transcript.write_text("{}\n{}\n")
         os.utime(self.transcript, (4, 4))
         after_transcript = self.adapter.current_revision(source)
-        with sqlite3.connect(self.database) as conn:
+        with contextlib.closing(sqlite3.connect(self.database)) as conn, conn:
             conn.execute("UPDATE composerHeaders SET lastUpdatedAt=5000")
         after_database = self.adapter.current_revision(source)
 
@@ -119,7 +121,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
             for source in self.adapter.discover(DiscoveryContext(home=str(self.root)))
         }
 
-        with sqlite3.connect(self.database) as conn:
+        with contextlib.closing(sqlite3.connect(self.database)) as conn, conn:
             conn.execute(
                 "UPDATE composerHeaders SET lastUpdatedAt=6000 WHERE composerId=?",
                 ("session-1",),
@@ -170,7 +172,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
 
     def test_partial_database_falls_back_to_transcript_discovery(self):
         partial = self.root / "partial.vscdb"
-        with sqlite3.connect(partial) as conn:
+        with contextlib.closing(sqlite3.connect(partial)) as conn, conn:
             conn.execute("CREATE TABLE unrelated (value TEXT)")
         adapter = CursorRuntimeAdapter(self.projects, partial, self.logs)
 
@@ -179,7 +181,7 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         self.assertEqual([source.session_id for source in sources], ["session-1"])
 
     def test_missing_usage_stays_unavailable_instead_of_measured_zero(self):
-        with sqlite3.connect(self.database) as conn:
+        with contextlib.closing(sqlite3.connect(self.database)) as conn, conn:
             conn.execute(
                 "UPDATE cursorDiskKV SET value=? WHERE key=?",
                 (json.dumps({"modelConfig": {"modelName": "model-1"}}),
@@ -199,9 +201,20 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         ])
 
     def test_connection_is_query_only(self):
-        with self.adapter.connection() as conn:
+        with contextlib.closing(self.adapter.connection()) as conn:
             with self.assertRaises(sqlite3.OperationalError):
                 conn.execute("DELETE FROM composerHeaders")
+
+    def test_adapter_closes_owned_database_connections(self):
+        connection = self.adapter.connection()
+        self.addCleanup(connection.close)
+
+        with mock.patch.object(self.adapter, "connection", return_value=connection):
+            self.adapter.reset_metadata_cache()
+            self.adapter.metadata_index()
+
+        with self.assertRaises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
 
 
 if __name__ == "__main__":

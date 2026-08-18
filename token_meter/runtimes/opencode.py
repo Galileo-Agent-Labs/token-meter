@@ -1,5 +1,6 @@
 """Native read-only adapter for OpenCode's SQLite evidence store."""
 
+import contextlib
 import json
 import math
 import os
@@ -241,7 +242,7 @@ class OpenCodeRuntimeAdapter:
 
     def _query_source_records(self):
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 rows = connection.execute(
                     "SELECT s.id, s.directory, COALESCE(s.title,''), "
                     "COALESCE(s.agent,''), COALESCE(s.model,''), "
@@ -328,7 +329,7 @@ class OpenCodeRuntimeAdapter:
     def current_revision(self, source):
         session_id = source.session_id if isinstance(source, SessionSource) else str(source.get("id") or "")
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 row = connection.execute(
                     "SELECT MAX(COALESCE(s.time_updated,0), "
                     "COALESCE((SELECT MAX(m.time_updated) FROM message m WHERE m.session_id=s.id),0), "
@@ -364,7 +365,7 @@ class OpenCodeRuntimeAdapter:
         if source.runtime_id != self.descriptor.runtime_id:
             raise ValueError("source belongs to another runtime")
         try:
-            with self.connection() as connection:
+            with contextlib.closing(self.connection()) as connection:
                 row = connection.execute(
                     "SELECT tokens_input, tokens_output, tokens_reasoning, "
                     "tokens_cache_read, tokens_cache_write, cost, "
@@ -472,7 +473,7 @@ class OpenCodeRuntimeAdapter:
         """
         sid = str(source.get("id") or "")
         try:
-            with self.connection() as conn:
+            with contextlib.closing(self.connection()) as conn:
                 session_row = conn.execute(
                     "SELECT tokens_input, tokens_output, tokens_reasoning, "
                     "tokens_cache_read, tokens_cache_write, cost, time_created, time_updated, model "

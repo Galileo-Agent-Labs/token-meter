@@ -183,14 +183,16 @@ def quota_http_json(url, headers=None, timeout=DEFAULT_HTTP_TIMEOUT_S, opener=No
             raise QuotaUnavailable("Provider returned an invalid quota response.")
         return value
     except HTTPError as exc:
-        if exc.code in (401, 403):
+        code = exc.code
+        exc.close()
+        if code in (401, 403):
             raise QuotaUnavailable("Provider authentication needs to be refreshed.") from None
-        if exc.code == 429:
+        if code == 429:
             raise QuotaUnavailable(
                 "Provider quota service is rate limited; Token Meter will retry."
             ) from None
         raise QuotaUnavailable(
-            "Provider quota request failed (HTTP {}).".format(exc.code)
+            "Provider quota request failed (HTTP {}).".format(code)
         ) from None
     except (URLError, TimeoutError):
         raise QuotaUnavailable("Provider quota request could not connect.") from None

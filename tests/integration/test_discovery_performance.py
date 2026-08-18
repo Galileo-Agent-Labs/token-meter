@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import sqlite3
@@ -12,7 +13,7 @@ import meter
 class CursorMetadataCacheTests(unittest.TestCase):
     def database(self, root):
         path = Path(root) / "state.vscdb"
-        with sqlite3.connect(path) as conn:
+        with contextlib.closing(sqlite3.connect(path)) as conn, conn:
             conn.execute(
                 "CREATE TABLE composerHeaders (composerId TEXT, workspaceId TEXT, "
                 "createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, "
@@ -45,7 +46,7 @@ class CursorMetadataCacheTests(unittest.TestCase):
                 second = meter.cursor_metadata_index(str(path))
 
             second["session-1"]["model"] = "mutated-copy"
-            with sqlite3.connect(path) as conn:
+            with contextlib.closing(sqlite3.connect(path)) as conn, conn:
                 conn.execute(
                     "UPDATE cursorDiskKV SET value = ? WHERE key = ?",
                     (json.dumps({"modelConfig": {"modelName": "model-two-longer"}}),

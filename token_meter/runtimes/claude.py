@@ -288,6 +288,61 @@ class ClaudeRuntimeAdapter:
                 })
         return sources
 
+    @staticmethod
+    def _canonical_records(records):
+        """Collapse only Claude records that declare the same logical session ID."""
+        groups = {}
+        order = []
+        for record in records:
+            session_id = str(record.get("id") or "")
+            key = "claude:{}".format(session_id) if session_id else "claude-path:{}".format(
+                record.get("path") or len(order)
+            )
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(record)
+
+        result = []
+        for key in order:
+            candidates = groups[key]
+
+            def rank(record):
+                try:
+                    activity = float(record.get("mtime") or 0)
+                except (TypeError, ValueError, OverflowError):
+                    activity = 0.0
+                try:
+                    signature = float(record.get("signature_mtime") or 0)
+                except (TypeError, ValueError, OverflowError):
+                    signature = 0.0
+                return (
+                    record.get("desktop_source_kind") != "agent",
+                    -activity,
+                    -signature,
+                    str(record.get("path") or ""),
+                )
+
+            ranked = sorted(candidates, key=rank)
+            canonical = dict(ranked[0])
+            for candidate in ranked[1:]:
+                for field in (
+                    "client", "label", "desktop_session_id", "metadata_path",
+                    "project", "title", "model",
+                ):
+                    if not canonical.get(field) and candidate.get(field):
+                        canonical[field] = candidate[field]
+            canonical["_aggregation_key"] = key
+            canonical["_aggregation_canonical"] = True
+            physical_paths = tuple(sorted({
+                str(candidate.get("path") or "")
+                for candidate in candidates if candidate.get("path")
+            }))
+            if len(physical_paths) > 1:
+                canonical["_duplicate_paths"] = physical_paths
+            result.append(canonical)
+        return tuple(result)
+
     def _legacy_records(self):
         records = []
         desktop_index = self.desktop_index()
@@ -327,7 +382,7 @@ class ClaudeRuntimeAdapter:
             if source["path"] not in known_paths:
                 records.append(source)
                 known_paths.add(source["path"])
-        return tuple(records)
+        return self._canonical_records(records)
 
     def discover(self, context):
         del context

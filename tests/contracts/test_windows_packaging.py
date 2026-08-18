@@ -195,6 +195,31 @@ class WindowsPackagingContracts(unittest.TestCase):
         self.assertIn("known_runtime_label", tray)
         self.assertIn("unknown_runtime_label", tray)
 
+    def test_windows_tray_negotiates_dpi_before_winforms_and_tracks_live_theme(self):
+        tray = (ROOT / "scripts" / "run-tray.ps1").read_text(encoding="utf-8")
+
+        for marker in (
+            "SetProcessDpiAwarenessContext",
+            "SetProcessDPIAware",
+            "PerMonitorV2",
+            "function Get-WindowsAppTheme",
+            "AppsUseLightTheme",
+            "function Set-TrayMenuTheme",
+            "TokenMeterDarkColorTable",
+            "TokenMeterDarkRenderer",
+            "OnRenderItemText",
+            "SystemColors]::GrayText",
+            "dpi_awareness",
+            "theme",
+        ):
+            self.assertIn(marker, tray)
+        self.assertLess(
+            tray.index("SetProcessDpiAwarenessContext"),
+            tray.index("Add-Type -AssemblyName System.Windows.Forms"),
+        )
+        opening = tray.split("$Menu.add_Opening", 1)[1].split("$Timer =", 1)[0]
+        self.assertIn("Set-TrayMenuTheme", opening)
+
     def test_windows_extension_does_not_add_os_dispatch_to_runtime_parsers(self):
         branch = re.compile(
             r"\b(?:if|elif|match|case)\b[^\n]{0,160}\b(?:win32|windows|os\.name\s*==\s*['\"]nt)",
@@ -257,6 +282,8 @@ class WindowsPackagingContracts(unittest.TestCase):
         self.assertEqual(smoke.returncode, 0, smoke.stderr)
         self.assertIn('"known_runtime_label":"Kiro"', smoke.stdout)
         self.assertIn('"unknown_runtime_label":"Unknown Runtime"', smoke.stdout)
+        self.assertRegex(smoke.stdout, r'"dpi_awareness":"(?:PerMonitorV2|SystemAware|Unavailable)"')
+        self.assertRegex(smoke.stdout, r'"theme":"(?:light|dark)"')
 
     @unittest.skipUnless(os.name == "nt", "Windows-native CMD validation")
     def test_local_windows_wrapper_executes_stub_and_preserves_exit_code(self):

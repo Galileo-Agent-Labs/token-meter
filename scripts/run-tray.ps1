@@ -11,11 +11,19 @@ if ($env:OS -ne "Windows_NT") {
     throw "The Token Meter tray requires Windows."
 }
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+
+public static class TokenMeterNativeWindow {
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetProcessDPIAware();
+}
 
 public static class TokenMeterNativeIcon {
     [DllImport("user32.dll")]
@@ -23,6 +31,115 @@ public static class TokenMeterNativeIcon {
     public static extern bool DestroyIcon(IntPtr handle);
 }
 "@
+
+$script:DpiAwareness = "Unavailable"
+try {
+    $PerMonitorV2 = [IntPtr](-4)
+    if ([TokenMeterNativeWindow]::SetProcessDpiAwarenessContext($PerMonitorV2)) {
+        $script:DpiAwareness = "PerMonitorV2"
+    }
+} catch {
+    $script:DpiAwareness = "Unavailable"
+}
+if ($script:DpiAwareness -ne "PerMonitorV2") {
+    try {
+        if ([TokenMeterNativeWindow]::SetProcessDPIAware()) {
+            $script:DpiAwareness = "SystemAware"
+        }
+    } catch {
+        $script:DpiAwareness = "Unavailable"
+    }
+}
+
+# DPI awareness must be selected before WinForms creates any controls.
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System.Drawing;
+using System.Windows.Forms;
+
+public sealed class TokenMeterDarkColorTable : ProfessionalColorTable {
+    private static readonly Color Background = Color.FromArgb(32, 32, 32);
+    private static readonly Color Selection = Color.FromArgb(64, 64, 64);
+    private static readonly Color Border = Color.FromArgb(86, 86, 86);
+
+    public TokenMeterDarkColorTable() { UseSystemColors = false; }
+    public override Color ToolStripDropDownBackground { get { return Background; } }
+    public override Color ImageMarginGradientBegin { get { return Background; } }
+    public override Color ImageMarginGradientMiddle { get { return Background; } }
+    public override Color ImageMarginGradientEnd { get { return Background; } }
+    public override Color MenuItemSelected { get { return Selection; } }
+    public override Color MenuItemBorder { get { return Border; } }
+    public override Color MenuBorder { get { return Border; } }
+    public override Color SeparatorDark { get { return Border; } }
+    public override Color SeparatorLight { get { return Background; } }
+    public override Color CheckBackground { get { return Selection; } }
+    public override Color CheckSelectedBackground { get { return Selection; } }
+    public override Color CheckPressedBackground { get { return Selection; } }
+}
+
+public sealed class TokenMeterDarkRenderer : ToolStripProfessionalRenderer {
+    private static readonly Color Foreground = Color.FromArgb(245, 245, 245);
+    private static readonly Color Disabled = Color.FromArgb(166, 166, 166);
+
+    public TokenMeterDarkRenderer() : base(new TokenMeterDarkColorTable()) { }
+
+    protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) {
+        e.TextColor = e.Item.Enabled ? Foreground : Disabled;
+        base.OnRenderItemText(e);
+    }
+}
+"@
+
+$script:DarkMenuRenderer = [TokenMeterDarkRenderer]::new()
+$script:LightMenuRenderer = [System.Windows.Forms.ToolStripSystemRenderer]::new()
+
+function Get-WindowsAppTheme {
+    try {
+        $Theme = Get-ItemProperty -LiteralPath (
+            "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        ) -Name "AppsUseLightTheme" -ErrorAction Stop
+        if ([int]$Theme.AppsUseLightTheme -eq 0) {
+            return "dark"
+        }
+    } catch {
+        # Windows defaults apps to the light theme when the value is absent.
+    }
+    return "light"
+}
+
+function Set-TrayMenuItemTheme($Items, $Background, $Foreground, $Disabled, $Renderer) {
+    foreach ($Item in @($Items)) {
+        $Item.BackColor = $Background
+        $Item.ForeColor = if ($Item.Enabled) { $Foreground } else { $Disabled }
+        if ($Item -is [System.Windows.Forms.ToolStripMenuItem] -and $Item.DropDownItems.Count -gt 0) {
+            $Item.DropDown.BackColor = $Background
+            $Item.DropDown.ForeColor = $Foreground
+            $Item.DropDown.Renderer = $Renderer
+            Set-TrayMenuItemTheme $Item.DropDownItems $Background $Foreground $Disabled $Renderer
+        }
+    }
+}
+
+function Set-TrayMenuTheme($Menu) {
+    $Theme = Get-WindowsAppTheme
+    if ($Theme -eq "dark") {
+        $Background = [System.Drawing.Color]::FromArgb(32, 32, 32)
+        $Foreground = [System.Drawing.Color]::FromArgb(245, 245, 245)
+        $Disabled = [System.Drawing.Color]::FromArgb(166, 166, 166)
+        $Renderer = $script:DarkMenuRenderer
+    } else {
+        $Background = [System.Drawing.SystemColors]::Menu
+        $Foreground = [System.Drawing.SystemColors]::MenuText
+        $Disabled = [System.Drawing.SystemColors]::GrayText
+        $Renderer = $script:LightMenuRenderer
+    }
+    $Menu.BackColor = $Background
+    $Menu.ForeColor = $Foreground
+    $Menu.Renderer = $Renderer
+    Set-TrayMenuItemTheme $Menu.Items $Background $Foreground $Disabled $Renderer
+    return $Theme
+}
 
 function Limit-Text([string]$Value, [int]$Maximum) {
     $Value = ([string]$Value -replace '\s+', ' ').Trim()
@@ -259,6 +376,12 @@ if ($SmokeTest) {
     Remove-Item -LiteralPath $script:OpenProbePath -Force -ErrorAction SilentlyContinue
     $Probe = New-Object System.Windows.Forms.NotifyIcon
     $ProbeIcon = New-TokenMeterIcon
+    $ProbeMenu = New-Object System.Windows.Forms.ContextMenuStrip
+    $ProbeDisabledItem = New-Object System.Windows.Forms.ToolStripMenuItem
+    $ProbeDisabledItem.Text = "Token Meter"
+    $ProbeDisabledItem.Enabled = $false
+    $ProbeMenu.Items.Add($ProbeDisabledItem) | Out-Null
+    $ProbeTheme = Set-TrayMenuTheme $ProbeMenu
     $IconBitmap = $null
     try {
         $Probe.Icon = $ProbeIcon
@@ -296,12 +419,15 @@ if ($SmokeTest) {
             menu_status = Format-MenuStatus $Sample
             known_runtime_label = Get-RuntimeLabel $Sample "kiro"
             unknown_runtime_label = Get-RuntimeLabel $Sample "future-runtime"
+            dpi_awareness = $script:DpiAwareness
+            theme = $ProbeTheme
         } | ConvertTo-Json -Compress
     } finally {
         $Probe.Visible = $false
         $Probe.Dispose()
         if ($IconBitmap) { $IconBitmap.Dispose() }
         $ProbeIcon.Dispose()
+        $ProbeMenu.Dispose()
         if ($OwnProbe) {
             Remove-Item -LiteralPath $script:OpenProbePath -Force -ErrorAction SilentlyContinue
         }
@@ -466,9 +592,13 @@ $Quit.Text = "Quit tray widget"
 $Quit.add_Click({ $script:Context.ExitThread() })
 $Menu.Items.Add($Quit) | Out-Null
 
+Set-TrayMenuTheme $Menu | Out-Null
 $script:NotifyIcon.ContextMenuStrip = $Menu
 $script:NotifyIcon.add_MouseClick({ Invoke-TrayMouseClick $_ })
-$Menu.add_Opening({ Invoke-TrayRefresh })
+$Menu.add_Opening({
+    Invoke-TrayRefresh
+    Set-TrayMenuTheme $Menu | Out-Null
+})
 
 $Timer = New-Object System.Windows.Forms.Timer
 $Timer.Interval = 10000

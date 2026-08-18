@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.domain.aggregates import current_session_summaries
@@ -73,6 +74,27 @@ class ClaudeRuntimeAdapterTests(unittest.TestCase):
     def _write(self, rows):
         self.trace.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
+    def _add_duplicate_local_agent_trace(self):
+        metadata = (
+            self.desktop / "local-agent-mode-sessions" / "account" /
+            "local_agent.json"
+        )
+        metadata.parent.mkdir(parents=True)
+        metadata.write_text(json.dumps({
+            "sessionId": "local-agent", "cliSessionId": "session-1",
+            "title": "Local agent", "model": "claude-test",
+            "lastActivityAt": 4000,
+        }))
+        trace = (
+            metadata.with_suffix("") / ".claude" / "projects" /
+            "-work-project" / "session-1.jsonl"
+        )
+        trace.parent.mkdir(parents=True)
+        trace.write_text(self.trace.read_text())
+        os.utime(metadata, (4, 4))
+        os.utime(trace, (4, 4))
+        return trace
+
     def test_discovers_desktop_enriched_code_trace(self):
         sources = self.adapter.discover(DiscoveryContext(home=str(self.root)))
 
@@ -85,6 +107,39 @@ class ClaudeRuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(source.model_ref.provider_id, "anthropic")
         self.assertEqual(source.model_ref.model_id, "claude-test")
         self.assertEqual(source.activity_mtime, self.last_event_at)
+
+    def test_duplicate_local_agent_trace_has_one_canonical_legacy_source(self):
+        duplicate = self._add_duplicate_local_agent_trace()
+
+        sources = self.adapter.discover_legacy(
+            DiscoveryContext(home=str(self.root))
+        )
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["path"], str(duplicate))
+        self.assertEqual(sources[0]["_aggregation_key"], "claude:session-1")
+        self.assertTrue(sources[0]["_aggregation_canonical"])
+        self.assertEqual(
+            set(sources[0]["_duplicate_paths"]),
+            {str(self.trace), str(duplicate)},
+        )
+
+    def test_duplicate_canonical_source_is_stable_when_globs_reverse(self):
+        duplicate = self._add_duplicate_local_agent_trace()
+        original_glob = self.adapter._glob
+
+        with mock.patch.object(
+            self.adapter, "_glob",
+            side_effect=lambda pattern, recursive=False: tuple(reversed(
+                original_glob(pattern, recursive=recursive)
+            )),
+        ):
+            sources = self.adapter.discover_legacy(
+                DiscoveryContext(home=str(self.root))
+            )
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["path"], str(duplicate))
 
     def test_opening_old_desktop_session_does_not_create_current_activity(self):
         before = self.adapter.discover(DiscoveryContext(home=str(self.root)))[0]

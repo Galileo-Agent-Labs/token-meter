@@ -1,8 +1,10 @@
+import contextlib
 import json
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.runtimes.opencode import OpenCodeRuntimeAdapter
@@ -32,7 +34,7 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.db_path = self.root / "opencode.db"
         self.models_path = self.root / "models.json"
-        with sqlite3.connect(self.db_path) as conn:
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.executescript(SCHEMA)
             conn.execute(
                 "INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -93,7 +95,7 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
     def test_revision_changes_when_message_or_part_changes(self):
         source = tuple(self.adapter.discover(DiscoveryContext(home=str(self.root))))[0]
         before = self.adapter.current_revision(source)
-        with sqlite3.connect(self.db_path) as conn:
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("UPDATE part SET time_updated=9000 WHERE id='part-1'")
         after = self.adapter.current_revision(source)
 
@@ -116,7 +118,7 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
             self.assertNotIn(private, serialized)
 
     def test_summary_detail_omits_turns_and_null_evidence_stays_unavailable(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with contextlib.closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 "UPDATE session SET tokens_cache_write=NULL, cost=NULL WHERE id='session-1'"
             )
@@ -133,7 +135,7 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
         corrupt = self.root / "corrupt.db"
         corrupt.write_bytes(b"not sqlite")
         partial = self.root / "partial.db"
-        with sqlite3.connect(partial) as conn:
+        with contextlib.closing(sqlite3.connect(partial)) as conn, conn:
             conn.execute("CREATE TABLE session (id TEXT PRIMARY KEY)")
 
         for path in (corrupt, partial):
@@ -142,9 +144,19 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
                 self.assertEqual(tuple(adapter.discover(DiscoveryContext(home=str(self.root)))), ())
 
     def test_connection_is_query_only(self):
-        with self.adapter.connection() as conn:
+        with contextlib.closing(self.adapter.connection()) as conn:
             with self.assertRaises(sqlite3.OperationalError):
                 conn.execute("DELETE FROM session")
+
+    def test_adapter_closes_owned_database_connections(self):
+        connection = self.adapter.connection()
+        self.addCleanup(connection.close)
+
+        with mock.patch.object(self.adapter, "connection", return_value=connection):
+            tuple(self.adapter.discover(DiscoveryContext(home=str(self.root))))
+
+        with self.assertRaises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
 
     def test_legacy_discovery_projection_matches_current_shape(self):
         rows = self.adapter.discover_legacy(DiscoveryContext(home=str(self.root)))

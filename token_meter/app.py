@@ -321,6 +321,9 @@ _summary_cache = {}
 _summary_cache_lock = threading.Lock()
 _matched_pace_cache = {"signature": None, "data": None}
 _matched_pace_cache_lock = threading.Lock()
+_SKILL_CATALOG_TTL_S = 60.0
+_skill_catalog_cache = {"rows": None, "at": 0.0}
+_skill_catalog_cache_lock = threading.Lock()
 _session_state_cache = {}
 _session_state_cache_lock = threading.Lock()
 _recursive_path_cache = BoundedPathCache(ttl_seconds=4.0, max_entries=64)
@@ -2514,6 +2517,15 @@ def trash_session_log(session_id, sources=None, trash_dir=None, mover=None):
     if not source or str(source.get("id") or "") != session_id:
         return {"ok": False, "error": "Session is not in the discovered log inventory.",
                 "error_code": "not_found"}
+    duplicate_paths = {
+        str(path) for path in (source.get("_duplicate_paths") or ()) if path
+    }
+    if len(duplicate_paths) > 1:
+        return {
+            "ok": False,
+            "error": "This logical session has multiple trace files and cannot be deleted safely.",
+            "error_code": "ambiguous_id",
+        }
     path = str(source.get("path") or "")
     if not path.endswith(".jsonl") or not os.path.isfile(path):
         return {"ok": False, "error": "The discovered session log is not available.",
@@ -4692,8 +4704,8 @@ def skill_identity(runtime, name, origin_id, plugin_id=""):
     return f"skill:{runtime_key}:{owner}:{name}"
 
 
-def discovered_skills(skill_usage=None):
-    usage = {str(row.get("name") or "").lower(): row for row in (skill_usage or [])}
+def _scan_discovered_skills():
+    usage = {}
     rows = []
 
     def add(path, runtime, source, origin_id, origin="user", enabled=True, plugin_id="",
@@ -4762,6 +4774,49 @@ def discovered_skills(skill_usage=None):
     for row in rows:
         deduped[row["id"]] = row
     return sorted(deduped.values(), key=lambda row: (row["runtime"], row["name"], row["source"]))
+
+
+def invalidate_discovered_skill_cache():
+    with _skill_catalog_cache_lock:
+        _skill_catalog_cache["rows"] = None
+        _skill_catalog_cache["at"] = 0.0
+
+
+def discovered_skills(skill_usage=None):
+    """Return current usage over a short-lived cache of static skill metadata."""
+    now = time.monotonic()
+    with _skill_catalog_cache_lock:
+        cached_rows = _skill_catalog_cache.get("rows")
+        if (
+            cached_rows is None
+            or now - float(_skill_catalog_cache.get("at") or 0) >= _SKILL_CATALOG_TTL_S
+        ):
+            cached_rows = tuple(_scan_discovered_skills())
+            _skill_catalog_cache["rows"] = cached_rows
+            _skill_catalog_cache["at"] = now
+        rows = [dict(row) for row in cached_rows]
+
+    usage = {
+        str(row.get("name") or "").lower(): row
+        for row in (skill_usage or [])
+    }
+    for row in rows:
+        used = usage.get(str(row.get("name") or "").lower()) or {}
+        providers = {
+            str(provider).lower() for provider in used.get("providers") or []
+        }
+        expected_provider = "codex" if row.get("runtime") == "Codex" else "claude"
+        if providers and expected_provider not in providers:
+            used = {}
+        row.update({
+            "used": bool(used),
+            "activations": int(used.get("activations") or 0),
+            "sessions_used": int(used.get("sessions_used") or 0),
+            "last_used": used.get("last_used") or "Never",
+            "measurement": "measurable" if used else row.get("measurement") or "unknown",
+        })
+        row["unmeasurable"] = row["measurement"] != "measurable"
+    return rows
 
 
 def capability_control_groups(mcp_items, skill_items):
@@ -5333,6 +5388,8 @@ def set_skill_pack_enabled(runtime, plugin_id, enabled):
         result = set_claude_plugin_enabled(plugin_id, enabled)
     else:
         return {"ok": False, "error": "Only Codex and Claude plugin packs can be changed."}
+    if result.get("ok"):
+        invalidate_discovered_skill_cache()
     return result
 
 
@@ -5850,6 +5907,44 @@ def metric_coverage(rows, metric):
     return _domain_metric_coverage(rows, metric)
 
 
+def canonical_aggregation_sources(sources):
+    """Honor adapter-owned aggregation identities without generic ID deduplication."""
+    source_rows = list(sources or ())
+    groups = {}
+    for index, source in enumerate(source_rows):
+        key = source.get("_aggregation_key")
+        if key:
+            groups.setdefault(str(key), []).append((index, source))
+
+    selected = {}
+    for key, candidates in groups.items():
+        def rank(indexed_source):
+            _index, source = indexed_source
+            try:
+                activity = float(source.get("mtime") or 0)
+            except (TypeError, ValueError, OverflowError):
+                activity = 0.0
+            try:
+                signature = float(source.get("signature_mtime") or 0)
+            except (TypeError, ValueError, OverflowError):
+                signature = 0.0
+            return (
+                not bool(source.get("_aggregation_canonical")),
+                -activity,
+                -signature,
+                str(source.get("path") or ""),
+            )
+
+        selected[key] = min(candidates, key=rank)[0]
+
+    result = []
+    for index, source in enumerate(source_rows):
+        key = source.get("_aggregation_key")
+        if not key or selected.get(str(key)) == index:
+            result.append(source)
+    return result
+
+
 def cross_session(sources=None):
     now = time.time()
     if _xsess["data"] and (now - _xsess["at"] < _XSESS_TTL):
@@ -5857,7 +5952,9 @@ def cross_session(sources=None):
 
     internal_rows = []
 
-    source_rows = list(sources) if sources is not None else all_session_sources()
+    source_rows = canonical_aggregation_sources(
+        list(sources) if sources is not None else all_session_sources()
+    )
     opencode_conn = None
     if any(source.get("provider") == "opencode" for source in source_rows):
         try:
@@ -5906,6 +6003,7 @@ def cross_session(sources=None):
         for row in internal_rows
         for sample in (row.get("_wait_samples") or [])
     ])
+    language_signals = aggregate_language_signals(internal_rows)
     data = {
         "generated_at": int(now),
         "sessions": sessions[:60],
@@ -5934,8 +6032,8 @@ def cross_session(sources=None):
         "premium_share": (premium / total) if total else 0.0,
         "providers": aggregate["providers"],
         "model_stats": aggregate_model_stats(internal_rows),
-        "language_signals": aggregate_language_signals(internal_rows),
-        "frustration": aggregate_frustration(internal_rows),
+        "language_signals": language_signals,
+        "frustration": language_signals["friction"],
         "model_pricing": model_pricing_settings(),
         "budgets": budgets,
         "budget": budget,

@@ -301,6 +301,36 @@ body.sessionRoute #view-session .currentSessionContextBaseline{stroke:rgba(0,188
 body.sessionRoute #view-session .currentSessionContextBar{fill:var(--session-cyan);opacity:.52}
 body.sessionRoute #view-session .currentSessionGrip{width:12px;height:16px;fill:var(--session-cyan);opacity:.7}
 body.sessionRoute #view-session .currentSessionsEmpty{border-color:rgba(0,188,235,.18);border-radius:8px;background:linear-gradient(145deg,rgba(23,33,43,.95),rgba(9,15,21,.98))}
+body.sessionRoute #view-session .currentSessionsEmpty{position:relative;display:flex;grid-column:1/-1;min-height:390px;overflow:hidden;align-items:center;justify-content:center;padding:38px 24px 36px;text-align:center;background:radial-gradient(ellipse at 50% 48%,rgba(0,188,235,.13),transparent 44%),radial-gradient(ellipse at 76% 42%,rgba(199,167,255,.08),transparent 36%),linear-gradient(150deg,rgba(18,30,41,.96),rgba(7,13,19,.98))}
+body.sessionRoute #view-session .currentSessionsEmpty:after{content:"";position:absolute;right:7%;bottom:-120px;left:7%;height:210px;border-radius:50%;background:rgba(0,188,235,.07);filter:blur(38px)}
+body.sessionRoute #view-session .currentSessionsEmptyInner{position:relative;z-index:1;width:min(720px,100%)}
+body.sessionRoute #view-session .currentSessionsEmpty h3{margin:0;font-family:"Tektur Local","Avenir Next",-apple-system,BlinkMacSystemFont,sans-serif;font-size:clamp(28px,3.2vw,40px);font-stretch:91%;font-weight:610;letter-spacing:-.03em}
+body.sessionRoute #view-session .currentSessionsEmptyCopy{max-width:65ch;margin:9px auto 0;color:var(--dim);font-size:13px;line-height:1.55}
+body.sessionRoute #view-session .currentSessionsArrival{width:min(390px,100%);margin:22px auto 28px;padding:15px 17px 14px;border:1px solid rgba(199,167,255,.48);border-radius:8px;background:linear-gradient(145deg,rgba(22,35,48,.98),rgba(11,18,26,.98));box-shadow:0 14px 30px rgba(0,0,0,.24),0 0 30px rgba(199,167,255,.08);text-align:left}
+body.sessionRoute #view-session .currentSessionsArrivalHead{display:flex;align-items:center;gap:8px}
+body.sessionRoute #view-session .currentSessionsArrivalHead:before{content:"";width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:var(--session-violet);box-shadow:0 0 12px rgba(199,167,255,.72)}
+body.sessionRoute #view-session .currentSessionsArrivalHead strong{font-size:13px}
+body.sessionRoute #view-session .currentSessionsArrivalHead span{margin-left:auto;color:var(--session-violet);font-size:11px;font-weight:760}
+body.sessionRoute #view-session .currentSessionsArrivalMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:13px;padding-top:12px;border-top:1px solid rgba(127,219,242,.14)}
+body.sessionRoute #view-session .currentSessionsArrivalMetric span{display:block;color:var(--faint);font-size:10px;font-weight:780;letter-spacing:.06em;text-transform:uppercase}
+body.sessionRoute #view-session .currentSessionsArrivalMetric strong{display:block;margin-top:4px;font:720 14px/1.1 ui-monospace,"SF Mono",Menlo,monospace}
+body.sessionRoute #view-session .currentSessionsHistorySummary{display:flex;align-items:baseline;justify-content:center;gap:14px;margin-bottom:3px}
+body.sessionRoute #view-session .currentSessionsHistorySummary>strong{font-family:"Tektur Local","Avenir Next",-apple-system,BlinkMacSystemFont,sans-serif;font-size:25px;font-weight:610;letter-spacing:-.03em}
+body.sessionRoute #view-session .currentSessionsHistorySummary>span{color:var(--dim);font-size:12px}
+body.sessionRoute #view-session .currentSessionsHistorySummary>span b{color:var(--fg);font:720 12px/1.2 ui-monospace,"SF Mono",Menlo,monospace}
+body.sessionRoute #view-session .currentSessionsHorizon{position:relative;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));height:92px;margin:0 auto 20px;padding:0 10px}
+body.sessionRoute #view-session .currentSessionsHorizon:before{content:"";position:absolute;right:10px;bottom:25px;left:10px;height:1px;background:linear-gradient(90deg,rgba(0,188,235,.14),rgba(127,219,242,.7) 72%,rgba(199,167,255,.72));box-shadow:0 8px 28px rgba(0,188,235,.18)}
+body.sessionRoute #view-session .currentSessionsHistoryDay{position:relative;display:grid;grid-template-rows:1fr auto 24px;justify-items:center;min-width:0}
+body.sessionRoute #view-session .currentSessionsHistoryValue{align-self:end;margin-bottom:6px;color:var(--dim);font:720 11px/1.1 ui-monospace,"SF Mono",Menlo,monospace}
+body.sessionRoute #view-session .currentSessionsHistoryBar{width:clamp(9px,1.5vw,15px);height:var(--activity);min-height:0;align-self:end;border-radius:3px 3px 0 0;background:linear-gradient(to top,rgba(0,188,235,.36),var(--session-sky));box-shadow:0 0 20px rgba(0,188,235,.17)}
+body.sessionRoute #view-session .currentSessionsHistoryDay small{align-self:end;color:var(--faint);font-size:11px;font-weight:720;letter-spacing:.05em;text-transform:uppercase}
+body.sessionRoute #view-session .currentSessionsEmptyActions{display:flex;align-items:center;justify-content:center;gap:22px}
+body.sessionRoute #view-session .currentSessionsEmptyAction{appearance:none;display:inline-flex;align-items:center;gap:7px;padding:2px;border:0;background:transparent;color:var(--session-sky);font:inherit;font-size:12px;font-weight:760;line-height:1.2;text-decoration:none;cursor:pointer}
+body.sessionRoute #view-session .currentSessionsEmptyAction.secondary{color:var(--dim)}
+body.sessionRoute #view-session .currentSessionsEmptyAction:hover{color:var(--fg)}
+body.sessionRoute #view-session .currentSessionsEmptyAction:focus-visible{outline:2px solid var(--session-cyan);outline-offset:4px;border-radius:3px}
+body.sessionRoute #view-session .currentSessionsEmptyAction svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:700px){body.sessionRoute #view-session .currentSessionsEmpty{min-height:0;padding:34px 14px 32px}body.sessionRoute #view-session .currentSessionsEmpty h3{font-size:27px}body.sessionRoute #view-session .currentSessionsArrival{margin:20px auto 24px}body.sessionRoute #view-session .currentSessionsHistorySummary{flex-wrap:wrap;gap:3px 10px}body.sessionRoute #view-session .currentSessionsHistorySummary>strong{font-size:24px}body.sessionRoute #view-session .currentSessionsHistorySummary>span{flex-basis:100%}body.sessionRoute #view-session .currentSessionsHorizon{height:86px;padding:0}body.sessionRoute #view-session .currentSessionsHorizon:before{right:0;left:0}body.sessionRoute #view-session .currentSessionsHistoryValue{visibility:hidden}body.sessionRoute #view-session .currentSessionsHistoryDay small{font-size:0}body.sessionRoute #view-session .currentSessionsHistoryDay small:after{content:attr(data-short);font-size:11px}body.sessionRoute #view-session .currentSessionsEmptyActions{flex-direction:column;gap:14px}}
 body.sessionRoute #view-session #all-session-history{margin-top:2px}
 body.sessionRoute #view-session .allSessionsHead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 10px;padding:2px 2px 0}
 body.sessionRoute #view-session .allSessionsHead h2{margin:0;font-family:"Tektur Local","Avenir Next",-apple-system,BlinkMacSystemFont,sans-serif;font-size:22px;font-weight:610;letter-spacing:-.025em}
@@ -4998,6 +5028,45 @@ function renderCurrentDaySummary(xs){
  $('current-day-vs-yesterday').textContent=comparison;
  $('current-day-vs-yesterday-note').textContent=comparisonNote;
 }
+function currentSessionsIdleHistory(xs,todayKey=localDayKey()){
+ const rows=Array.isArray(xs?.daily)?xs.daily:[];
+ const end=new Date(`${todayKey}T12:00:00`);
+ const byDay=new Map(rows.map(row=>[row.day,row]));
+ const dayKey=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+ const days=Array.from({length:7},(_,index)=>{
+  const date=new Date(end);
+  date.setDate(end.getDate()-6+index);
+  const day=dayKey(date),row=byDay.get(day);
+  return {day,sessions:Math.max(0,Number(row?.sessions)||0)};
+ });
+ const activeRows=days.map(day=>byDay.get(day.day)).filter(row=>row&&Number(row.sessions)>0);
+ const availableCostRows=activeRows.filter(row=>row.availability?.cost!==false);
+ const runtimes=[...new Set(activeRows.flatMap(row=>(row.providers||[]).map(provider=>String(provider?.provider||'').trim()).filter(Boolean)))].sort();
+ return {
+  days,
+  sessions:days.reduce((total,day)=>total+day.sessions,0),
+  cost:availableCostRows.reduce((total,row)=>total+(Number(row.cost)||0),0),
+  costAvailable:availableCostRows.length>0,
+  costPartial:activeRows.some(row=>row.availability?.cost===false||row.coverage?.cost?.complete===false),
+  costEstimated:availableCostRows.some(row=>['local_estimate','mixed'].includes(row.usage_basis)||Number(row.provenance?.estimated_sessions)>0),
+  runtimes,
+ };
+}
+function currentSessionsEmptyHtml(xs,todayKey=localDayKey()){
+ const history=currentSessionsIdleHistory(xs,todayKey),maxSessions=Math.max(1,...history.days.map(day=>day.sessions));
+ const costText=history.costAvailable?`${history.costPartial?'At least ':''}${money(history.cost)}${history.costEstimated?' est':''} tracked`:'Spend unavailable';
+ const runtimeText=`${f(history.runtimes.length)} ${countWord(history.runtimes.length,'runtime')}`;
+ const historyTitle=history.sessions?`${f(history.sessions)} past ${countWord(history.sessions,'session')}`:'No past sessions yet';
+ const historyDetail=history.sessions?`over 7 days · <b>${esc(costText)}</b> · <b>${esc(runtimeText)}</b>`:'Your seven-day activity will build here.';
+ const horizonLabel=history.days.map(day=>`${new Date(`${day.day}T12:00:00`).toLocaleDateString([],{weekday:'short'})} ${day.sessions}`).join(', ');
+ const horizon=history.days.map(day=>{
+  const weekday=new Date(`${day.day}T12:00:00`).toLocaleDateString([],{weekday:'short'});
+  const height=day.sessions?Math.max(7,Math.round(62*day.sessions/maxSessions)):0;
+  return `<div class=currentSessionsHistoryDay aria-hidden=true><span class=currentSessionsHistoryValue>${f(day.sessions)}</span><i class=currentSessionsHistoryBar style="--activity:${height}px"></i><small data-short="${esc(weekday.slice(0,1))}">${esc(weekday)}</small></div>`;
+ }).join('');
+ const historyAction=history.sessions?`<button class=currentSessionsEmptyAction type=button data-current-empty-history>Explore ${f(history.sessions)} past ${countWord(history.sessions,'session')}<svg viewBox="0 0 16 16" aria-hidden=true><path d="M3 8h9M9 4l4 4-4 4"/></svg></button>`:'';
+ return `<section class="card currentSessionsEmpty"><div class=currentSessionsEmptyInner><h3>Your next live session appears here</h3><p class=currentSessionsEmptyCopy>Start Claude, Codex, Cursor, OpenCode, or Kiro. Token Meter adds its live card to this space automatically.</p><div class=currentSessionsArrival role=group aria-label="Placeholder for the next live session card"><div class=currentSessionsArrivalHead><strong>Next live session</strong><span>Listening</span></div><div class=currentSessionsArrivalMetrics><div class=currentSessionsArrivalMetric><span>Cost</span><strong>--</strong></div><div class=currentSessionsArrivalMetric><span>Context</span><strong>--</strong></div><div class=currentSessionsArrivalMetric><span>Speed</span><strong>--</strong></div></div></div><div class=currentSessionsHistorySummary><strong>${esc(historyTitle)}</strong><span>${historyDetail}</span></div><div class=currentSessionsHorizon role=img aria-label="Sessions over the last seven days: ${esc(horizonLabel)}">${horizon}</div><div class=currentSessionsEmptyActions>${historyAction}<a class="currentSessionsEmptyAction secondary" href="https://github.com/splunk/token-meter/issues" target=_blank rel="noopener noreferrer">Share feedback<svg viewBox="0 0 16 16" aria-hidden=true><path d="M6 3h7v7M13 3 6 10M11 9v4H3V5h4"/></svg></a></div></div></section>`;
+}
 function renderCurrentSessions(state=LATEST){
  renderCurrentDaySummary(state?.xsession);
  const sourceRows=state?.xsession?.current_sessions;
@@ -5026,12 +5095,14 @@ function renderCurrentSessions(state=LATEST){
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
   return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
- }).join(''):`<section class="card currentSessionsEmpty"><h3>No recent sessions</h3><p>Start ${esc(Object.entries(RUNTIME_CATALOG).filter(([id])=>id!=='unknown-runtime').slice(0,5).map(([,meta])=>meta.label).join(', ')||'a supported runtime')} to see one here.</p></section>`;
+ }).join(''):currentSessionsEmptyHtml(state?.xsession);
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }
 const currentSessionGrid=$('current-session-grid');
 currentSessionGrid.onclick=event=>{
  if(Date.now()<currentSessionSuppressClickUntil){event.preventDefault();return;}
+ const historyAction=event.target.closest('[data-current-empty-history]');
+ if(historyAction){openSessionScope('all');return;}
  const card=event.target.closest('[data-current-session-id]');
  if(card)selectSession(card.dataset.currentSessionId);
 };

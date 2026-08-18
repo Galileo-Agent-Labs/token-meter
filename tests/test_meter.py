@@ -4195,6 +4195,91 @@ console.log(JSON.stringify({
         self.assertIn(".currentDayReadouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.page)
         self.assertIn(".currentDayMetric:nth-child(3){grid-column:1/-1", self.page)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_empty_current_sessions_render_live_arrival_and_real_seven_day_history(self):
+        functions = []
+        for name in ("currentSessionsIdleHistory", "currentSessionsEmptyHtml"):
+            match = re.search(
+                rf"^function {name}\(.*?^\}}\n",
+                self.page,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        fixture = {"daily": [
+            {"day": "2026-08-18", "sessions": 1, "cost": 1.25,
+             "providers": [{"provider": "codex"}],
+             "availability": {"cost": True},
+             "coverage": {"cost": {"complete": True}},
+             "usage_basis": "local_estimate"},
+            {"day": "2026-08-17", "sessions": 5, "cost": 2.0,
+             "providers": [{"provider": "codex"}, {"provider": "claude"}],
+             "availability": {"cost": True},
+             "coverage": {"cost": {"complete": True}},
+             "usage_basis": "reported"},
+            {"day": "2026-08-12", "sessions": 2, "cost": 50.0,
+             "providers": [{"provider": "claude"}],
+             "availability": {"cost": False},
+             "coverage": {"cost": {"complete": False}},
+             "usage_basis": "unavailable"},
+            {"day": "2026-08-11", "sessions": 99, "cost": 99.0,
+             "providers": [{"provider": "outside-window"}],
+             "availability": {"cost": True},
+             "coverage": {"cost": {"complete": True}},
+             "usage_basis": "reported"},
+        ]}
+        script = """
+const f=value=>String(value);
+const money=value=>'$'+Number(value).toFixed(2);
+const esc=value=>String(value);
+const countWord=(count,singular,plural=singular+'s')=>Number(count)===1?singular:plural;
+""" + "\n".join(functions) + "\nconst xs=" + json.dumps(fixture) + ";\n" + """
+const history=currentSessionsIdleHistory(xs,'2026-08-18');
+const html=currentSessionsEmptyHtml(xs,'2026-08-18');
+const firstRunHtml=currentSessionsEmptyHtml({daily:[]},'2026-08-18');
+console.log(JSON.stringify({history,html,firstRunHtml}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["history"], {
+            "days": [
+                {"day": "2026-08-12", "sessions": 2},
+                {"day": "2026-08-13", "sessions": 0},
+                {"day": "2026-08-14", "sessions": 0},
+                {"day": "2026-08-15", "sessions": 0},
+                {"day": "2026-08-16", "sessions": 0},
+                {"day": "2026-08-17", "sessions": 5},
+                {"day": "2026-08-18", "sessions": 1},
+            ],
+            "sessions": 8,
+            "cost": 3.25,
+            "costAvailable": True,
+            "costPartial": True,
+            "costEstimated": True,
+            "runtimes": ["claude", "codex"],
+        })
+        html = rendered["html"]
+        for marker in (
+            "Your next live session appears here",
+            "Next live session",
+            "Cost",
+            "Context",
+            "Speed",
+            "8 past sessions",
+            "At least $3.25 est tracked",
+            "2 runtimes",
+            "data-current-empty-history",
+            "Explore 8 past sessions",
+            'href="https://github.com/splunk/token-meter/issues"',
+            "Share feedback",
+        ):
+            self.assertIn(marker, html)
+        self.assertIn("No past sessions yet", rendered["firstRunHtml"])
+        self.assertIn("Your seven-day activity will build here.", rendered["firstRunHtml"])
+        self.assertNotIn("data-current-empty-history", rendered["firstRunHtml"])
+
     def test_session_cards_use_compact_readable_metrics(self):
         for marker in (
             ".currentSessionGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}",

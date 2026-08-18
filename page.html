@@ -14,9 +14,7 @@
  --reason:#4ec6ee; --output:#7fdbf2; --retrieval:#19b3e6; --coord:var(--orange2); --toolcall:#0aa4d4;
  --c-read:#00bceb; --c-write:#1ba0e1; --c-input:#00bceb; --c-output:#64d8ff;
  --c-cache-read:#66d990; --c-cache-write:#ffb457; --c-cost:#c7a7ff; --c-context:#f6f8fb;
- --chart-input-fill:rgba(0,188,235,.16); --chart-output-fill:rgba(100,216,255,.16);
- --chart-fresh-fill:rgba(0,188,235,.14); --chart-cache-read-fill:rgba(102,217,144,.18);
- --chart-cache-write-fill:rgba(255,180,87,.18); --chart-cost-fill:rgba(199,167,255,.24);
+ --chart-cost-fill:rgba(199,167,255,.24);
  --chart-axis:#636d7b; --chart-grid:rgba(27,160,225,.18); --chart-label:#a8b3c1;
  --chart-tip:#05070a; --chart-tip-head:rgba(0,188,235,.16); --chart-tip-line:rgba(255,255,255,.42);
  --radius:8px; --shadow:0 1px 0 rgba(255,255,255,.055),0 18px 48px rgba(0,0,0,.36);
@@ -2925,9 +2923,7 @@ const CHART={
  input:cssVar('--c-input'),output:cssVar('--c-output'),tool:cssVar('--toolcall'),side:cssVar('--orange2'),
  cacheRead:cssVar('--c-cache-read'),cacheWrite:cssVar('--c-cache-write'),cost:cssVar('--c-cost'),context:cssVar('--c-context'),
  reason:cssVar('--reason'),muted:'rgba(255,255,255,.26)',
- inputFill:cssVar('--chart-input-fill'),outputFill:cssVar('--chart-output-fill'),
- freshFill:cssVar('--chart-fresh-fill'),cacheReadFill:cssVar('--chart-cache-read-fill'),
- cacheWriteFill:cssVar('--chart-cache-write-fill'),costFill:cssVar('--chart-cost-fill'),
+ costFill:cssVar('--chart-cost-fill'),
  axis:cssVar('--chart-axis'),grid:cssVar('--chart-grid'),lbl:cssVar('--chart-label'),
  tip:cssVar('--chart-tip'),tipHead:cssVar('--chart-tip-head'),tipLine:cssVar('--chart-tip-line')
 };
@@ -3160,11 +3156,11 @@ function drawIO(series){
   vals.forEach((v,i)=>{ if(v===null||v===undefined||Number.isNaN(v)){open=false;return;} d+=(open?' L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1); open=true; });
   return d?`<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${dash?` stroke-dasharray="${dash}"`:''}/>`:'';
  };
- const band=(top,bottom,col)=>{
+ const band=(top,bottom,col,opacity)=>{
   let d='';
   top.forEach((v,i)=>{ d+=(i?' L':'M')+x(i).toFixed(1)+' '+y(v||0).toFixed(1); });
   for(let i=bottom.length-1;i>=0;i--) d+=' L'+x(i).toFixed(1)+' '+y(bottom[i]||0).toFixed(1);
-  return `<path d="${d} Z" fill="${col}"/>`;
+  return `<path d="${d} Z" fill="${col}" fill-opacity="${opacity}"/>`;
  };
  const bars=(vals,col)=>{
   const bw=Math.max(2,Math.min(22,PW/Math.max(1,n)/1.85));
@@ -3189,7 +3185,7 @@ function drawIO(series){
   plot+=`<line x1="${ML}" y1="${y(.85).toFixed(1)}" x2="${VW-MR}" y2="${y(.85).toFixed(1)}" stroke="${CHART.cost}" stroke-dasharray="5 5" opacity=".75"/><line x1="${ML}" y1="${y(.7).toFixed(1)}" x2="${VW-MR}" y2="${y(.7).toFixed(1)}" stroke="${CHART.cacheWrite}" stroke-dasharray="5 5" opacity=".75"/>`;
   plot+=contexts.some(v=>v!==null)?lineVals(contexts,CHART.context,2.7):`<text x=520 y=122 text-anchor=middle fill="${CHART.lbl}">context data unavailable</text>`;
  }else if(mode==='tokens'){
-  plot+=band(cacheRead,zeros,CHART.cacheReadFill)+band(cacheTop,cacheRead,CHART.cacheWriteFill);
+  plot+=band(cacheRead,zeros,CHART.cacheRead,.18)+band(cacheTop,cacheRead,CHART.cacheWrite,.18);
   plot+=lineVals(inputTotals,CHART.input,2.7)+lineVals(output,CHART.output,2.1)+lineVals(cacheTop,CHART.cacheRead,1.7,'4 4')+lineVals(fresh,CHART.input,1.5,'5 4');
  }else if(mode==='tools'){
   plot+=bars(toolCalls,'rgba(10,164,212,.24)')+lineVals(toolCalls,CHART.tool,2.6);
@@ -5275,5 +5271,4 @@ setInterval(refreshSoftwareUpdateStatus,60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshLiveState();refreshSelectedSession({show:true});}});
 refreshLiveState();
 refreshSoftwareUpdateStatus();
-loadAgentAccess();
 </script></body></html>

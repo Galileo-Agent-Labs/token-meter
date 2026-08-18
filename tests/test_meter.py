@@ -17,6 +17,33 @@ from token_meter.contracts import DiscoveryContext
 from token_meter.runtimes.codex import CodexRuntimeAdapter
 
 
+class LegacyJsonlLoadTests(unittest.TestCase):
+    def test_load_skips_corrupt_bytes_truncated_rows_and_non_objects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            path.write_bytes(
+                b'{"type":"user","value":1}\n'
+                b'\xff\n'
+                b'[]\n'
+                b'"text"\n'
+                b'42\n'
+                b'null\n'
+                b'{"type":"assistant","value":2}\n'
+                b'{"truncated":\n'
+            )
+
+            rows = meter.load(str(path))
+
+        self.assertEqual(rows, [
+            {"type": "user", "value": 1},
+            {"type": "assistant", "value": 2},
+        ])
+
+    def test_load_returns_empty_when_the_trace_cannot_be_opened(self):
+        with mock.patch("builtins.open", side_effect=PermissionError("denied")):
+            self.assertEqual(meter.load("/unreadable/session.jsonl"), [])
+
+
 class SourceDiscoveryCacheTests(unittest.TestCase):
     def test_codex_metadata_prefix_is_reused_after_large_trace_append(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -4048,6 +4075,27 @@ console.log(JSON.stringify({
         self.assertLess(settings.index("id=model-pricing-settings"),
                         settings.index("id=frustration-settings"))
 
+    def test_agent_access_status_loads_only_when_settings_is_opened(self):
+        startup = self.page[self.page.rindex(
+            "setInterval(refreshLiveState,LIVE_STATE_POLL_MS);"
+        ):]
+        self.assertNotIn("loadAgentAccess();", startup)
+        settings_route = self.page.split(
+            "if(h==='settings'||h==='model-pricing'", 1
+        )[1].split("if(!h||h==='session')", 1)[0]
+        self.assertIn("loadAgentAccess();", settings_route)
+
+    def test_token_chart_fills_use_the_same_colors_as_legend_and_tooltip(self):
+        self.assertIn("const band=(top,bottom,col,opacity)=>", self.page)
+        self.assertIn(
+            "band(cacheRead,zeros,CHART.cacheRead,.18)+"
+            "band(cacheTop,cacheRead,CHART.cacheWrite,.18)",
+            self.page,
+        )
+        self.assertIn('fill-opacity="${opacity}"', self.page)
+        self.assertNotIn("cacheReadFill", self.page)
+        self.assertNotIn("cacheWriteFill", self.page)
+
     def test_agent_access_conflict_has_an_explicit_repair_flow(self):
         for marker in (
             "row.conflict?'Repair':'Connect'",
@@ -6020,6 +6068,27 @@ class SoftwareUpdateTests(unittest.TestCase):
             return meter.subprocess.CompletedProcess(command, 0, value, "")
         return run
 
+    def test_windows_background_git_checks_do_not_create_a_console_window(self):
+        observed = {}
+
+        def runner(command, **kwargs):
+            observed.update(kwargs)
+            return meter.subprocess.CompletedProcess(command, 0, "main\n", "")
+
+        windows = meter.platform_services(
+            "windows", environment={"USERPROFILE": r"C:\Users\example"},
+            home=r"C:\Users\example",
+        )
+        with mock.patch.object(meter, "_PLATFORM_SERVICES", windows):
+            self.assertEqual(
+                meter._run_update_git(r"C:\Token Meter", ["rev-parse", "HEAD"],
+                                      runner=runner),
+                "main",
+            )
+
+        self.assertEqual(observed["creationflags"], 0x08000000)
+        self.assertTrue(observed["close_fds"])
+
     def test_update_setting_defaults_on_and_preserves_an_explicit_off_choice(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"
@@ -6581,6 +6650,59 @@ class AgentAccessTests(unittest.TestCase):
         self.assertTrue(status["connected"])
         self.assertFalse(status["conflict"])
         self.assertNotIn("/usr/bin/codex", status["connect_command"])
+
+    def test_windows_codex_status_check_does_not_create_a_console_window(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            launcher = Path(tmp) / "token-meter-mcp"
+            launcher.write_text("#!/bin/sh\n")
+            launcher.chmod(0o755)
+            observed = {}
+
+            def runner(command, **kwargs):
+                observed.update(kwargs)
+                return meter.subprocess.CompletedProcess(command, 1, "", "missing")
+
+            windows = meter.platform_services(
+                "windows", environment={"USERPROFILE": r"C:\Users\example"},
+                home=r"C:\Users\example",
+            )
+            with mock.patch.object(meter, "_PLATFORM_SERVICES", windows):
+                meter.agent_access_client_status(
+                    "codex", launcher=str(launcher), runner=runner,
+                    which=lambda name: fr"C:\Tools\{name}.exe",
+                )
+
+        self.assertEqual(observed["creationflags"], 0x08000000)
+        self.assertTrue(observed["close_fds"])
+
+    def test_windows_connection_change_does_not_create_a_console_window(self):
+        before = {"label": "Codex", "detected": True, "available": True,
+                  "configured": False, "connected": False, "conflict": False}
+        after = {**before, "configured": True, "connected": True}
+        states = iter((before, after))
+        observed = {}
+
+        def runner(command, **kwargs):
+            observed.update(kwargs)
+            return meter.subprocess.CompletedProcess(command, 0, "", "")
+
+        windows = meter.platform_services(
+            "windows", environment={"USERPROFILE": r"C:\Users\example"},
+            home=r"C:\Users\example",
+        )
+        with mock.patch.object(meter, "_PLATFORM_SERVICES", windows), \
+                mock.patch.object(meter, "agent_access_launcher",
+                                  return_value=r"C:\Token Meter\token-meter-mcp.cmd"), \
+                mock.patch.object(meter, "agent_client_executable",
+                                  return_value=r"C:\Tools\codex.exe"):
+            result = meter.set_agent_access(
+                "codex", True, runner=runner,
+                status_getter=lambda client: next(states),
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(observed["creationflags"], 0x08000000)
+        self.assertTrue(observed["close_fds"])
 
     def test_claude_status_reads_only_the_user_scope_entry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -519,15 +519,17 @@ def load(path):
     if not path:
         return out
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 if not line.strip():
                     continue
                 try:
-                    out.append(json.loads(line))
-                except Exception:
-                    pass
-    except FileNotFoundError:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(row, dict):
+                    out.append(row)
+    except OSError:
         pass
     return out
 
@@ -1456,6 +1458,20 @@ def software_update_status(settings_path=None, status_path=None):
     }
 
 
+def _platform_subprocess_kwargs(purpose=ProcessPurpose.DEFAULT):
+    options = _PLATFORM_SERVICES.process_options(purpose)
+    if not options.supported:
+        return {}
+    kwargs = {}
+    if options.close_fds:
+        kwargs["close_fds"] = True
+    if options.start_new_session:
+        kwargs["start_new_session"] = True
+    if options.creation_flags:
+        kwargs["creationflags"] = options.creation_flags
+    return kwargs
+
+
 def _run_update_git(checkout, args, runner=None, timeout=None):
     runner = runner or subprocess.run
     result = runner(
@@ -1464,6 +1480,7 @@ def _run_update_git(checkout, args, runner=None, timeout=None):
         stderr=subprocess.PIPE,
         text=True,
         timeout=timeout or UPDATE_FETCH_TIMEOUT_S,
+        **_platform_subprocess_kwargs(),
     )
     if result.returncode != 0:
         raise RuntimeError("git command failed")
@@ -5115,7 +5132,8 @@ def agent_access_client_status(client, launcher=None, runner=None, which=None, c
         try:
             completed = runner([cli_path, "mcp", "get", AGENT_ACCESS_SERVER, "--json"],
                                capture_output=True, text=True, timeout=15, check=False,
-                               env=agent_client_environment(cli_path))
+                               env=agent_client_environment(cli_path),
+                               **_platform_subprocess_kwargs())
         except (OSError, subprocess.TimeoutExpired):
             completed = None
         if completed and completed.returncode == 0:
@@ -5213,7 +5231,8 @@ def set_agent_access(client, enabled, repair=False, runner=None, status_getter=N
     for description, command in commands:
         try:
             completed = runner(command, capture_output=True, text=True, timeout=45, check=False,
-                               env=agent_client_environment(cli_path))
+                               env=agent_client_environment(cli_path),
+                               **_platform_subprocess_kwargs())
         except subprocess.TimeoutExpired:
             return {"ok": False, "conflict": repairing,
                     "error": f"The agent client timed out while trying to {description}."}

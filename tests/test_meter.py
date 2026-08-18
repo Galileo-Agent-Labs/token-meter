@@ -4415,13 +4415,22 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
     def test_top_level_views_share_the_spectrum_design_primitives(self):
         for marker in (
             "shared-spectrum-system-v1",
+            "spectrum-professional-finish-v2",
+            "--spectrum-surface-quiet:",
+            "--spectrum-surface-elevated:",
+            "--spectrum-edge-light:",
+            "--spectrum-edge-hover:",
+            "--spectrum-depth-focus:",
+            "--spectrum-active-hover:",
             "body.spectrumApp .card{",
             "body.spectrumApp .tbtn{",
+            "body.spectrumApp .seg{",
             "body.spectrumApp .tab.on,body.spectrumApp .seg button.on",
             "body.spectrumApp :is(input:not([type=checkbox]):not([type=range]),select,textarea,.modelPicker>summary)",
+            "body.spectrumApp .spectrumPageHead:after",
             "--spectrum-page:radial-gradient",
             "--spectrum-card:radial-gradient",
-            "--spectrum-control:linear-gradient",
+            "--spectrum-control:radial-gradient",
             "--spectrum-active:linear-gradient",
             '<div class="previewHead spectrumPageHead">',
             '<header class="capPageHead spectrumPageHead">',
@@ -4445,6 +4454,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "@media(max-width:760px){body.spectrumApp .wrap{display:block",
             "body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row",
             ".navPrimary,.navSecondary{display:contents}",
+            "@media(max-width:760px){#view-models{overflow-x:clip}}",
             "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr))",
         ):
             self.assertIn(marker, self.page)

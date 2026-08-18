@@ -7,7 +7,7 @@ colors:
   cool-panel-raised: "#17212b"
   paper: "#f6f8fb"
   muted: "#a8b3c1"
-  faint: "#748195"
+  faint: "#7d8ba0"
   electric-cyan: "#00bceb"
   blue-signal: "#1ba0e1"
   sky-signal: "#7fdbf2"
@@ -104,7 +104,7 @@ platform, data-flow, packaging, and privacy boundaries, see
 
 Token Meter is a dense, local operator dashboard. Its incumbent world is cool and technical: near-black layers, off-white type, cyan measurement signals, compact controls, and restrained depth. The system favors legible evidence, clear state, and reusable dashboard primitives over decorative storytelling.
 
-That system now spans the whole dashboard. Every top-level route uses the same ink surface, layered spectrum header, cyan active controls, cool-gradient cards, and compact fields. Per-route atmospheric blends vary within the original Token Meter cyan, blue, sky, violet, and orange palette, while Sessions keeps the unique data-bearing context horizon and live-run instrument cards.
+That system now spans the whole dashboard. Every top-level route uses the same layered ink canvas, spectrum header, cyan active controls, cool-gradient cards, compact fields, and edge-light vocabulary. Per-route atmospheric blends vary within the original Token Meter cyan, blue, sky, violet, and orange palette, while Sessions keeps the unique data-bearing context horizon and live-run instrument cards. Stronger color is concentrated in the canvas, navigation, route headers, and selected controls; dense evidence surfaces use the quieter shared surface token.
 
 **Key Characteristics:**
 
@@ -142,6 +142,8 @@ The palette is one cool Token Meter system. Cyan-to-sky is the common action and
 ### Named Rules
 
 **The Shared Spectrum Rule.** Page atmosphere, headers, cards, controls, active states, and focus treatments come from the shared spectrum tokens. Routes may tune only the atmospheric blend; they must not fork these primitives.
+
+**The Color Dosage Rule.** Cyan, sky, violet, and restrained orange may own large atmospheric regions, but working cards stay quieter so selected controls, evidence, and semantic states remain the first things a user reads.
 
 **The Evidence Color Rule.** Provider and semantic colors identify source or state in small, explicit signals. Atmospheric violet or orange never overrides warning, danger, or provider identity.
 
@@ -183,11 +185,12 @@ The rail keeps frequent monitoring routes near the top and anchors Learn and Set
 
 ## Elevation & Depth
 
-The dashboard uses tonal layering plus two soft shadow levels for cards, menus, and floating affordances. Shared cards gain atmosphere through one radial-and-linear gradient recipe. Every top-level header adds a conic spectrum field, while the Sessions context gauge alone carries a cool ambient glow because its horizon encodes live pressure.
+The dashboard uses tonal layering plus a quiet and elevated surface pair for cards, menus, and floating affordances. Shared cards gain atmosphere through one radial-and-linear gradient recipe. A fine cool edge light and neutral offset shadow separate a surface from the canvas; focus and hover strengthen the same depth recipe without moving live-polled geometry. Every top-level header adds a conic spectrum field, while the Sessions context gauge alone carries a cool ambient glow because its horizon encodes live pressure.
 
 ### Shadow Vocabulary
 
-- **Dashboard Surface:** A fine top highlight over a broad 18px by 48px shadow for substantial incumbent cards.
+- **Dashboard Surface:** A fine cool top highlight over a 16px by 38px neutral shadow, plus a restrained low-offset blue depth note.
+- **Dashboard Focus:** The same surface grows to a 20px by 46px neutral shadow and a stronger edge light; it does not translate or resize.
 - **Dashboard Soft:** A fine top highlight over a 10px by 28px shadow for compact incumbent surfaces.
 - **Session Hover:** A 0 18px 38px black shadow used only while a session instrument is hovered.
 - **Spectrum Gauge Glow:** A 0 24px 58px cool shadow tied to the context-pressure horizon.

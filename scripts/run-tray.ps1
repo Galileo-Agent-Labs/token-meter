@@ -54,44 +54,7 @@ if ($script:DpiAwareness -ne "PerMonitorV2") {
 # DPI awareness must be selected before WinForms creates any controls.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @"
-using System.Drawing;
-using System.Windows.Forms;
-
-public sealed class TokenMeterDarkColorTable : ProfessionalColorTable {
-    private static readonly Color Background = Color.FromArgb(32, 32, 32);
-    private static readonly Color Selection = Color.FromArgb(64, 64, 64);
-    private static readonly Color Border = Color.FromArgb(86, 86, 86);
-
-    public TokenMeterDarkColorTable() { UseSystemColors = false; }
-    public override Color ToolStripDropDownBackground { get { return Background; } }
-    public override Color ImageMarginGradientBegin { get { return Background; } }
-    public override Color ImageMarginGradientMiddle { get { return Background; } }
-    public override Color ImageMarginGradientEnd { get { return Background; } }
-    public override Color MenuItemSelected { get { return Selection; } }
-    public override Color MenuItemBorder { get { return Border; } }
-    public override Color MenuBorder { get { return Border; } }
-    public override Color SeparatorDark { get { return Border; } }
-    public override Color SeparatorLight { get { return Background; } }
-    public override Color CheckBackground { get { return Selection; } }
-    public override Color CheckSelectedBackground { get { return Selection; } }
-    public override Color CheckPressedBackground { get { return Selection; } }
-}
-
-public sealed class TokenMeterDarkRenderer : ToolStripProfessionalRenderer {
-    private static readonly Color Foreground = Color.FromArgb(245, 245, 245);
-    private static readonly Color Disabled = Color.FromArgb(166, 166, 166);
-
-    public TokenMeterDarkRenderer() : base(new TokenMeterDarkColorTable()) { }
-
-    protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e) {
-        e.TextColor = e.Item.Enabled ? Foreground : Disabled;
-        base.OnRenderItemText(e);
-    }
-}
-"@
-
-$script:DarkMenuRenderer = [TokenMeterDarkRenderer]::new()
+$script:DarkMenuRenderer = [System.Windows.Forms.ToolStripProfessionalRenderer]::new()
 $script:LightMenuRenderer = [System.Windows.Forms.ToolStripSystemRenderer]::new()
 
 function Get-WindowsAppTheme {

@@ -205,9 +205,7 @@ class WindowsPackagingContracts(unittest.TestCase):
             "function Get-WindowsAppTheme",
             "AppsUseLightTheme",
             "function Set-TrayMenuTheme",
-            "TokenMeterDarkColorTable",
-            "TokenMeterDarkRenderer",
-            "OnRenderItemText",
+            "ToolStripProfessionalRenderer",
             "SystemColors]::GrayText",
             "dpi_awareness",
             "theme",
@@ -219,6 +217,7 @@ class WindowsPackagingContracts(unittest.TestCase):
         )
         opening = tray.split("$Menu.add_Opening", 1)[1].split("$Timer =", 1)[0]
         self.assertIn("Set-TrayMenuTheme", opening)
+        self.assertEqual(tray.count("Add-Type -TypeDefinition"), 1)
 
     def test_windows_extension_does_not_add_os_dispatch_to_runtime_parsers(self):
         branch = re.compile(

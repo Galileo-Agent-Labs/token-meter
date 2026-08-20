@@ -437,10 +437,13 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 #view-daily{--spend-claude:#f26722;--spend-codex:#04a4b0;--spend-cursor:#a974f7;--spend-opencode:#fa5762;--spend-kiro:#868ec2;--spend-unknown:#889099}
 .spendRangeControls{display:grid;justify-items:end;gap:8px;max-width:100%}.spendRangeControls .seg button{min-height:36px}.spendCustom{display:flex;align-items:flex-end;justify-content:flex-end;gap:8px;flex-wrap:wrap}.spendCustom[hidden]{display:none}.spendCustom label{display:grid;gap:4px;color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.spendCustom input{height:36px;min-width:144px;border:1px solid var(--line2);border-radius:7px;background:rgba(7,9,12,.62);padding:0 9px;color:var(--fg);color-scheme:dark;font:650 11px/1 ui-monospace,"SF Mono",Menlo,monospace}.spendCustom input:focus-visible{border-color:var(--accent);outline:2px solid rgba(0,188,235,.2);outline-offset:1px}.spendCustom #s-range-error{max-width:270px;padding-bottom:8px;color:var(--bad);font-size:10.5px}
 .spendKpis{display:grid;grid-template-columns:1.25fr repeat(3,minmax(0,1fr));gap:12px}.spendKpi{min-width:0;padding:15px 16px}.spendKpi .v{margin-top:5px;overflow-wrap:anywhere;font-size:24px;font-weight:820;letter-spacing:-.02em}.spendKpi:first-child .v{font-size:29px}.spendKpi .subline{min-height:16px;margin-top:4px;font-size:10.5px}
-.spendChartCard{margin-top:12px;padding:17px 18px 14px;overflow:hidden}.spendChartHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.spendChartHead h2,.spendPanelHead h2,.spendPlatformCard h2{margin:0;font-size:14px}.spendChartHead p{margin:3px 0 0;color:var(--faint);font-size:11.5px}.spendLegend{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:10.5px}.spendLegend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.spendLegend i{width:9px;height:9px;border-radius:2px;background:var(--spend-color)}.spendLegend .spendEstimateKey i{border:1px solid rgba(255,255,255,.28);background:repeating-linear-gradient(135deg,rgba(255,255,255,.38) 0 1px,transparent 1px 4px),rgba(255,255,255,.08)}.spendChart{min-height:270px;margin-top:12px;overflow:hidden;display:grid;grid-template-columns:52px minmax(0,1fr)}.spendYAxis{height:260px;display:flex;flex-direction:column;justify-content:space-between;padding:25px 8px 27px 0;color:var(--faint);font-size:9.5px;text-align:right}.spendPlot{min-width:0;overflow:hidden;border-bottom:1px solid var(--line)}.spendChartInner{width:100%;height:260px;display:flex;align-items:stretch}.spendDay{appearance:none;position:relative;display:grid;grid-template-rows:22px minmax(0,1fr) 24px;flex:1 1 0;min-width:0;gap:3px;border:0;border-radius:6px;background:transparent;padding:0 clamp(1px,.25vw,3px);color:var(--faint);font:inherit;cursor:pointer}.spendDay:hover,.spendDay:focus-visible{background:rgba(0,188,235,.055);outline:none}.spendDay:focus-visible{box-shadow:inset 0 0 0 1px rgba(0,188,235,.52)}.spendBarValue{overflow:hidden;color:var(--dim);font-size:9px;text-align:center;text-overflow:ellipsis;white-space:nowrap;opacity:0}.spendDay:hover .spendBarValue{opacity:1}.spendDayTrack{display:flex;height:100%;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line2);background:repeating-linear-gradient(to top,transparent 0 44px,rgba(255,255,255,.035) 44px 45px)}.spendDayStack{display:flex;width:min(28px,82%);height:var(--spend-height);min-height:0;flex-direction:column-reverse;overflow:hidden;border-radius:4px 4px 1px 1px}.spendStackSegment{display:block;flex:none;height:var(--segment-share);min-height:1px;background:var(--spend-color)}.spendStackSegment[data-estimated=true]{background:repeating-linear-gradient(135deg,rgba(255,255,255,.32) 0 1px,transparent 1px 4px),var(--spend-color)}.spendStackSegment[data-partial=true]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.32)}.spendDayLabel{position:absolute;bottom:0;left:50%;width:max-content;max-width:none;transform:translateX(-50%);font-size:9.5px;line-height:20px;text-align:center;white-space:nowrap;pointer-events:none}.spendDay[data-axis-edge=first] .spendDayLabel{left:0;transform:none;text-align:left}.spendDay[data-axis-edge=last] .spendDayLabel{right:0;left:auto;transform:none}.spendChartTip{position:absolute;pointer-events:none;z-index:8;width:min(250px,calc(100% - 24px));border:1px solid rgba(0,188,235,.35);border-radius:8px;background:#111922;padding:10px 11px;color:var(--dim);font-size:11px;line-height:1.45;box-shadow:0 16px 38px rgba(0,0,0,.42)}.spendChartTip[hidden]{display:none}.spendTipDate{color:var(--fg);font-weight:800}.spendTipTotal{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:5px;padding-bottom:7px;border-bottom:1px solid var(--line)}.spendTipTotal b{color:var(--fg)}.spendTipNote{margin-top:6px;color:var(--warn);font-size:10px}.spendTipRuntimes{display:grid;margin-top:5px}.spendTipRuntime{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 9px;padding:5px 0;border-top:1px solid var(--line)}.spendTipRuntime:first-child{border-top:0}.spendTipRuntime>span{display:flex;align-items:center;gap:6px;color:var(--fg);font-weight:720}.spendTipRuntime i{width:8px;height:8px;border-radius:2px;background:var(--spend-color)}.spendTipRuntime b{color:var(--fg)}.spendTipRuntime small{grid-column:1/-1;color:var(--faint);font-size:9.5px}.spendTipEmpty{padding:7px 0;color:var(--faint)}
-.spendEvidenceGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);align-items:start;gap:12px;margin-top:12px}.spendLogsCard{height:360px;display:flex;min-height:0;flex-direction:column;padding:16px 18px}.spendPlatformCard{padding:16px 18px}.spendPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.spendPanelHead>div>span,.spendPanelHead>span{display:block;margin-top:2px;color:var(--faint);font-size:10.5px}.spendPanelHead>span{flex:none}.spendLogs{display:grid;min-height:0;flex:1;margin-top:7px;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-color:var(--line2) transparent}.spendLogRow{height:68px;display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;align-items:center;gap:11px;padding:0;border-top:1px solid var(--line)}.spendLogRow:first-child{border-top:0}.spendLogRank{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--faint);font:700 10px/1 ui-monospace,"SF Mono",monospace}.spendLogMain{min-width:0}.spendLogName{overflow:hidden;color:var(--fg);font-weight:760;text-overflow:ellipsis;white-space:nowrap}.spendLogMeta{margin-top:1px;overflow:hidden;color:var(--faint);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.spendLogTrack{height:4px;margin-top:6px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.045)}.spendLogTrack i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--orange3))}.spendLogValue{min-width:84px;text-align:right}.spendLogValue strong{display:block;font-size:13px}.spendLogValue span{display:block;margin-top:1px;color:var(--faint);font-size:10px}.spendLogRow .tbtn{min-height:34px}.spendLogEmpty,.spendEmpty{display:grid;min-height:100%;place-items:center;padding:18px;color:var(--dim);font-size:12px;line-height:1.45;text-align:center}.spendPlatformRows{display:grid;margin-top:8px}.spendPlatformRow{display:grid;grid-template-columns:minmax(100px,.48fr) minmax(100px,1fr) auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line)}.spendPlatformRow:first-child{border-top:0}.spendPlatformName{display:flex;min-width:0;align-items:center;gap:8px;font-weight:760}.spendPlatformName i{width:9px;height:9px;flex:none;border-radius:2px;background:var(--spend-color)}.spendPlatformTrack{height:7px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.045)}.spendPlatformTrack i{display:block;height:100%;border-radius:inherit;background:var(--spend-color)}.spendPlatformValue{min-width:96px;text-align:right;font-weight:790}.spendPlatformValue span{display:block;margin-top:2px;color:var(--faint);font-size:10px;font-weight:600}
-@media(max-width:900px){.spendRangeControls{width:100%;justify-items:start}.spendRangeControls .seg{width:100%;overflow-x:auto;justify-content:flex-start}.spendKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.spendChartHead{display:grid}.spendLegend{justify-content:flex-start}.spendCustom{justify-content:flex-start}.spendEvidenceGrid{grid-template-columns:1fr}}
-@media(max-width:520px){.spendKpis{grid-template-columns:1fr}.spendKpi .v,.spendKpi:first-child .v{font-size:22px}.spendRangeControls .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.spendRangeControls [data-spend-range=custom]{grid-column:1/-1}.spendCustom{display:grid;grid-template-columns:1fr 1fr;width:100%}.spendCustom label,.spendCustom input{width:100%;min-width:0}.spendCustom #s-range-error{grid-column:1/-1;padding:0}.spendPlatformRow{grid-template-columns:minmax(0,1fr) auto}.spendPlatformTrack{grid-column:1/-1;grid-row:2}.spendChartCard{padding-inline:13px}.spendChart{grid-template-columns:44px minmax(0,1fr)}.spendYAxis{padding-right:6px;font-size:9px}.spendLogsCard,.spendPlatformCard{padding:14px 13px}.spendLogRow{height:86px;grid-template-columns:24px minmax(0,1fr) auto;gap:9px}.spendLogRank{width:22px;height:22px}.spendLogValue{grid-column:2/4;grid-row:2;display:flex;min-width:0;align-items:baseline;justify-content:space-between;gap:10px;text-align:left}.spendLogValue strong,.spendLogValue span{display:block;margin:0}.spendLogRow .tbtn{grid-column:3;grid-row:1;min-height:44px;padding-inline:12px}}
+.spendChartCard{margin-top:12px;padding:17px 18px 14px;overflow:hidden}.spendChartHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.spendChartHead h2,.spendPanelHead h2,.spendPlatformCard h2{margin:0;font-size:14px}.spendChartHead p{margin:3px 0 0;color:var(--faint);font-size:11.5px}.spendLegend{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:10.5px}.spendLegend span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.spendLegend i{width:9px;height:9px;border-radius:2px;background:var(--spend-color)}.spendLegend .spendEstimateKey i{border:1px solid rgba(255,255,255,.28);background:repeating-linear-gradient(135deg,rgba(255,255,255,.38) 0 1px,transparent 1px 4px),rgba(255,255,255,.08)}.spendChart{min-height:270px;margin-top:12px;overflow:hidden;display:grid;grid-template-columns:52px minmax(0,1fr)}.spendYAxis{height:260px;display:flex;flex-direction:column;justify-content:space-between;padding:25px 8px 27px 0;color:var(--faint);font-size:9.5px;text-align:right}.spendPlot{position:relative;min-width:0;overflow:hidden;border-bottom:1px solid var(--line)}.spendChartInner{width:100%;height:260px;display:flex;align-items:stretch}.spendDay{appearance:none;position:relative;display:grid;grid-template-rows:22px minmax(0,1fr) 24px;flex:1 1 0;min-width:0;gap:3px;border:0;border-radius:6px;background:transparent;padding:0 clamp(1px,.25vw,3px);color:var(--faint);font:inherit;cursor:pointer}.spendDay:hover,.spendDay:focus-visible{background:rgba(0,188,235,.055);outline:none}.spendDay:focus-visible{box-shadow:inset 0 0 0 1px rgba(0,188,235,.52)}.spendBarValue{overflow:hidden;color:var(--dim);font-size:9px;text-align:center;text-overflow:ellipsis;white-space:nowrap;opacity:0}.spendDay:hover .spendBarValue{opacity:1}.spendDayTrack{display:flex;height:100%;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line2);background:repeating-linear-gradient(to top,transparent 0 44px,rgba(255,255,255,.035) 44px 45px)}.spendDayStack{display:flex;width:min(28px,82%);height:var(--spend-height);min-height:0;flex-direction:column-reverse;overflow:hidden;border-radius:4px 4px 1px 1px}.spendStackSegment{display:block;flex:none;height:var(--segment-share);min-height:1px;background:var(--spend-color)}.spendStackSegment[data-estimated=true]{background:repeating-linear-gradient(135deg,rgba(255,255,255,.32) 0 1px,transparent 1px 4px),var(--spend-color)}.spendStackSegment[data-partial=true]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.32)}.spendDayLabel{position:absolute;bottom:0;left:50%;width:max-content;max-width:none;transform:translateX(-50%);font-size:9.5px;line-height:20px;text-align:center;white-space:nowrap;pointer-events:none}.spendDay[data-axis-edge=first] .spendDayLabel{left:0;transform:none;text-align:left}.spendDay[data-axis-edge=last] .spendDayLabel{right:0;left:auto;transform:none}.spendAverageLine{position:absolute;z-index:2;right:0;left:0;height:1px;border-top:1px solid rgba(206,222,234,.62);pointer-events:none}.spendAverageLine[hidden]{display:none}.spendAverageLine span{position:absolute;right:3px;bottom:4px;border-radius:3px;background:rgba(9,14,20,.88);padding:1px 4px;color:#cbd9e4;font-size:9.5px;line-height:1.35}.spendChartTip{position:absolute;pointer-events:none;z-index:8;width:min(250px,calc(100% - 24px));border:1px solid rgba(0,188,235,.35);border-radius:8px;background:#111922;padding:10px 11px;color:var(--dim);font-size:11px;line-height:1.45;box-shadow:0 16px 38px rgba(0,0,0,.42)}.spendChartTip[hidden]{display:none}.spendTipDate{color:var(--fg);font-weight:800}.spendTipTotal{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:5px;padding-bottom:7px;border-bottom:1px solid var(--line)}.spendTipTotal b{color:var(--fg)}.spendTipNote{margin-top:6px;color:var(--warn);font-size:10px}.spendTipRuntimes{display:grid;margin-top:5px}.spendTipRuntime{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 9px;padding:5px 0;border-top:1px solid var(--line)}.spendTipRuntime:first-child{border-top:0}.spendTipRuntime>span{display:flex;align-items:center;gap:6px;color:var(--fg);font-weight:720}.spendTipRuntime i{width:8px;height:8px;border-radius:2px;background:var(--spend-color)}.spendTipRuntime b{color:var(--fg)}.spendTipRuntime small{grid-column:1/-1;color:var(--faint);font-size:9.5px}.spendTipEmpty{padding:7px 0;color:var(--faint)}
+.spendEvidenceGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);align-items:stretch;gap:12px;margin-top:12px}.spendLogsCard,.spendPlatformCard{height:360px;display:flex;min-height:0;flex-direction:column;padding:16px 18px}.spendPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.spendPanelHead>div>span,.spendPanelHead>span{display:block;margin-top:2px;color:var(--faint);font-size:10.5px}.spendPanelHead>span{flex:none}.spendLogs{display:grid;min-height:0;flex:1;margin-top:7px;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-color:var(--line2) transparent}.spendLogRow{height:68px;display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;align-items:center;gap:11px;padding:0;border-top:1px solid var(--line)}.spendLogRow:first-child{border-top:0}.spendLogRank{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:rgba(255,255,255,.035);color:var(--faint);font:700 10px/1 ui-monospace,"SF Mono",monospace}.spendLogMain{min-width:0}.spendLogName{overflow:hidden;color:var(--fg);font-weight:760;text-overflow:ellipsis;white-space:nowrap}.spendLogMeta{margin-top:1px;overflow:hidden;color:var(--faint);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.spendLogTrack{height:4px;margin-top:6px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.045)}.spendLogTrack i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--orange3))}.spendLogValue{min-width:84px;text-align:right}.spendLogValue strong{display:block;font-size:13px}.spendLogValue span{display:block;margin-top:1px;color:var(--faint);font-size:10px}.spendLogRow .tbtn{min-height:34px}.spendLogEmpty,.spendEmpty{display:grid;min-height:100%;place-items:center;padding:18px;color:var(--dim);font-size:12px;line-height:1.45;text-align:center}.spendPlatformBody{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;scrollbar-color:var(--line2) transparent}.spendPlatformRows{display:grid;margin-top:8px}.spendPlatformRow{display:grid;grid-template-columns:minmax(78px,.48fr) minmax(72px,1fr) minmax(82px,auto);align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}.spendPlatformRow:first-child{border-top:0}.spendPlatformName{display:flex;min-width:0;align-items:center;gap:8px;font-weight:760}.spendPlatformName i{width:9px;height:9px;flex:none;border-radius:2px;background:var(--spend-color)}.spendPlatformTrack{height:7px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.045)}.spendPlatformTrack i{display:block;height:100%;border-radius:inherit;background:var(--spend-color)}.spendPlatformValue{min-width:82px;text-align:right;font-weight:790}.spendPlatformValue span{display:block;margin-top:2px;color:var(--faint);font-size:10px;font-weight:600}
+.spendInsightSection{margin-top:28px}.spendInsightHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:10px;padding-top:22px;border-top:1px solid var(--line)}.spendInsightHead h2{margin:0;font-size:18px}.spendInsightHead p{max-width:760px;margin:4px 0 0;color:var(--dim);font-size:11.5px;line-height:1.5}.spendInsightRange{flex:none;color:var(--faint);font:690 10.5px/1.4 ui-monospace,"SF Mono",Menlo,monospace}.spendInsightGrid{display:grid;grid-template-columns:minmax(290px,.72fr) minmax(0,1.28fr);gap:12px}.spendConcentrationCard,.spendShapeCard,.spendScatterCard{padding:17px 18px}.spendInsightCardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.spendInsightCardHead h3{margin:0;font-size:14px}.spendInsightCardHead p{margin:3px 0 0;color:var(--faint);font-size:10.5px;line-height:1.45}.spendConcentrationValue{margin-top:18px;color:var(--fg);font:780 44px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:-.035em}.spendConcentrationNote{min-height:34px;margin-top:6px;color:var(--dim);font-size:11.5px;line-height:1.45}.spendConcentrationBar{height:12px;margin-top:15px;overflow:hidden;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.035)}.spendConcentrationBar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--orange3),var(--accent))}.spendConcentrationLegend{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px;color:var(--faint);font-size:9.5px}.spendImpactList{display:grid;margin-top:14px;border-top:1px solid var(--line)}.spendImpactRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;width:100%;align-items:center;border:0;border-bottom:1px solid var(--line);background:transparent;padding:9px 0;color:var(--fg);font:inherit;text-align:left;cursor:pointer}.spendImpactRow:last-child{border-bottom:0}.spendImpactRow:hover .spendImpactName,.spendImpactRow:focus-visible .spendImpactName{color:var(--accent)}.spendImpactRow:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px}.spendImpactName{min-width:0;overflow:hidden;font-size:11.5px;font-weight:740;text-overflow:ellipsis;white-space:nowrap}.spendImpactValue{text-align:right}.spendImpactValue b{display:block;font-size:11.5px}.spendImpactValue small{display:block;margin-top:1px;color:var(--faint);font-size:9.5px}.spendShape{margin-top:11px}.spendShapeHeader,.spendShapeRow{display:grid;grid-template-columns:118px 62px minmax(150px,1fr) minmax(280px,.9fr);align-items:center;gap:12px}.spendShapeHeader{padding:0 0 7px;color:var(--faint);font-size:9px;font-weight:780;text-transform:uppercase}.spendShapeHeader span:last-child{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:right}.spendShapeRow{min-height:62px;border-top:1px solid var(--line)}.spendShapeIdentity b{display:block;font-size:11.5px}.spendShapeIdentity small,.spendShapeCoverage{display:block;margin-top:2px;color:var(--faint);font-size:9.5px}.spendShapeCoverage{margin:0}.spendShapeRail{position:relative;height:22px}.spendShapeRail:before{content:"";position:absolute;top:10px;right:0;left:0;height:2px;border-radius:999px;background:rgba(255,255,255,.09)}.spendShapeIqr{position:absolute;top:7px;left:var(--p25);width:calc(var(--p75) - var(--p25));height:8px;border-radius:999px;background:rgba(0,188,235,.3)}.spendShapeMedian,.spendShapeMean{position:absolute;top:4px;left:var(--median);width:2px;height:14px;border-radius:2px;background:var(--accent);transform:translateX(-50%)}.spendShapeMean{top:7px;left:var(--mean);width:7px;height:7px;border:1px solid #111922;background:var(--orange3);transform:translateX(-50%) rotate(45deg)}.spendShapeValues{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:right}.spendShapeValues span{min-width:0;overflow:hidden;color:var(--dim);font:680 10.5px/1.3 ui-monospace,"SF Mono",Menlo,monospace;text-overflow:ellipsis;white-space:nowrap}.spendShapeEmpty{display:grid;min-height:228px;place-items:center;color:var(--dim);font-size:11.5px;text-align:center}.spendScatterCard{position:relative;margin-top:12px;overflow:hidden}.spendScatterControls{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}.spendScatterCoverage{color:var(--faint);font-size:10px}.spendScatterWrap{position:relative;margin-top:10px}.spendScatterSvg{display:block;width:100%;height:340px;border:1px solid var(--line);border-radius:8px;background:rgba(5,9,13,.28)}.spendScatterPoint{cursor:pointer;transition:r .14s ease,stroke-width .14s ease}.spendScatterPoint:hover,.spendScatterPoint:focus{r:8;stroke-width:3}.spendScatterLink:focus{outline:none}.spendScatterLink:focus .spendScatterPoint{r:8;stroke:#fff;stroke-width:3}.spendScatterTip{position:absolute;z-index:8;pointer-events:none;width:min(270px,calc(100% - 20px));border:1px solid rgba(0,188,235,.42);border-radius:8px;background:#111922;padding:10px 11px;color:var(--dim);font-size:10.5px;line-height:1.45;box-shadow:0 16px 38px rgba(0,0,0,.5)}.spendScatterTip[hidden]{display:none}.spendScatterTip b{display:block;overflow:hidden;margin-bottom:5px;color:var(--fg);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}.spendScatterTip span{display:flex;justify-content:space-between;gap:12px}.spendScatterTip strong{color:var(--fg);font-weight:760}.spendScatterLegend{display:flex;align-items:center;gap:13px;margin-top:8px;color:var(--faint);font-size:9.5px}.spendScatterLegend span{display:inline-flex;align-items:center;gap:5px}.spendScatterLegend i{width:8px;height:8px;border-radius:50%;background:var(--accent)}.spendScatterLegend i.top{border:2px solid var(--orange3);background:transparent}
+.spendShapeHeader,.spendShapeRow{grid-template-columns:108px 54px minmax(110px,1fr) minmax(225px,.9fr);gap:10px}.spendShapeHeader span:last-child i{font-style:normal}.spendScatterLegend i.spendScatterTopDot{border:2px solid var(--orange3);background:transparent}
+@media(max-width:900px){.spendRangeControls{width:100%;justify-items:start}.spendRangeControls .seg{width:100%;overflow-x:auto;justify-content:flex-start}.spendKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.spendChartHead{display:grid}.spendLegend{justify-content:flex-start}.spendCustom{justify-content:flex-start}.spendEvidenceGrid,.spendInsightGrid{grid-template-columns:1fr}.spendInsightHead{align-items:flex-start;flex-direction:column}.spendInsightRange{white-space:normal}.spendScatterControls{justify-content:flex-start}}
+@media(max-width:700px){.spendShapeHeader{display:none}.spendShapeRow{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px 0}.spendShapeRail,.spendShapeValues{grid-column:1/-1}.spendShapeValues span{display:grid;gap:2px;text-align:left}.spendShapeValues span:before{content:attr(data-label);color:var(--faint);font:760 8.5px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-transform:uppercase}.spendScatterSvg{height:300px}}
+@media(max-width:520px){.spendKpis{grid-template-columns:1fr}.spendKpi .v,.spendKpi:first-child .v{font-size:22px}.spendRangeControls .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.spendRangeControls [data-spend-range=custom]{grid-column:1/-1}.spendCustom{display:grid;grid-template-columns:1fr 1fr;width:100%}.spendCustom label,.spendCustom input{width:100%;min-width:0}.spendCustom #s-range-error{grid-column:1/-1;padding:0}.spendPlatformRow{grid-template-columns:minmax(0,1fr) auto}.spendPlatformTrack{grid-column:1/-1;grid-row:2}.spendChartCard{padding-inline:13px}.spendChart{grid-template-columns:44px minmax(0,1fr)}.spendYAxis{padding-right:6px;font-size:9px}.spendLogsCard,.spendPlatformCard,.spendConcentrationCard,.spendShapeCard,.spendScatterCard{padding:14px 13px}.spendLogRow{height:86px;grid-template-columns:24px minmax(0,1fr) auto;gap:9px}.spendLogRank{width:22px;height:22px}.spendLogValue{grid-column:2/4;grid-row:2;display:flex;min-width:0;align-items:baseline;justify-content:space-between;gap:10px;text-align:left}.spendLogValue strong,.spendLogValue span{display:block;margin:0}.spendLogRow .tbtn{grid-column:3;grid-row:1;min-height:44px;padding-inline:12px}.spendConcentrationValue{font-size:38px}.spendInsightCardHead{display:grid}.spendScatterControls .seg{width:100%}.spendScatterControls .seg button{flex:1}.spendScatterSvg{height:270px}.spendScatterLegend{align-items:flex-start;flex-direction:column;gap:5px}}
 </style></head><body class=spectrumApp>
 <!--
 THESIS: Sessions are live instruments, not a generic grid of dark cards.
@@ -896,14 +899,22 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   <div class="card spendKpi"><div class=label>Highest day</div><div class="v mono" id=s-highest-day>--</div><div class=subline id=s-highest-day-note></div></div>
 	  </div>
 	  <section class="card spendChartCard">
-	   <div class=spendChartHead><div><h2>Spend trend</h2><p>Bar height is total daily spend; color is platform contribution.</p></div><div class=spendLegend id=s-legend></div></div>
-	   <div class=spendChart id=s-chart aria-label="Spend trend by day and platform"><div class="spendYAxis mono" id=s-y-axis aria-hidden=true></div><div class=spendPlot><div class=spendChartInner id=s-chart-inner></div></div></div>
+	   <div class=spendChartHead><div><h2>Spend trend</h2><p>Bar height is total daily spend; color is platform contribution. Thin line is daily average.</p></div><div class=spendLegend id=s-legend></div></div>
+	   <div class=spendChart id=s-chart aria-label="Spend trend by day and platform"><div class="spendYAxis mono" id=s-y-axis aria-hidden=true></div><div class=spendPlot><div class=spendChartInner id=s-chart-inner></div><div class=spendAverageLine id=s-average-line hidden aria-hidden=true><span class=mono></span></div></div></div>
 	   <div class=spendChartTip id=s-chart-tip tabindex=0 hidden aria-live=polite></div>
 	  </section>
 	  <div class=spendEvidenceGrid>
 	   <section class="card spendLogsCard"><div class=spendPanelHead><div><h2>Highest-cost logs</h2><span id=s-log-day></span></div><span id=s-log-count></span></div><div class=spendLogs id=s-logs></div></section>
-	   <section class="card spendPlatformCard"><h2>Platform split</h2><div id=s-platforms></div></section>
+	   <section class="card spendPlatformCard"><h2>Platform split</h2><div class=spendPlatformBody id=s-platforms></div></section>
 	  </div>
+	  <section class=spendInsightSection aria-labelledby=s-insight-title>
+	   <div class=spendInsightHead><div><h2 id=s-insight-title>Session economics</h2><p>See whether spend is concentrated in a few sessions, what a typical session looks like, and which runs sit outside the usual shape.</p></div><div class=spendInsightRange id=s-insights-range></div></div>
+	   <div class=spendInsightGrid>
+	    <section class="card spendConcentrationCard"><div class=spendInsightCardHead><div><h3>Spend concentration</h3><p>The top 10% of cost-covered sessions in this period.</p></div></div><div class=spendConcentrationValue id=s-concentration>--</div><div class=spendConcentrationNote id=s-concentration-note>Loading range evidence…</div><div class=spendConcentrationBar id=s-concentration-bar role=progressbar aria-label="Share of spend from the top ten percent of sessions" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div><div class=spendConcentrationLegend><span>Top decile</span><span>Remaining sessions</span></div><div class=spendImpactList id=s-concentration-sessions></div></section>
+	    <section class="card spendShapeCard"><div class=spendInsightCardHead><div><h3>Session shape</h3><p>Selected-period cost; other measures are full-session totals for sessions with spend in the period.</p></div></div><div class=spendShape id=s-shape><div class=spendShapeEmpty>Loading session distributions…</div></div></section>
+	   </div>
+	   <section class="card spendScatterCard" id=s-scatter><div class=spendInsightCardHead><div><h3>Cost and input by active time</h3><p>Each point is an openable session. Both axes use a log scale so short and long runs remain visible.</p></div><div class=spendScatterControls><span class=spendScatterCoverage id=s-scatter-coverage></span><div class=seg id=s-scatter-metric aria-label="Outlier map metric"><button data-scatter-metric=cost>Spend</button><button data-scatter-metric=input>Processed input</button></div></div></div><div class=spendScatterWrap><svg class=spendScatterSvg id=s-scatter-svg viewBox="0 0 1040 340" preserveAspectRatio=none role=img aria-label="Session spend by active time"></svg><div class=spendScatterTip id=s-scatter-tip hidden></div></div><div class=spendScatterLegend><span><i></i>Session</span><span><i class=spendScatterTopDot></i>Top-decile spend</span><span>Only sessions with both active-time and selected metric evidence are plotted.</span></div></section>
+	  </section>
 	 </div>
 
 	 <div class=view id=view-learn>
@@ -4232,14 +4243,60 @@ function spendNiceMax(value){
  const padded=value*1.08,magnitude=10**Math.floor(Math.log10(padded)),quantum=magnitude/10;
  return Math.max(1,Number((Math.ceil(padded/quantum-1e-12)*quantum).toPrecision(12)));
 }
+function spendAverageReference(rows,axisMax){
+ const costs=(rows||[]).map(row=>{const value=Number(row?.cost||0);return Number.isFinite(value)&&value>0?value:0;});
+ if(!costs.length)return {value:0,ratio:0};
+ const value=costs.reduce((sum,cost)=>sum+cost,0)/costs.length,max=Number(axisMax)||0;
+ return {value,ratio:max>0?Math.min(1,Math.max(0,value/max)):0};
+}
 function spendDayNavigation(rows,focusDay=''){
  const days=(rows||[]).map(row=>row.day),resolved=days.includes(focusDay)?focusDay:(days.at(-1)||'');
  return {focusDay:resolved,buttons:days.map(day=>({day,tabIndex:day===resolved?0:-1,selected:false}))};
 }
+function spendSessionMetricValue(row,metric){
+ let value=null;
+ if(metric==='cost'&&row?.availability?.cost===true)value=Number(row.cost);
+ else if(metric==='input'&&(row?.availability?.input_tokens===true||row?.availability?.tokens===true))value=Number(row.input_tokens);
+ else if(metric==='executions'&&row?.turns!==null&&row?.turns!==undefined)value=Number(row.turns);
+ else if(metric==='active'&&row?.duration_available===true)value=Number(row.duration_s);
+ return Number.isFinite(value)&&value>=0?value:null;
+}
+function spendQuantile(values,quantile){
+ const sorted=(values||[]).filter(value=>Number.isFinite(value)).slice().sort((a,b)=>a-b);
+ if(!sorted.length)return 0;
+ const position=(sorted.length-1)*quantile,lower=Math.floor(position),upper=Math.ceil(position),weight=position-lower;
+ return sorted[lower]+(sorted[upper]-sorted[lower])*weight;
+}
+function spendDistribution(values){
+ const clean=(values||[]).filter(value=>Number.isFinite(value));
+ if(!clean.length)return {count:0,p10:0,p25:0,median:0,mean:0,p75:0,p90:0};
+ return {count:clean.length,p10:spendQuantile(clean,.1),p25:spendQuantile(clean,.25),median:spendQuantile(clean,.5),mean:clean.reduce((sum,value)=>sum+value,0)/clean.length,p75:spendQuantile(clean,.75),p90:spendQuantile(clean,.9)};
+}
+function spendSessionAnalytics(rows){
+ rows=rows||[];
+ const coveredCosts=rows.map(row=>spendSessionMetricValue(row,'cost')).filter(value=>value!==null).sort((a,b)=>b-a),total=coveredCosts.reduce((sum,value)=>sum+value,0),topCount=coveredCosts.length?Math.ceil(coveredCosts.length*.1):0,topCost=coveredCosts.slice(0,topCount).reduce((sum,value)=>sum+value,0);
+ return {
+  concentration:{covered:coveredCosts.length,total,top_count:topCount,top_cost:topCost,top_share:total?topCost/total:0},
+  distributions:{
+   cost:spendDistribution(rows.map(row=>spendSessionMetricValue(row,'cost')).filter(value=>value!==null)),
+   input:spendDistribution(rows.map(row=>spendSessionMetricValue(row,'input')).filter(value=>value!==null)),
+   executions:spendDistribution(rows.map(row=>spendSessionMetricValue(row,'executions')).filter(value=>value!==null)),
+   active:spendDistribution(rows.map(row=>spendSessionMetricValue(row,'active')).filter(value=>value!==null)),
+  },
+ };
+}
+function spendScatterRows(rows,metric){
+ const valueMetric=metric==='input'?'input':'cost';
+ return (rows||[]).filter(row=>{
+  const active=spendSessionMetricValue(row,'active'),value=spendSessionMetricValue(row,valueMetric);
+  return active!==null&&active>0&&value!==null&&value>=0;
+ });
+}
 function normalizeSpendRangeChoice(value){return ['today','7','30','month','custom'].includes(value)?value:'7';}
 // spend-range-logic-end
 const SPEND_RANGE_KEY='tm_spend_range_v1';
-let spendRangeChoice='7',spendCustomFrom='',spendCustomTo='',spendFocusDay='',spendInspectDay='',spendCurrentRows=[],spendCurrentWindow=null,spendCurrentSource=[],spendResizeTimer=0,spendLogsRequestKey='',spendLogsRenderedRange='',spendLogsRequestSeq=0;
+const SPEND_SCATTER_METRIC_KEY='tm_spend_scatter_metric_v1';
+let spendRangeChoice='7',spendCustomFrom='',spendCustomTo='',spendFocusDay='',spendInspectDay='',spendCurrentRows=[],spendCurrentWindow=null,spendCurrentSource=[],spendResizeTimer=0,spendLogsRequestKey='',spendLogsRenderedRange='',spendLogsRequestSeq=0,spendInsightPayload=null,spendInsightRenderKey='',spendScatterMetric=localStorage.getItem(SPEND_SCATTER_METRIC_KEY)==='input'?'input':'cost';
 try{
  const saved=JSON.parse(localStorage.getItem(SPEND_RANGE_KEY)||'{}');
  spendRangeChoice=normalizeSpendRangeChoice(saved.range);
@@ -4280,6 +4337,14 @@ function renderSpendAxis(axisMax){
  const ticks=[1,.75,.5,.25,0].map(ratio=>`<span>${money(axisMax*ratio)}</span>`).join('');
  if($('s-y-axis')._spendTicks!==ticks){$('s-y-axis').innerHTML=ticks;$('s-y-axis')._spendTicks=ticks;}
 }
+function renderSpendAverage(rows,axisMax){
+ const line=$('s-average-line'),reference=spendAverageReference(rows,axisMax),track=$('s-chart-inner').querySelector('.spendDayTrack');
+ if(!track||reference.value<=0){line.hidden=true;return;}
+ const trackRect=track.getBoundingClientRect(),plotRect=line.parentElement.getBoundingClientRect();
+ const top=trackRect.top-plotRect.top+(1-reference.ratio)*trackRect.height,label=`avg ${money(reference.value)}`;
+ line.style.top=`${Math.round(top*10)/10}px`;line.hidden=false;
+ const value=line.querySelector('span');if(value.textContent!==label)value.textContent=label;
+}
 function spendPaintNavigation(){
  const state=spendDayNavigation(spendCurrentRows,spendFocusDay);spendFocusDay=state.focusDay;
  [...$('s-chart-inner').querySelectorAll('[data-spend-day]')].forEach((button,index)=>{
@@ -4304,6 +4369,7 @@ function reconcileSpendBars(rows){
   inner.dataset.keys=keys;
  }
  [...inner.querySelectorAll('[data-spend-day]')].forEach((button,index)=>updateSpendBar(button,rows[index],index,rows.length,axisMax,chartWidth));
+ renderSpendAverage(rows,axisMax);
  spendPaintNavigation();
 }
 function setSpendLogsHtml(html){
@@ -4312,9 +4378,87 @@ function setSpendLogsHtml(html){
  const scrollTop=list.scrollTop;
  list.innerHTML=html;list._spendHtml=html;list.scrollTop=scrollTop;
 }
+function spendInsightMetricFormat(metric,value){
+ if(metric==='cost')return money(value);
+ if(metric==='input')return compactNumber(value);
+ if(metric==='active')return waitFmt(value);
+ const rounded=Math.round(Number(value||0)*10)/10;
+ return Number.isInteger(rounded)?rounded.toLocaleString():rounded.toLocaleString(undefined,{maximumFractionDigits:1});
+}
+function spendShapeRow(metric,label,note,distribution,totalRows){
+ if(!distribution.count)return `<div class=spendShapeRow><div class=spendShapeIdentity><b>${esc(label)}</b><small>${esc(note)}</small></div><div class=spendShapeCoverage>0 / ${f(totalRows)}</div><div class=spendShapeRail></div><div class=spendShapeValues><span data-label=P10>--</span><span data-label=Median>--</span><span data-label=Mean>--</span><span data-label=P90>--</span></div></div>`;
+ const span=Math.max(.000001,distribution.p90-distribution.p10),position=value=>Math.max(0,Math.min(100,100*(value-distribution.p10)/span));
+ const style=`--p25:${position(distribution.p25)}%;--p75:${position(distribution.p75)}%;--median:${position(distribution.median)}%;--mean:${position(distribution.mean)}%`;
+ const format=value=>spendInsightMetricFormat(metric,value);
+ return `<div class=spendShapeRow><div class=spendShapeIdentity><b>${esc(label)}</b><small>${esc(note)}</small></div><div class=spendShapeCoverage>${f(distribution.count)} / ${f(totalRows)}</div><div class=spendShapeRail style="${style}"><i class=spendShapeIqr></i><i class=spendShapeMedian title="Median ${esc(format(distribution.median))}"></i><i class=spendShapeMean title="Mean ${esc(format(distribution.mean))}"></i></div><div class=spendShapeValues><span data-label=P10 title="10th percentile">${esc(format(distribution.p10))}</span><span data-label=Median>${esc(format(distribution.median))}</span><span data-label=Mean>${esc(format(distribution.mean))}</span><span data-label=P90 title="90th percentile">${esc(format(distribution.p90))}</span></div></div>`;
+}
+function renderSpendShape(distributions,totalRows){
+ $('s-shape').innerHTML=`<div class=spendShapeHeader><span>Measure</span><span>Coverage</span><span>Middle 50% · median / mean</span><span><i>P10</i><i>Median</i><i>Mean</i><i>P90</i></span></div>${spendShapeRow('cost','Period spend','selected range',distributions.cost,totalRows)}${spendShapeRow('input','Processed input','full session',distributions.input,totalRows)}${spendShapeRow('executions','Executions','full session',distributions.executions,totalRows)}${spendShapeRow('active','Active time','full session',distributions.active,totalRows)}`;
+}
+function spendScatterTipHtml(row){
+ const selected=spendSessionMetricValue(row,spendScatterMetric),active=spendSessionMetricValue(row,'active'),estimated=['local_estimate','mixed'].includes(row.usage_basis)||['local_estimate','mixed'].includes(row.provenance?.usage_basis);
+ return `<b title="${esc(row.title||'Untitled session')}">${esc(row.title||'Untitled session')}</b><span><em>${spendScatterMetric==='input'?'Processed input':'Period spend'}</em><strong class=mono>${esc(spendInsightMetricFormat(spendScatterMetric,selected))}${spendScatterMetric==='cost'&&estimated?' est':''}</strong></span><span><em>Active time</em><strong class=mono>${esc(waitFmt(active))}</strong></span><span><em>Executions</em><strong class=mono>${f(row.turns)}</strong></span><span><em>${esc(row.label||row.provider||'Runtime')}</em><strong>${esc(row.project||'No project')}</strong></span>`;
+}
+function hideSpendScatterTip(){$('s-scatter-tip').hidden=true;}
+function showSpendScatterTip(row,target,event){
+ const tip=$('s-scatter-tip'),wrap=tip.parentElement,wrapRect=wrap.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
+ tip.innerHTML=spendScatterTipHtml(row);tip.hidden=false;
+ const pointerX=event?.clientX||targetRect.left+targetRect.width/2,pointerY=event?.clientY||targetRect.top;
+ tip.style.left=Math.max(6,Math.min(wrapRect.width-tip.offsetWidth-6,pointerX-wrapRect.left+12))+'px';
+ tip.style.top=Math.max(6,Math.min(wrapRect.height-tip.offsetHeight-6,pointerY-wrapRect.top-tip.offsetHeight-10))+'px';
+}
+function drawSpendScatter(rows,analytics=spendSessionAnalytics(rows)){
+ const svg=$('s-scatter-svg'),points=spendScatterRows(rows,spendScatterMetric),valueMetric=spendScatterMetric==='input'?'input':'cost',metricLabel=spendScatterMetric==='input'?'processed input':'selected-period spend';
+ [...$('s-scatter-metric').querySelectorAll('[data-scatter-metric]')].forEach(button=>{const on=button.dataset.scatterMetric===spendScatterMetric;button.classList.toggle('on',on);button.setAttribute('aria-pressed',String(on));});
+ $('s-scatter-coverage').textContent=`${f(points.length)} of ${f((rows||[]).length)} sessions plotted`;
+ svg.setAttribute('aria-label',`${metricLabel} by full-session active time for ${points.length} sessions. Each point opens the session.`);
+ hideSpendScatterTip();
+ const VW=Math.max(320,Math.round(svg.clientWidth||1040)),VH=Math.max(270,Math.round(svg.clientHeight||340)),mobile=VW<560,ML=mobile?54:66,MR=mobile?18:28,MT=26,MB=48,PW=VW-ML-MR,PH=VH-MT-MB;
+ svg.setAttribute('viewBox',`0 0 ${VW} ${VH}`);
+ if(!points.length){svg.innerHTML=`<text x="${VW/2}" y="${VH/2}" fill="${CHART.lbl}" text-anchor="middle" font-size="12">No sessions have both ${esc(metricLabel)} and active-time evidence</text>`;return;}
+ const xMax=Math.max(1,...points.map(row=>spendSessionMetricValue(row,'active'))),yMax=Math.max(1,...points.map(row=>spendSessionMetricValue(row,valueMetric))),xLog=Math.log1p(xMax),yLog=Math.log1p(yMax),x=value=>ML+PW*Math.log1p(value)/xLog,y=value=>MT+PH-PH*Math.log1p(value)/yLog;
+ let html='';
+ for(let index=0;index<=4;index++){
+  const ratio=index/4,gx=ML+PW*ratio,gy=MT+PH-PH*ratio,xValue=Math.expm1(xLog*ratio),yValue=Math.expm1(yLog*ratio);
+  html+=`<line x1="${gx}" x2="${gx}" y1="${MT}" y2="${MT+PH}" stroke="${CHART.grid}"/><line x1="${ML}" x2="${ML+PW}" y1="${gy}" y2="${gy}" stroke="${CHART.grid}"/><text x="${gx}" y="${VH-24}" text-anchor="middle" fill="${CHART.lbl}" font-size="9">${esc(waitFmt(xValue))}</text><text x="${ML-8}" y="${gy+3}" text-anchor="end" fill="${CHART.lbl}" font-size="9">${esc(spendInsightMetricFormat(valueMetric,yValue))}</text>`;
+ }
+ const activeMedian=analytics.distributions.active.median,valueMedian=analytics.distributions[valueMetric].median;
+ if(activeMedian>0)html+=`<line x1="${x(activeMedian)}" x2="${x(activeMedian)}" y1="${MT}" y2="${MT+PH}" stroke="rgba(0,188,235,.52)" stroke-dasharray="4 5"/><text x="${Math.min(ML+PW-4,x(activeMedian)+5)}" y="${MT+11}" fill="${CHART.lbl}" font-size="9">median time</text>`;
+ if(valueMedian>0)html+=`<line x1="${ML}" x2="${ML+PW}" y1="${y(valueMedian)}" y2="${y(valueMedian)}" stroke="rgba(0,188,235,.52)" stroke-dasharray="4 5"/><text x="${ML+5}" y="${Math.max(MT+10,y(valueMedian)-5)}" fill="${CHART.lbl}" font-size="9">median</text>`;
+ const ranked=(rows||[]).filter(row=>spendSessionMetricValue(row,'cost')!==null).slice().sort((a,b)=>spendSessionMetricValue(b,'cost')-spendSessionMetricValue(a,'cost')),topIds=new Set(ranked.slice(0,analytics.concentration.top_count).map(row=>String(row.id)));
+ points.slice().sort((a,b)=>Number(topIds.has(String(a.id)))-Number(topIds.has(String(b.id)))).forEach(row=>{
+  const active=spendSessionMetricValue(row,'active'),value=spendSessionMetricValue(row,valueMetric),runtime=spendRuntimeKey(row.provider),top=topIds.has(String(row.id)),label=`Open ${row.title||'untitled session'}: ${spendInsightMetricFormat(valueMetric,value)} ${metricLabel}, ${waitFmt(active)} active time`;
+  html+=`<a class=spendScatterLink href="${esc(sessionRoute(row.id))}" data-spend-insight-session="${esc(row.id)}" aria-label="${esc(label)}"><circle class=spendScatterPoint cx="${x(active)}" cy="${y(value)}" r="${top?6.5:5.5}" fill="${SPEND_RUNTIME_COLORS[runtime]}" fill-opacity="${top ? .92 : .7}" stroke="${top?'var(--orange3)':'#07090c'}" stroke-width="${top?2.5:1.5}" vector-effect="non-scaling-stroke"><title>${esc(label)}</title></circle></a>`;
+ });
+ html+=`<text x="${ML}" y="13" fill="${CHART.lbl}" font-size="9">${esc(metricLabel)}</text><text x="${ML+PW/2}" y="${VH-6}" text-anchor="middle" fill="${CHART.lbl}" font-size="9">full-session active time · log scale</text>`;
+ svg.innerHTML=html;
+ [...svg.querySelectorAll('[data-spend-insight-session]')].forEach(link=>{
+  const row=points.find(item=>String(item.id)===link.dataset.spendInsightSession);
+  link.onpointerenter=event=>showSpendScatterTip(row,link,event);link.onpointermove=event=>showSpendScatterTip(row,link,event);link.onpointerleave=hideSpendScatterTip;link.onfocus=()=>showSpendScatterTip(row,link);link.onblur=hideSpendScatterTip;
+ });
+}
+function renderSpendSessionInsights(payload,window){
+ $('s-insights-range').textContent=spendRangeLabel(window);
+ if(payload?.loading||payload?.error){
+  const statusKey=`${window.start}|${window.end}|${payload?.error||'loading'}`;spendInsightPayload=null;if(statusKey===spendInsightRenderKey)return;spendInsightRenderKey=statusKey;$('s-concentration').textContent='--';$('s-concentration-note').textContent=payload?.error||'Loading range evidence…';$('s-concentration-bar').querySelector('i').style.width='0%';$('s-concentration-bar').setAttribute('aria-valuenow','0');$('s-concentration-sessions').innerHTML='';$('s-shape').innerHTML=`<div class=spendShapeEmpty>${esc(payload?.error||'Loading session distributions…')}</div>`;drawSpendScatter([]);return;
+ }
+ spendInsightPayload=payload;
+ const rows=payload?.sessions||[],renderKey=`${window.start}|${window.end}|`+rows.map(row=>[row.id,row.title,row.project,row.cost,row.input_tokens,row.turns,row.duration_s,row.duration_available,row.duration_basis,row.usage_basis,row.availability?.cost,row.availability?.input_tokens].join('~')).join('|');
+ if(renderKey===spendInsightRenderKey)return;
+ spendInsightRenderKey=renderKey;
+ const focused=document.activeElement?.closest?.('[data-spend-insight-session]'),focusedId=focused?.dataset.spendInsightSession||'',focusedScatter=Boolean(focused?.closest?.('#s-scatter-svg')),analytics=spendSessionAnalytics(rows),concentration=analytics.concentration,share=concentration.top_share;
+ $('s-concentration').textContent=concentration.covered?spendPct(share):'--';
+ $('s-concentration-note').textContent=concentration.covered?`${f(concentration.top_count)} of ${f(concentration.covered)} cost-covered ${countWord(concentration.covered,'session')} account for ${money(concentration.top_cost)} of ${money(concentration.total)}.${rows.some(hasLocalEstimate)?' Includes local estimates.':''}`:'No cost-covered sessions in this period.';
+ $('s-concentration-bar').querySelector('i').style.width=Math.max(0,Math.min(100,100*share))+'%';$('s-concentration-bar').setAttribute('aria-valuenow',String(Math.round(100*share)));
+ const topRows=rows.filter(row=>spendSessionMetricValue(row,'cost')!==null).slice().sort((a,b)=>spendSessionMetricValue(b,'cost')-spendSessionMetricValue(a,'cost')).slice(0,Math.min(3,concentration.top_count));
+ $('s-concentration-sessions').innerHTML=topRows.map(row=>{const cost=spendSessionMetricValue(row,'cost'),estimated=['local_estimate','mixed'].includes(row.usage_basis)||['local_estimate','mixed'].includes(row.provenance?.usage_basis);return `<button class=spendImpactRow data-spend-insight-session="${esc(row.id)}" type=button title="Open ${esc(row.title||'Untitled session')}"><span class=spendImpactName>${esc(row.title||'Untitled session')}</span><span class=spendImpactValue><b class=mono>${money(cost)}${estimated?' est':''}</b><small>${spendPct(concentration.total?cost/concentration.total:0)} of covered spend</small></span></button>`;}).join('');
+ renderSpendShape(analytics.distributions,rows.length);drawSpendScatter(rows,analytics);
+ if(focusedId)requestAnimationFrame(()=>{const root=focusedScatter?$('s-scatter-svg'):$('s-concentration-sessions'),target=[...root.querySelectorAll('[data-spend-insight-session]')].find(element=>element.dataset.spendInsightSession===focusedId);target?.focus({preventScroll:true});});
+}
 function renderSpendLogs(payload,window){
  const rows=payload?.sessions||[],rangeTotal=Number(payload?.total_cost||0);
  $('s-log-day').textContent=spendRangeLabel(window);
+ renderSpendSessionInsights(payload,window);
  if(payload?.loading){$('s-log-count').textContent='';setSpendLogsHtml('<div class=spendLogEmpty>Loading range logs…</div>');return;}
  if(payload?.error){$('s-log-count').textContent='';setSpendLogsHtml(`<div class=spendLogEmpty>${esc(payload.error)}</div>`);return;}
  $('s-log-count').textContent=`${f(rows.length)} logs`;
@@ -4376,11 +4520,11 @@ function renderSpend(xs){
  $('s-custom').hidden=spendRangeChoice!=='custom';
  ['s-from','s-to'].forEach(id=>{$(id).min=earliest;$(id).max=today;});
  if(!$('s-range-error').textContent){$('s-from').value=spendCustomFrom;$('s-to').value=spendCustomTo;}
- const rows=spendCurrentRows,total=rows.reduce((sum,row)=>sum+Number(row.cost||0),0),evidence=spendEvidence(rows),runtimeTotals=spendRuntimeTotals(rows),topRuntime=runtimeTotals.reduce((best,row)=>!best||row.cost>best.cost?row:best,null),highest=rows.reduce((best,row)=>!best||Number(row.cost||0)>Number(best.cost||0)?row:best,null);
+	 const rows=spendCurrentRows,total=rows.reduce((sum,row)=>sum+Number(row.cost||0),0),dailyAverage=window.dayCount?total/window.dayCount:0,evidence=spendEvidence(rows),runtimeTotals=spendRuntimeTotals(rows),topRuntime=runtimeTotals.reduce((best,row)=>!best||row.cost>best.cost?row:best,null),highest=rows.reduce((best,row)=>!best||Number(row.cost||0)>Number(best.cost||0)?row:best,null);
  const rangeText=spendRangeLabel(window),periodUnavailable=evidence.allUnavailable&&!total;
  $('s-total').textContent=periodUnavailable?'--':money(total);
  $('s-total-note').textContent=periodUnavailable?'Cost unavailable for recorded activity':`${rangeText} · API-equivalent estimate${evidence.partial?' · lower bound':''}`;
- $('s-average').textContent=periodUnavailable?'--':money(total/window.dayCount);
+	 $('s-average').textContent=periodUnavailable?'--':money(dailyAverage);
  const previousWindow=spendPreviousWindow(window),previousRows=spendCalendarRows(source,previousWindow),previousEvidence=source.some(row=>row.day>=previousWindow.start&&row.day<=previousWindow.end),previousCoverage=spendEvidence(previousRows),previousTotal=previousRows.reduce((sum,row)=>sum+Number(row.cost||0),0);
  $('s-average-note').textContent=periodUnavailable?'Daily average unavailable':previousEvidence&&!evidence.partial&&!previousCoverage.partial?`${dailyDeltaLabel(total,previousTotal)} vs preceding ${window.dayCount}d`:`${window.dayCount} calendar ${countWord(window.dayCount,'day')}${evidence.partial||previousCoverage.partial?' · comparison withheld for partial coverage':''}`;
  $('s-top-runtime').textContent=periodUnavailable?'Unavailable':topRuntime&&topRuntime.cost?topRuntime.label:'No spend';
@@ -4390,7 +4534,7 @@ function renderSpend(xs){
  const visibleRuntimes=runtimeTotals.filter(runtime=>runtime.cost||runtime.unavailable);
  $('s-legend').innerHTML=visibleRuntimes.map(runtime=>`<span style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><i></i>${esc(runtime.label)}</span>`).join('')+(visibleRuntimes.some(runtime=>runtime.estimated)?'<span class=spendEstimateKey><i></i>Local estimate</span>':'');
  reconcileSpendBars(rows);
- $('s-chart').setAttribute('aria-label',`${rangeText}. ${periodUnavailable?'Spend unavailable':`${money(total)} estimated spend`}${evidence.partial?', partial coverage':''}. Use arrow keys to inspect days.`);
+	 $('s-chart').setAttribute('aria-label',`${rangeText}. ${periodUnavailable?'Spend unavailable':`${money(total)} estimated spend, daily average ${money(dailyAverage)}`}${evidence.partial?', partial coverage':''}. Use arrow keys to inspect days.`);
  $('s-platforms').innerHTML=visibleRuntimes.length?`<div class=spendPlatformRows>${visibleRuntimes.map(runtime=>`<div class=spendPlatformRow style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><div class=spendPlatformName><i></i><span>${esc(runtime.label)}</span></div><div class=spendPlatformTrack><i style="width:${total?100*runtime.cost/total:0}%"></i></div><div class="spendPlatformValue mono">${runtime.unavailable&&!runtime.cost?'--':money(runtime.cost)}<span>${runtime.unavailable?'unavailable':total?spendPct(runtime.cost/total):'0%'}${runtime.estimated?' · est':''}${runtime.partial?' · partial':''}</span></div></div>`).join('')}</div>`:`<div class=spendEmpty>${evidence.active?'Recorded activity has no runtime cost evidence.':'No spend recorded in this range.'}</div>`;
  loadSpendLogs(window,xs?.generated_at);
  const hovered=$('s-chart-inner').querySelector('.spendDay:hover');
@@ -4426,6 +4570,9 @@ $('s-chart-inner').addEventListener('pointerover',handleSpendInspect);
 $('s-chart-inner').addEventListener('pointerleave',hideSpendTip);
 $('s-chart-inner').onclick=event=>{const button=event.target.closest('[data-spend-day]');if(button)selectSpendDay(button.dataset.spendDay,{focus:true});};
 $('s-logs').onclick=event=>{const button=event.target.closest('[data-spend-session]');if(button)selectSession(button.dataset.spendSession);};
+$('s-scatter-metric').onclick=event=>{const button=event.target.closest('[data-scatter-metric]');if(!button)return;spendScatterMetric=button.dataset.scatterMetric==='input'?'input':'cost';localStorage.setItem(SPEND_SCATTER_METRIC_KEY,spendScatterMetric);drawSpendScatter(spendInsightPayload?.sessions||[]);};
+function openSpendInsightSession(event){const button=event.target.closest('[data-spend-insight-session]');if(!button)return;event.preventDefault();selectSession(button.dataset.spendInsightSession);}
+$('s-concentration-sessions').onclick=openSpendInsightSession;$('s-scatter-svg').onclick=openSpendInsightSession;
 $('s-chart-inner').onkeydown=event=>{
  if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(event.key))return;
  if(event.key==='Escape'){hideSpendTip();return;}
@@ -4440,6 +4587,7 @@ window.addEventListener('resize',()=>{
   reconcileSpendBars(spendCurrentRows);
   const hovered=$('s-chart-inner').querySelector('.spendDay:hover');
   if(hovered)showSpendTip(hovered.dataset.spendDay,hovered);else hideSpendTip();
+  if(spendInsightPayload)drawSpendScatter(spendInsightPayload.sessions||[]);
  },100);
 });
 
@@ -4447,7 +4595,31 @@ window.addEventListener('resize',()=>{
 
 const MODEL_COUNTER_KEYS=['input_tokens','output_tokens','executions','cost','timed_output_tokens','timed_seconds','timed_samples','tool_free_output_tokens','tool_free_seconds','tool_free_samples','ttft_total_s','ttft_samples','wait_seconds','wait_samples','user_pause_seconds'];
 const MODEL_ARRAY_KEYS=['wait_durations_s','workload_peak_inputs','workload_outputs','workload_tool_calls','workload_model_calls','workload_cache_ratios'];
-const MODEL_COLORS=['#00bceb','#ff9f43','#b78cff','#66d990','#ff6f91','#ffd166','#5aa9ff','#d4e157'];
+// model-color-logic-start
+const MODEL_COLORS={
+ codex:['#55D6ED','#32B8C8','#7AA7FF','#50CFB0'],
+ claude:['#FFAA64','#F3C76A','#FF8978','#ED91BB'],
+ 'claude-3p':['#B9A2FF','#D28CFF','#9EAEFF','#E788CA'],
+ cursor:['#65D6A6','#A0D56E','#43C8B5','#83C7B4'],
+ kiro:['#92A2F4','#73B8E8','#B49BF1','#72C5D4'],
+ opencode:['#FF8290','#F39AB9','#F08B72','#DFA0FF'],
+ fallback:['#A9B8C7','#8FB1C5','#B3A8D8','#83C8BD'],
+};
+const MODEL_RUNTIME_COLOR_FAMILIES={
+ codex:'codex','claude code':'claude','claude-3p':'claude-3p',cursor:'cursor',kiro:'kiro',opencode:'opencode',
+};
+const MODEL_OUTPUT_BAR_FILL='#536879',MODEL_OUTPUT_BAR_STROKE='#7890A3';
+function modelRuntimeColorFamily(identity){
+ const runtime=String(identity||'').split('::').pop().trim().toLowerCase();
+ return MODEL_RUNTIME_COLOR_FAMILIES[runtime]||'fallback';
+}
+function modelColor(name,names){
+ const family=modelRuntimeColorFamily(name),palette=MODEL_COLORS[family]||MODEL_COLORS.fallback;
+ const siblings=[...new Set((names||[]).filter(identity=>modelRuntimeColorFamily(identity)===family))].sort((a,b)=>a.localeCompare(b));
+ return palette[Math.max(0,siblings.indexOf(name))%palette.length];
+}
+function modelTrendPaint(seriesColor){return {barFill:MODEL_OUTPUT_BAR_FILL,barStroke:MODEL_OUTPUT_BAR_STROKE,line:seriesColor};}
+// model-color-logic-end
 function localDateKey(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
 function dateKeyAgo(days,now=new Date()){const date=new Date(now);date.setHours(12,0,0,0);date.setDate(date.getDate()-days);return localDateKey(date);}
 function modelRangeWindow(range,now=new Date()){
@@ -4519,7 +4691,6 @@ function filledModelDays(rows,window){
  const byDay=new Map(rows.map(row=>[row.day,row]));
  return window.days.map(day=>byDay.get(day)||{day});
 }
-function modelColor(name,names){const index=Math.max(0,names.indexOf(name));return MODEL_COLORS[index%MODEL_COLORS.length];}
 function modelRuntimeLabel(row){return `${row.model} · ${row.runtime||'unknown runtime'}`;}
 function migrateModelRuntimeFilters(filters,models){
  const ids=new Set(models.map(row=>row.id)),migrated=[];
@@ -4555,8 +4726,8 @@ function drawModelTrend(chart){
  const x=index=>ML+step*(index+.5),outY=value=>MT+PH-PH*(Number(value||0)/maxOutput),lineY=value=>MT+PH-PH*(Number(value||0)/maxLine),lineFormat=metric.format;
  let html='';
  for(let i=0;i<=4;i++){const y=MT+PH*i/4;html+=`<line x1="${ML}" x2="${ML+PW}" y1="${y}" y2="${y}" stroke="${CHART.grid}" stroke-width="1"/><text x="${ML-8}" y="${y+4}" text-anchor="end" fill="${CHART.lbl}" font-size="10">${compactNumber(maxOutput*(1-i/4))}</text><text x="${ML+PW+8}" y="${y+4}" fill="${CHART.lbl}" font-size="10">${lineFormat(maxLine*(1-i/4))}</text>`;}
- days.forEach((day,index)=>series.forEach((model,modelIndex)=>{const row=model.points[index],y=outY(row.output_tokens),h=MT+PH-y,barX=x(index)-groupW/2+modelIndex*barW;html+=`<rect x="${barX}" y="${y}" width="${Math.max(.8,barW-.5)}" height="${Math.max(0,h)}" rx="2" fill="${model.color}" fill-opacity=".22" stroke="${model.color}" stroke-opacity=".52"/>`;}));
- series.forEach(model=>{let segment=[];const flush=()=>{if(segment.length>1)html+=`<path d="${segment.map((point,index)=>`${index?'L':'M'}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(' ')}" fill="none" stroke="${model.color}" stroke-width="2.5" ${model.estimated?'stroke-dasharray="6 4"':''} stroke-linecap="round" stroke-linejoin="round"/>`;segment=[];};model.points.forEach((row,index)=>{if(!lineAvailable(row)){flush();return;}segment.push([x(index),lineY(lineValue(row))]);});flush();model.points.forEach((row,index)=>{if(lineAvailable(row))html+=`<circle cx="${x(index)}" cy="${lineY(lineValue(row))}" r="3.8" fill="${model.color}" stroke="#07090c" stroke-width="2"/>`;});});
+ days.forEach((day,index)=>series.forEach((model,modelIndex)=>{const row=model.points[index],y=outY(row.output_tokens),h=MT+PH-y,barX=x(index)-groupW/2+modelIndex*barW,paint=modelTrendPaint(model.color);html+=`<rect x="${barX}" y="${y}" width="${Math.max(.8,barW-.5)}" height="${Math.max(0,h)}" rx="2" fill="${paint.barFill}" stroke="${paint.barStroke}" stroke-opacity=".78"/>`;}));
+ series.forEach(model=>{const paint=modelTrendPaint(model.color);let segment=[];const flush=()=>{if(segment.length>1)html+=`<path d="${segment.map((point,index)=>`${index?'L':'M'}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(' ')}" fill="none" stroke="${paint.line}" stroke-width="2.5" ${model.estimated?'stroke-dasharray="6 4"':''} stroke-linecap="round" stroke-linejoin="round"/>`;segment=[];};model.points.forEach((row,index)=>{if(!lineAvailable(row)){flush();return;}segment.push([x(index),lineY(lineValue(row))]);});flush();model.points.forEach((row,index)=>{if(lineAvailable(row))html+=`<circle cx="${x(index)}" cy="${lineY(lineValue(row))}" r="3.8" fill="${paint.line}" stroke="#07090c" stroke-width="2"/>`;});});
  const labelEvery=Math.max(1,Math.ceil(days.length/8));
  days.forEach((day,index)=>{const remaining=days.length-1-index,showLabel=index===days.length-1||(index%labelEvery===0&&remaining>=Math.max(2,Math.ceil(labelEvery/2)));if(showLabel)html+=`<text x="${x(index)}" y="${VH-12}" text-anchor="middle" fill="${CHART.lbl}" font-size="10">${esc(day.slice(5))}</text>`;html+=`<rect data-model-day="${esc(day)}" x="${ML+step*index}" y="${MT}" width="${step}" height="${PH}" fill="transparent" pointer-events="all"/>`;});
  html+=`<text x="8" y="12" fill="${CHART.lbl}" font-size="10">output</text><text x="${VW-8}" y="12" text-anchor="end" fill="${CHART.lbl}" font-size="10">${esc(metric.axis)}</text>`;

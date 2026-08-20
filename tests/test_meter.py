@@ -3022,6 +3022,59 @@ console.log(JSON.stringify({
         self.assertNotIn('id=m-model aria-label="Models filter"', self.page)
         self.assertNotIn("Speed change", self.page)
 
+    def test_model_colors_encode_runtime_family_and_keep_volume_neutral(self):
+        """Flattening runtime families or recoloring volume bars breaks chart meaning."""
+        start = self.page.find("// model-color-logic-start")
+        end = self.page.find("// model-color-logic-end")
+        logic = self.page[start:end] if start >= 0 and end > start else ""
+        script = logic + """
+const names = [
+  'gpt-5.6-sol::Codex',
+  'gpt-5.6-terra::Codex',
+  'codex-auto-review::Codex',
+  'gpt-5.6-luna::Codex',
+  'claude-opus-4-8::Claude Code',
+  'claude-sonnet-5::Claude Code',
+  'claude-haiku-4-5::Claude-3P',
+  'claude-opus-4-8::Claude-3P',
+  'claude-sonnet-5::Claude-3P',
+  'composer-2.5::Cursor',
+  'claude-sonnet-4-6::Kiro',
+  'qwen3::OpenCode',
+  'other::Unknown',
+];
+console.log(JSON.stringify({
+  codex: [modelColor(names[2], names), modelColor(names[3], names), modelColor(names[0], names), modelColor(names[1], names)],
+  claude: [modelColor(names[4], names), modelColor(names[5], names)],
+  thirdParty: [modelColor(names[6], names), modelColor(names[7], names), modelColor(names[8], names)],
+  cursor: modelColor(names[9], names),
+  kiro: modelColor(names[10], names),
+  openCode: modelColor(names[11], names),
+  fallback: modelColor(names[12], names),
+  stable: modelColor(names[0], names) === modelColor(names[0], [...names].reverse()),
+  paint: modelTrendPaint('#FFAA64'),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {
+            "codex": ["#55D6ED", "#32B8C8", "#7AA7FF", "#50CFB0"],
+            "claude": ["#FFAA64", "#F3C76A"],
+            "thirdParty": ["#B9A2FF", "#D28CFF", "#9EAEFF"],
+            "cursor": "#65D6A6",
+            "kiro": "#92A2F4",
+            "openCode": "#FF8290",
+            "fallback": "#A9B8C7",
+            "stable": True,
+            "paint": {
+                "barFill": "#536879",
+                "barStroke": "#7890A3",
+                "line": "#FFAA64",
+            },
+        })
+
     def test_model_trend_omits_legend_and_limits_hover_to_relevant_metrics(self):
         self.assertNotIn("id=m-legend", self.page)
         self.assertNotIn("$('m-legend')", self.page)
@@ -3520,6 +3573,24 @@ console.log(JSON.stringify([
             self.page,
         )
 
+    def test_spend_evidence_cards_share_one_fixed_height(self):
+        """Removing either card from the shared height contract breaks alignment."""
+        for marker in (
+            ".spendEvidenceGrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);align-items:stretch",
+            ".spendLogsCard,.spendPlatformCard{height:360px;display:flex;min-height:0;flex-direction:column",
+            "class=spendPlatformBody id=s-platforms",
+            ".spendPlatformBody{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable",
+        ):
+            self.assertIn(marker, self.page)
+
+    def test_spend_platform_split_keeps_amounts_inside_narrow_cards(self):
+        """Restoring the old wide column minimums clips amounts at laptop width."""
+        self.assertIn(
+            ".spendPlatformRow{display:grid;grid-template-columns:minmax(78px,.48fr) minmax(72px,1fr) minmax(82px,auto);align-items:center;gap:10px",
+            self.page,
+        )
+        self.assertIn(".spendPlatformValue{min-width:82px", self.page)
+
     def test_spend_hover_detail_is_transient_and_bars_stay_mounted(self):
         for marker in (
             ".spendChartTip{position:absolute;pointer-events:none",
@@ -3590,7 +3661,7 @@ console.log(JSON.stringify({
             "id=s-y-axis",
             "function spendNiceMax(value)",
             "function renderSpendAxis(axisMax)",
-            ".spendLogsCard{height:360px",
+            ".spendLogsCard,.spendPlatformCard{height:360px",
             "overflow-y:auto",
             "scrollbar-gutter:stable",
             ".spendLogRow{height:68px",
@@ -3629,6 +3700,32 @@ console.log(JSON.stringify({
             ".spendChart{min-height:270px;margin-top:12px;overflow-x:auto",
             self.page,
         )
+
+    def test_spend_average_reference_uses_every_calendar_day(self):
+        """Dropping zero-spend days makes the chart line disagree with the KPI."""
+        logic = self.page.split("// spend-range-logic-start", 1)[1].split(
+            "// spend-range-logic-end", 1,
+        )[0]
+        script = logic + """
+const rows = [
+  {day:'2026-08-01', cost:1},
+  {day:'2026-08-02', cost:2},
+  {day:'2026-08-03', cost:0},
+  {day:'2026-08-04', cost:1},
+];
+console.log(JSON.stringify({
+  reference: spendAverageReference(rows, 4),
+  empty: spendAverageReference([], 4),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {
+            "reference": {"value": 1, "ratio": 0.25},
+            "empty": {"value": 0, "ratio": 0},
+        })
 
     def test_spend_uses_exact_calendar_ranges_and_stacked_runtime_bars(self):
         for marker in (
@@ -3709,6 +3806,72 @@ console.log(JSON.stringify({
         self.assertEqual(payload["keys"], [
             "claude", "codex", "cursor", "opencode", "kiro", "unknown",
         ])
+
+    def test_spend_session_analytics_excludes_unavailable_evidence(self):
+        logic = self.page.split("// spend-range-logic-start", 1)[1].split(
+            "// spend-range-logic-end", 1
+        )[0]
+        script = logic + """
+const rows = [
+  {id:'a', cost:40, input_tokens:1000, turns:1, duration_s:10,
+   duration_available:true, availability:{cost:true,input_tokens:true}},
+  {id:'b', cost:30, input_tokens:2000, turns:2, duration_s:20,
+   duration_available:true, availability:{cost:true,input_tokens:true}},
+  {id:'c', cost:20, input_tokens:3000, turns:3, duration_s:30,
+   duration_available:true, availability:{cost:true,input_tokens:true}},
+  {id:'d', cost:10, input_tokens:4000, turns:4, duration_s:999,
+   duration_available:false, availability:{cost:true,input_tokens:true}},
+  {id:'e', cost:99, input_tokens:5000, turns:5, duration_s:50,
+   duration_available:true, availability:{cost:false,input_tokens:true}},
+];
+const analytics = spendSessionAnalytics(rows);
+console.log(JSON.stringify({
+  concentration: analytics.concentration,
+  cost: analytics.distributions.cost,
+  input: analytics.distributions.input,
+  executions: analytics.distributions.executions,
+  active: analytics.distributions.active,
+  spendPoints: spendScatterRows(rows, 'cost').map(row => row.id),
+  inputPoints: spendScatterRows(rows, 'input').map(row => row.id),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["concentration"], {
+            "covered": 4, "total": 100, "top_count": 1,
+            "top_cost": 40, "top_share": 0.4,
+        })
+        self.assertEqual(payload["cost"], {
+            "count": 4, "p10": 13, "p25": 17.5, "median": 25,
+            "mean": 25, "p75": 32.5, "p90": 37,
+        })
+        self.assertEqual(payload["input"], {
+            "count": 5, "p10": 1400, "p25": 2000, "median": 3000,
+            "mean": 3000, "p75": 4000, "p90": 4600,
+        })
+        self.assertEqual(payload["executions"], {
+            "count": 5, "p10": 1.4, "p25": 2, "median": 3,
+            "mean": 3, "p75": 4, "p90": 4.6,
+        })
+        self.assertEqual(payload["active"], {
+            "count": 4, "p10": 13, "p25": 17.5, "median": 25,
+            "mean": 27.5, "p75": 35, "p90": 44,
+        })
+        self.assertEqual(payload["spendPoints"], ["a", "b", "c"])
+        self.assertEqual(payload["inputPoints"], ["a", "b", "c", "e"])
+
+    def test_spend_route_exposes_concentration_shape_and_openable_outliers(self):
+        spend = self.page.split("id=view-daily", 1)[1].split("id=view-learn", 1)[0]
+        for marker in (
+            "id=s-concentration", "id=s-concentration-bar", "id=s-shape",
+            "id=s-scatter", "id=s-scatter-svg", "data-scatter-metric=cost",
+            "data-scatter-metric=input", "data-spend-insight-session=",
+        ):
+            self.assertIn(marker, spend if marker.startswith("id=s-") or marker.startswith("data-scatter") else self.page)
+        self.assertIn("function renderSpendSessionInsights(payload,window)", self.page)
+        self.assertIn("selectSession(button.dataset.spendInsightSession)", self.page)
 
     def test_non_current_views_keep_visible_copy_terse(self):
         boundaries = (
@@ -7235,6 +7398,9 @@ class DailySummaryTests(unittest.TestCase):
                 "id": "multi-day", "title": "Multi day", "project": "/repo/a",
                 "provider": "codex", "label": "Codex",
                 "availability": {"cost": True},
+                "input_tokens": 12000, "output_tokens": 600, "turns": 6,
+                "duration_s": 420, "duration_available": True,
+                "duration_basis": "observed", "token_estimate": True,
                 "_day_cost": {
                     "2026-08-01": 1.25,
                     "2026-08-02": 2.75,
@@ -7276,6 +7442,13 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual(payload["total_sessions"], 2)
         self.assertEqual(payload["total_cost"], 6.0)
         self.assertEqual(payload["sessions"][0]["id"], "multi-day")
+        self.assertEqual(payload["sessions"][0]["input_tokens"], 12000)
+        self.assertEqual(payload["sessions"][0]["output_tokens"], 600)
+        self.assertEqual(payload["sessions"][0]["turns"], 6)
+        self.assertEqual(payload["sessions"][0]["duration_s"], 420)
+        self.assertTrue(payload["sessions"][0]["duration_available"])
+        self.assertEqual(payload["sessions"][0]["duration_basis"], "observed")
+        self.assertEqual(payload["sessions"][0]["usage_basis"], "local_estimate")
         for error, error_status in (
             (missing, missing_status),
             (malformed, malformed_status),

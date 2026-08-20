@@ -91,7 +91,9 @@ evidence connected to the session that produced it.
 ### Understand spend
 
 Compare Today, 7-day, 30-day, This month, or a custom period across platforms,
-projects, runtimes, and sessions.
+projects, runtimes, and sessions. Spend concentration, percentile session
+shapes, and a clickable cost-or-input versus active-time map expose which runs
+deserve inspection.
 
 <p align="center">
   <img src="images/spend.png" alt="Token Meter Spend page with selected-period totals, stacked daily runtime costs, highest-cost logs, and platform split" width="900">

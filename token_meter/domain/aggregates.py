@@ -695,6 +695,12 @@ def spend_log_summaries(session_rows, start_day, end_day,
             "provider": provider,
             "label": session.get("label") or provider,
             "cost": cost,
+            "input_tokens": int(session.get("input_tokens") or 0),
+            "output_tokens": int(session.get("output_tokens") or 0),
+            "turns": int(session.get("turns") or 0),
+            "duration_s": float(session.get("duration_s") or 0),
+            "duration_available": bool(session.get("duration_available")),
+            "duration_basis": session.get("duration_basis") or "unavailable",
             "active_days": len(matching),
             "availability": copy.deepcopy(
                 session.get("availability") or availability_resolver(provider)

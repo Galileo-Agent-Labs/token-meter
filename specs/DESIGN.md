@@ -235,9 +235,21 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 
 ### Navigation
 
-Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Daily, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide widths, contracts to icons at intermediate widths, and becomes a horizontally scrollable top strip at narrow widths; destinations never wrap or disappear.
+Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Spend, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide widths, contracts to icons at intermediate widths, and becomes a horizontally scrollable top strip at narrow widths; destinations never wrap or disappear.
 
 The brand lockup pairs Splunk's unmodified white corporate wordmark with the Token Meter product name. At the intermediate icon-only rail width, the wordmark remains visible and the product-name text hides; the full lockup returns in the mobile top strip.
+
+### Spend Evidence Field
+
+Spend keeps calendar totals and the daily runtime stack first, then moves from
+source evidence to interpretation in one route. Highest-cost logs and platform
+split establish where cost accumulated. Session economics follows with a
+top-decile concentration bar, P10-to-P90 distributions, and a log-scale
+active-time map whose points open the underlying session. Selected-period cost
+must remain distinct from full-session input, execution, and active-time
+evidence. Coverage counts, local estimates, and unavailable timing stay visible;
+the surface describes unusual shape and concentration without claiming
+productivity or model quality.
 
 ### Session Instrument Card
 

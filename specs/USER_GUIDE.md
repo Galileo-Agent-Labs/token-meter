@@ -98,7 +98,11 @@ safe, recoverable target.
 Spend supports Today, 7-day, 30-day, This month, and custom calendar ranges.
 Use its daily bars, platform split, projects, runtimes, and highest-cost logs to
 understand where usage accumulated. Partial and locally estimated costs remain
-explicitly labeled.
+explicitly labeled. Session economics shows the share attributable to the top
+10% of cost-covered sessions, P10-to-P90 shapes for spend, processed input,
+executions, and active time, plus an openable outlier map. Cost uses the selected
+period; input, executions, and active time are full-session totals for sessions
+that contributed spend during that period.
 
 ### Models
 

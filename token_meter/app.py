@@ -257,6 +257,8 @@ MODEL_PRICING_MTIME_TTL_S = 0.25
 BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode", "kiro")
 DEFAULT_RUNTIME_BUDGET = 0.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
+DEFAULT_SESSION_BUDGET = 10.0
+MIN_SESSION_BUDGET = 0.5
 MAX_MONTHLY_BUDGET = 100_000_000.0
 OPENCODE_DETAIL_MESSAGE_LIMIT = 200
 UPDATE_CHECK_INTERVAL_S = 10 * 60
@@ -1174,6 +1176,21 @@ def normalize_budget_settings(values):
     if currency != "USD":
         raise ValueError("Token Meter budgets currently support USD only.")
 
+    default_session_budget = values.get(
+        "default_session_budget", DEFAULT_SESSION_BUDGET,
+    )
+    if (isinstance(default_session_budget, bool)
+            or not isinstance(default_session_budget, (int, float))):
+        raise ValueError("Default session budget must be a number.")
+    default_session_budget = float(default_session_budget)
+    if (not math.isfinite(default_session_budget)
+            or default_session_budget < MIN_SESSION_BUDGET
+            or default_session_budget > MAX_MONTHLY_BUDGET):
+        raise ValueError(
+            "Default session budget must be between "
+            f"{MIN_SESSION_BUDGET:g} and {MAX_MONTHLY_BUDGET:,.0f}."
+        )
+
     raw_allocations = values.get("allocations") or {}
     if not isinstance(raw_allocations, dict):
         raise ValueError("Runtime allocations must be an object.")
@@ -1218,6 +1235,7 @@ def normalize_budget_settings(values):
         raise ValueError("Budget notifications must be on or off.")
     return {
         "currency": "USD",
+        "default_session_budget": default_session_budget,
         "monthly_total": total,
         "allocations": allocations,
         "thresholds": thresholds,

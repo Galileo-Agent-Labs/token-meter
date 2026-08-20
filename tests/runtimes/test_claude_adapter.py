@@ -108,6 +108,41 @@ class ClaudeRuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(source.model_ref.model_id, "claude-test")
         self.assertEqual(source.activity_mtime, self.last_event_at)
 
+    def test_discovers_local_agent_trace_in_sibling_session_directory(self):
+        desktop = self.root / "Claude-3p"
+        cli_session_id = "87654321-4321-4321-4321-cba987654321"
+        desktop_session_id = "local_12345678-1234-1234-1234-123456789abc"
+        metadata = (
+            desktop / "local-agent-mode-sessions" / "account" / "org" /
+            f"{desktop_session_id}.json"
+        )
+        trace = (
+            metadata.parent / "12345678" / ".claude" / "projects" /
+            "outputs" / f"{cli_session_id}.jsonl"
+        )
+        metadata.parent.mkdir(parents=True)
+        trace.parent.mkdir(parents=True)
+        metadata.write_text(json.dumps({
+            "sessionId": desktop_session_id,
+            "cliSessionId": cli_session_id,
+            "cwd": str(trace.parents[2] / "outputs"),
+            "lastActivityAt": 3000,
+        }))
+        trace.write_text("{}\n")
+        adapter = ClaudeRuntimeAdapter(
+            self.root / "empty-projects", [desktop],
+            default_model="claude-default",
+        )
+
+        sources = adapter.discover_legacy(
+            DiscoveryContext(home=str(self.root))
+        )
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["id"], cli_session_id)
+        self.assertEqual(sources[0]["path"], str(trace))
+        self.assertEqual(sources[0]["client"], "claude_desktop")
+
     def test_duplicate_local_agent_trace_has_one_canonical_legacy_source(self):
         duplicate = self._add_duplicate_local_agent_trace()
 

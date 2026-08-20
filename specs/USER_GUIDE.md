@@ -84,7 +84,7 @@ a durable local URL such as `/sessions/<id>#summary`.
 
 Within a session:
 
-- **Run** shows usage and timing.
+- **Run** shows usage, timing, and the session budget cap.
 - **Activity** shows normalized events.
 - **Tools** shows capability evidence.
 - **Insights** shows bounded derived signals.
@@ -116,12 +116,14 @@ disable recommendations.
 
 ### Settings
 
-Settings contains monthly budget allocations, thresholds, effective-dated
-model pricing, software updates, menu-bar preferences, language signals, and
-local agent connections. Model pricing shows the review date and provider
-sources for bundled rates. Select the models to change, edit their prices,
-choose **From now**, **From date**, or **All history**, and save them together.
-Unselected models are not changed.
+Settings contains the default session budget, monthly budget allocations and
+thresholds, effective-dated model pricing, software updates, menu-bar
+preferences, language signals, and local agent connections. The default session
+budget applies whenever that browser has no saved cap for a session; changing it
+does not replace existing per-session caps. Model pricing shows the review date
+and provider sources for bundled rates. Select the models to change, edit their
+prices, choose **From now**, **From date**, or **All history**, and save them
+together. Unselected models are not changed.
 
 ## Native Companions
 

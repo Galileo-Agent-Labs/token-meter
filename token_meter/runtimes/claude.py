@@ -267,7 +267,14 @@ class ClaudeRuntimeAdapter:
                 session_root, ".claude", "projects", "*",
                 "{}.jsonl".format(desktop.get("cli_session_id")),
             )
-            for path in self._glob(pattern):
+            paths = self._glob(pattern)
+            if not paths:
+                sibling_pattern = os.path.join(
+                    os.path.dirname(metadata_path), "*", ".claude", "projects", "*",
+                    "{}.jsonl".format(desktop.get("cli_session_id")),
+                )
+                paths = self._glob(sibling_pattern)
+            for path in paths:
                 sources.append({
                     "provider": "claude",
                     "client": "claude_desktop",

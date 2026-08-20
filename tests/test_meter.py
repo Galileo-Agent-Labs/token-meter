@@ -2766,14 +2766,44 @@ console.log(JSON.stringify({
             self.page,
         )
         settings = self.page[self.page.index("id=view-settings"):]
+        alerts = self.page[
+            self.page.index("id=panel-alerts"):
+            self.page.index("id=view-models")
+        ]
         rail = self.page[self.page.index("<div class=top aria-label="):self.page.index("<div id=session-depot")]
         for marker in (
             "class=budgetBrowserAlerts", "class=budgetBrowserAlertsCopy",
-            "Browser delivery", "id=notify role=switch",
+            "Browser delivery",
+        ):
+            self.assertNotIn(marker, settings)
+        for marker in (
+            "id=notify role=switch",
             'aria-label="Toggle browser budget alerts"',
         ):
-            self.assertIn(marker, settings)
+            self.assertIn(marker, alerts)
         self.assertNotIn("id=notify", rail)
+
+    def test_budget_alert_controls_share_the_set_budgets_header(self):
+        config = self.page[
+            self.page.index('id=budget-config'):
+            self.page.index('class="budgetFormGroup budgetRuntimeFields"')
+        ]
+        header = config[
+            config.index("class=budgetConfigHead"):
+            config.index("class=budgetFormGroup")
+        ]
+
+        self.assertIn("Set budgets</h2>", header)
+        self.assertIn("class=budgetAlertInline", header)
+        self.assertIn("class=budgetThresholds", header)
+        self.assertIn("id=budget-input-threshold-early", header)
+        self.assertIn("id=budget-input-threshold-mid", header)
+        self.assertIn("id=budget-input-threshold-full", header)
+        self.assertIn("class=budgetNotifySwitch", header)
+        self.assertIn("class=sw aria-hidden=true", header)
+        self.assertIn("id=budget-input-notifications", header)
+        self.assertNotIn("Default for sessions without a saved cap.", config)
+        self.assertNotIn("Browser delivery", config)
 
     def test_monthly_budget_alerts_recover_missed_exceeded_state(self):
         for marker in (
@@ -2839,6 +2869,17 @@ console.log(JSON.stringify({
             "Set a live-run cap without changing the machine-wide monthly budget.",
             summary,
         )
+
+    def test_settings_default_session_budget_preserves_saved_session_caps(self):
+        for marker in (
+            "id=budget-input-session-default",
+            "Default session budget",
+            "function sessionBudgetForSession(s)",
+            "defaultSessionBudget=Number(settings.default_session_budget||10)",
+            "Number.isFinite(saved)&&saved>0?saved:defaultSessionBudget",
+            "default_session_budget:budgetNumber('budget-input-session-default')",
+        ):
+            self.assertIn(marker, self.page)
 
     def test_promoted_current_is_dense_complete_and_settings_stay_dedicated(self):
         for marker in (
@@ -3714,7 +3755,7 @@ console.log(JSON.stringify({
             "id=budget-spend", "id=budget-total", "id=budget-remaining",
             "id=budget-projected", "id=budget-runtimes", "id=budget-bars",
             "id=budget-progress-markers", "id=budget-allocation-note",
-            "id=budget-config-summary", "id=budget-plan-jump",
+            "id=budget-plan-jump",
             "class=budgetDashboard", "class=budgetLeadHeadActions",
             "class=\"card pad budgetLead\"",
             "class=\"card pad budgetRuntimeCard budgetConfig\"",
@@ -3722,13 +3763,13 @@ console.log(JSON.stringify({
             "class=budgetSpendSummary", "class=budgetSpendLimit",
             "class=budgetReadouts", "class=budgetRuntimeValue",
             "class=budgetRuntimeTrack",
-            "class=budgetFormGroup", "class=budgetCoreFields",
+            "class=budgetFormGroup", "class=budgetAlertInline",
             "class=\"budgetForm budgetInlineForm\"",
             "class=budgetRuntimeHead", "class=budgetRuntimeInput",
             "class=budgetChartInner", "class=budgetTarget",
             "id=budget-input-claude", "id=budget-input-codex",
             "id=budget-input-cursor", "id=budget-input-opencode",
-            "id=budget-input-thresholds",
+            "id=budget-input-threshold-early",
             "id=budget-runtime-spend-claude",
             "id=budget-runtime-spend-codex",
             "id=budget-runtime-spend-cursor",
@@ -3747,8 +3788,8 @@ console.log(JSON.stringify({
             "input.focus({preventScroll:true})",
             "function budgetAllocationsFromInputs()",
             "function previewCalculatedBudget()",
-            "const payload={currency:'USD',allocations,thresholds:",
-            "per month from runtime budgets.",
+            "const payload={currency:'USD',default_session_budget:",
+            "per session by default · ${money(total)} per month.",
             "Save budgets",
             "Set budgets</h2>",
             "Spent this month</span><span>Budget (USD)",
@@ -7315,6 +7356,47 @@ class DailySummaryTests(unittest.TestCase):
 
 
 class MonthlyBudgetTests(unittest.TestCase):
+    def test_missing_default_session_budget_migrates_to_ten(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({
+                "budgets": {
+                    "currency": "USD",
+                    "allocations": {},
+                    "thresholds": [80, 90, 100],
+                    "native_notifications": True,
+                },
+            }))
+
+            loaded = meter.budget_settings(str(path))
+
+        self.assertEqual(loaded.get("default_session_budget"), 10)
+
+    def test_default_session_budget_is_validated_and_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.json"
+            path.write_text(json.dumps({"model_pricing": {"claude": {}}}))
+            too_small = meter.set_budget_settings({
+                "default_session_budget": 0,
+                "allocations": {},
+                "thresholds": [80, 90, 100],
+                "native_notifications": True,
+            }, str(path))
+            result = meter.set_budget_settings({
+                "default_session_budget": 25.5,
+                "allocations": {},
+                "thresholds": [80, 90, 100],
+                "native_notifications": True,
+            }, str(path))
+            stored = json.loads(path.read_text())
+
+        self.assertFalse(too_small["ok"])
+        self.assertIn("Default session budget", too_small["error"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["budgets"]["default_session_budget"], 25.5)
+        self.assertEqual(stored["budgets"]["default_session_budget"], 25.5)
+        self.assertIn("model_pricing", stored)
+
     def test_settings_derive_total_from_allocations_and_preserve_other_machine_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "settings.json"

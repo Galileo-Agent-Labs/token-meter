@@ -10,30 +10,6 @@ whether to continue, intervene, compare, or investigate a run.
 Python standard library only. No API keys for trace analysis. No Token Meter
 analytics or telemetry leaves your machine.
 
-## What You Can Do
-
-| Goal | Token Meter helps you |
-| --- | --- |
-| **Understand a live run** | Follow estimated cost, tokens, context pressure, wait, output pace, tool calls, execution evidence, and session-budget alerts. |
-| **Review history and spend** | Find expensive or slow work across sessions, projects, runtimes, platforms, and calendar ranges. |
-| **Compare models and execution** | Compare input, output, pace, wait, and workload shape without presenting weak matches as meaningful results. |
-| **Investigate tools and skills** | Find high-output, failing, repeated, unobserved, or deferred capabilities while keeping incomplete evidence explicit. |
-| **Manage usage** | Check provider-reported limits, allocate a monthly budget, receive threshold notifications, and let Codex or Claude query bounded evidence through the local MCP. |
-
-## Coverage
-
-**Runtimes:** Claude Code and Desktop Agent/Cowork, Codex CLI and desktop,
-Cursor Agent/Composer, OpenCode, and Kiro.
-
-| Platform | Status | Experience |
-| --- | --- | --- |
-| **macOS** | Supported | Browser dashboard and native menu-bar companion |
-| **Linux** | Supported | Browser dashboard and AppIndicator tray companion |
-| **Windows** | **Beta** | Browser dashboard and notification-area extension |
-
-Evidence varies by runtime and client version. Missing values remain
-unavailable instead of appearing as a misleading zero.
-
 ## Quick Start
 
 ### macOS or Linux
@@ -68,6 +44,30 @@ troubleshooting, see the [User guide](specs/USER_GUIDE.md).
 
 **Windows beta uninstall:**
 `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\Token Meter\runtime\scripts\uninstall-windows.ps1"`
+
+## What You Can Do
+
+| Goal | Token Meter helps you |
+| --- | --- |
+| **Understand a live run** | Follow estimated cost, tokens, context pressure, wait, output pace, tool calls, execution evidence, and session-budget alerts. |
+| **Review history and spend** | Find expensive or slow work across sessions, projects, runtimes, platforms, and calendar ranges. |
+| **Compare models and execution** | Compare input, output, pace, wait, and workload shape without presenting weak matches as meaningful results. |
+| **Investigate tools and skills** | Find high-output, failing, repeated, unobserved, or deferred capabilities while keeping incomplete evidence explicit. |
+| **Manage usage** | Check provider-reported limits, allocate a monthly budget, receive threshold notifications, and let Codex or Claude query bounded evidence through the local MCP. |
+
+## Coverage
+
+**Runtimes:** Claude Code and Desktop Agent/Cowork, Codex CLI and desktop,
+Cursor Agent/Composer, OpenCode, and Kiro.
+
+| Platform | Status | Experience |
+| --- | --- | --- |
+| **macOS** | Supported | Browser dashboard and native menu-bar companion |
+| **Linux** | Supported | Browser dashboard and AppIndicator tray companion |
+| **Windows** | **Beta** | Browser dashboard and notification-area extension |
+
+Evidence varies by runtime and client version. Missing values remain
+unavailable instead of appearing as a misleading zero.
 
 ## First Five Minutes
 

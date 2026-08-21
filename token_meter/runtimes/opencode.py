@@ -674,12 +674,14 @@ class OpenCodeRuntimeAdapter:
                     prompt.get("ts") or ts, "user", "User message",
                     compact_text(prompt.get("text") or "", 84), idx,
                     severity="start", model=model,
+                    native_type="message", native_subtype="user_message",
                 ))
             for tool in tools:
                 trace.append(trace_event(
                     ts, "tool_call", tool["display"], tool["namespace"], idx,
                     tool=tool["name"], severity="tool", model=model,
                     args_chars=tool["args_chars"], tool_kind=tool["kind"],
+                    native_type="part", native_subtype="tool_call",
                 ))
                 if tool["result_available"] or tool["error"]:
                     trace.append(trace_event(
@@ -689,6 +691,7 @@ class OpenCodeRuntimeAdapter:
                         severity="warn" if tool["error"] else "retrieval", model=model,
                         output_chars=tool["output_chars"],
                         retrieval_tokens=tool["output_tokens"], error=tool["error"],
+                        native_type="part", native_subtype="tool_result",
                     ))
             if part_reasoning_ms or think_now:
                 trace.append(trace_event(
@@ -697,6 +700,7 @@ class OpenCodeRuntimeAdapter:
                     else f"{reasoning_tok:,} reasoning tokens",
                     idx, tokens=reasoning_tok, severity="reasoning", model=model,
                     duration_ms=part_reasoning_ms or None, output_tokens=reasoning_tok,
+                    native_type="part", native_subtype="reasoning",
                 ))
             trace.append(trace_event(
                 ts, "message", "Assistant turn",
@@ -707,6 +711,7 @@ class OpenCodeRuntimeAdapter:
                 fresh_input_tokens=fresh_tok, cache_read_tokens=cache_read,
                 cache_write_tokens=cache_write, tool_count=len(tools),
                 reasoning_tokens=reasoning_tok,
+                native_type="message", native_subtype="agent_message",
             ))
     
             active_s = duration_ms / 1000.0 if duration_ms else 0.0

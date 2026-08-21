@@ -46,9 +46,21 @@ The optional `tokenmeter` MCP server is also local and read-only. It uses stdio,
 does not open another listening port, and returns bounded derived evidence. It
 must never return prompts, messages, reasoning text, tool arguments, tool
 results, credentials, environment variables, configuration values, or log
-paths. Detailed output is limited to the caller's matched current runtime and
-project; historical output is aggregate-only. Capability names are returned
-only when capability review is explicitly requested.
+paths. `check` detail is limited to the caller's matched current runtime and
+project. Query tools may return opaque session IDs and content-free historical
+evidence, but never session titles, project names, source paths, or native
+provider payloads. Capability names are returned only when capability review is
+explicitly requested.
+
+The `sessions`, `trace`, `stats`, and `schema` tools use strict input schemas,
+positive output allowlists, and fixed limits. Session IDs identify only an
+already discovered local source. Pagination cursors contain hashed query and
+revision bindings, not paths or trace content; a changed revision invalidates
+the cursor. Serialized query pages are capped at 65,536 bytes. The
+`native_structure` view is not raw trace content: it admits only fixed native
+type/subtype enums plus bounded numeric, status, model, and tool fields. Raw
+prompts, responses, tool payloads, account data, and trace paths are not
+available through MCP.
 
 When an MCP tool is called, the bounded derived result is handed to the
 connected Codex or Claude client. That client may send the result to its model

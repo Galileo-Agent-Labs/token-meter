@@ -6,8 +6,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import meter
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.runtimes.opencode import OpenCodeRuntimeAdapter
+from tests.runtime_projection_privacy import assert_runtime_trace_privacy
 
 
 SCHEMA = """
@@ -116,6 +118,22 @@ class OpenCodeRuntimeAdapterTests(unittest.TestCase):
         serialized = repr(result)
         for private in ("private prompt", "private response", "secret"):
             self.assertNotIn(private, serialized)
+
+    def test_mcp_trace_views_are_structural_and_content_free(self):
+        self.adapter.compatibility = meter._opencode_compatibility()
+        source = self.adapter.discover_legacy(
+            DiscoveryContext(home=str(self.root)),
+        )[0]
+        state = self.adapter.load(source, DetailLevel.FULL)
+
+        assert_runtime_trace_privacy(
+            self, source, state, runtime="opencode", model="model-1",
+            tool="read", native_types=("message", "part"),
+            forbidden=(
+                "private prompt", "private response", "secret",
+                "/work/project",
+            ),
+        )
 
     def test_summary_detail_omits_turns_and_null_evidence_stays_unavailable(self):
         with contextlib.closing(sqlite3.connect(self.db_path)) as conn, conn:

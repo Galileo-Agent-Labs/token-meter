@@ -807,17 +807,20 @@ class KiroRuntimeAdapter:
             trace.append(compat["trace_event"](
                 turn["start"], "user", "User input", "Content excluded",
                 turn["index"], severity="start", model=model.model_id,
+                native_type="user", native_subtype="user_message",
             ))
             for tool in tools:
                 trace.append(compat["trace_event"](
                     turn["end"], "tool_call", tool["display"], "Payload excluded",
                     turn["index"], tool=tool["name"], severity="tool",
                     model=model.model_id,
+                    native_type="tool_call", native_subtype="tool_call",
                 ))
             trace.append(compat["trace_event"](
                 turn["end"], "complete", "Execution complete", "",
                 turn["index"], severity="good", model=model.model_id,
                 cost=execution_cost if cost_available else None,
+                native_type="assistant", native_subtype="agent_message",
             ))
             tot["input"] += turn["input_tokens"]
             tot["output"] += turn["output_tokens"]

@@ -802,7 +802,9 @@ class CursorRuntimeAdapter:
             assistant_text = ""
             if user_text:
                 trace.append(trace_event(start_ts, "user", "User message", compact_text(user_text, 84),
-                                         idx, severity="start", model=model))
+                                         idx, severity="start", model=model,
+                                         native_type="message",
+                                         native_subtype="user_message"))
     
             for bubble in bubbles:
                 if not isinstance(bubble, dict):
@@ -819,6 +821,7 @@ class CursorRuntimeAdapter:
                         ts, "reasoning", "Reasoning",
                         duration_label(thinking_ms / 1000.0) if thinking_ms else "Trace-visible reasoning",
                         idx, severity="reasoning", model=model, duration_ms=thinking_ms or None,
+                        native_type="message", native_subtype="reasoning",
                     ))
                 tool_data = bubble.get("toolFormerData")
                 if isinstance(tool_data, dict) and tool_data.get("name"):
@@ -850,6 +853,7 @@ class CursorRuntimeAdapter:
                         ts, "tool_call", ident["display"], ident["namespace"], idx,
                         tool=ident["name"], severity="tool", model=model,
                         args_chars=tool["args_chars"], tool_kind=ident["kind"],
+                        native_type="message", native_subtype="tool_call",
                     ))
                     if result_present or errored:
                         trace.append(trace_event(
@@ -858,19 +862,22 @@ class CursorRuntimeAdapter:
                             idx, tool=ident["name"], tokens=tool["output_tokens"],
                             severity="warn" if errored else "retrieval", model=model,
                             output_chars=output_chars, retrieval_tokens=tool["output_tokens"], error=errored,
+                            native_type="message", native_subtype="tool_result",
                         ))
                 text = bubble.get("text")
                 if isinstance(text, str) and text.strip():
                     assistant_text = compact_text(text, 84)
                     trace.append(trace_event(ts, "message", "Assistant message", assistant_text,
-                                             idx, model=model))
+                                             idx, model=model, native_type="message",
+                                             native_subtype="agent_message"))
                 for block in bubble.get("content") or []:
                     if not isinstance(block, dict):
                         continue
                     if block.get("type") == "text" and str(block.get("text") or "").strip():
                         assistant_text = compact_text(str(block.get("text")), 84)
                         trace.append(trace_event(ts, "message", "Assistant message", assistant_text,
-                                                 idx, model=model))
+                                                 idx, model=model, native_type="message",
+                                                 native_subtype="agent_message"))
                     elif block.get("type") == "tool_use":
                         ident = cursor_tool_identity(block.get("name"))
                         arguments = block.get("input") or {}
@@ -885,7 +892,9 @@ class CursorRuntimeAdapter:
                         tools.append(tool)
                         trace.append(trace_event(ts, "tool_call", ident["display"], ident["namespace"],
                                                  idx, tool=ident["name"], severity="tool", model=model,
-                                                 args_chars=tool["args_chars"], tool_kind="tool"))
+                                                 args_chars=tool["args_chars"], tool_kind="tool",
+                                                 native_type="message",
+                                                 native_subtype="tool_call"))
     
             if timing.get("retries"):
                 trace.append(trace_event(
@@ -893,6 +902,7 @@ class CursorRuntimeAdapter:
                     f"{timing['attempts']} attempts · {timing['failed_attempts']} failed",
                     idx, severity="warn", model=model, attempts=timing["attempts"],
                     failed_attempts=timing["failed_attempts"], retries=timing["retries"],
+                    native_type="request", status="failed",
                 ))
             trace.append(trace_event(
                 end_ts, "complete", "Execution complete",
@@ -900,6 +910,8 @@ class CursorRuntimeAdapter:
                 idx, severity="good" if group.get("completed") else "neutral", model=model,
                 duration_ms=(timing.get("wait_s") or 0) * 1000 or None,
                 cost=execution_cost if cost_available else None,
+                native_type="request",
+                status="completed" if group.get("completed") else "unknown",
             ))
     
             retrieval = sum(int(tool.get("output_tokens") or 0) for tool in tools)

@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
+import meter
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.domain.aggregates import current_session_summaries
 from token_meter.runtimes.claude import ClaudeRuntimeAdapter
+from tests.runtime_projection_privacy import assert_runtime_trace_privacy
 
 
 class ClaudeRuntimeAdapterTests(unittest.TestCase):
@@ -231,6 +233,22 @@ class ClaudeRuntimeAdapterTests(unittest.TestCase):
         for private in ("private prompt", "private reasoning", "private response",
                         "private tool output", "argument"):
             self.assertNotIn(private, encoded)
+
+    def test_mcp_trace_views_are_structural_and_content_free(self):
+        self.adapter.compatibility = meter._claude_compatibility()
+        source = self.adapter.discover_legacy(
+            DiscoveryContext(home=str(self.root)),
+        )[0]
+        state = self.adapter.load(source, DetailLevel.FULL)
+
+        assert_runtime_trace_privacy(
+            self, source, state, runtime="claude", model="claude-test",
+            tool="Read", native_types=("assistant", "user"),
+            forbidden=(
+                "private prompt", "private reasoning", "private response",
+                "private tool output", "argument", "/work/project",
+            ),
+        )
 
     def test_partial_and_corrupt_trace_preserves_unavailable(self):
         self.trace.write_text("not-json\n" + json.dumps(self.rows[0]) + "\n")

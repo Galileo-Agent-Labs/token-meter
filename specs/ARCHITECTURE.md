@@ -20,6 +20,7 @@ flowchart LR
   domain["Runtime-neutral domain aggregation"]
   app["Application composition, caches, and settings"]
   projections["Allowlisted projections"]
+  mcp_queries["MCP query validation, schema, and allowlists"]
   browser["Browser dashboard"]
   native["macOS, Linux, and Windows companions"]
   mcp["Read-only local MCP"]
@@ -28,6 +29,7 @@ flowchart LR
   projections --> browser
   projections --> native
   projections --> mcp
+  app --> mcp_queries --> mcp
 ```
 
 The server binds to `127.0.0.1:8722`. `meter.py` is intentionally only an
@@ -46,6 +48,7 @@ executable and import-compatibility facade; current composition lives in
 | Operating-system behavior | `token_meter/platforms/` | Own host paths, process policy, updates, service integration, and recoverable trash behavior. |
 | Application lifecycle | `token_meter/app.py`, `token_meter/services/` | Compose registries, manage caches/settings/watchers, and serve application jobs. |
 | Public projections | `token_meter/projections.py` | Allowlist fields for session, state, model, menu-bar, and MCP consumers. |
+| MCP query layer | `token_meter/mcp/` | Validate filters, bind opaque cursors to query revisions, positively allowlist standardized and native-structure fields, aggregate metrics, and publish schema metadata. |
 | HTTP transport | `token_meter/web/`, `page.html` | Serve the loopback API, routes, actions, and the single-file dashboard. |
 | Native clients | `menubar/`, Windows scripts | Render the compact `/menubar` payload and delegate deep review to the browser. |
 | Local MCP | `token_meter_mcp.py` | Return bounded read-only current-run or aggregate evidence over stdio. |
@@ -147,9 +150,16 @@ runtime catalog for generic labels, colors, and capabilities. Provider quota
 views use cached normalized windows; unavailable is never rendered as 0%.
 
 The optional MCP server is local stdio, read-only, and independently bounded.
-Current-run details are matched to the caller's runtime/project; historical
-answers are aggregate-only. Data returned to a connected coding agent may enter
-that agent provider's model context under the client's own terms.
+Its decision tools use caller-matched or aggregate projections. Its `sessions`,
+`trace`, `stats`, and `schema` query tools select content-free session IDs, read
+one standardized or sanitized-native trace, aggregate only standardized
+evidence, and describe their schema. Opaque
+cursors bind the normalized query to the source revision, and serialized pages
+are capped at 65,536 bytes. Native structure is not raw trace content: adapters
+attach only constant structural types/subtypes and the shared projection keeps
+an explicit allowlist of numeric, enum, model, and tool fields. Data returned to
+a connected coding agent may enter that agent provider's model context under
+the client's own terms.
 
 ## Privacy and Security Invariants
 

@@ -8,8 +8,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import meter
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.runtimes.cursor import CursorRuntimeAdapter
+from tests.runtime_projection_privacy import assert_runtime_trace_privacy
 
 
 class CursorRuntimeAdapterTests(unittest.TestCase):
@@ -169,6 +171,26 @@ class CursorRuntimeAdapterTests(unittest.TestCase):
         encoded = repr(result)
         for private in ("private prompt", "private response", "secret"):
             self.assertNotIn(private, encoded)
+
+    def test_mcp_trace_views_are_structural_and_content_free(self):
+        self.adapter.compatibility = meter._cursor_compatibility()
+        self.adapter.compatibility.update({
+            "snapshot": self.adapter.snapshot_legacy,
+            "request_spans": self.adapter.request_spans,
+        })
+        source = self.adapter.discover_legacy(
+            DiscoveryContext(home=str(self.root)),
+        )[0]
+        state = self.adapter.load(source, DetailLevel.FULL)
+
+        assert_runtime_trace_privacy(
+            self, source, state, runtime="cursor", model="model-1",
+            tool="read_file_v2", native_types=("message", "request"),
+            forbidden=(
+                "private prompt", "private response", "secret",
+                "/work/project",
+            ),
+        )
 
     def test_partial_database_falls_back_to_transcript_discovery(self):
         partial = self.root / "partial.vscdb"

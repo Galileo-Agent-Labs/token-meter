@@ -851,6 +851,7 @@ class CodexRuntimeAdapter:
                     ts, "context", "Run context", detail, severity="neutral",
                     model=model, tools_loaded=tools_loaded or None,
                     tool_namespaces=tool_namespaces[:6],
+                    native_type="turn_context",
                 ))
                 continue
     
@@ -863,7 +864,9 @@ class CodexRuntimeAdapter:
                                                     payload.get("collaboration_mode_kind", ""), severity="start",
                                                     model=model, context_window=context_window,
                                                     tools_loaded=tools_loaded or None, trace_id=payload.get("trace_id"),
-                                                    turn_id=payload.get("turn_id")))
+                                                    turn_id=payload.get("turn_id"),
+                                                    native_type="event_msg",
+                                                    native_subtype="task_started"))
                 continue
     
             if ptype == "user_message":
@@ -871,7 +874,9 @@ class CodexRuntimeAdapter:
                 if txt:
                     pending["user_inputs"].append(compact_text(payload.get("message") or "", 220))
                     pending["trace"].append(trace_event(ts, "user", "User message", txt,
-                                                        severity="start", model=model))
+                                                        severity="start", model=model,
+                                                        native_type="event_msg",
+                                                        native_subtype="user_message"))
                 continue
     
             if ptype == "agent_message":
@@ -879,19 +884,23 @@ class CodexRuntimeAdapter:
                 if txt:
                     pending["trace"].append(trace_event(ts, "message", "Agent update", txt,
                                                         severity="neutral", model=model,
-                                                        phase=payload.get("phase")))
+                                                        phase=payload.get("phase"),
+                                                        native_type="event_msg",
+                                                        native_subtype="agent_message"))
                 continue
     
             if ptype == "context_compacted":
                 pending["trace"].append(trace_event(ts, "context", "Context compacted", "",
-                                                    severity="warn", model=model))
+                                                    severity="warn", model=model,
+                                                    native_type="event_msg"))
                 continue
     
             if ptype == "thread_goal_updated":
                 goal = payload.get("goal") or {}
                 txt = compact_text(goal.get("objective") if isinstance(goal, dict) else str(goal), 120)
                 pending["trace"].append(trace_event(ts, "goal", "Goal updated", txt,
-                                                    severity="neutral", model=model))
+                                                    severity="neutral", model=model,
+                                                    native_type="event_msg"))
                 continue
     
             if ptype == "reasoning":
@@ -899,7 +908,9 @@ class CodexRuntimeAdapter:
                 summary = payload.get("summary")
                 pending["trace"].append(trace_event(ts, "reasoning", "Reasoning",
                                                     compact_text(str(summary or "encrypted reasoning"), 90),
-                                                    severity="reasoning", model=model))
+                                                    severity="reasoning", model=model,
+                                                    native_type="event_msg",
+                                                    native_subtype="reasoning"))
                 continue
     
             if ptype == "message":
@@ -907,11 +918,17 @@ class CodexRuntimeAdapter:
                 content = payload.get("content")
                 if role == "assistant":
                     txt = compact_text(text_from_content(content), 84)
-                    pending["trace"].append(trace_event(ts, "message", "Assistant message", txt, model=model))
+                    pending["trace"].append(trace_event(
+                        ts, "message", "Assistant message", txt, model=model,
+                        native_type="response_item", native_subtype="agent_message",
+                    ))
                 elif role == "user":
                     txt = compact_text(text_from_content(content), 84)
                     if txt:
-                        pending["trace"].append(trace_event(ts, "user", "User message", txt, severity="start", model=model))
+                        pending["trace"].append(trace_event(
+                            ts, "user", "User message", txt, severity="start", model=model,
+                            native_type="response_item", native_subtype="user_message",
+                        ))
                 continue
     
             if ptype in ("function_call", "custom_tool_call", "web_search_call", "tool_search_call"):
@@ -933,7 +950,11 @@ class CodexRuntimeAdapter:
                 call_map[call_id] = tool
                 pending["trace"].append(trace_event(ts, "tool_call", ident["display"], ident["namespace"],
                                                     tool=name, severity="tool", model=model,
-                                                    args_chars=tool["args_chars"], tool_kind=ident["kind"]))
+                                                    args_chars=tool["args_chars"], tool_kind=ident["kind"],
+                                                    native_type="response_item",
+                                                    native_subtype=(ptype if ptype in (
+                                                        "function_call", "custom_tool_call", "web_search_call",
+                                                    ) else "tool_call")))
                 continue
     
             if ptype in ("function_call_output", "custom_tool_call_output", "web_search_end", "tool_search_output", "patch_apply_end"):
@@ -956,7 +977,11 @@ class CodexRuntimeAdapter:
                                                     tool=tool["name"], tokens=tool["output_tokens"],
                                                     severity="warn" if tool.get("error") else "retrieval", model=model,
                                                     output_chars=tool["output_chars"],
-                                                    retrieval_tokens=tool["output_tokens"], error=tool.get("error")))
+                                                    retrieval_tokens=tool["output_tokens"], error=tool.get("error"),
+                                                    native_type="response_item",
+                                                    native_subtype=(ptype if ptype in (
+                                                        "function_call_output", "custom_tool_call_output", "web_search_end",
+                                                    ) else "tool_result")))
                 continue
     
             if ptype == "task_complete":
@@ -968,12 +993,16 @@ class CodexRuntimeAdapter:
                                              f"{duration}ms" if duration else "",
                                              executions[-1]["idx"], severity="good",
                                              model=model, duration_ms=duration,
-                                             turn_id=payload.get("turn_id")))
+                                             turn_id=payload.get("turn_id"),
+                                             native_type="event_msg",
+                                             native_subtype="task_complete"))
                 else:
                     pending["trace"].append(trace_event(ts, "complete", "Execution complete", "",
                                                         severity="good", model=model,
                                                         duration_ms=duration,
-                                                        turn_id=payload.get("turn_id")))
+                                                        turn_id=payload.get("turn_id"),
+                                                        native_type="event_msg",
+                                                        native_subtype="task_complete"))
                 continue
     
             if ptype == "token_count":
@@ -1026,6 +1055,7 @@ class CodexRuntimeAdapter:
                     cache_read_tokens=cache_read_tokens,
                     cache_write_tokens=cache_write_tokens,
                     reasoning_tokens=reasoning, tools_loaded=observed_tools_loaded or None,
+                    native_type="event_msg", native_subtype="token_count",
                 ))
     
                 series.append({

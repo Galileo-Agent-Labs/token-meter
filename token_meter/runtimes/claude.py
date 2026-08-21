@@ -696,7 +696,9 @@ class ClaudeRuntimeAdapter:
                 think_cost += out_tok * price_for(model, "claude", at=ts)[0]["output"] / 1e6
                 trace.append(trace_event(ts, "reasoning", "Reasoning", f"thinking turn #{idx}", idx,
                                          tokens=out_tok, cost=think_cost, severity="reasoning",
-                                         model=model, output_tokens=out_tok))
+                                         model=model, output_tokens=out_tok,
+                                         native_type="assistant",
+                                         native_subtype="reasoning"))
             else:
                 routine_out += out_tok
             if rec["stop_reason"] == "end_turn":
@@ -706,7 +708,9 @@ class ClaudeRuntimeAdapter:
                 side_turns += 1
                 trace.append(trace_event(ts, "coordination", "Subagent turn", f"execution #{idx}", idx,
                                          tokens=out_tok, cost=tc, severity="coordination",
-                                         model=model, output_tokens=out_tok))
+                                         model=model, output_tokens=out_tok,
+                                         native_type="assistant",
+                                         native_subtype="agent_message"))
     
             cache_tokens = usage.get("cache_read_input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
             fresh_input_tokens = usage.get("input_tokens", 0)
@@ -722,18 +726,23 @@ class ClaudeRuntimeAdapter:
                 cache_read_tokens=cache_read_tokens,
                 cache_write_tokens=cache_write_tokens,
                 tool_count=len(tools), reasoning_tokens=out_tok if has_think else 0,
+                native_type="assistant", native_subtype="agent_message",
             ))
             for tool in tools:
                 trace.append(trace_event(ts, "tool_call", tool["display"], tool["namespace"], idx,
                                          tool=tool["name"], severity="tool",
-                                         model=model, args_chars=tool["args_chars"]))
+                                         model=model, args_chars=tool["args_chars"],
+                                         native_type="assistant",
+                                         native_subtype="tool_call"))
                 if tool["output_tokens"]:
                     trace.append(trace_event(result_ts.get(tool["id"]) or ts, "tool_result", tool["display"],
                                              f"~{tool['output_tokens']:,} returned tokens", idx,
                                              tool=tool["name"], tokens=tool["output_tokens"],
                                              severity="warn" if tool.get("error") else "retrieval",
                                              model=model, output_chars=tool["output_chars"],
-                                             retrieval_tokens=tool["output_tokens"], error=tool.get("error")))
+                                             retrieval_tokens=tool["output_tokens"], error=tool.get("error"),
+                                             native_type="user",
+                                             native_subtype="tool_result"))
     
             series.append({
                 "i": idx,

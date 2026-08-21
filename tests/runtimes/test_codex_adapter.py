@@ -4,9 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import meter
 from token_meter.contracts import DetailLevel, DiscoveryContext, EvidenceBasis
 from token_meter.runtimes import codex as codex_runtime
 from token_meter.runtimes.codex import CodexRuntimeAdapter
+from tests.runtime_projection_privacy import assert_runtime_trace_privacy
 
 
 class CodexRuntimeAdapterTests(unittest.TestCase):
@@ -650,6 +652,20 @@ class CodexRuntimeAdapterTests(unittest.TestCase):
         for private in ("private prompt", "private tool output", "argument",
                         "private definition"):
             self.assertNotIn(private, encoded)
+
+    def test_mcp_trace_views_are_structural_and_content_free(self):
+        self.adapter.compatibility = meter._codex_compatibility()
+        source = self.adapter.discover_legacy(self.context)[0]
+        state = self.adapter.load(source, DetailLevel.FULL)
+
+        assert_runtime_trace_privacy(
+            self, source, state, runtime="codex", model="gpt-test",
+            tool="read", native_types=("event_msg", "response_item"),
+            forbidden=(
+                "private prompt", "private tool output", "argument",
+                "private definition", "/work/project",
+            ),
+        )
 
     def test_corrupt_partial_trace_is_bounded_and_unavailable(self):
         self.trace.write_text("not-json\n" + json.dumps(self.rows[0]) + "\n")

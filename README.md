@@ -118,6 +118,29 @@ and automatic installation are separate settings; both are on by default.
   <img src="images/mcp.png" alt="Token Meter Settings view for local read-only agent connections" width="900">
 </p>
 
+The local MCP exposes seven read-only tools:
+
+| Tool | Use |
+| --- | --- |
+| `check` | Make a bounded decision about the caller-matched current run. |
+| `usage` | Review aggregate spend, model, tool, or change evidence. |
+| `capabilities` | Review optional user-installed skill-pack evidence. |
+| `sessions` | Select content-free session IDs using runtime, client, model, state, or time filters. |
+| `trace` | Read a standardized trace or sanitized runtime-native structure for one session. |
+| `stats` | Aggregate selected token, cost, timing, context, attempt, model-call, or tool metrics. |
+| `schema` | Discover fields, dimensions, units, limits, and availability semantics. |
+
+A comparison harness can call `sessions`, pass one returned ID to `trace`, and
+then call `stats` with dimensions such as `runtime`, `model`, `day`, or
+`session_id`. List responses expose `page.next_cursor`; continue by replaying
+the same query with that cursor. Metrics retain measured, estimated, inferred,
+and unavailable coverage, so missing evidence is not silently treated as zero.
+
+The `native_structure` trace view is not raw trace content. It keeps only
+allowlisted event types/subtypes, model and tool identities, statuses,
+relationships, timestamps, and numeric evidence. It does not expose raw trace
+content, prompts, responses, reasoning text, tool payloads, or trace paths.
+
 ### Check without opening the dashboard
 
 Use the macOS menu bar, Linux tray, or beta Windows extension to reach the

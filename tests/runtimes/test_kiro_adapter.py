@@ -13,6 +13,7 @@ from token_meter.contracts import (
     PriceQuote,
 )
 from token_meter.runtimes.kiro import KiroRuntimeAdapter
+from tests.runtime_projection_privacy import assert_runtime_trace_privacy
 
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "kiro"
@@ -98,6 +99,25 @@ class KiroRuntimeAdapterTests(unittest.TestCase):
         for private in ("sanitized user text", "sanitized assistant text",
                         "sanitized tool result"):
             self.assertNotIn(private, encoded)
+
+    def test_mcp_trace_views_are_structural_and_content_free(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.install_message_fixture(root)
+            adapter = self.fixture_adapter(root)
+            adapter.compatibility = meter._kiro_compatibility()
+            source = adapter.discover_legacy(DiscoveryContext(str(root)))[0]
+            state = adapter.load(source, DetailLevel.FULL)
+
+            assert_runtime_trace_privacy(
+                self, source, state, runtime="kiro",
+                model="claude-sonnet-4-6", tool="read_file",
+                native_types=("user", "tool_call", "assistant"),
+                forbidden=(
+                    "sanitized user text", "sanitized assistant text",
+                    "sanitized tool result", str(root),
+                ),
+            )
 
     def test_cli_kind_data_schema_reaches_cross_session_inventory(self):
         with tempfile.TemporaryDirectory() as tmp:

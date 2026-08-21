@@ -151,13 +151,36 @@ The bounded tools are:
 - `mcp__tokenmeter__check` for the caller-matched current run and optional
   execution drill-down;
 - `mcp__tokenmeter__usage` for aggregate spend, model, tool, or change review;
-- `mcp__tokenmeter__capabilities` for named user-installed skill-pack evidence.
+- `mcp__tokenmeter__capabilities` for named user-installed skill-pack evidence;
+- `mcp__tokenmeter__sessions` for content-free session selection by runtime,
+  client, model, state, and time;
+- `mcp__tokenmeter__trace` for standardized evidence or sanitized native
+  structure from one selected session;
+- `mcp__tokenmeter__stats` for selected metrics grouped by stable dimensions;
+- `mcp__tokenmeter__schema` for query fields, units, limits, and evidence
+  semantics.
 
-Current detail is runtime/project matched. Historical output is aggregate-only.
-Prompts, responses, reasoning, tool arguments/results, credentials, environment
-values, settings, and trace paths are excluded. Results returned to an
-explicitly connected agent may be processed by that client's model provider
-under its own terms.
+A typical experiment uses `sessions` to choose comparable runs, `trace` to
+retrieve per-execution tokens, cost, timing, semantic event types, tool
+identities, context, and coverage, then `stats` to group the same standardized
+evidence by runtime, model, day, or session ID. Use `schema` first when building
+a reusable harness rather than assuming a provider-specific field exists.
+
+`sessions`, `trace`, and `stats` are cursor-paginated. When
+`page.next_cursor` is present, repeat the identical query with that cursor. A
+trace changed during pagination returns `stale_cursor`; restart that query to
+avoid mixing revisions. A response is capped at 65,536 serialized bytes.
+
+Each metric reports evidence coverage and retains whether values were measured,
+estimated, inferred, or unavailable. `native_structure` is diagnostic only: it
+is not raw trace content, and provider payloads are never recursively returned.
+
+`check` current detail is runtime/project matched. Explicit trace queries use
+an opaque selected session ID and remain content-free. Prompts, responses,
+reasoning text, tool arguments/results, credentials, environment values,
+settings, project names, session titles, and trace paths are excluded. Results
+returned to an explicitly connected agent may be processed by that client's
+model provider under its own terms.
 
 ## Software Updates
 

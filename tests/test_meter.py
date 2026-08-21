@@ -7710,6 +7710,35 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertTrue(codex["exceeded"])
 
 
+class McpDocumentationContractTests(unittest.TestCase):
+    def test_maintained_docs_describe_the_read_only_query_surface(self):
+        root = Path(__file__).resolve().parents[1]
+        documents = {
+            path: (root / path).read_text()
+            for path in (
+                "README.md",
+                "specs/USER_GUIDE.md",
+                "specs/ARCHITECTURE.md",
+                "specs/SECURITY.md",
+            )
+        }
+        for path, content in documents.items():
+            with self.subTest(path=path):
+                self.assertIn("read-only", content.lower())
+                for tool in ("sessions", "trace", "stats", "schema"):
+                    self.assertIn(tool, content)
+                self.assertIn("not raw trace content", content.lower())
+
+        combined = "\n".join(documents.values()).lower()
+        for prohibited_claim in (
+            "returns raw prompts",
+            "returns raw responses",
+            "raw tool payloads are available",
+            "trace paths are available",
+        ):
+            self.assertNotIn(prohibited_claim, combined)
+
+
 class OpenCodeTests(unittest.TestCase):
     """OpenCode is discovered from its read-only SQLite database."""
 

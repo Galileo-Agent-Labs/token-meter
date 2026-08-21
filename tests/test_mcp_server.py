@@ -36,8 +36,21 @@ class McpProtocolTests(unittest.TestCase):
         capabilities = next(tool for tool in tools if tool["name"] == "capabilities")
         self.assertEqual(
             capabilities["inputSchema"]["properties"]["limit"],
-            {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
+            {
+                "type": "integer", "minimum": 1, "maximum": 5, "default": 5,
+                "description": "Maximum candidate skill packs to return; must be from 1 through 5.",
+            },
         )
+
+    def test_stats_description_explains_metric_grain_restriction(self):
+        listed, _ = server.dispatch(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            initialized=True,
+        )
+        stats = next(
+            tool for tool in listed["result"]["tools"] if tool["name"] == "stats"
+        )
+        self.assertIn("query tool metrics separately", stats["description"].lower())
 
     def test_tool_calls_require_initialization(self):
         response, initialized = server.dispatch({

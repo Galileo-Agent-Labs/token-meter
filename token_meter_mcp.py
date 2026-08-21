@@ -138,7 +138,10 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "scope": {"type": "string", "enum": ["current", "all"], "default": "current"},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
+                "limit": {
+                    "type": "integer", "minimum": 1, "maximum": 5, "default": 5,
+                    "description": "Maximum candidate skill packs to return; must be from 1 through 5.",
+                },
             },
             "additionalProperties": False,
         },
@@ -206,7 +209,8 @@ TOOLS = [
         "title": "Aggregate trace statistics",
         "description": (
             "Aggregate comparable token, cost, timing, context, attempt, model-call, and tool evidence across "
-            "sessions. Every metric includes coverage so measured zero remains distinct from unavailable evidence."
+            "sessions. Query tool metrics separately from execution or session metrics. Every metric includes "
+            "coverage so measured zero remains distinct from unavailable evidence."
         ),
         "inputSchema": {
             "type": "object",

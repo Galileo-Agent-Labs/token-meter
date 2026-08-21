@@ -6454,12 +6454,61 @@ class AgentDataContractTests(unittest.TestCase):
             {"search": 120, "fetch": 80},
         )
 
+    def test_usage_headline_and_action_answer_the_requested_focus(self):
+        today = datetime.date.today()
+        recent = today - datetime.timedelta(days=1)
+
+        def midday(day):
+            return int(time.mktime((*day.timetuple()[:3], 12, 0, 0, 0, 0, -1)))
+
+        internal = {
+            "id": "one", "provider": "codex", "runtime": "Codex",
+            "availability": {"cost": True, "tokens": True},
+            "_model_daily": [
+                {"model": "model-top", "day": today.isoformat(), "cost": 5.0,
+                 "input_tokens": 100, "output_tokens": 20, "executions": 1},
+                {"model": "model-top", "day": recent.isoformat(), "cost": 5.0,
+                 "input_tokens": 100, "output_tokens": 20, "executions": 1},
+            ],
+            "_tool_evidence": meter.summarize_tool_evidence([
+                {**meter.tool_identity("search"), "output_tokens": 9000,
+                 "ts": midday(today), "args_fingerprint": "today", "error": False},
+            ]),
+        }
+        cross = {
+            "daily": [
+                {"day": today.isoformat(), "cost": 5.0, "sessions": 1,
+                 "providers": [{"provider": "codex", "cost": 5.0}]},
+                {"day": recent.isoformat(), "cost": 5.0, "sessions": 1,
+                 "providers": [{"provider": "codex", "cost": 5.0}]},
+            ],
+            "sessions": [internal], "model_mix": [], "tool_waste": {"by_name": []},
+        }
+
+        with mock.patch.object(meter, "cross_session", return_value=cross), \
+                mock.patch.dict(meter._xsess, {"internal_rows": (internal,)}):
+            spend = meter.agent_usage(window="7d", focus="spend")
+            models = meter.agent_usage(window="7d", focus="models")
+            tools = meter.agent_usage(window="7d", focus="tools")
+
+        self.assertIn("$10.00", spend["answer"])
+        self.assertIn("spend", spend["recommended_action"].lower())
+        self.assertIn("model-top", models["answer"])
+        self.assertIn("model", models["recommended_action"].lower())
+        self.assertIn("9,000", tools["answer"])
+        self.assertIn("tool", tools["recommended_action"].lower())
+        self.assertEqual(len({spend["answer"], models["answer"], tools["answer"]}), 3)
+
     def test_capability_result_names_only_requested_evidence(self):
         cross = {"capabilities": {
-            "summary": {"optional": {"enabled": 2, "unused": 1}},
+            "summary": {"optional": {
+                "enabled": 2, "unused": 1,
+                "review_candidates": ["skill_pack:Codex:docs@personal"],
+            }},
             "control_groups": [
-                {"name": "docs@personal", "control_type": "skill_pack", "runtime": "Codex",
-                 "used": False, "enabled": True, "activations": 0,
+                {"id": "skill_pack:Codex:docs@personal", "name": "docs@personal",
+                 "control_type": "skill_pack", "runtime": "Codex", "mutable": True,
+                 "reviewable": True, "used": False, "enabled": True, "activations": 0,
                  "environment": {"TOKEN": "secret"}},
                 {"name": "tokenmeter", "control_type": "skill_pack", "runtime": "Codex",
                  "used": False, "enabled": True},
@@ -6471,6 +6520,29 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertEqual([row["name"] for row in result["candidates"]], ["docs@personal"])
         self.assertNotIn("TOKEN", encoded)
         self.assertNotIn("secret", encoded)
+
+    def test_all_scope_capabilities_returns_only_counted_review_candidates(self):
+        candidate_id = "skill_pack:Codex:z-review"
+        cross = {"capabilities": {
+            "summary": {"optional": {
+                "enabled": 1, "unused": 1, "review_candidates": [candidate_id],
+            }},
+            "control_groups": [
+                {"id": "skill_pack:Codex:a-disabled", "name": "a-disabled",
+                 "control_type": "skill_pack", "runtime": "Codex", "mutable": True,
+                 "reviewable": True, "used": False, "enabled": False},
+                {"id": candidate_id, "name": "z-review", "control_type": "skill_pack",
+                 "runtime": "Codex", "mutable": True, "reviewable": True,
+                 "used": False, "enabled": True},
+            ],
+        }}
+
+        with mock.patch.object(meter, "cross_session", return_value=cross):
+            result = meter.agent_capabilities(scope="all", limit=5)
+
+        self.assertEqual([row["name"] for row in result["candidates"]], ["z-review"])
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["candidates_returned"], 1)
 
     def test_agent_result_has_a_hard_serialized_bound(self):
         result = meter.bounded_agent_result({

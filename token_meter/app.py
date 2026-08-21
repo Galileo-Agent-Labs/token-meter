@@ -6899,19 +6899,46 @@ def agent_usage(window="7d", focus="changes"):
             supported_runtime_phrase()
         )
         assessment = "No data"
-    elif delta is not None and delta >= 0.25:
-        answer = f"The latest day is {delta * 100:.0f}% more expensive than the prior recorded day."
-        action = "Review Spend and the largest model or tool category before the next phase."
-        assessment = "Spend increased"
-    elif flagged_tokens and flagged_tokens / max(1, tool_tokens) >= 0.25:
-        answer = "Tool-result volume is the clearest efficiency signal in this window."
-        action = "Review the largest returned-token category and narrow repeated or oversized results."
-        assessment = "Tool output needs review"
-    else:
+    elif focus == "spend":
         answer = (f"Estimated spend among cost-covered logs is ${total_cost:.2f} across the selected {window} window"
                   + ("; one or more traces lack pricing evidence." if not cost_complete else ", with no strong change signal."))
-        action = "Keep the current approach and compare again after another recorded day."
-        assessment = "Stable"
+        if delta is not None and delta >= 0.25:
+            answer = (f"Estimated spend is ${total_cost:.2f} across {window}; the latest day is "
+                      f"{delta * 100:.0f}% more expensive than the prior recorded day.")
+            assessment = "Spend increased"
+        else:
+            assessment = "Spend stable"
+        action = "Review the spend total, daily change, and largest runtime before approving more work."
+    elif focus == "models":
+        if model_rank:
+            largest = model_rank[0]
+            answer = (f"{largest['model']} is the largest model category in {window} at "
+                      f"${float(largest.get('cost') or 0):.2f}.")
+            action = "Review the largest model category and test a cheaper model only where task quality holds."
+            assessment = "Model mix available"
+        else:
+            answer = f"Token Meter found spend in {window}, but no window-specific model category evidence."
+            action = "Use a trace with model-attributed usage before making a model decision."
+            assessment = "Model mix unavailable"
+    elif focus == "tools":
+        answer = f"Trace-observed tool results returned {tool_tokens:,} tokens in {window}."
+        if tool_rank:
+            answer += (f" {tool_rank[0]['name']} was the largest returned-token category at "
+                       f"{int(tool_rank[0].get('returned_tokens') or 0):,} tokens.")
+        if flagged_tokens and flagged_tokens / max(1, tool_tokens) >= 0.25:
+            action = "Review the largest tool category and narrow repeated, failed, or oversized results."
+            assessment = "Tool output needs review"
+        else:
+            action = "Keep tool requests scoped to the result fields needed for the task."
+            assessment = "Tool output stable"
+    elif delta is not None:
+        answer = f"The latest day changed {delta * 100:+.0f}% from the prior recorded day."
+        action = "Review the daily spend change and compare again after another recorded day."
+        assessment = "Spend increased" if delta >= 0.25 else "Daily change available"
+    else:
+        answer = "Token Meter has no prior recorded day in this window for a change comparison."
+        action = "Compare again after another recorded day."
+        assessment = "No change baseline"
     approximate = any(bool(row.get("cost_approx")) for row in (cross.get("sessions") or []))
     result = {
         "ok": bool(selected),
@@ -6968,11 +6995,17 @@ def agent_capabilities(scope="current", limit=5, caller=None):
         summary = ((capabilities.get("summary") or {}).get("optional") or {})
         groups = capabilities.get("control_groups") or []
     groups = [row for row in groups if row.get("name") != "tokenmeter" and row.get("namespace") != "tokenmeter"]
+    if scope == "all":
+        review_candidates = set(summary.get("review_candidates") or [])
+        groups = [row for row in groups if row.get("id") in review_candidates]
+    else:
+        groups = [row for row in groups if not row.get("current_used")]
     groups.sort(key=lambda row: (
         bool(row.get("current_used") if scope == "current" else row.get("used")),
         -int(row.get("current_unused_eager_definition_tokens") or row.get("unused_eager_definition_tokens") or 0),
         str(row.get("name") or ""),
     ))
+    candidate_count = len(groups)
     candidates = []
     for row in groups[:limit]:
         used = bool(row.get("current_used") if scope == "current" else row.get("used"))
@@ -6988,7 +7021,7 @@ def agent_capabilities(scope="current", limit=5, caller=None):
             candidate["avoidable_eager_tokens"] = overhead
         candidates.append(candidate)
     enabled = int(summary.get("enabled") or 0)
-    unused = int(summary.get("unused") or 0)
+    unused = candidate_count
     if unused:
         answer = f"{unused} of {enabled} removable capability groups have no observed use in this scope."
         action = "Review the named candidates in Tools & Skills; only disable a group after confirming you do not need it."
@@ -7006,8 +7039,13 @@ def agent_capabilities(scope="current", limit=5, caller=None):
             {"label": "Groups without observed use", "value": unused},
         ],
         "candidates": candidates,
+        "candidate_count": candidate_count,
+        "candidates_returned": len(candidates),
         "recommended_action": action,
-        "caveat": "Capability evidence names user-installed skill packs but never returns configuration values, environment variables, credentials, tool arguments, or tool results.",
+        "caveat": ("Capability evidence names user-installed skill packs but never returns configuration values, "
+                   "environment variables, credentials, tool arguments, or tool results."
+                   + (f" Returned {len(candidates)} of {candidate_count} candidates because of the requested limit."
+                      if len(candidates) < candidate_count else "")),
         "dashboard_url": agent_dashboard_url(panel="capabilities"),
         "as_of": agent_as_of(),
         "data_scope": "named_capability_evidence",

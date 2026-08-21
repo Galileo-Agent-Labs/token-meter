@@ -1,4 +1,5 @@
 import json
+import copy
 import unittest
 
 
@@ -131,6 +132,63 @@ def synthetic_source_and_state(secret="SENTINEL-PRIVATE", session_id="session-1"
         "trace_truncated": True,
     }
     return source, state
+
+
+def synthetic_query_service():
+    from token_meter.mcp.service import MCPQueryService
+
+    first_source, first_state = synthetic_source_and_state(session_id="session-1")
+    first_source["project"] = "/repo/a"
+    first_state["trace"].append({
+        "ts": 1_787_254_030.0,
+        "kind": "usage",
+        "native_type": "token_count",
+        "execution": 1,
+        "tokens": 20,
+    })
+    second_source = copy.deepcopy(first_source)
+    second_source.update({
+        "id": "session-2",
+        "path": "/private/second.jsonl",
+        "project": "/repo/b",
+        "mtime": first_source["mtime"] - 10,
+    })
+    second_state = copy.deepcopy(first_state)
+    second_state["source"]["id"] = "session-2"
+    second_state["executions"][0]["tokens"]["input"] = 200
+    second_state["total_tokens"] = 270
+    sources = [first_source, second_source]
+    states = {"session-1": first_state, "session-2": second_state}
+    revisions = {"session-1": ("rev-1",), "session-2": ("rev-2",)}
+
+    def summary(source):
+        state = states[source["id"]]
+        return {
+            "primary_model": state["primary_model"],
+            "terminal": False,
+            "availability": state["availability"],
+            "tokens": state["total_tokens"],
+            "input_tokens": state["executions"][0]["tokens"]["input"],
+            "output_tokens": state["executions"][0]["tokens"]["output"],
+            "cost": state["total_cost"],
+            "duration_s": state["timing"]["duration_s"],
+        }
+
+    service = MCPQueryService(
+        sources=lambda: list(sources),
+        find_session=lambda session_id, rows: next(
+            (row for row in rows if row["id"] == session_id), None,
+        ),
+        summary=summary,
+        state=lambda source: copy.deepcopy(states[source["id"]]),
+        revision=lambda source: revisions[source["id"]],
+        project_key=lambda value: str(value or "").lower(),
+        runtime_descriptors=lambda: (),
+        now=lambda: 1_787_254_200.0,
+    )
+    service.revisions = revisions
+    service.states = states
+    return service
 
 
 class MCPQueryContractTests(unittest.TestCase):
@@ -271,6 +329,69 @@ class MCPTraceProjectionTests(unittest.TestCase):
         self.assertEqual(missing["executions"], [])
         self.assertEqual(missing["events"], [])
         self.assertEqual(len(selected["events"]), 1)
+
+
+class MCPQueryServiceTests(unittest.TestCase):
+    def test_sessions_returns_paginated_content_free_inventory(self):
+        service = synthetic_query_service()
+
+        first = service.sessions(scope="all", runtime="codex", limit=1)
+        second = service.sessions(
+            scope="all", runtime="codex", limit=1,
+            cursor=first["page"]["next_cursor"],
+        )
+
+        self.assertEqual(first["sessions"][0]["id"], "session-1")
+        self.assertEqual(second["sessions"][0]["id"], "session-2")
+        self.assertNotIn("project", json.dumps(first))
+        self.assertIsNotNone(first["page"]["next_cursor"])
+
+    def test_sessions_current_project_scope_uses_caller_without_echoing_it(self):
+        service = synthetic_query_service()
+
+        result = service.sessions(
+            scope="current_project", caller={"project": "/repo/a"},
+        )
+
+        self.assertEqual([row["id"] for row in result["sessions"]], ["session-1"])
+        self.assertNotIn("/repo/a", json.dumps(result))
+
+    def test_trace_filters_and_rejects_changed_revision_cursor(self):
+        from token_meter.mcp.contracts import MCPQueryError
+
+        service = synthetic_query_service()
+        first = service.trace(session_id="session-1", limit=1)
+
+        self.assertEqual(first["schema_version"], "1.0")
+        self.assertIsNotNone(first["page"]["next_cursor"])
+        service.revisions["session-1"] = ("changed",)
+        with self.assertRaises(MCPQueryError) as raised:
+            service.trace(
+                session_id="session-1", limit=1,
+                cursor=first["page"]["next_cursor"],
+            )
+        self.assertEqual(raised.exception.code, "stale_cursor")
+
+    def test_trace_supports_native_view_and_bounded_errors(self):
+        from token_meter.mcp.contracts import MCPQueryError
+
+        service = synthetic_query_service()
+        result = service.trace(
+            session_id="session-1", view="native_structure",
+            event_types=("tool_result",), limit=20,
+        )
+
+        self.assertEqual(result["records"][0]["native_type"], "tool_result")
+        self.assertNotIn("SENTINEL-PRIVATE", json.dumps(result))
+        for arguments, code in (
+            ({"session_id": "missing"}, "session_not_found"),
+            ({"session_id": "session-1", "view": "raw"}, "invalid_argument"),
+            ({"session_id": "session-1", "execution": 0}, "invalid_argument"),
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(MCPQueryError) as raised:
+                    service.trace(**arguments)
+                self.assertEqual(raised.exception.code, code)
 
 
 if __name__ == "__main__":

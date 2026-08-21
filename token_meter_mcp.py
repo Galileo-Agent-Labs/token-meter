@@ -10,7 +10,7 @@ import meter
 
 SERVER_NAME = "tokenmeter"
 SERVER_TITLE = "Token Meter"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {
     "2025-11-25",
@@ -19,14 +19,16 @@ SUPPORTED_PROTOCOL_VERSIONS = {
     "2024-11-05",
 }
 SERVER_INSTRUCTIONS = (
-    "Token Meter is a local, read-only source of cost and efficiency evidence for Codex, Claude, and Cursor. "
+    "Token Meter is a local, read-only source of cost, efficiency, and structural trace evidence for supported agent runtimes. "
     "Use check for a decision about the caller's current run, usage for aggregate historical change, "
-    "and capabilities for optional skill-pack hygiene. Prefer calling check at meaningful phase "
+    "capabilities for optional skill-pack hygiene, sessions to select runs, trace for standardized or "
+    "sanitized runtime-native structure, stats for comparable aggregates, and schema to discover fields. "
+    "Prefer calling check at meaningful phase "
     "boundaries or when the user asks about cost, context, tool output, or whether to continue. Never imply "
     "continuous monitoring: tools run only when called. Results omit prompts, messages, reasoning text, tool "
-    "arguments, tool results, credentials, config values, and named historical runs. The server cannot mutate "
-    "Token Meter or agent configuration. Present the verdict first, no more than three evidence points, one "
-    "action, the caveat, and the supplied dashboard URL."
+    "arguments, tool results, credentials, config values, filesystem paths, project names, and session titles. "
+    "Native trace output preserves only allowlisted structure and numeric evidence; it is not byte-faithful raw data. "
+    "Follow pagination cursors when more rows are needed. The server cannot mutate Token Meter or agent configuration."
 )
 
 READ_ONLY_ANNOTATIONS = {
@@ -53,6 +55,37 @@ COMMON_OUTPUT_SCHEMA = {
     },
     "additionalProperties": True,
 }
+
+QUERY_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": ["ok", "data_scope"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "schema_version": {"type": "string"},
+        "as_of": {"type": ["number", "string"]},
+        "data_scope": {"type": "string"},
+        "page": {"type": "object"},
+    },
+    "additionalProperties": True,
+}
+
+TRACE_EVENT_TYPES = [
+    "start", "user", "model", "reasoning", "tool_call", "tool_result",
+    "usage", "context", "compaction", "coordination", "complete", "error",
+]
+
+STATS_METRICS = [
+    "session_count", "execution_count", "input_tokens", "output_tokens",
+    "cache_read_tokens", "cache_write_tokens", "total_tokens", "cost_usd",
+    "active_seconds", "wait_seconds", "ttft_seconds", "model_calls",
+    "tool_calls", "tool_result_tokens", "attempts", "retries",
+    "failed_attempts", "context_latest", "context_peak",
+]
+
+STATS_DIMENSIONS = [
+    "runtime", "client", "model_provider", "model", "day", "session_id",
+    "tool_category", "tool_name",
+]
 
 TOOLS = [
     {
@@ -112,6 +145,116 @@ TOOLS = [
         "outputSchema": COMMON_OUTPUT_SCHEMA,
         "annotations": READ_ONLY_ANNOTATIONS,
     },
+    {
+        "name": "sessions",
+        "title": "List trace sessions",
+        "description": (
+            "List content-free session metadata for trace selection. Defaults to the caller's current project; "
+            "scope=all still omits titles, project names, and paths. Results are bounded and cursor-paginated."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scope": {"type": "string", "enum": ["current_project", "all"], "default": "current_project"},
+                "runtime": {"type": "string", "maxLength": 120},
+                "client": {"type": "string", "maxLength": 120},
+                "model": {"type": "string", "maxLength": 160},
+                "state": {"type": "string", "enum": ["current", "completed", "historical"]},
+                "start": {"type": "string", "maxLength": 64, "description": "Inclusive ISO-8601 activity timestamp."},
+                "end": {"type": "string", "maxLength": 64, "description": "Inclusive ISO-8601 activity timestamp."},
+                "cursor": {"type": "string", "maxLength": 2048},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+            "additionalProperties": False,
+        },
+        "outputSchema": QUERY_OUTPUT_SCHEMA,
+        "annotations": READ_ONLY_ANNOTATIONS,
+    },
+    {
+        "name": "trace",
+        "title": "Query one session trace",
+        "description": (
+            "Query standardized trace evidence or sanitized runtime-native structure for one selected session. "
+            "Returns numeric, timing, event-type, tool-identity, context, coverage, and warning evidence only; "
+            "never returns prompts, responses, reasoning, arguments, results, paths, or arbitrary native payloads."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {
+                "session_id": {"type": "string", "minLength": 1, "maxLength": 240},
+                "view": {"type": "string", "enum": ["standardized", "native_structure"], "default": "standardized"},
+                "sections": {
+                    "type": "array", "maxItems": 7, "uniqueItems": True,
+                    "items": {"type": "string", "enum": ["session", "executions", "events", "tools", "context", "coverage", "warnings"]},
+                },
+                "execution": {"type": "integer", "minimum": 1},
+                "event_types": {
+                    "type": "array", "maxItems": 12, "uniqueItems": True,
+                    "items": {"type": "string", "enum": TRACE_EVENT_TYPES},
+                },
+                "cursor": {"type": "string", "maxLength": 2048},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+            "additionalProperties": False,
+        },
+        "outputSchema": QUERY_OUTPUT_SCHEMA,
+        "annotations": READ_ONLY_ANNOTATIONS,
+    },
+    {
+        "name": "stats",
+        "title": "Aggregate trace statistics",
+        "description": (
+            "Aggregate comparable token, cost, timing, context, attempt, model-call, and tool evidence across "
+            "sessions. Every metric includes coverage so measured zero remains distinct from unavailable evidence."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["metrics"],
+            "properties": {
+                "metrics": {
+                    "type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": True,
+                    "items": {"type": "string", "enum": STATS_METRICS},
+                },
+                "group_by": {
+                    "type": "array", "maxItems": 3, "uniqueItems": True,
+                    "items": {"type": "string", "enum": STATS_DIMENSIONS},
+                },
+                "runtime": {"type": "string", "maxLength": 120},
+                "client": {"type": "string", "maxLength": 120},
+                "model": {"type": "string", "maxLength": 160},
+                "state": {"type": "string", "enum": ["current", "completed", "historical"]},
+                "session_id": {"type": "string", "maxLength": 240},
+                "start": {"type": "string", "maxLength": 64},
+                "end": {"type": "string", "maxLength": 64},
+                "sort_by": {"type": "string", "enum": STATS_METRICS},
+                "sort_direction": {"type": "string", "enum": ["asc", "desc"], "default": "desc"},
+                "cursor": {"type": "string", "maxLength": 2048},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
+            "additionalProperties": False,
+        },
+        "outputSchema": QUERY_OUTPUT_SCHEMA,
+        "annotations": READ_ONLY_ANNOTATIONS,
+    },
+    {
+        "name": "schema",
+        "title": "Describe trace query fields",
+        "description": (
+            "Describe the stable fields, metrics, dimensions, availability semantics, limits, and optional "
+            "runtime support for the session and trace query surface."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "enum": ["sessions", "standardized_trace", "native_structure", "stats"], "default": "stats"},
+                "runtime": {"type": "string", "maxLength": 120},
+            },
+            "additionalProperties": False,
+        },
+        "outputSchema": QUERY_OUTPUT_SCHEMA,
+        "annotations": READ_ONLY_ANNOTATIONS,
+    },
 ]
 
 
@@ -133,8 +276,10 @@ def jsonrpc_error(request_id, code, message, data=None):
     return {"jsonrpc": "2.0", "id": request_id, "error": error}
 
 
-def tool_error(message):
+def tool_error(message, code=None):
     payload = {"ok": False, "error": str(message)}
+    if code:
+        payload["error_code"] = str(code)
     return {
         "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
         "structuredContent": payload,
@@ -166,12 +311,47 @@ def call_tool(name, arguments):
             data = meter.application().agent_api.capabilities(
                 caller=caller_context(), **arguments
             )
+        elif name == "sessions":
+            allowed = {
+                "scope", "runtime", "client", "model", "state", "start",
+                "end", "cursor", "limit",
+            }
+            if set(arguments) - allowed:
+                raise ValueError("sessions received an unsupported argument")
+            data = meter.application().agent_api.sessions(
+                caller=caller_context(), **arguments
+            )
+        elif name == "trace":
+            allowed = {
+                "session_id", "view", "sections", "execution",
+                "event_types", "cursor", "limit",
+            }
+            if set(arguments) - allowed:
+                raise ValueError("trace received an unsupported argument")
+            data = meter.application().agent_api.trace(**arguments)
+        elif name == "stats":
+            allowed = {
+                "metrics", "group_by", "runtime", "client", "model",
+                "state", "session_id", "start", "end", "sort_by",
+                "sort_direction", "cursor", "limit",
+            }
+            if set(arguments) - allowed:
+                raise ValueError("stats received an unsupported argument")
+            data = meter.application().agent_api.stats(**arguments)
+        elif name == "schema":
+            allowed = {"subject", "runtime"}
+            if set(arguments) - allowed:
+                raise ValueError("schema received an unsupported argument")
+            data = meter.application().agent_api.schema(**arguments)
         else:
-            return tool_error(f"Unknown tool: {name}")
+            return tool_error(f"Unknown tool: {name}", "method_not_found")
     except ValueError as exc:
-        return tool_error(exc)
+        return tool_error(exc, getattr(exc, "code", "invalid_argument"))
     except Exception:
-        return tool_error("Token Meter could not build this insight. Check the local dashboard and try again.")
+        return tool_error(
+            "Token Meter could not build this insight. Check the local dashboard and try again.",
+            "internal_error",
+        )
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     return {
         "content": [{"type": "text", "text": text}],

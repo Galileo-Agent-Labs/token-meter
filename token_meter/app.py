@@ -175,6 +175,7 @@ from token_meter.runtimes.kiro import (
 )
 from token_meter.runtimes.path_cache import BoundedPathCache
 from token_meter.runtimes.registry import RuntimeRegistry
+from token_meter.mcp.service import MCPQueryService
 from token_meter.services.agent_api import AgentAPIService
 from token_meter.services.application import Application
 from token_meter.services.budgets import BudgetService
@@ -8151,6 +8152,18 @@ def application():
                 lambda **kwargs: agent_check(**kwargs),
                 lambda **kwargs: agent_usage(**kwargs),
                 lambda **kwargs: agent_capabilities(**kwargs),
+                MCPQueryService(
+                    sources=all_session_sources,
+                    find_session=lambda session_id, sources: find_session(
+                        session_id, sources=sources,
+                    ),
+                    summary=session_summary,
+                    state=cached_session_state,
+                    revision=source_revision_signature,
+                    project_key=agent_project_key,
+                    runtime_descriptors=lambda: runtime_registry().descriptors,
+                    now=time.time,
+                ),
             ),
             current_state=lambda: current_state(),
             cross_session=lambda: cross_session(),

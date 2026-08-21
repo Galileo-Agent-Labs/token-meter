@@ -76,6 +76,10 @@ class ApplicationCompositionTests(unittest.TestCase):
 
         self.assertIs(application.sessions.registry, meter.runtime_registry())
         self.assertTrue(callable(application.agent_api.check))
+        self.assertTrue(callable(application.agent_api.sessions))
+        self.assertTrue(callable(application.agent_api.trace))
+        self.assertTrue(callable(application.agent_api.stats))
+        self.assertTrue(callable(application.agent_api.schema))
         self.assertTrue(callable(application.menubar.state))
 
 

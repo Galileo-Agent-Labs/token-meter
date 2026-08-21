@@ -1,4 +1,5 @@
 import unittest
+import time
 from pathlib import Path
 
 from token_meter.contracts import EvidenceBasis, EvidenceValue, TimingEvidence
@@ -74,6 +75,34 @@ class TimingDomainTests(unittest.TestCase):
 
 
 class ToolDomainTests(unittest.TestCase):
+    def test_tool_evidence_retains_per_tool_calendar_day_totals(self):
+        first_day = int(time.mktime((2026, 8, 20, 12, 0, 0, 0, 0, -1)))
+        second_day = int(time.mktime((2026, 8, 21, 12, 0, 0, 0, 0, -1)))
+
+        evidence = summarize_tool_evidence([
+            {
+                **tool_identity("search"), "output_tokens": 120,
+                "ts": first_day, "args_fingerprint": "one", "error": False,
+            },
+            {
+                **tool_identity("search"), "output_tokens": 80,
+                "ts": second_day, "args_fingerprint": "two", "error": False,
+            },
+        ])
+
+        self.assertEqual(evidence["tools"][0]["daily"], [
+            {
+                "day": "2026-08-20", "calls": 1, "output_tokens": 120,
+                "flagged_tokens": 0, "errors": 0, "oversized_calls": 0,
+                "repeat_calls": 0,
+            },
+            {
+                "day": "2026-08-21", "calls": 1, "output_tokens": 80,
+                "flagged_tokens": 0, "errors": 0, "oversized_calls": 0,
+                "repeat_calls": 0,
+            },
+        ])
+
     def test_native_skill_evidence_is_not_inferred_from_text_or_tool_name(self):
         evidence = summarize_tool_evidence([
             {**tool_identity("Skill"), "output_tokens": 2, "skills": ["named-skill"]},

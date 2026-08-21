@@ -6693,10 +6693,46 @@ def agent_check(focus="continue", execution=None, session_id=None, caller=None):
         action = f"{action}: {recommendation['detail']}"
     selected = agent_session_summary(source)
     answer = verdict.get("detail") or recommendation.get("detail") or "Token Meter found no immediate intervention signal."
+    latest_cost = round(float(last_execution.get("cost") or 0), 4)
+    if focus == "cost":
+        if cost_available:
+            answer = (f"Estimated run cost is ${total_cost:.2f}; "
+                      f"the {selected_execution_label.lower()} cost is ${latest_cost:.2f}.")
+            action = "Review the run and latest-execution cost before approving more work."
+        else:
+            answer = "Run cost is unavailable because this trace lacks supported pricing or input-context evidence."
+            action = "Use a cost-covered trace before making a cost-based decision."
+    elif focus == "context":
+        answer = f"Current context use is {context_text}."
+        if context_pct is None:
+            action = "Confirm the model context window before making a context-pressure decision."
+        else:
+            action = f"Use the {context_text} context signal when deciding whether to continue or start fresh."
+    elif focus == "tools":
+        if tool_results_available:
+            answer = (f"This run has {tool_tokens:,} trace-observed tool-result tokens; "
+                      f"the {selected_execution_label.lower()} has {selected_tool_tokens:,}.")
+            if flagged_tokens:
+                action = (f"Review the {flagged_tokens:,} flagged tool-result tokens and narrow oversized, "
+                          "repeated, or failed results where practical.")
+            else:
+                action = "Keep tool calls scoped and request only the result fields needed for the next step."
+        else:
+            answer = "Tool-result volume is unavailable because this runtime did not expose supported result evidence."
+            action = "Use a trace with tool-result evidence before making a tool-efficiency decision."
+    elif focus == "next_phase":
+        cost_text = f"${total_cost:.2f}" if cost_available else "unavailable"
+        tools_text = f"{tool_tokens:,} tokens" if tool_results_available else "unavailable"
+        answer = (f"Next-phase readiness: context is {context_text}, estimated run cost is {cost_text}, "
+                  f"and trace-observed tool results total {tools_text}.")
+        action = "Approve the next phase only if its expected value justifies these cost, context, and tool signals."
     result = {
         "ok": True,
         "answer": answer,
-        "verdict": {key: verdict.get(key) for key in ("key", "label", "severity", "detail")},
+        "verdict": {
+            **{key: verdict.get(key) for key in ("key", "label", "severity")},
+            "detail": answer,
+        },
         "evidence": evidence,
         "recommended_action": compact_text(action, 220),
         "caveat": ("Cursor input is a local one-context-snapshot-per-execution proxy; output uses trace-visible model text. Cost applies the persisted model variant's public rate. Cache, hidden reasoning, repeated internal model-call input, and authoritative dashboard billing are excluded."
@@ -6731,6 +6767,85 @@ def agent_check(focus="continue", execution=None, session_id=None, caller=None):
     return bounded_agent_result(result)
 
 
+def agent_usage_day_keys(window, today=None):
+    today = today or datetime.date.today()
+    day_count = AGENT_USAGE_WINDOWS[window]
+    return {
+        (today - datetime.timedelta(days=offset)).isoformat()
+        for offset in range(day_count)
+    }
+
+
+def agent_usage_model_categories(session_rows, day_keys, limit=5):
+    categories = {}
+    for session in session_rows or []:
+        runtime = session.get("runtime") or source_runtime_label(session)
+        for daily in session.get("_model_daily") or []:
+            if daily.get("day") not in day_keys:
+                continue
+            model = daily.get("model") or "unknown"
+            key = (model, runtime)
+            row = categories.setdefault(key, {
+                "model": model, "runtime": runtime, "cost": 0.0,
+                "tokens": 0, "executions": 0,
+            })
+            row["cost"] += float(daily.get("cost") or 0)
+            row["tokens"] += (int(daily.get("input_tokens") or 0)
+                              + int(daily.get("output_tokens") or 0))
+            row["executions"] += int(daily.get("executions") or 0)
+    ranked = sorted(
+        categories.values(),
+        key=lambda row: (-row["cost"], -row["tokens"], row["model"], row["runtime"]),
+    )[:limit]
+    for row in ranked:
+        row["cost"] = round(row["cost"], 4)
+    return ranked
+
+
+def agent_usage_tool_categories(session_rows, day_keys, limit=5):
+    categories = {}
+    total_tokens = 0
+    flagged_tokens = 0
+    for session in session_rows or []:
+        evidence = session.get("_tool_evidence") or {}
+        total_tokens += sum(
+            int(value or 0) for day, value in (evidence.get("day_tokens") or {}).items()
+            if day in day_keys
+        )
+        flagged_tokens += sum(
+            int(value or 0) for day, value in (evidence.get("day_flagged") or {}).items()
+            if day in day_keys
+        )
+        provider = session.get("provider") or "unknown"
+        for tool in evidence.get("tools") or []:
+            name = tool.get("name") or "?"
+            namespace = tool.get("namespace") or "unknown"
+            kind = tool.get("kind") or "tool"
+            diagnostic = kind == "mcp" and (
+                namespace == "tokenmeter" or str(name).startswith("mcp__tokenmeter__")
+            )
+            if diagnostic:
+                continue
+            key = (name, namespace, "" if kind == "mcp" else provider)
+            row = categories.setdefault(key, {
+                "name": tool.get("display") or name,
+                "namespace": namespace, "returned_tokens": 0, "calls": 0,
+            })
+            daily_rows = tool.get("daily") or []
+            if isinstance(daily_rows, dict):
+                daily_rows = daily_rows.values()
+            for daily in daily_rows:
+                if daily.get("day") not in day_keys:
+                    continue
+                row["returned_tokens"] += int(daily.get("output_tokens") or 0)
+                row["calls"] += int(daily.get("calls") or 0)
+    ranked = sorted(
+        (row for row in categories.values() if row["calls"] or row["returned_tokens"]),
+        key=lambda row: (-row["returned_tokens"], -row["calls"], row["name"]),
+    )[:limit]
+    return ranked, total_tokens, flagged_tokens
+
+
 def agent_usage(window="7d", focus="changes"):
     window = str(window or "7d").strip().lower()
     focus = str(focus or "changes").strip().lower()
@@ -6740,31 +6855,21 @@ def agent_usage(window="7d", focus="changes"):
         raise ValueError(f"focus must be one of: {', '.join(sorted(AGENT_USAGE_FOCUS))}")
     cross = cross_session()
     days = sorted(cross.get("daily") or [], key=lambda row: row.get("day") or "", reverse=True)
-    today = time.strftime("%Y-%m-%d", time.localtime())
-    if window == "today":
-        selected = [row for row in days if row.get("day") == today]
-    else:
-        selected = days[:AGENT_USAGE_WINDOWS[window]]
+    day_keys = agent_usage_day_keys(window)
+    selected = [row for row in days if row.get("day") in day_keys]
     total_cost = sum(float(row.get("cost") or 0) for row in selected)
     sessions = sum(int(row.get("sessions") or 0) for row in selected)
-    tool_tokens = sum(int(row.get("tool_tokens") or 0) for row in selected)
-    flagged_tokens = sum(int(row.get("flagged_tokens") or 0) for row in selected)
     providers = defaultdict(float)
     for row in selected:
         for provider in row.get("providers") or []:
             if metric_available(provider, "cost"):
                 providers[provider.get("provider") or "unknown"] += float(provider.get("cost") or 0)
     provider_rank = sorted(providers.items(), key=lambda item: (-item[1], item[0]))[:5]
-    model_rank = [
-        {"model": row.get("model"), "cost": round(float(row.get("cost") or 0), 4), "tokens": int(row.get("tokens") or 0)}
-        for row in (cross.get("model_mix") or [])[:5]
-    ]
-    tool_rank = [
-        {"name": row.get("display") or row.get("name"), "namespace": row.get("namespace"),
-         "returned_tokens": int(row.get("output_tokens") or 0), "calls": int(row.get("calls") or 0)}
-        for row in ((cross.get("tool_waste") or {}).get("by_name") or [])
-        if not row.get("diagnostic")
-    ][:5]
+    internal_rows = list(_xsess.get("internal_rows") or ())
+    model_rank = agent_usage_model_categories(internal_rows, day_keys)
+    tool_rank, tool_tokens, flagged_tokens = agent_usage_tool_categories(
+        internal_rows, day_keys,
+    )
 
     newest = selected[0] if selected else {}
     previous = selected[1] if len(selected) > 1 else {}

@@ -222,6 +222,7 @@ def summarize_tool_evidence(calls, catalog=None):
             "oversized_calls": 0,
             "repeat_calls": 0,
             "last_ts": 0,
+            "daily": {},
         })
         row["calls"] += 1
         row["output_tokens"] += tokens
@@ -230,6 +231,18 @@ def summarize_tool_evidence(calls, catalog=None):
         row["oversized_calls"] += 1 if oversized else 0
         row["repeat_calls"] += 1 if repeated else 0
         row["last_ts"] = max(row["last_ts"], ts)
+        if day:
+            daily = row["daily"].setdefault(day, {
+                "day": day, "calls": 0, "output_tokens": 0,
+                "flagged_tokens": 0, "errors": 0, "oversized_calls": 0,
+                "repeat_calls": 0,
+            })
+            daily["calls"] += 1
+            daily["output_tokens"] += tokens
+            daily["flagged_tokens"] += tokens if flagged else 0
+            daily["errors"] += 1 if error else 0
+            daily["oversized_calls"] += 1 if oversized else 0
+            daily["repeat_calls"] += 1 if repeated else 0
 
         totals["total_calls"] += 1
         totals["total_output_tokens"] += tokens
@@ -249,6 +262,8 @@ def summarize_tool_evidence(calls, catalog=None):
             skill["activations"] += 1
             skill["last_ts"] = max(skill["last_ts"], ts)
 
+    for row in by_name.values():
+        row["daily"] = [row["daily"][day] for day in sorted(row["daily"])]
     totals["tools"] = sorted(
         by_name.values(),
         key=lambda row: (-row["output_tokens"], -row["calls"], row["name"]),

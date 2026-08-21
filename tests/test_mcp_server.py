@@ -33,6 +33,11 @@ class McpProtocolTests(unittest.TestCase):
             self.assertTrue(tool["annotations"]["readOnlyHint"])
             self.assertFalse(tool["annotations"]["destructiveHint"])
             self.assertFalse(tool["inputSchema"]["additionalProperties"])
+        capabilities = next(tool for tool in tools if tool["name"] == "capabilities")
+        self.assertEqual(
+            capabilities["inputSchema"]["properties"]["limit"],
+            {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
+        )
 
     def test_tool_calls_require_initialization(self):
         response, initialized = server.dispatch({

@@ -6241,6 +6241,48 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertEqual(latest_tools["value"], 1000)
         self.assertNotEqual(latest_tools["value"], self.state["tools"]["total_output_tokens"])
 
+    def test_cost_check_answers_the_cost_question(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(focus="cost", caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+
+        self.assertIn("$1.25", result["answer"])
+        self.assertIn("cost", result["recommended_action"].lower())
+
+    def test_context_check_answers_the_context_question(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(focus="context", caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+
+        self.assertIn("20%", result["answer"])
+        self.assertIn("context", result["recommended_action"].lower())
+
+    def test_tools_check_answers_the_tool_volume_question(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(focus="tools", caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+
+        self.assertIn("9,000", result["answer"])
+        self.assertIn("tool", result["recommended_action"].lower())
+
+    def test_next_phase_check_summarizes_all_readiness_signals(self):
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=self.state):
+            result = meter.agent_check(focus="next_phase", caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+
+        self.assertIn("20%", result["answer"])
+        self.assertIn("$1.25", result["answer"])
+        self.assertIn("9,000", result["answer"])
+        self.assertIn("next phase", result["recommended_action"].lower())
+
     def test_missing_context_percentage_is_not_described_as_zero(self):
         state = {"context": {"latest_pct": None}, "last_turn_cost": 0,
                  "insights": [], "executions": [], "ended": False}
@@ -6306,6 +6348,111 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertTrue(result["dashboard_url"].endswith("/#spend"))
         self.assertNotIn("private title", encoded)
         self.assertNotIn("/private/repo", encoded)
+
+    def test_usage_model_categories_are_scoped_to_calendar_window(self):
+        today = datetime.date.today()
+        recent = today - datetime.timedelta(days=1)
+        outside_seven_days = today - datetime.timedelta(days=7)
+        daily = [
+            {"day": today.isoformat(), "cost": 2.0, "sessions": 1,
+             "providers": [{"provider": "codex", "cost": 2.0}]},
+            {"day": recent.isoformat(), "cost": 3.0, "sessions": 1,
+             "providers": [{"provider": "codex", "cost": 3.0}]},
+            {"day": outside_seven_days.isoformat(), "cost": 5.0, "sessions": 1,
+             "providers": [{"provider": "codex", "cost": 5.0}]},
+        ]
+        internal = {
+            "id": "one", "provider": "codex", "runtime": "Codex",
+            "availability": {"cost": True, "tokens": True},
+            "_model_daily": [
+                {"model": "model-current", "day": today.isoformat(), "cost": 2.0,
+                 "input_tokens": 100, "output_tokens": 20, "executions": 1},
+                {"model": "model-week", "day": recent.isoformat(), "cost": 3.0,
+                 "input_tokens": 200, "output_tokens": 30, "executions": 1},
+                {"model": "model-fortnight", "day": outside_seven_days.isoformat(), "cost": 5.0,
+                 "input_tokens": 300, "output_tokens": 50, "executions": 1},
+            ],
+        }
+        cross = {
+            "daily": daily, "sessions": [internal],
+            "model_mix": [{"model": "all-time", "cost": 999.0, "tokens": 999999}],
+            "tool_waste": {"by_name": []},
+        }
+
+        with mock.patch.object(meter, "cross_session", return_value=cross), \
+                mock.patch.dict(meter._xsess, {"internal_rows": (internal,)}):
+            today_result = meter.agent_usage(window="today", focus="models")
+            week_result = meter.agent_usage(window="7d", focus="models")
+            fortnight_result = meter.agent_usage(window="14d", focus="models")
+
+        self.assertEqual([row["model"] for row in today_result["categories"]], ["model-current"])
+        self.assertEqual(
+            {row["model"] for row in week_result["categories"]},
+            {"model-current", "model-week"},
+        )
+        self.assertEqual(
+            {row["model"] for row in fortnight_result["categories"]},
+            {"model-current", "model-week", "model-fortnight"},
+        )
+        self.assertEqual([today_result["days_observed"], week_result["days_observed"],
+                          fortnight_result["days_observed"]], [1, 2, 3])
+
+    def test_usage_tool_categories_and_evidence_share_the_selected_window(self):
+        today = datetime.date.today()
+        recent = today - datetime.timedelta(days=1)
+        outside_seven_days = today - datetime.timedelta(days=7)
+
+        def midday(day):
+            return int(time.mktime((*day.timetuple()[:3], 12, 0, 0, 0, 0, -1)))
+
+        internal = {
+            "id": "one", "provider": "codex", "runtime": "Codex",
+            "availability": {"cost": True, "tokens": True},
+            "_tool_evidence": meter.summarize_tool_evidence([
+                {**meter.tool_identity("search"), "output_tokens": 120,
+                 "ts": midday(today), "args_fingerprint": "today", "error": False},
+                {**meter.tool_identity("fetch"), "output_tokens": 80,
+                 "ts": midday(recent), "args_fingerprint": "recent", "error": False},
+                {**meter.tool_identity("search"), "output_tokens": 500,
+                 "ts": midday(outside_seven_days), "args_fingerprint": "older", "error": False},
+            ]),
+        }
+        cross = {
+            "daily": [
+                {"day": today.isoformat(), "cost": 2.0, "sessions": 1,
+                 "providers": [{"provider": "codex", "cost": 2.0}]},
+                {"day": recent.isoformat(), "cost": 3.0, "sessions": 1,
+                 "providers": [{"provider": "codex", "cost": 3.0}]},
+                {"day": outside_seven_days.isoformat(), "cost": 5.0, "sessions": 1,
+                 "providers": [{"provider": "codex", "cost": 5.0}]},
+            ],
+            "sessions": [internal], "model_mix": [],
+            "tool_waste": {"by_name": [
+                {"name": "search", "namespace": "unknown", "output_tokens": 620, "calls": 2},
+                {"name": "fetch", "namespace": "unknown", "output_tokens": 80, "calls": 1},
+            ]},
+        }
+
+        with mock.patch.object(meter, "cross_session", return_value=cross), \
+                mock.patch.dict(meter._xsess, {"internal_rows": (internal,)}):
+            today_result = meter.agent_usage(window="today", focus="tools")
+            week_result = meter.agent_usage(window="7d", focus="tools")
+            fortnight_result = meter.agent_usage(window="14d", focus="tools")
+
+        def tool_evidence(result):
+            return next(row["value"] for row in result["evidence"]
+                        if row["label"] == "Trace-observed tool results")
+
+        self.assertEqual(today_result["categories"], [{
+            "name": "search", "namespace": "search", "returned_tokens": 120, "calls": 1,
+        }])
+        self.assertEqual(tool_evidence(today_result), 120)
+        self.assertEqual(tool_evidence(week_result), 200)
+        self.assertEqual(tool_evidence(fortnight_result), 700)
+        self.assertEqual(
+            {row["name"]: row["returned_tokens"] for row in week_result["categories"]},
+            {"search": 120, "fetch": 80},
+        )
 
     def test_capability_result_names_only_requested_evidence(self):
         cross = {"capabilities": {

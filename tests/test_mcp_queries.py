@@ -135,6 +135,7 @@ def synthetic_source_and_state(secret="SENTINEL-PRIVATE", session_id="session-1"
 
 
 def synthetic_query_service():
+    from token_meter.contracts import RuntimeDescriptor
     from token_meter.mcp.service import MCPQueryService
 
     first_source, first_state = synthetic_source_and_state(session_id="session-1")
@@ -183,7 +184,10 @@ def synthetic_query_service():
         state=lambda source: copy.deepcopy(states[source["id"]]),
         revision=lambda source: revisions[source["id"]],
         project_key=lambda value: str(value or "").lower(),
-        runtime_descriptors=lambda: (),
+        runtime_descriptors=lambda: (RuntimeDescriptor(
+            "codex", "Codex", frozenset(("sessions",)),
+            "runtime.generic", "runtime-neutral",
+        ),),
         now=lambda: 1_787_254_200.0,
     )
     service.revisions = revisions
@@ -392,6 +396,68 @@ class MCPQueryServiceTests(unittest.TestCase):
                 with self.assertRaises(MCPQueryError) as raised:
                     service.trace(**arguments)
                 self.assertEqual(raised.exception.code, code)
+
+    def test_stats_groups_complete_scope_by_runtime_and_model(self):
+        service = synthetic_query_service()
+
+        result = service.stats(
+            metrics=("session_count", "input_tokens", "cost_usd"),
+            group_by=("runtime", "model"),
+            limit=20,
+        )
+
+        self.assertEqual(len(result["groups"]), 1)
+        self.assertEqual(
+            result["groups"][0]["dimensions"],
+            {"runtime": "codex", "model": "gpt-5.6"},
+        )
+        self.assertEqual(result["groups"][0]["metrics"]["session_count"], 2)
+        self.assertEqual(result["groups"][0]["metrics"]["input_tokens"], 300)
+        self.assertAlmostEqual(result["groups"][0]["metrics"]["cost_usd"], 0.24)
+        self.assertEqual(result["totals"]["session_count"], 2)
+
+    def test_stats_preserves_measured_zero_and_paginates_groups(self):
+        service = synthetic_query_service()
+
+        result = service.stats(
+            metrics=("cache_write_tokens",),
+            group_by=("session_id",),
+            limit=1,
+        )
+
+        self.assertEqual(result["groups"][0]["metrics"]["cache_write_tokens"], 0)
+        self.assertEqual(
+            result["groups"][0]["coverage"]["cache_write_tokens"]["covered"],
+            1,
+        )
+        self.assertIsNotNone(result["page"]["next_cursor"])
+
+    def test_stats_rejects_unknown_or_mixed_grain_queries(self):
+        from token_meter.mcp.contracts import MCPQueryError
+
+        service = synthetic_query_service()
+        for arguments in (
+            {"metrics": ("unknown",)},
+            {"metrics": ("tool_calls", "input_tokens")},
+            {"metrics": ("input_tokens",), "group_by": (
+                "runtime", "model", "day", "session_id",
+            )},
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(MCPQueryError) as raised:
+                    service.stats(**arguments)
+                self.assertEqual(raised.exception.code, "invalid_argument")
+
+    def test_schema_describes_units_coverage_and_runtime(self):
+        service = synthetic_query_service()
+
+        result = service.schema(subject="stats", runtime="codex")
+
+        self.assertEqual(result["schema_version"], "1.0")
+        self.assertEqual(result["metrics"]["cost_usd"]["unit"], "USD")
+        self.assertIn("tool_name", result["dimensions"])
+        self.assertEqual(result["runtime"], "codex")
+        self.assertTrue(result["runtime_supported"])
 
 
 if __name__ == "__main__":

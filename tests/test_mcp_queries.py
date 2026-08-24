@@ -432,6 +432,76 @@ class MCPQueryServiceTests(unittest.TestCase):
         )
         self.assertIsNotNone(result["page"]["next_cursor"])
 
+    def test_stats_time_window_filters_executions_inside_matching_sessions(self):
+        service = synthetic_query_service()
+        state = service.states["session-1"]
+        earlier = copy.deepcopy(state["executions"][0])
+        earlier.update({"idx": 2, "ts": 1_787_167_610.0, "cost": 0.8})
+        earlier["tokens"]["input"] = 900
+        state["executions"].insert(0, earlier)
+
+        result = service.stats(
+            metrics=("session_count", "execution_count", "input_tokens", "cost_usd"),
+            session_id="session-1",
+            start="2026-08-20T00:00:00+00:00",
+            end="2026-08-20T23:59:59+00:00",
+        )
+
+        self.assertEqual(result["totals"]["session_count"], 1)
+        self.assertEqual(result["totals"]["execution_count"], 1)
+        self.assertEqual(result["totals"]["input_tokens"], 100)
+        self.assertAlmostEqual(result["totals"]["cost_usd"], 0.12)
+
+    def test_stats_time_window_filters_tools_by_their_execution_timestamp(self):
+        service = synthetic_query_service()
+        state = service.states["session-1"]
+        state["executions"][0]["tools"][0].pop("category", None)
+        state["tools"]["by_name"][0].pop("category", None)
+        earlier = copy.deepcopy(state["executions"][0])
+        earlier.update({"idx": 2, "ts": 1_787_167_610.0})
+        earlier["tools"][0].update({
+            "name": "old_tool", "namespace": "old", "output_tokens": 900,
+        })
+        state["executions"].insert(0, earlier)
+        state["tools"]["by_name"].append({
+            "name": "old_tool", "namespace": "old", "category": "old",
+            "calls": 1, "output_tokens": 900, "errors": 0,
+        })
+
+        result = service.stats(
+            metrics=("tool_calls", "tool_result_tokens"),
+            group_by=("tool_category", "tool_name"),
+            session_id="session-1",
+            start="2026-08-20T00:00:00+00:00",
+            end="2026-08-20T23:59:59+00:00",
+        )
+
+        self.assertEqual(result["totals"]["tool_calls"], 1)
+        self.assertEqual(result["totals"]["tool_result_tokens"], 400)
+        self.assertEqual(result["groups"][0]["dimensions"], {
+            "tool_category": "shell", "tool_name": "exec_command",
+        })
+
+    def test_stats_model_filter_applies_to_execution_records(self):
+        service = synthetic_query_service()
+        state = service.states["session-1"]
+        alternate = copy.deepcopy(state["executions"][0])
+        alternate.update({"idx": 2, "model": "gpt-5.4", "cost": 0.08})
+        alternate["tokens"]["input"] = 80
+        state["executions"].append(alternate)
+
+        result = service.stats(
+            metrics=("execution_count", "input_tokens", "cost_usd"),
+            group_by=("model",),
+            session_id="session-1",
+            model="gpt-5.4",
+        )
+
+        self.assertEqual(result["totals"]["execution_count"], 1)
+        self.assertEqual(result["totals"]["input_tokens"], 80)
+        self.assertAlmostEqual(result["totals"]["cost_usd"], 0.08)
+        self.assertEqual(result["groups"][0]["dimensions"]["model"], "gpt-5.4")
+
     def test_stats_rejects_unknown_or_mixed_grain_queries(self):
         from token_meter.mcp.contracts import MCPQueryError
 

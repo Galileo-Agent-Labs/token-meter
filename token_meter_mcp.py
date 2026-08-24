@@ -210,7 +210,8 @@ TOOLS = [
         "description": (
             "Aggregate comparable token, cost, timing, context, attempt, model-call, and tool evidence across "
             "sessions. Query tool metrics separately from execution or session metrics. Every metric includes "
-            "coverage so measured zero remains distinct from unavailable evidence."
+            "coverage so measured zero remains distinct from unavailable evidence. Start and end scope execution "
+            "and tool records by their execution timestamps."
         ),
         "inputSchema": {
             "type": "object",
@@ -229,8 +230,14 @@ TOOLS = [
                 "model": {"type": "string", "maxLength": 160},
                 "state": {"type": "string", "enum": ["current", "completed", "historical"]},
                 "session_id": {"type": "string", "maxLength": 240},
-                "start": {"type": "string", "maxLength": 64},
-                "end": {"type": "string", "maxLength": 64},
+                "start": {
+                    "type": "string", "maxLength": 64,
+                    "description": "Inclusive ISO-8601 execution timestamp; records without a timestamp are excluded.",
+                },
+                "end": {
+                    "type": "string", "maxLength": 64,
+                    "description": "Inclusive ISO-8601 execution timestamp; records without a timestamp are excluded.",
+                },
                 "sort_by": {"type": "string", "enum": STATS_METRICS},
                 "sort_direction": {"type": "string", "enum": ["asc", "desc"], "default": "desc"},
                 "cursor": {"type": "string", "maxLength": 2048},

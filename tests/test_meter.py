@@ -3405,6 +3405,70 @@ console.log(JSON.stringify([
             {"summary": "3 models selected", "button": "Save 3 models", "disabled": False},
         ])
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_settings_polling_pauses_while_the_user_is_selecting_or_editing(self):
+        functions = []
+        for name in ("settingsInteractionActive", "renderSettings"):
+            match = re.search(
+                rf"^function {name}\(.*?^\}}\n",
+                self.page,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        script = """
+let settingsPointerActive=false;
+const view={contains:node=>Boolean(node?.insideSettings)};
+const field={insideSettings:true,matches:selector=>selector.includes('input')};
+const outside={insideSettings:false,matches:()=>false};
+let activeElement=outside;
+let selection={isCollapsed:true,rangeCount:0,anchorNode:null,focusNode:null};
+const document={get activeElement(){return activeElement;}};
+const window={getSelection:()=>selection};
+const $=id=>id==='view-settings'?view:null;
+let calls=[];
+const renderBudgets=()=>calls.push('budgets');
+const renderFrustrationSettings=()=>calls.push('signals');
+const renderModelPricing=()=>calls.push('pricing');
+""" + "\n".join(functions) + """
+const xs={language_signals:{},model_pricing:{}};
+activeElement=field;
+const focused=settingsInteractionActive();
+renderSettings(xs);
+const focusedCalls=[...calls];
+calls=[];
+activeElement=outside;
+selection={isCollapsed:false,rangeCount:1,anchorNode:{insideSettings:true},focusNode:{insideSettings:true}};
+const selected=settingsInteractionActive();
+renderSettings(xs);
+const selectedCalls=[...calls];
+calls=[];
+selection={isCollapsed:true,rangeCount:0,anchorNode:null,focusNode:null};
+settingsPointerActive=true;
+const dragging=settingsInteractionActive();
+renderSettings(xs);
+const draggingCalls=[...calls];
+calls=[];
+settingsPointerActive=false;
+selection={isCollapsed:true,rangeCount:1,anchorNode:{insideSettings:true},focusNode:{insideSettings:true}};
+const idle=settingsInteractionActive();
+renderSettings(xs);
+console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging,draggingCalls,idle,idleCalls:calls}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "focused": True,
+            "focusedCalls": [],
+            "selected": True,
+            "selectedCalls": [],
+            "dragging": True,
+            "draggingCalls": [],
+            "idle": False,
+            "idleCalls": ["budgets", "signals", "pricing"],
+        })
+
     def test_execution_overview_separates_activity_from_removable_optimization(self):
         for marker in ("id=ov-activity-tools", "id=ov-optional-use", "id=ov-unused-packs"):
             self.assertIn(marker, self.page)
@@ -6220,7 +6284,8 @@ class AgentDataContractTests(unittest.TestCase):
             })
         encoded = json.dumps(result)
         self.assertTrue(result["ok"])
-        self.assertEqual(result["selected_session"]["project"], "repository")
+        self.assertNotIn("project", result["selected_session"])
+        self.assertNotIn("repository", encoded)
         self.assertEqual(result["data_scope"], "matched_current_run")
         self.assertNotIn("private prompt", encoded)
         self.assertNotIn("private args", encoded)

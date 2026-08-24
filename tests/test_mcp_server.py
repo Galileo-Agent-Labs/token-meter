@@ -51,6 +51,11 @@ class McpProtocolTests(unittest.TestCase):
             tool for tool in listed["result"]["tools"] if tool["name"] == "stats"
         )
         self.assertIn("query tool metrics separately", stats["description"].lower())
+        for field in ("start", "end"):
+            self.assertIn(
+                "execution timestamp",
+                stats["inputSchema"]["properties"][field]["description"].lower(),
+            )
 
     def test_tool_calls_require_initialization(self):
         response, initialized = server.dispatch({

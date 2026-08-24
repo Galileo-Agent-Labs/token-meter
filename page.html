@@ -2385,8 +2385,21 @@ function renderBudgets(xs){
  paintBudgetSettings(settings);
  observeBudgetThresholds(status);
 }
+let settingsPointerActive=false;
+const settingsView=$('view-settings');
+settingsView.addEventListener('pointerdown',()=>{settingsPointerActive=true;});
+window.addEventListener('pointerup',()=>{settingsPointerActive=false;});
+window.addEventListener('pointercancel',()=>{settingsPointerActive=false;});
+function settingsInteractionActive(){
+ const root=$('view-settings'),active=document.activeElement,selection=window.getSelection?.();
+ const editing=active&&root.contains(active)&&active.matches('input,textarea,select,[contenteditable=true]');
+ const selecting=selection&&!selection.isCollapsed&&selection.rangeCount&&(
+  (selection.anchorNode&&root.contains(selection.anchorNode))||(selection.focusNode&&root.contains(selection.focusNode))
+ );
+ return settingsPointerActive||Boolean(editing)||Boolean(selecting);
+}
 function renderSettings(xs){
- if(!xs)return;
+ if(!xs||settingsInteractionActive())return;
  renderBudgets(xs);
  renderFrustrationSettings(xs.language_signals);
  renderModelPricing(xs.model_pricing);

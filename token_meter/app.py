@@ -6529,7 +6529,6 @@ def agent_session_summary(source):
         "id": source.get("id"),
         "provider": source.get("provider"),
         "client": source.get("client") or source.get("provider"),
-        "project": agent_project_name(source.get("project")),
     }
 
 

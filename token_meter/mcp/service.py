@@ -15,6 +15,8 @@ from token_meter.mcp.contracts import (
 from token_meter.mcp.projections import (
     ALL_TRACE_SECTIONS,
     native_structure_projection,
+    safe_identity,
+    safe_number,
     session_projection,
     standardized_trace_projection,
 )
@@ -193,6 +195,7 @@ def _execution_records(source, state):
         counts = execution.get("counts") or {}
         record = {
             "session_id": session.get("id"),
+            "timestamp": execution.get("timestamp"),
             "dimensions": _record_dimensions(
                 session, execution.get("model"), execution.get("timestamp"),
             ),
@@ -219,6 +222,7 @@ def _execution_records(source, state):
     if not rows:
         rows.append({
             "session_id": session.get("id"),
+            "timestamp": None,
             "dimensions": _record_dimensions(session),
             "metrics": {
                 "execution_count": 0,
@@ -233,25 +237,82 @@ def _tool_records(source, state):
     projection = standardized_trace_projection(
         source,
         state,
-        ("session", "tools", "context"),
+        ("session", "context"),
         None,
         (),
     )
     session = projection.get("session") or {}
     context = projection.get("context") or {}
     rows = []
-    for tool in projection.get("tools") or []:
-        rows.append({
-            "session_id": session.get("id"),
-            "dimensions": _record_dimensions(session, tool=tool),
-            "metrics": {
-                "tool_calls": tool.get("calls"),
-                "tool_result_tokens": tool.get("output_tokens"),
-                "context_latest": context.get("latest"),
-                "context_peak": context.get("peak"),
-            },
-        })
+    for execution in state.get("executions") or []:
+        if not isinstance(execution, dict):
+            continue
+        timestamp = safe_number(execution.get("ts"))
+        model = safe_identity(execution.get("model"), 160) or None
+        for tool in execution.get("tools") or []:
+            if not isinstance(tool, dict):
+                continue
+            name = safe_identity(tool.get("name"))
+            if not name:
+                continue
+            namespace = safe_identity(tool.get("namespace")) or None
+            category = safe_identity(
+                tool.get("category") or namespace or tool.get("kind")
+            ) or None
+            rows.append({
+                "session_id": session.get("id"),
+                "timestamp": timestamp,
+                "dimensions": _record_dimensions(
+                    session,
+                    model,
+                    timestamp,
+                    tool={"name": name, "category": category},
+                ),
+                "metrics": {
+                    "tool_calls": 1,
+                    "tool_result_tokens": safe_number(
+                        tool.get("output_tokens"), integer=True,
+                    ),
+                    "context_latest": context.get("latest"),
+                    "context_peak": context.get("peak"),
+                },
+            })
+    if not rows:
+        aggregate = standardized_trace_projection(
+            source, state, ("tools",), None, (),
+        )
+        for tool in aggregate.get("tools") or []:
+            category = tool.get("category") or tool.get("namespace")
+            rows.append({
+                "session_id": session.get("id"),
+                "timestamp": None,
+                "dimensions": _record_dimensions(
+                    session, tool={**tool, "category": category},
+                ),
+                "metrics": {
+                    "tool_calls": tool.get("calls"),
+                    "tool_result_tokens": tool.get("output_tokens"),
+                    "context_latest": context.get("latest"),
+                    "context_peak": context.get("peak"),
+                },
+            })
     return rows, projection
+
+
+def _record_matches_filters(record, filters):
+    dimensions = record.get("dimensions") or {}
+    if filters["model"] and dimensions.get("model") != filters["model"]:
+        return False
+    timestamp = record.get("timestamp")
+    if filters["start"] is not None and (
+        timestamp is None or timestamp < filters["start"]
+    ):
+        return False
+    if filters["end"] is not None and (
+        timestamp is None or timestamp > filters["end"]
+    ):
+        return False
+    return True
 
 
 def _aggregate_records(records, metrics, group_by):
@@ -491,20 +552,8 @@ class MCPQueryService:
                 continue
             summary = self._summary(source) or {}
             listed = session_projection(source, summary, self._now())
-            if filters["model"] and listed.get("model") != filters["model"]:
-                continue
             if filters["state"] and listed.get("state") != filters["state"]:
                 continue
-            activity = listed.get("last_activity_at")
-            if filters["start"] is not None and (
-                activity is None or activity < filters["start"]
-            ):
-                continue
-            if filters["end"] is not None and (
-                activity is None or activity > filters["end"]
-            ):
-                continue
-            matched_sources.append(source)
             detailed = self._state(source)
             if detailed:
                 source_records, _projection = (
@@ -512,13 +561,28 @@ class MCPQueryService:
                     if grain == "tool"
                     else _execution_records(source, detailed)
                 )
-                records.extend(source_records)
+                source_records = [
+                    record for record in source_records
+                    if _record_matches_filters(record, filters)
+                ]
             elif grain == "execution":
-                records.append({
+                source_records = [{
                     "session_id": listed.get("id"),
-                    "dimensions": _record_dimensions(listed),
+                    "timestamp": listed.get("last_activity_at"),
+                    "dimensions": _record_dimensions(
+                        listed, timestamp=listed.get("last_activity_at"),
+                    ),
                     "metrics": {"execution_count": None},
-                })
+                }]
+                source_records = [
+                    record for record in source_records
+                    if _record_matches_filters(record, filters)
+                ]
+            else:
+                source_records = []
+            if source_records:
+                matched_sources.append(source)
+                records.extend(source_records)
         groups = _aggregate_records(records, metrics, group_by)
         totals_rows = _aggregate_records(records, metrics, ())
         if totals_rows:

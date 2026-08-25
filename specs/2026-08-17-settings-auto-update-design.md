@@ -15,7 +15,8 @@ release channel. It will check every ten minutes, optionally install a clean
 fast-forward update without dashboard interaction, and surface an available or
 failed update in the native menu. The Settings cleanup will normalize section
 hierarchy, remove repetitive guidance, clarify model-pricing provenance and
-scope, and eliminate the reported narrow-width pricing overflow.
+scope, and keep the pricing surface usable at the supported 1024-pixel laptop
+target.
 
 ## User Experience
 
@@ -97,10 +98,10 @@ used. Repeated Save buttons are removed from built-in rows. **Restore default**
 appears only for a model with a custom override and uses the selected effective
 scope. Adding a new custom model remains a separate explicit action.
 
-At narrow widths, each model becomes a stacked pricing card with its model and
-provider first, a two-column field grid, and any contextual action below. The
-page must not overflow horizontally, and every action must remain reachable by
-keyboard and touch.
+Throughout the supported desktop range, each model remains in the pricing
+table. At the 1024-pixel laptop target, the model, provider, price fields, and
+contextual actions must remain visible without page-level horizontal overflow,
+and every action must remain reachable by keyboard and pointer.
 
 ### Language signals
 
@@ -180,7 +181,7 @@ invalidation happen once after a successful batch.
 - Model-pricing validation names the invalid model and field without exposing
   settings paths or unrelated values.
 
-## Accessibility and Responsive Behavior
+## Accessibility and Desktop Layout
 
 Both update preferences use native checkboxes with visible labels and concise
 supporting text. Dependency changes are announced through the existing status
@@ -189,8 +190,8 @@ or color.
 
 Settings headings retain a logical hierarchy. Links and buttons have visible
 focus states. Language-signal counts are associated with their textareas.
-Responsive checks cover wide desktop, laptop, and narrow mobile widths; the
-Settings page and pricing controls must have no page-level horizontal overflow.
+Layout checks cover wide-desktop and 1024-pixel-laptop widths; the Settings
+page and pricing controls must have no page-level horizontal overflow.
 
 ## Explicit Non-Goals
 
@@ -218,14 +219,15 @@ Implementation starts with failing regression tests for:
   contextual language-signal counts, and absence of the rejected bottom card;
 - batched pricing validation and atomic persistence;
 - official pricing-source metadata and every evidence-backed catalog change;
-- model-pricing scope vocabulary and narrow-width layout contracts.
+- model-pricing scope vocabulary and desktop/laptop layout contracts.
 
 The completed change runs the full Python suite, embedded JavaScript parse,
 Python compilation, shell checks, Swift compilation and deterministic native
-smoke, and `git diff --check`. Browser verification covers wide, laptop, and
-narrow widths with no console or overflow errors. The final source is installed
-with `./scripts/install`, then `/health`, `/menubar`, both LaunchAgents,
-automatic startup, live menu behavior, and source/runtime parity are verified.
+smoke, and `git diff --check`. Browser verification covers wide-desktop and
+1024-pixel-laptop widths with no console or overflow errors. The final source
+is installed with `./scripts/install`, then `/health`, `/menubar`, both
+LaunchAgents, automatic startup, live menu behavior, and source/runtime parity
+are verified.
 
 ## References
 

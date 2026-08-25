@@ -9,7 +9,9 @@ principles only.
 ## Platform
 
 Local browser dashboard on macOS, Linux, and Windows, with platform-native
-menu-bar, tray, or notification-area companions.
+menu-bar, tray, or notification-area companions. The browser dashboard is a
+desktop product designed and verified for viewports of 1024 CSS pixels and
+wider. Phone and tablet layouts are not supported product targets.
 
 ## Users
 

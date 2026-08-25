@@ -79,7 +79,7 @@ Token Meter reads local agent traces, calculates clearly labeled usage estimates
 - Keep the complete machine-wide monthly budget dashboard and controls inside Settings. The native companion may deep-link to `#settings-budgets`; preserve `#budgets` as a compatibility redirect.
 - Use macOS labels such as `⌥`, never `Alt`, in user-facing copy.
 - Do not add a top-level dashboard view when an existing workflow can contain the complete capability, unless the approved design explicitly calls for one.
-- Visible dashboard changes require embedded-JS validation and browser checks at wide, laptop, and narrow widths.
+- Visible dashboard changes require embedded-JS validation and browser checks at wide-desktop and 1024-pixel-laptop widths. Phone, tablet, and sub-1024-pixel layouts are outside the supported product target.
 - Native changes require Swift compilation, smoke output, and a live menu-bar check.
 - Source-only success is insufficient: run `./scripts/install`, verify `/health` and `/menubar`, and confirm staged runtime parity.
 - Do not patch only `~/Library/Application Support/Token Meter/runtime`; change source, reinstall, then verify.

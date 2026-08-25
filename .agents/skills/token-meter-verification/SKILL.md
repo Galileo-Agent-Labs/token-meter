@@ -19,7 +19,7 @@ affect:
 | Surface | Evidence |
 |---|---|
 | Python and contracts | Focused tests, full suite when proportionate, and `py_compile` |
-| Dashboard | Embedded-JavaScript parse plus live wide, laptop, and narrow interaction checks |
+| Dashboard | Embedded-JavaScript parse plus live wide-desktop and 1024-pixel-laptop interaction checks |
 | Native menu | Swift compile, deterministic smoke output, and live menu behavior |
 | Packaging | Installer syntax, manifest coverage, installed-runtime revision, and source/runtime parity |
 | HTTP behavior | `/health`, relevant endpoint payloads, cache/privacy boundaries, and failure states |

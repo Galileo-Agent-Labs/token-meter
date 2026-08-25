@@ -455,7 +455,7 @@ Example:
 }
 ```
 
-The catalog is presentation metadata, not arbitrary HTML, CSS, image URLs, shell commands, or executable configuration. Existing client mappings remain as compatibility fallbacks until metadata-driven rendering is proven at wide, laptop, narrow, and native-tray sizes.
+The catalog is presentation metadata, not arbitrary HTML, CSS, image URLs, shell commands, or executable configuration. Existing client mappings remain as compatibility fallbacks until metadata-driven rendering is proven at wide-desktop, 1024-pixel-laptop, and native-tray sizes.
 
 ## 8. OpenTelemetry boundary
 
@@ -630,7 +630,7 @@ Use runtime-neutral normalized fixtures to test usage, timing, tools, insights, 
 - generic icon/color fallback;
 - capabilities hide unsupported actions;
 - legacy routes and stored preferences;
-- wide, laptop, and narrow browser checks;
+- wide-desktop and 1024-pixel-laptop browser checks;
 - native menu behavior with mixed runtime sessions.
 
 ### Telemetry tests

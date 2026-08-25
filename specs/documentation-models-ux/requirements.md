@@ -156,11 +156,12 @@ THE change SHALL preserve current hash routes, project/model selections,
 metric selections, and all model aggregation/API contracts outside the explicit
 history-window additions.
 
-### NFR-003: Responsive and accessible UI
+### NFR-003: Desktop and accessible UI
 
-THE new filter options and simplified tooltip SHALL remain usable at wide,
-laptop, and narrow dashboard widths, with no new horizontal overflow or browser
-console errors.
+THE new filter options and simplified tooltip SHALL remain usable at
+wide-desktop and 1024-pixel-laptop dashboard widths, with no new horizontal
+overflow or browser console errors. Phone, tablet, and sub-1024-pixel layouts
+are outside the supported product target.
 
 THE scale buttons and history selector SHALL retain accessible labels and
 selected-state semantics.

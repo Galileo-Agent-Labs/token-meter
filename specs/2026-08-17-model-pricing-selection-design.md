@@ -72,11 +72,12 @@ appearance, and the existing scope-specific success message remains visible.
 If saving fails, selection and entered values remain so the user can correct
 the problem or retry.
 
-## Responsive and Accessible Behavior
+## Desktop and Accessible Behavior
 
-At narrow widths, the selection checkbox and model ID form the top of each
-price card. Provider and price fields follow below; there is no empty action
-region. The page must retain zero horizontal overflow at 390 pixels.
+The pricing surface retains its table layout throughout the supported desktop
+range. At the 1024-pixel laptop target, every selection control, model ID,
+provider, price field, and contextual lifecycle action remains visible without
+page-level horizontal overflow.
 
 Each checkbox has a model-specific accessible name such as **Select gpt-5.6
 for price update**. Selection is communicated by checkbox state, text count,
@@ -113,6 +114,6 @@ tests must remain green.
 
 Browser QA will cover selection, exclusion, date scope, save enablement,
 contextual restore/remove placement, keyboard focus, and zero horizontal
-overflow at wide desktop, 1024-pixel laptop, and 390-pixel mobile widths. The
+overflow at wide-desktop and 1024-pixel-laptop widths. The
 exact committed source will then be installed and checked for service health,
 native operation, and source/runtime parity.

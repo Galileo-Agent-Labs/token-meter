@@ -182,9 +182,9 @@ semantics.
 After focused green tests, run the complete repository suite and static checks.
 Install the exact checkout, verify `/health`, `/menubar`, both LaunchAgents,
 loopback listener ownership, installed revision, and manifest parity. Exercise
-Sessions and Models in a browser at wide, laptop, and narrow widths, including
-Today, Yesterday, old stored scale migration, tooltip hover, empty exact-day
-state, and console output.
+Sessions and Models in a browser at wide-desktop and 1024-pixel-laptop widths,
+including Today, Yesterday, old stored scale migration, tooltip hover, empty
+exact-day state, and console output.
 
 ## Decisions
 
@@ -288,5 +288,5 @@ table and KPI cards.
 | REQ-MODELS-002 | Model trends hover card | focused tooltip contract and hover checks |
 | NFR-001 | Data flow and invariants | existing privacy/contracts suite |
 | NFR-002 | Data flow and invariants | full regression suite |
-| NFR-003 | UI design | wide/laptop/narrow browser validation |
+| NFR-003 | UI design | wide-desktop/1024-pixel-laptop browser validation |
 | NFR-004 | Test strategy | repository validation and installed parity |

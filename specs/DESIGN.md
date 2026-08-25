@@ -98,6 +98,11 @@ This document owns visual language and interaction design. For runtime,
 platform, data-flow, packaging, and privacy boundaries, see
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+The browser dashboard is designed for desktop and laptop viewports of 1024 CSS
+pixels and wider. Phone, tablet, and sub-1024-pixel layouts are outside the
+supported product and design target. Existing small-screen behavior is graceful
+degradation only and does not create a mobile design or QA requirement.
+
 ## Overview
 
 **Creative North Star: "Spectrum Instrument Field"**
@@ -159,8 +164,8 @@ The palette is one cool Token Meter system. Cyan-to-sky is the common action and
 
 ### Hierarchy
 
-- **Spectrum Display** (610, fluid 36–54px, 0.98): The route title or selected Sessions task name in the shared spectrum field header; it falls to 30px on narrow screens.
-- **Sessions Title** (610, 22px, 1.2): Task names on session instruments; narrow cards use 19px and clamp to two lines.
+- **Spectrum Display** (610, fluid 36–54px, 0.98): The route title or selected Sessions task name in the shared spectrum field header.
+- **Sessions Title** (610, 22px, 1.2): Task names on session instruments; long titles clamp to two lines.
 - **Body** (400, 14px, 1.5): Global interface copy, explanations, and supporting evidence.
 - **Data** (720, 18px, 1.15): Cost, context, speed, and related numeric readouts; use tabular numerals.
 - **Label** (780, 11px, 0.04em): Compact measurement labels and status metadata, usually uppercase only when the label is functional.
@@ -175,9 +180,9 @@ The palette is one cool Token Meter system. Cyan-to-sky is the common action and
 
 The global dashboard pairs a centered content field of up to 1320px with a sticky 184px left navigation rail. The outer shell expands to preserve the content field rather than subtracting the rail from it. Its default rhythm is built from 8px, 12px, 16px, and 24px intervals. Each top-level route opens with the same responsive spectrum field header; route-specific controls can occupy its trailing edge.
 
-Sessions opens with one layered spectrum field header, then a two-column instrument grid with a 12px gap. At 700px and below the grid becomes one column. On detail, the working chart and decision instrument form an asymmetric two-column layout; it narrows at 1120px and becomes a single column at 900px. Supporting KPIs form an attached ledger: three columns below 1120px and two columns below 520px.
+Sessions opens with one layered spectrum field header, then a two-column instrument grid with a 12px gap. On detail, the working chart and decision instrument form an asymmetric two-column layout that tightens at the 1024-pixel laptop target. Supporting KPIs form an attached ledger with three columns at that laptop target.
 
-The rail keeps frequent monitoring routes near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At intermediate widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. At 760px and below the two navigation groups merge into one sticky, horizontally scrollable top strip so the working content keeps the full viewport width. At 520px, shared header padding tightens, the spectrum geometry scales down, and trailing controls stack below the title. In Sessions, task titles clamp to two lines, the metric ledger wraps its third readout across the full width, and route-local tabs scroll horizontally.
+The rail keeps frequent monitoring routes near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At laptop widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. The supported desktop shell does not convert into mobile top navigation.
 
 ### Named Rules
 
@@ -225,7 +230,7 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 - **Background:** Shared cards use cool near-black gradients with restrained cyan and violet radial light. Sessions cards tune the same recipe for live-run emphasis.
 - **Shadow Strategy:** Both global surfaces and Sessions cards use the dashboard shadow vocabulary; Sessions hover strengthens the lift.
 - **Border:** One-pixel low-contrast borders globally; Sessions uses a low-opacity cyan border without a provider rail.
-- **Internal Padding:** Global panels commonly use 16px. Session cards use 19px 20px 16px at wide widths and 16px 15px 13px at narrow widths.
+- **Internal Padding:** Global panels commonly use 16px. Session cards use 19px 20px 16px throughout the supported desktop range.
 
 ### Inputs / Fields
 
@@ -235,9 +240,9 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 
 ### Navigation
 
-Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Spend, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide widths, contracts to icons at intermediate widths, and becomes a horizontally scrollable top strip at narrow widths; destinations never wrap or disappear.
+Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Spend, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide desktop widths and contracts to icons at laptop widths; destinations remain available through the persistent rail.
 
-The brand lockup pairs Splunk's unmodified white corporate wordmark with the Token Meter product name. At the intermediate icon-only rail width, the wordmark remains visible and the product-name text hides; the full lockup returns in the mobile top strip.
+The brand lockup pairs Splunk's unmodified white corporate wordmark with the Token Meter product name. At the laptop icon-only rail width, the wordmark remains visible and the product-name text hides.
 
 ### Spend Evidence Field
 
@@ -267,7 +272,7 @@ The detail-side instrument pairs live state and estimated cost with context pres
 - **Do** lead Sessions with the task name and the three decision readouts: cost, context, and speed.
 - **Do** use layered radial, linear, and conic gradients with restrained violet and orange accents across the dashboard.
 - **Do** preserve semantic and provider colors as small, factual signals.
-- **Do** collapse grids and remove nonessential decoration at the implemented 900px, 700px, and 520px breakpoints.
+- **Do** verify wide desktop and 1024-pixel laptop layouts without page-level overflow, clipped controls, or hidden navigation.
 - **Do** disable decorative motion under `prefers-reduced-motion` and retain visible keyboard focus.
 
 ### Don't:

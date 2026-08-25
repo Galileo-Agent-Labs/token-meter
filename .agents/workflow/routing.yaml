@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "coordinator": {
+    "owner": "primary-agent",
+    "specialist_delegation_depth": 1,
+    "default_execution": "direct",
+    "authoritative_state_owner": true
+  },
+  "task_classes": {
+    "direct-response": {
+      "skill": "token-meter-intake",
+      "route": ["coordinator"],
+      "external_write_requires_approval": true
+    },
+    "triage": {
+      "skill": "token-meter-intake",
+      "route": ["coordinator"],
+      "output": "acceptance-criteria-and-route"
+    },
+    "diagnosis-only": {
+      "skill": "token-meter-development",
+      "route": ["developer", "coordinator"],
+      "writer": null,
+      "implementation_authorized": false
+    },
+    "bounded-code-change": {
+      "skill": "token-meter-development",
+      "route": ["developer", "tester+reviewer", "coordinator", "github-operator"],
+      "writer": "developer",
+      "parallel_read_only_step": ["tester", "reviewer"],
+      "invalidate_evidence_on_tracked_change": true
+    },
+    "architectural-change": {
+      "skill": "token-meter-development",
+      "route": ["approved-design", "approved-plan", "developer", "tester+reviewer", "coordinator", "github-operator"],
+      "writer": "developer",
+      "parallel_read_only_step": ["tester", "reviewer"],
+      "invalidate_evidence_on_tracked_change": true
+    },
+    "verification-only": {
+      "skill": "token-meter-verification",
+      "route": ["tester", "coordinator"],
+      "writer": null
+    },
+    "review-only": {
+      "skill": "token-meter-review",
+      "route": ["reviewer", "coordinator"],
+      "writer": null
+    },
+    "external-review-feedback": {
+      "skill": "token-meter-review",
+      "route": ["reviewer", "coordinator", "developer-if-accepted", "tester+reviewer"],
+      "verify_before_fix": true,
+      "invalidate_evidence_on_tracked_change": true
+    },
+    "documentation-only": {
+      "skill": "token-meter-development",
+      "route": ["coordinator-or-developer", "proportionate-review"],
+      "writer": "assigned-single-writer"
+    },
+    "github-operation": {
+      "skill": "token-meter-github-ops",
+      "route": ["coordinator", "github-operator"],
+      "external_write_requires_approval": true,
+      "recheck_readiness_before_action": true
+    }
+  },
+  "risk_overrides": [
+    "privacy-boundary",
+    "pricing-semantics",
+    "provider-parsing",
+    "deletion",
+    "persistence",
+    "installer-or-staged-runtime",
+    "native-menu",
+    "cross-platform",
+    "shared-helper"
+  ],
+  "states": [
+    "intake",
+    "accepted",
+    "developing",
+    "verifying-and-reviewing",
+    "fix-required",
+    "ready-to-merge",
+    "closed",
+    "blocked"
+  ],
+  "transitions": {
+    "intake": ["accepted", "blocked", "closed"],
+    "accepted": ["developing", "verifying-and-reviewing", "blocked", "closed"],
+    "developing": ["verifying-and-reviewing", "blocked"],
+    "verifying-and-reviewing": ["fix-required", "ready-to-merge", "blocked"],
+    "fix-required": ["developing", "blocked"],
+    "ready-to-merge": ["closed", "blocked"],
+    "blocked": ["accepted", "developing", "verifying-and-reviewing", "closed"],
+    "closed": []
+  },
+  "task_envelope_required": [
+    "objective",
+    "mode",
+    "acceptance_criteria",
+    "scope",
+    "non_goals",
+    "risk_lenses",
+    "allowed_actions",
+    "worktree",
+    "base_commit",
+    "head_commit",
+    "required_output",
+    "escalation_conditions"
+  ],
+  "worker_result_required": [
+    "status",
+    "head_commit",
+    "evidence",
+    "findings",
+    "unverified",
+    "blockers",
+    "recommended_next_state"
+  ]
+}

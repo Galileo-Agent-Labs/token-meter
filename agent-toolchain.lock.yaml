@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "supported_hosts": ["codex", "claude", "opencode", "pi"],
+  "project_skills": [
+    {
+      "name": "token-meter-intake",
+      "description": "Use when a Token Meter Slack or GitHub request needs contextual intake, clarification, triage, acknowledgment, or closure.",
+      "path": ".agents/skills/token-meter-intake/SKILL.md"
+    },
+    {
+      "name": "token-meter-development",
+      "description": "Use when a Token Meter issue or approved feature needs diagnosis or implementation in the repository.",
+      "path": ".agents/skills/token-meter-development/SKILL.md"
+    },
+    {
+      "name": "token-meter-verification",
+      "description": "Use when Token Meter changes or claims need independent source, test, runtime, native, browser, privacy, or platform verification.",
+      "path": ".agents/skills/token-meter-verification/SKILL.md"
+    },
+    {
+      "name": "token-meter-review",
+      "description": "Use when a Token Meter change needs independent requirements, correctness, regression, privacy, or cross-surface review.",
+      "path": ".agents/skills/token-meter-review/SKILL.md"
+    },
+    {
+      "name": "token-meter-github-ops",
+      "description": "Use when Token Meter GitHub issues, pull requests, review requests, checks, comments, merges, or closure need to be managed.",
+      "path": ".agents/skills/token-meter-github-ops/SKILL.md"
+    }
+  ],
+  "roles": [
+    {
+      "name": "developer",
+      "skill": "token-meter-development",
+      "source": ".agents/roles/developer.md",
+      "write_mode": "single-writer",
+      "codex_adapter": ".codex/agents/token-meter-developer.toml",
+      "claude_adapter": ".claude/agents/token-meter-developer.md"
+    },
+    {
+      "name": "tester",
+      "skill": "token-meter-verification",
+      "source": ".agents/roles/tester.md",
+      "write_mode": "no-tracked-writes",
+      "codex_adapter": ".codex/agents/token-meter-tester.toml",
+      "claude_adapter": ".claude/agents/token-meter-tester.md"
+    },
+    {
+      "name": "reviewer",
+      "skill": "token-meter-review",
+      "source": ".agents/roles/reviewer.md",
+      "write_mode": "read-only",
+      "codex_adapter": ".codex/agents/token-meter-reviewer.toml",
+      "claude_adapter": ".claude/agents/token-meter-reviewer.md"
+    },
+    {
+      "name": "github-operator",
+      "skill": "token-meter-github-ops",
+      "source": ".agents/roles/github-operator.md",
+      "write_mode": "external-write-with-approval",
+      "codex_adapter": ".codex/agents/token-meter-github-operator.toml",
+      "claude_adapter": ".claude/agents/token-meter-github-operator.md"
+    }
+  ],
+  "workflow": {
+    "routing": ".agents/workflow/routing.yaml",
+    "review_policy": ".agents/workflow/review-policy.yaml",
+    "handoff_schema": ".agents/workflow/handoff.schema.json",
+    "handoff_template": "specs/agent-workflow/HANDOFF.md",
+    "review_contract": "specs/agent-workflow/REVIEW.md"
+  },
+  "generated": {
+    "claude_skill_root": ".claude/skills",
+    "root_agents": "AGENTS.md",
+    "root_claude": "CLAUDE.md",
+    "root_review": "REVIEW.md"
+  },
+  "external_toolkits": [
+    {
+      "name": "superpowers",
+      "source": "https://github.com/obra/superpowers",
+      "version": "6.3.0",
+      "required_for": ["code-contributor", "maintainer"],
+      "skills": [
+        "brainstorming",
+        "writing-plans",
+        "systematic-debugging",
+        "test-driven-development",
+        "verification-before-completion",
+        "requesting-code-review",
+        "receiving-code-review"
+      ],
+      "install": {
+        "codex": {
+          "instruction": "Open /plugins, search for Superpowers, and select Install Plugin.",
+          "interactive": true
+        },
+        "claude": {
+          "instruction": "/plugin install superpowers@claude-plugins-official",
+          "interactive": true
+        },
+        "opencode": {
+          "instruction": "Fetch and follow https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md",
+          "interactive": true
+        },
+        "pi": {
+          "instruction": "pi install git:github.com/obra/superpowers",
+          "interactive": false
+        }
+      }
+    }
+  ]
+}

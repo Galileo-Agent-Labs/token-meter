@@ -3,8 +3,8 @@
 Thanks for helping improve Token Meter.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing component boundaries.
-Coding agents must also open [AGENTS.md](AGENTS.md) explicitly because it no
-longer lives at the repository root and may not be auto-discovered.
+The generated root `AGENTS.md` and `CLAUDE.md` files let supported coding agents
+discover the maintained instructions in [AGENTS.md](AGENTS.md) at startup.
 
 ## Before you start
 
@@ -34,10 +34,31 @@ git switch -c fix/short-description
 ## Use a coding agent
 
 Start the agent in the repository and give it a narrow bug report or an approved
-feature issue. Coding-agent instructions live in [AGENTS.md](AGENTS.md);
-`CLAUDE.md` in this directory references the same file. Review the resulting
-diff and validation evidence before asking the agent to push or open a pull
-request.
+feature issue. The primary agent coordinates implementation, independent
+testing, and risk-based review. Review the resulting diff, handoff, and
+validation evidence before asking the agent to push or open a pull request.
+
+The canonical project skills and role contracts live under `.agents/skills/`
+and `.agents/roles/`. Codex adapters under `.codex/` and Claude adapters under
+`.claude/` are generated so there is only one maintained skill body. After
+cloning, or whenever the manifest, skills, roles, or workflow contracts change,
+run:
+
+```bash
+./scripts/setup-agent-tools
+./scripts/check-agent-tools
+```
+
+The setup command deterministically creates repository discovery files and
+prints host-specific guidance if the pinned external Superpowers skills are not
+installed. The check command is read-only and fails on generated-file drift,
+invalid contracts, or a missing/wrong external version. On Windows, use
+`py scripts/agent_tools.py setup` and `py scripts/agent_tools.py check`.
+
+OpenCode and Pi read the canonical `.agents/skills/` tree directly. A host may
+need to be restarted after its project agent directory is created for the first
+time. The agent toolchain is optional for contributors who prefer to work
+without an AI coding agent.
 
 ## Local setup
 

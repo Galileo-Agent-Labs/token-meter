@@ -35,10 +35,10 @@ PLAN.md
 token-meter-insights-report.html
 .structured-dev-state
 /implementation-log.md
-.agents
 /PRODUCT.md
 /specs/plans/active.md
 .superpowers/*
+.agent-tools/
 
 # Launch blog drafts, not public repo docs
 /blog-drafts/

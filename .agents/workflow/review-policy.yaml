@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "standard": {
+    "minimum_testers": 1,
+    "minimum_project_reviewers": 1,
+    "distinct_lenses_required": false
+  },
+  "high_risk": {
+    "minimum_testers": 1,
+    "minimum_project_reviewers": 2,
+    "distinct_lenses_required": true,
+    "categories": [
+      "privacy-boundary",
+      "pricing-semantics",
+      "provider-parsing",
+      "deletion",
+      "persistence",
+      "installer-or-staged-runtime",
+      "native-menu",
+      "cross-platform",
+      "shared-helper"
+    ]
+  },
+  "lenses": [
+    "requirements-and-correctness",
+    "regressions-and-consumers",
+    "privacy-and-data-boundaries",
+    "runtime-and-packaging-parity",
+    "platform-and-native-behavior",
+    "test-quality-and-real-evidence",
+    "maintainability"
+  ],
+  "severities": ["blocking", "important", "minor"],
+  "dispositions": ["fixed", "disproved", "accepted-by-owner", "externally-blocked"],
+  "hosted_reviews": {
+    "advisory": true,
+    "satisfy_project_gate": false,
+    "verify_findings_before_fix": true
+  },
+  "freshness": {
+    "bind_to_head_commit": true,
+    "tracked_code_or_test_change_invalidates_evidence": true,
+    "failed_or_unrun_checks_must_remain_explicit": true
+  }
+}

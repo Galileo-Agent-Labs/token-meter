@@ -4605,7 +4605,7 @@ console.log(JSON.stringify({
             "data-current-session-id",
             '<h1 id=session-page-title>Sessions</h1>',
             'class=currentSessionsCount id=current-session-count-label',
-            "runtimeView.countLabel",
+            "filterView.countLabel",
             "Working",
             "Waiting",
             "Recent",
@@ -4634,6 +4634,37 @@ console.log(JSON.stringify({
         self.assertNotIn("currentSessionsMoveHint", self.page)
         self.assertNotIn("currentSessionOpen", self.page)
         self.assertNotIn(">Open →</span>", self.page)
+
+    def test_current_session_activity_filters_are_accessible_and_wired(self):
+        for marker in (
+            'id=current-session-activity-filters role=group aria-label="Filter current sessions by activity"',
+            'data-current-activity-filter=all aria-pressed=true>All</button>',
+            'data-current-activity-filter=working aria-pressed=false>Working</button>',
+            'data-current-activity-filter=recent aria-pressed=false>Recent</button>',
+            "let currentSessionRuntimeFilter='all',currentSessionActivityFilter='all';",
+            "function renderCurrentSessionActivityFilters(selection)",
+            "currentSessionFilterView(orderedRows,currentSessionRuntimeFilter,currentSessionActivityFilter)",
+            "renderCurrentSessionActivityFilters(filterView.activitySelection);",
+            "currentSessionActivityFilter=button.dataset.currentActivityFilter||'all';",
+            "currentSessionsFilteredEmptyHtml(filterView.activitySelection)",
+            "function keepCurrentSessionFilterFocusVisible(event)",
+            "button.scrollIntoView({block:'nearest',inline:'nearest'});",
+            "currentSessionRuntimeFilters.addEventListener('focusin',keepCurrentSessionFilterFocusVisible);",
+            "currentSessionActivityFilters.addEventListener('focusin',keepCurrentSessionFilterFocusVisible);",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertIn(
+            "$('current-session-activity-filters').hidden=true;",
+            self.page,
+        )
+        for marker in (
+            ".currentSessionFilterGroups{display:flex;align-items:center;gap:10px;min-width:0;overflow-x:auto",
+            ".currentSessionFilterGroup[hidden]{display:none}",
+            "body.sessionRoute #view-session .currentSessionRuntimeFilters,body.sessionRoute #view-session .currentSessionActivityFilters{display:flex;min-width:0}",
+            "body.sessionRoute #view-session .currentSessionFilterGroups{display:grid;width:100%;max-width:none;overflow:visible}",
+            "body.sessionRoute #view-session .currentSessionFilterGroup{min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}",
+        ):
+            self.assertIn(marker, self.page)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_current_session_runtime_view_discovers_filters_and_preserves_valid_selection(self):
@@ -4690,6 +4721,87 @@ console.log(JSON.stringify({all,claude,emerged,vanished}));
         self.assertEqual(rendered["vanished"]["countLabel"], "2 active")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_filter_view_composes_runtime_and_sticky_activity_selection(self):
+        names = (
+            "currentSessionActivity",
+            "currentSessionRuntimeView",
+            "currentSessionFilterView",
+        )
+        functions = []
+        for name in names:
+            match = re.search(
+                rf"^function {name}\(.*?^\}}\n",
+                self.page,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        rows = [
+            {"id": "claude-working", "provider": "claude", "activity_state": "working"},
+            {"id": "claude-recent", "provider": "claude", "activity_state": "recent"},
+            {"id": "codex-working", "provider": "codex", "activity_state": "working"},
+            {"id": "codex-waiting", "provider": "codex", "activity_state": "waiting"},
+        ]
+        script = """
+const appFilterGroup=row=>row.provider;
+const appFilterLabel=row=>({claude:'Claude',codex:'Codex'})[row.provider];
+""" + "\n".join(functions) + "\nconst rows=" + json.dumps(rows) + ";\n" + """
+const codexWorking=currentSessionFilterView(rows,'codex','working');
+const claudeRecent=currentSessionFilterView(rows,'claude','recent');
+const zeroWorking=currentSessionFilterView(
+ rows.filter(row=>row.activity_state!=='working'),
+ 'all',
+ 'working',
+);
+const invalidActivity=currentSessionFilterView(rows,'all','waiting');
+console.log(JSON.stringify({codexWorking,claudeRecent,zeroWorking,invalidActivity}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(
+            [row["id"] for row in rendered["codexWorking"]["rows"]],
+            ["codex-working"],
+        )
+        self.assertEqual(rendered["codexWorking"]["selection"], "codex")
+        self.assertEqual(rendered["codexWorking"]["activitySelection"], "working")
+        self.assertEqual(rendered["codexWorking"]["countLabel"], "1 of 4 active")
+        self.assertEqual(
+            [row["id"] for row in rendered["claudeRecent"]["rows"]],
+            ["claude-recent"],
+        )
+        self.assertEqual(rendered["zeroWorking"]["rows"], [])
+        self.assertEqual(rendered["zeroWorking"]["activitySelection"], "working")
+        self.assertEqual(rendered["zeroWorking"]["countLabel"], "0 of 2 active")
+        self.assertEqual(rendered["invalidActivity"]["activitySelection"], "all")
+        self.assertEqual(rendered["invalidActivity"]["countLabel"], "4 active")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_sessions_filtered_empty_copy_describes_the_selected_activity(self):
+        match = re.search(
+            r"^function currentSessionsFilteredEmptyHtml\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs currentSessionsFilteredEmptyHtml")
+        script = match.group(0) + """
+console.log(JSON.stringify({
+ working:currentSessionsFilteredEmptyHtml('working'),
+ recent:currentSessionsFilteredEmptyHtml('recent'),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertIn("No working sessions right now", rendered["working"])
+        self.assertIn("No recent sessions right now", rendered["recent"])
+        for html in rendered.values():
+            self.assertIn("Filters are still active", html)
+            self.assertNotIn("Your next live session appears here", html)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_current_session_keyboard_move_reorders_the_visible_runtime_sequence(self):
         match = re.search(
             r"^function currentSessionKeyboardMove\(.*?^\}\n",
@@ -4714,6 +4826,46 @@ console.log(JSON.stringify(moved));
             "index": 1,
             "total": 2,
         })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_keyboard_move_uses_the_combined_filter_sequence(self):
+        names = (
+            "currentSessionActivity",
+            "currentSessionKeyboardMove",
+            "currentSessionRuntimeView",
+            "currentSessionFilterView",
+            "moveCurrentSessionCardBy",
+        )
+        functions = []
+        for name in names:
+            match = re.search(
+                rf"^function {name}\(.*?^\}}\n",
+                self.page,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        script = """
+const appFilterGroup=row=>row.provider;
+const appFilterLabel=row=>({claude:'Claude',codex:'Codex'})[row.provider];
+const LATEST={xsession:{current_sessions:[
+ {id:'claude-working',provider:'claude',activity_state:'working'},
+ {id:'codex-working',provider:'codex',activity_state:'working'},
+ {id:'claude-recent',provider:'claude',activity_state:'recent'},
+]}};
+const currentSessionRuntimeFilter='claude';
+const currentSessionActivityFilter='working';
+const orderedCurrentSessionRows=rows=>rows;
+let saved=null;
+const setCurrentSessionOrder=ids=>{saved=ids};
+""" + "\n".join(functions) + """
+const result=moveCurrentSessionCardBy('claude-working',1);
+console.log(JSON.stringify({result,saved}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {"result": None, "saved": None})
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_current_session_ids_match_detects_a_stale_filtered_grid(self):
@@ -4813,6 +4965,17 @@ console.log(JSON.stringify({unavailable,first,next,idle}));
             "working": 0, "waiting": 0, "recent": 0,
             "ids": [], "arriving": [],
         })
+
+    def test_sessions_do_not_bundle_the_unrequested_webgl_shader_animation(self):
+        for marker in (
+            "session-shaders.js",
+            "paper-shaders",
+            "sessionShaderField",
+            "sessionShaderCanvas",
+            "currentSessionShader",
+        ):
+            self.assertNotIn(marker, self.page)
+        self.assertIsNone(meter.dashboard_asset_path("/assets/session-shaders.js"))
 
     def test_sessions_header_and_working_cards_use_the_token_flow_motion_contract(self):
         for marker in (
@@ -5078,7 +5241,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             'src:url("/assets/fonts/Tektur-Variable.ttf")',
             "--context-pressure",
             ".style.setProperty('--context-pressure'",
-            "runtimeView.countLabel",
+            "filterView.countLabel",
             "concept-roll seed a5c0fdde",
         ):
             self.assertIn(marker, self.page)

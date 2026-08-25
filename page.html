@@ -216,8 +216,8 @@ body.spectrumApp .top .tab{display:grid;width:100%;min-height:42px;grid-template
 .tabLabel{min-width:0;overflow:hidden;text-overflow:ellipsis}.tabShortcut{color:var(--faint);font:720 10px/1 ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
 body.spectrumApp .top .tab.on .tabShortcut{color:rgba(6,36,48,.66)}
 body.spectrumApp .top>.spacer{display:none}
-@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px;column-gap:16px;padding-right:18px;padding-left:18px}body.spectrumApp .top{padding:10px 8px}body.spectrumApp .top .brand{justify-content:center;padding-right:0;padding-left:0}.logo,.logo img{width:50px}.brandCopy,.tabLabel,.tabShortcut{display:none}body.spectrumApp .top .tab{display:grid;grid-template-columns:1fr;place-items:center;padding:9px}}
-@media(max-width:760px){body.spectrumApp .wrap{display:block;max-width:1320px;padding:12px 14px 64px}body.spectrumApp .wrap>:not(.top){min-width:0}body.spectrumApp .top{position:sticky;top:0;display:grid;height:auto;min-height:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 14px;padding:8px 0 10px;border:0;border-bottom:1px solid var(--spectrum-border);border-radius:0;background:radial-gradient(ellipse 62% 90% at 5% 0,rgba(0,188,235,.16),transparent 70%),linear-gradient(180deg,#07090c,#08121a);box-shadow:0 10px 26px rgba(0,0,0,.28)}body.spectrumApp .top:before{inset:auto 0 0}body.spectrumApp .top .brand{grid-column:1;grid-row:1;justify-content:flex-start;padding:0}.logo,.logo img{width:58px}.brandCopy{display:grid}body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row;gap:3px;padding:8px 0 0;border-top:1px solid var(--line)}.navPrimary,.navSecondary{display:contents}body.spectrumApp .top .tab{display:flex;width:auto;min-height:38px;grid-template-columns:none;gap:7px;padding:8px 11px;white-space:nowrap}.tabLabel{display:inline}.tabShortcut{display:none}}
+@media(max-width:1180px){body.spectrumApp .wrap{--navigation-rail-width:68px;column-gap:16px;padding-right:18px;padding-left:18px}body.spectrumApp .top{padding:10px 8px}body.spectrumApp .top .brand{justify-content:center;padding-right:0;padding-left:0}.logo,.logo img{width:50px}body.spectrumApp .top .brandCopy,body.spectrumApp .top .tabLabel,body.spectrumApp .top .tabShortcut{display:none}body.spectrumApp .top .tab{display:grid;grid-template-columns:1fr;place-items:center;padding:9px}}
+@media(max-width:760px){body.spectrumApp .wrap{display:block;max-width:1320px;padding:12px 14px 64px}body.spectrumApp .wrap>:not(.top){min-width:0}body.spectrumApp .top{position:sticky;top:0;display:grid;height:auto;min-height:0;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:0 0 14px;padding:8px 0 10px;border:0;border-bottom:1px solid var(--spectrum-border);border-radius:0;background:radial-gradient(ellipse 62% 90% at 5% 0,rgba(0,188,235,.16),transparent 70%),linear-gradient(180deg,#07090c,#08121a);box-shadow:0 10px 26px rgba(0,0,0,.28)}body.spectrumApp .top:before{inset:auto 0 0}body.spectrumApp .top .brand{grid-column:1;grid-row:1;justify-content:flex-start;padding:0}.logo,.logo img{width:58px}body.spectrumApp .top .brandCopy{display:grid}body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row;gap:3px;padding:8px 0 0;border-top:1px solid var(--line)}.navPrimary,.navSecondary{display:contents}body.spectrumApp .top .tab{display:flex;width:auto;min-height:38px;grid-template-columns:none;gap:7px;padding:8px 11px;white-space:nowrap}body.spectrumApp .top .tabLabel{display:inline}body.spectrumApp .top .tabShortcut{display:none}}
 @media(max-width:760px){#view-models{overflow-x:clip}}
 @media(max-width:520px){.brandName{font-size:14px}}
 body.spectrumApp .seg{border-color:var(--spectrum-border);background:var(--spectrum-control);box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 6px 18px rgba(0,0,0,.1)}
@@ -259,6 +259,42 @@ body.spectrumApp :is(.sessionStart,.toast,.capReview,.agentDiscovery,.frustratio
 @media(prefers-reduced-motion:reduce){.spectrumPageHead:before{animation:none}body.spectrumApp .tbtn{transition:none}}
 /* session-spectrum-field-v2 */
 body.sessionRoute{--session-cyan:var(--spectrum-cyan);--session-blue:var(--spectrum-blue);--session-sky:var(--spectrum-sky);--session-violet:var(--spectrum-violet);--session-orange:var(--spectrum-orange)}
+/* session-token-flow-v1 */
+body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:188px;align-items:flex-start;padding:29px 31px;background:radial-gradient(ellipse 58% 120% at 79% 48%,rgba(0,188,235,.13),transparent 66%),radial-gradient(ellipse 42% 100% at 100% 80%,rgba(199,167,255,.11),transparent 70%),linear-gradient(116deg,rgba(17,38,49,.995),rgba(7,17,24,.995) 48%,rgba(15,12,29,.985));box-shadow:0 1px 0 rgba(202,243,253,.2),0 20px 54px rgba(0,0,0,.34),0 10px 30px rgba(0,112,149,.11)}
+body.sessionRoute #view-session.sessionOverview .sessionFlowHead:before{content:none}
+body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{z-index:3;max-width:min(650px,58%)}
+body.sessionRoute #view-session.sessionOverview .sessionFlowHead h1{font-size:clamp(44px,5.2vw,66px);line-height:.92;letter-spacing:-.05em}
+body.sessionRoute #view-session.sessionOverview .sessionFlowHead p{margin-top:12px;color:#8fa4b2}
+body.sessionRoute #view-session .sessionFlowStatus{display:inline-flex;min-height:28px;align-items:center;gap:8px;margin-top:17px;padding:6px 10px;border:1px solid rgba(127,219,242,.22);border-radius:999px;background:rgba(5,17,23,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);color:var(--session-sky);font:760 10px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.055em;text-transform:uppercase}
+body.sessionRoute #view-session .sessionFlowStatus i{width:6px;height:6px;flex:0 0 auto;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowStatus{border-color:rgba(102,217,144,.3);color:var(--good)}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowStatus i{animation:sessionFlowStatusPulse 2.8s ease-out infinite}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowStatus{color:var(--warn)}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=recent] .sessionFlowStatus{color:var(--session-violet)}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowStatus{color:var(--dim)}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] .sessionFlowStatus{border-style:dashed;color:var(--faint)}
+body.sessionRoute #view-session .sessionFlowField{position:absolute;z-index:1;top:-13%;right:-5%;bottom:-17%;width:68%;overflow:hidden;pointer-events:none;opacity:.82;mask-image:linear-gradient(90deg,transparent 0,#000 18%,#000 88%,transparent 100%)}
+body.sessionRoute #view-session .sessionFlowField svg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 9px rgba(0,188,235,.16))}
+body.sessionRoute #view-session .sessionFlowLine{fill:none;stroke:url(#session-flow-cyan);stroke-width:13;stroke-linecap:round;stroke-dasharray:9 18;animation:sessionFlowDrift 13s linear infinite}
+body.sessionRoute #view-session .sessionFlowLine.secondary{stroke:url(#session-flow-violet);stroke-width:6;stroke-dasharray:3 15;animation-duration:18s;animation-direction:reverse}
+body.sessionRoute #view-session .sessionFlowLine.detail{stroke:rgba(224,250,255,.78);stroke-width:2;stroke-dasharray:1 14;animation-duration:8.5s}
+body.sessionRoute #view-session .sessionFlowGuide{fill:none;stroke:rgba(127,219,242,.13);stroke-width:1}
+body.sessionRoute #view-session .sessionFlowPacket{position:absolute;top:45%;left:3%;width:8px;height:8px;border-radius:50%;background:#dcfaff;box-shadow:0 0 8px #b8f2ff,0 0 20px rgba(0,188,235,.38);offset-path:path("M 0 78 C 110 -10 210 135 330 45 S 505 20 670 90");animation:sessionFlowPacket 12s linear infinite}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowLine{animation-duration:8s}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowLine.secondary{animation-duration:11s}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowPacket{animation-duration:7s}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowField{opacity:.48}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowLine{animation-duration:20s}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=recent] .sessionFlowField{opacity:.42}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowField{opacity:.24}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowLine{animation-duration:24s}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowPacket{display:none}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] .sessionFlowField{opacity:.14}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] :is(.sessionFlowLine,.sessionFlowPacket){animation-play-state:paused}
+body.sessionRoute #view-session.sessionDetail .sessionFlowField,body.sessionRoute #view-session.sessionDetail .sessionFlowStatus{display:none}
+@keyframes sessionFlowDrift{to{stroke-dashoffset:-240}}
+@keyframes sessionFlowPacket{to{offset-distance:100%}}
+@keyframes sessionFlowStatusPulse{0%,70%{box-shadow:0 0 0 0 rgba(102,217,144,.4)}100%{box-shadow:0 0 0 9px transparent}}
 body.sessionRoute #view-session .sessionScopeTabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;width:100%;margin:-4px 0 12px;padding:4px;border-color:rgba(0,188,235,.24);background:rgba(7,12,17,.72)}
 body.sessionRoute #view-session .sessionScopeTabs .tab{display:flex;min-height:44px;align-items:center;justify-content:center;gap:8px;padding:10px 14px;text-align:center}
 body.sessionRoute #view-session .sessionScopeTabs .tab .tabIcon{width:17px;height:17px;flex:0 0 auto}
@@ -273,12 +309,29 @@ body.sessionRoute #view-session .currentDayMetricValue{display:block;margin-top:
 body.sessionRoute #view-session .currentDayMetricNote{display:block;margin-top:3px;color:var(--faint);font-size:11px;line-height:1.3;overflow-wrap:anywhere}
 body.sessionRoute #view-session .currentDayLearn{align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;text-decoration:none;white-space:nowrap}
 body.sessionRoute #view-session .currentDayLearnIcon{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-body.sessionRoute #view-session .currentSessionsHead{justify-content:flex-end;margin:-4px 0 8px;padding:0 2px}
+body.sessionRoute #view-session .currentSessionsHead{justify-content:space-between;margin:-4px 0 8px;padding:0 2px}
 body.sessionRoute #view-session .currentSessionsCount{color:var(--faint);font-size:11px;letter-spacing:.02em}
+body.sessionRoute #view-session .currentSessionRuntimeFilters{display:flex;min-width:0;max-width:calc(100% - 96px);overflow-x:auto;scrollbar-width:none}
+body.sessionRoute #view-session .currentSessionRuntimeFilters::-webkit-scrollbar{display:none}
+body.sessionRoute #view-session .currentSessionRuntimeFilters[hidden]{display:none}
+body.sessionRoute #view-session .currentSessionRuntimeFilters button{min-height:30px;padding:6px 11px;white-space:nowrap}
 body.sessionRoute #view-session .currentSessionGrid{gap:12px}
-body.sessionRoute #view-session .currentSessionCard{min-height:226px;padding:19px 20px 16px;border-color:rgba(0,188,235,.16);border-radius:8px;background:radial-gradient(circle at 92% 8%,rgba(127,219,242,.1),transparent 28%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.07),transparent 34%),linear-gradient(145deg,rgba(23,33,43,.98),rgba(9,15,21,.99));box-shadow:var(--shadow-soft);transition:transform .18s cubic-bezier(.16,1,.3,1),border-color .18s,box-shadow .18s,opacity .18s}
+body.sessionRoute #view-session .currentSessionCard{isolation:isolate;min-height:226px;padding:19px 20px 16px;border-color:rgba(0,188,235,.16);border-radius:8px;background:radial-gradient(circle at 92% 8%,rgba(127,219,242,.1),transparent 28%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.07),transparent 34%),linear-gradient(145deg,rgba(23,33,43,.98),rgba(9,15,21,.99));box-shadow:var(--shadow-soft);transition:transform .18s cubic-bezier(.16,1,.3,1),border-color .18s,box-shadow .18s,opacity .18s}
 body.sessionRoute #view-session .currentSessionCard:before{content:none}
 body.sessionRoute #view-session .currentSessionCard.activity-working{border-color:rgba(0,188,235,.42);background:radial-gradient(circle at 88% 4%,rgba(0,188,235,.18),transparent 34%),linear-gradient(135deg,rgba(17,45,58,.98),rgba(10,19,27,.99) 56%,rgba(14,15,27,.99))}
+body.sessionRoute #view-session .currentSessionCard>:not(.currentSessionFlow){position:relative;z-index:2}
+body.sessionRoute #view-session .currentSessionFlow{position:absolute;z-index:1;right:-9%;bottom:-18px;width:72%;height:92px;overflow:hidden;pointer-events:none;opacity:0;transform:skewX(-13deg);mask-image:linear-gradient(90deg,transparent,#000 24%,#000 88%,transparent)}
+body.sessionRoute #view-session .currentSessionFlowLine{position:absolute;right:0;left:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,188,235,.2) 12%,var(--harness) 58%,rgba(127,219,242,.9) 78%,transparent);transform-origin:center;animation:currentSessionFlowDrift 8.5s ease-in-out infinite}
+body.sessionRoute #view-session .currentSessionFlowLine:nth-child(1){top:15%;animation-delay:-1.2s}body.sessionRoute #view-session .currentSessionFlowLine:nth-child(2){top:43%;animation-delay:-3.6s}body.sessionRoute #view-session .currentSessionFlowLine:nth-child(3){top:72%;animation-delay:-5.8s}
+body.sessionRoute #view-session .currentSessionCard.activity-working .currentSessionFlow{opacity:.38}
+body.sessionRoute #view-session .currentSessionCard.activity-working .currentSessionFlowLine{animation-play-state:running}
+body.sessionRoute #view-session .currentSessionCard.activity-waiting .currentSessionFlow{opacity:.13}
+body.sessionRoute #view-session .currentSessionCard.activity-waiting .currentSessionFlowLine{animation-play-state:paused}
+body.sessionRoute #view-session .currentSessionCard.activity-recent .currentSessionFlow{opacity:.055}
+body.sessionRoute #view-session .currentSessionCard.activity-recent .currentSessionFlowLine{animation-play-state:paused}
+body.sessionRoute #view-session .currentSessionCard.is-arriving{animation:currentSessionArrive .82s var(--spectrum-ease) both}
+@keyframes currentSessionFlowDrift{0%,100%{transform:translateX(-15%) scaleX(.62);opacity:.28}50%{transform:translateX(8%) scaleX(1);opacity:1}}
+@keyframes currentSessionArrive{0%{opacity:.15;transform:translateY(9px);box-shadow:0 0 0 1px rgba(0,188,235,.06)}55%{opacity:1;box-shadow:0 0 0 1px rgba(0,188,235,.58),0 0 34px rgba(0,188,235,.18)}100%{opacity:1;transform:none;box-shadow:var(--shadow-soft)}}
 body.sessionRoute #view-session .currentSessionCard:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--harness) 72%,var(--session-cyan));box-shadow:0 18px 38px rgba(0,0,0,.3)}
 body.sessionRoute #view-session .currentSessionCard:focus-visible{outline:2px solid var(--session-cyan);outline-offset:3px;border-color:var(--session-cyan);box-shadow:none}
 body.sessionRoute #view-session .currentSessionIdentity{position:relative;z-index:1;margin-top:22px}
@@ -370,12 +423,12 @@ body.sessionRoute #view-session.sessionDetail .previewTimes b{overflow:visible;w
 body.sessionRoute #view-session.sessionDetail .previewRunBudgetSlot .sessionBudget{border-color:rgba(0,188,235,.14);border-radius:8px;background:linear-gradient(145deg,rgba(17,24,32,.96),rgba(8,13,18,.98));box-shadow:none}
 body.sessionRoute #view-session.sessionDetail .previewTokenSlot .bar{border-color:rgba(0,188,235,.16);background:rgba(5,9,13,.7)}
 body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:var(--session-sky);text-shadow:none}
-@media(max-width:900px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:126px}}
+@media(max-width:900px){body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:172px;padding:25px 25px}body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{max-width:66%}body.sessionRoute #view-session .sessionFlowField{right:-13%;width:76%}body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:126px}}
 @media(max-width:900px){body.sessionRoute #view-session .logsSummary .logKpis{grid-template-columns:repeat(3,minmax(0,1fr))}body.sessionRoute #view-session .logsSummary .logStat:nth-child(4){border-left:0}body.sessionRoute #view-session .logsSummary .logStat:nth-child(n+4){margin-top:9px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}}
 @media(max-width:700px){body.sessionRoute #view-session .currentSessionMetric{padding:0 8px}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}}
-@media(max-width:520px){body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .currentDaySummary{grid-template-columns:1fr;gap:10px;padding:11px 12px}body.sessionRoute #view-session .currentDayReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}body.sessionRoute #view-session .currentDayMetric{padding:0 10px}body.sessionRoute #view-session .currentDayMetric:nth-child(3){grid-column:1/-1;margin-top:9px;padding:9px 10px 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentDayLearn{width:100%}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
+@media(max-width:520px){body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:158px;padding:20px 18px}body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{max-width:84%}body.sessionRoute #view-session.sessionOverview .sessionFlowHead h1{font-size:38px}body.sessionRoute #view-session .sessionFlowStatus{margin-top:14px;padding:5px 8px;font-size:9px}body.sessionRoute #view-session .sessionFlowField{top:-4%;right:-38%;bottom:-12%;width:108%;opacity:.36}body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .currentDaySummary{grid-template-columns:1fr;gap:10px;padding:11px 12px}body.sessionRoute #view-session .currentDayReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}body.sessionRoute #view-session .currentDayMetric{padding:0 10px}body.sessionRoute #view-session .currentDayMetric:nth-child(3){grid-column:1/-1;margin-top:9px;padding:9px 10px 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentDayLearn{width:100%}body.sessionRoute #view-session .currentSessionsHead{display:grid;grid-template-columns:minmax(0,1fr) auto}body.sessionRoute #view-session .currentSessionRuntimeFilters{width:100%;max-width:none}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
 @media(max-width:520px){body.sessionRoute #view-session .allSessionsHead{display:block}body.sessionRoute #view-session .allSessionsHint{display:block;margin-top:7px}body.sessionRoute #view-session .logsSummary .logKpis{grid-template-columns:1fr}body.sessionRoute #view-session .logsSummary .logStat,body.sessionRoute #view-session .logsSummary .logStat:nth-child(4){margin-top:0;padding:11px 13px;border-top:1px solid rgba(255,255,255,.08);border-left:0}body.sessionRoute #view-session .logsSummary .logStat:first-child{border-top:0}}
-@media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}}
+@media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}body.sessionRoute #view-session :is(.sessionFlowLine,.sessionFlowPacket,.currentSessionFlowLine,.sessionFlowStatus i,.currentSessionCard.is-arriving){animation:none!important}body.sessionRoute #view-session .sessionFlowPacket{display:none}}
 .workloadCell strong{display:block;color:var(--fg);font-size:13px}.workloadCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px;white-space:nowrap}
 .modelKpi:hover,.modelKpi:focus-within{z-index:50}.modelKpi:nth-child(n+4) .fieldtip:after{left:auto;right:0}.modelHelp:before{content:"i";display:inline-grid;place-items:center;width:13px;height:13px;margin-right:5px;border:1px solid currentColor;border-radius:50%;font:800 9px/1 ui-monospace,"SF Mono",Menlo,monospace;opacity:.72}.modelCoverage.fieldtip{display:block}.modelCoverage.fieldtip:after{bottom:auto;top:calc(100% + 7px)}
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}
@@ -592,11 +645,13 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
    <span class=msg id=current-budget-warning-msg></span>
    <button class=tbtn id=current-budget-settings type=button>Open budget settings</button>
   </div>
-  <div class="previewHead spectrumPageHead">
+  <div class="previewHead spectrumPageHead sessionFlowHead" id=session-flow-head data-session-flow=unavailable>
    <div class="previewHeadCopy spectrumPageHeadCopy">
    <h1 id=session-page-title>Sessions</h1>
    <p id=current-description>Live traces from the last 30 minutes.</p>
+   <div class=sessionFlowStatus role=status aria-live=polite><i aria-hidden=true></i><span id=session-flow-label>Waiting for evidence</span></div>
    </div>
+   <div class=sessionFlowField aria-hidden=true><svg viewBox="0 0 720 240" preserveAspectRatio="none" focusable="false"><defs><linearGradient id=session-flow-cyan x1="0" x2="1"><stop stop-color="#00bceb" stop-opacity="0"/><stop offset=".32" stop-color="#00bceb"/><stop offset=".72" stop-color="#a9efff"/><stop offset="1" stop-color="#c7a7ff" stop-opacity="0"/></linearGradient><linearGradient id=session-flow-violet x1="0" x2="1"><stop stop-color="#7fdbf2" stop-opacity="0"/><stop offset=".42" stop-color="#7fdbf2"/><stop offset=".8" stop-color="#a88cff"/><stop offset="1" stop-color="#a88cff" stop-opacity="0"/></linearGradient></defs><path class=sessionFlowGuide d="M-20 177 C132 22 246 224 406 92 S650 42 760 150"/><path class=sessionFlowGuide d="M-30 79 C135 211 251 17 424 150 S655 212 760 70"/><path class=sessionFlowLine d="M-20 177 C132 22 246 224 406 92 S650 42 760 150"/><path class="sessionFlowLine secondary" d="M-30 79 C135 211 251 17 424 150 S655 212 760 70"/><path class="sessionFlowLine detail" d="M-20 125 C145 45 267 192 418 70 S658 165 760 109"/></svg><i class=sessionFlowPacket></i></div>
   </div>
 
   <div class="tabs sessionScopeTabs" id=session-scope-tabs role=tablist aria-label="Sessions view">
@@ -636,6 +691,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
      </div>
     </section>
     <div class=currentSessionsHead>
+     <div class="seg currentSessionRuntimeFilters" id=current-session-runtime-filters role=group aria-label="Filter current sessions by runtime" hidden></div>
      <span class=currentSessionsCount id=current-session-count-label>Waiting</span>
     </div>
     <div class=currentSessionGrid id=current-session-grid aria-label="Recent sessions. Drag cards or use Option and arrow keys to reorder."></div>
@@ -1210,8 +1266,10 @@ const CURRENT_SESSION_ORDER_KEY='tm_current_session_order_v1';
 const CURRENT_SESSION_ORDER_MIGRATION_KEY='tm_current_session_newest_first_v1';
 let currentSessionOrder=loadCurrentSessionOrder();
 let currentSessionOrderNeedsNewestMigration=localStorage.getItem(CURRENT_SESSION_ORDER_MIGRATION_KEY)!=='1';
+let currentSessionRuntimeFilter='all';
 let currentSessionDragId='',currentSessionDropId='',currentSessionDropAfter=false;
 let currentSessionSuppressClickUntil=0;
+let currentSessionSeenIds=[],currentSessionSeenReady=false;
 const usageDetails=$('usage-details');
 usageDetails.open=localStorage.getItem('tm_usage_details_open')==='1';
 usageDetails.addEventListener('toggle',()=>localStorage.setItem('tm_usage_details_open',usageDetails.open?'1':'0'));
@@ -4884,6 +4942,20 @@ function setCurrentSessionOrder(ids){
  currentSessionOrder=ids;
  saveCurrentSessionOrder();
 }
+function currentSessionKeyboardMove(allIds,visibleIds,sourceId,delta){
+ const ids=[...allIds].map(String),visible=[...visibleIds].map(String),source=String(sourceId);
+ const from=visible.indexOf(source);
+ if(from<0)return null;
+ const destination=Math.max(0,Math.min(visible.length-1,from+delta));
+ if(destination===from)return null;
+ const target=visible[destination],allFrom=ids.indexOf(source);
+ if(allFrom<0)return null;
+ ids.splice(allFrom,1);
+ const allTarget=ids.indexOf(target);
+ if(allTarget<0)return null;
+ ids.splice(allTarget+(destination>from?1:0),0,source);
+ return {ids,index:destination,total:visible.length};
+}
 function moveCurrentSessionCard(sourceId,targetId,after=false){
  const ids=orderedCurrentSessionRows(LATEST?.xsession?.current_sessions||[]).map(row=>String(row.id));
  const from=ids.indexOf(String(sourceId)),target=ids.indexOf(String(targetId));
@@ -4896,15 +4968,16 @@ function moveCurrentSessionCard(sourceId,targetId,after=false){
  return {index:destination,total:ids.length};
 }
 function moveCurrentSessionCardBy(sourceId,delta){
- const ids=orderedCurrentSessionRows(LATEST?.xsession?.current_sessions||[]).map(row=>String(row.id));
- const from=ids.indexOf(String(sourceId));
- if(from<0)return null;
- const destination=Math.max(0,Math.min(ids.length-1,from+delta));
- if(destination===from)return null;
- const [moved]=ids.splice(from,1);
- ids.splice(destination,0,moved);
- setCurrentSessionOrder(ids);
- return {index:destination,total:ids.length};
+ const orderedRows=orderedCurrentSessionRows(LATEST?.xsession?.current_sessions||[]);
+ const result=currentSessionKeyboardMove(
+  orderedRows.map(row=>String(row.id)),
+  currentSessionRuntimeView(orderedRows,currentSessionRuntimeFilter).rows.map(row=>String(row.id)),
+  sourceId,
+  delta,
+ );
+ if(!result)return null;
+ setCurrentSessionOrder(result.ids);
+ return {index:result.index,total:result.total};
 }
 function clearCurrentSessionDropMarkers(){
  $('current-session-grid').querySelectorAll('.dropBefore,.dropAfter').forEach(card=>card.classList.remove('dropBefore','dropAfter'));
@@ -4954,6 +5027,40 @@ function focusCurrentSessionCard(id){
 function currentSessionActivity(row){
  const state=['working','waiting','recent'].includes(row?.activity_state)?row.activity_state:'recent';
  return {state,label:{working:'Working',waiting:'Waiting',recent:'Recent'}[state]};
+}
+function currentSessionIdsMatch(ids,rows){
+ const mounted=[...ids].map(String),expected=(Array.isArray(rows)?rows:[]).map(row=>String(row.id||''));
+ return mounted.length===expected.length&&mounted.every((id,index)=>id===expected[index]);
+}
+function sessionFlowSnapshot(rows,seenIds=[],seenReady=false){
+ if(!Array.isArray(rows))return {evidence:'unavailable',mode:'idle',count:0,working:0,waiting:0,recent:0,ids:[],arriving:[]};
+ const ids=[],states={working:0,waiting:0,recent:0},known=new Set();
+ rows.forEach(row=>{
+  const id=String(row?.id||'');
+  if(!id||known.has(id))return;
+  known.add(id);ids.push(id);
+  const state=['working','waiting','recent'].includes(row?.activity_state)?row.activity_state:'recent';
+  states[state]++;
+ });
+ const previous=new Set((Array.isArray(seenIds)?seenIds:[]).map(String));
+ return {
+  evidence:'available',
+  mode:states.working?'working':states.waiting?'waiting':states.recent?'recent':'idle',
+  count:ids.length,
+  working:states.working,
+  waiting:states.waiting,
+  recent:states.recent,
+  ids,
+  arriving:seenReady?ids.filter(id=>!previous.has(id)):[],
+ };
+}
+function syncSessionFlow(snapshot){
+ const head=$('session-flow-head'),label=$('session-flow-label');
+ if(!head||!label)return;
+ head.dataset.sessionFlow=snapshot.evidence==='available'?snapshot.mode:'unavailable';
+ const count=snapshot.count,activeLabel=`${count} active`;
+ const nextLabel=snapshot.evidence!=='available'?'Waiting for evidence':!count?'Listening':snapshot.working?`${snapshot.working} working · ${activeLabel}`:activeLabel;
+ if(label.textContent!==nextLabel)label.textContent=nextLabel;
 }
 function syncCurrentSessionActivity(root,rows){
  const byId=new Map();
@@ -5037,18 +5144,63 @@ function currentSessionsEmptyHtml(xs,todayKey=localDayKey()){
  const historyAction=history.sessions?`<button class=currentSessionsEmptyAction type=button data-current-empty-history>Explore ${f(history.sessions)} past ${countWord(history.sessions,'session')}<svg viewBox="0 0 16 16" aria-hidden=true><path d="M3 8h9M9 4l4 4-4 4"/></svg></button>`:'';
  return `<section class="card currentSessionsEmpty"><div class=currentSessionsEmptyInner><h3>Your next live session appears here</h3><p class=currentSessionsEmptyCopy>Start Claude, Codex, Cursor, OpenCode, or Kiro. Token Meter adds its live card to this space automatically.</p><div class=currentSessionsArrival role=group aria-label="Placeholder for the next live session card"><div class=currentSessionsArrivalHead><strong>Next live session</strong><span>Listening</span></div><div class=currentSessionsArrivalMetrics><div class=currentSessionsArrivalMetric><span>Cost</span><strong>--</strong></div><div class=currentSessionsArrivalMetric><span>Context</span><strong>--</strong></div><div class=currentSessionsArrivalMetric><span>Speed</span><strong>--</strong></div></div></div><div class=currentSessionsHistorySummary><strong>${esc(historyTitle)}</strong><span>${historyDetail}</span></div><div class=currentSessionsHorizon role=img aria-label="Sessions over the last seven days: ${esc(horizonLabel)}">${horizon}</div><div class=currentSessionsEmptyActions>${historyAction}<a class="currentSessionsEmptyAction secondary" href="https://github.com/splunk/token-meter/issues" target=_blank rel="noopener noreferrer">Share feedback<svg viewBox="0 0 16 16" aria-hidden=true><path d="M6 3h7v7M13 3 6 10M11 9v4H3V5h4"/></svg></a></div></div></section>`;
 }
+function currentSessionRuntimeView(rows,selection='all'){
+ const source=Array.isArray(rows)?[...rows]:[],byId=new Map();
+ source.forEach(row=>{
+  const id=String(appFilterGroup(row)||'unknown-runtime'),label=String(appFilterLabel(row)||'Unknown Runtime');
+  const option=byId.get(id)||{id,label,count:0};
+  option.count+=1;byId.set(id,option);
+ });
+ const options=[...byId.values()].sort((a,b)=>a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
+ const active=selection==='all'||options.some(option=>option.id===selection)?selection:'all';
+ const visible=active==='all'?source:source.filter(row=>String(appFilterGroup(row)||'unknown-runtime')===active);
+ return {options,selection:active,rows:visible,countLabel:active==='all'?`${source.length} active`:`${visible.length} of ${source.length} active`};
+}
+function currentSessionFilterFocusTarget(view,focusedFilter){
+ if(!focusedFilter)return '';
+ const ids=['all',...view.options.map(option=>option.id)];
+ return ids.includes(focusedFilter)?focusedFilter:view.selection;
+}
+function renderCurrentSessionRuntimeFilters(view){
+ const root=$('current-session-runtime-filters'),signature=JSON.stringify(view.options.map(({id,label})=>[id,label]));
+ const focusedFilter=root.contains(document.activeElement)?document.activeElement.dataset.currentRuntimeFilter||'':'';
+ let optionsChanged=false;
+ root.hidden=!view.options.length;
+ if(root.dataset.options!==signature){
+  optionsChanged=true;
+  root.dataset.options=signature;
+  root.innerHTML=`<button type=button data-current-runtime-filter=all>All</button>`+view.options.map(option=>`<button type=button data-current-runtime-filter="${esc(option.id)}">${esc(option.label)}</button>`).join('');
+ }
+ root.querySelectorAll('[data-current-runtime-filter]').forEach(button=>{
+  const selected=button.dataset.currentRuntimeFilter===view.selection;
+  button.classList.toggle('on',selected);button.setAttribute('aria-pressed',selected?'true':'false');
+ });
+ if(optionsChanged&&focusedFilter){
+  const target=currentSessionFilterFocusTarget(view,focusedFilter);
+  [...root.querySelectorAll('[data-current-runtime-filter]')].find(button=>button.dataset.currentRuntimeFilter===target)?.focus();
+ }
+}
 function renderCurrentSessions(state=LATEST){
  renderCurrentDaySummary(state?.xsession);
  const sourceRows=state?.xsession?.current_sessions;
+ const flow=sessionFlowSnapshot(sourceRows,currentSessionSeenIds,currentSessionSeenReady);
+ syncSessionFlow(flow);
  if(!Array.isArray(sourceRows)){
+  $('current-session-runtime-filters').hidden=true;
   $('current-session-count-label').textContent='Waiting';
   return;
  }
- const rows=orderedCurrentSessionRows(sourceRows),count=rows.length;
+ const orderedRows=orderedCurrentSessionRows(sourceRows),runtimeView=currentSessionRuntimeView(orderedRows,currentSessionRuntimeFilter);
+ currentSessionSeenIds=flow.ids;currentSessionSeenReady=true;
+ currentSessionRuntimeFilter=runtimeView.selection;
+ renderCurrentSessionRuntimeFilters(runtimeView);
+ const rows=runtimeView.rows,count=rows.length;
+ const arrivingIds=new Set(flow.arriving);
  const focusedId=document.activeElement?.closest?.('[data-current-session-id]')?.dataset.currentSessionId||'';
- $('current-session-count-label').textContent=`${count} active`;
+ $('current-session-count-label').textContent=runtimeView.countLabel;
  const currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');
- if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}
+ const mountedCurrentSessionIds=[...currentGrid.querySelectorAll('.currentSessionCard[data-current-session-id]')].map(card=>card.dataset.currentSessionId);
+ if(currentSessionDragId||(interactingCurrentSessionCard&&currentSessionIdsMatch(mountedCurrentSessionIds,rows))){syncCurrentSessionActivity(currentGrid,rows);return;}
  currentGrid.innerHTML=count?rows.map(row=>{
   const provider=runtimeId(row);
   const {state:activity,label:activityLabel}=currentSessionActivity(row);
@@ -5064,10 +5216,18 @@ function renderCurrentSessions(state=LATEST){
   const speed=speedAvailable?`${speedFmt(throughput.output_tps)} tok/s${row.token_estimate?' est':''}`:'--';
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
-  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+  const arriving=arrivingIds.has(String(row.id))?' is-arriving':'';
+  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}${arriving}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionFlow aria-hidden=true><i class=currentSessionFlowLine></i><i class=currentSessionFlowLine></i><i class=currentSessionFlowLine></i></div><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):currentSessionsEmptyHtml(state?.xsession);
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }
+const currentSessionRuntimeFilters=$('current-session-runtime-filters');
+currentSessionRuntimeFilters.onclick=event=>{
+ const button=event.target.closest('[data-current-runtime-filter]');
+ if(!button)return;
+ currentSessionRuntimeFilter=button.dataset.currentRuntimeFilter||'all';
+ renderCurrentSessions();
+};
 const currentSessionGrid=$('current-session-grid');
 currentSessionGrid.onclick=event=>{
  if(Date.now()<currentSessionSuppressClickUntil){event.preventDefault();return;}

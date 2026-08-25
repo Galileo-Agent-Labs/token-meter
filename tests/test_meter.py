@@ -3223,7 +3223,8 @@ console.log(JSON.stringify({
     def test_session_card_hover_preserves_the_live_card_node(self):
         for marker in (
             "currentGrid=$('current-session-grid'),interactingCurrentSessionCard=currentGrid.querySelector('.currentSessionCard:hover,.currentSessionCard:focus');",
-            "if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}",
+            "const mountedCurrentSessionIds=[...currentGrid.querySelectorAll('.currentSessionCard[data-current-session-id]')].map(card=>card.dataset.currentSessionId);",
+            "if(currentSessionDragId||(interactingCurrentSessionCard&&currentSessionIdsMatch(mountedCurrentSessionIds,rows))){syncCurrentSessionActivity(currentGrid,rows);return;}",
             "card.classList.remove('activity-working','activity-waiting','activity-recent');",
             "body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}",
         ):
@@ -4604,7 +4605,7 @@ console.log(JSON.stringify({
             "data-current-session-id",
             '<h1 id=session-page-title>Sessions</h1>',
             'class=currentSessionsCount id=current-session-count-label',
-            "`${count} active`",
+            "runtimeView.countLabel",
             "Working",
             "Waiting",
             "Recent",
@@ -4633,6 +4634,219 @@ console.log(JSON.stringify({
         self.assertNotIn("currentSessionsMoveHint", self.page)
         self.assertNotIn("currentSessionOpen", self.page)
         self.assertNotIn(">Open →</span>", self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_runtime_view_discovers_filters_and_preserves_valid_selection(self):
+        match = re.search(
+            r"^function currentSessionRuntimeView\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs currentSessionRuntimeView")
+        rows = [
+            {"id": "claude-code", "provider": "claude"},
+            {"id": "codex", "provider": "codex"},
+            {"id": "claude-desktop", "provider": "claude"},
+        ]
+        script = """
+const appFilterGroup=row=>row.provider;
+const appFilterLabel=row=>({claude:'Claude',codex:'Codex',cursor:'Cursor'})[row.provider];
+""" + match.group(0) + "\nconst rows=" + json.dumps(rows) + ";\n" + """
+const all=currentSessionRuntimeView(rows,'all');
+const claude=currentSessionRuntimeView(rows,'claude');
+rows.push({id:'cursor',provider:'cursor'});
+const emerged=currentSessionRuntimeView(rows,'claude');
+const vanished=currentSessionRuntimeView(rows.filter(row=>row.provider!=='claude'),'claude');
+console.log(JSON.stringify({all,claude,emerged,vanished}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["all"], {
+            "options": [
+                {"id": "claude", "label": "Claude", "count": 2},
+                {"id": "codex", "label": "Codex", "count": 1},
+            ],
+            "selection": "all",
+            "rows": rows[:3],
+            "countLabel": "3 active",
+        })
+        self.assertEqual(
+            [row["id"] for row in rendered["claude"]["rows"]],
+            ["claude-code", "claude-desktop"],
+        )
+        self.assertEqual(rendered["claude"]["countLabel"], "2 of 3 active")
+        self.assertEqual(rendered["emerged"]["selection"], "claude")
+        self.assertEqual(
+            rendered["emerged"]["options"],
+            [
+                {"id": "claude", "label": "Claude", "count": 2},
+                {"id": "codex", "label": "Codex", "count": 1},
+                {"id": "cursor", "label": "Cursor", "count": 1},
+            ],
+        )
+        self.assertEqual(rendered["vanished"]["selection"], "all")
+        self.assertEqual(rendered["vanished"]["countLabel"], "2 active")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_keyboard_move_reorders_the_visible_runtime_sequence(self):
+        match = re.search(
+            r"^function currentSessionKeyboardMove\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs currentSessionKeyboardMove")
+        script = match.group(0) + """
+const moved=currentSessionKeyboardMove(
+ ['claude-1','codex-1','claude-2'],
+ ['claude-1','claude-2'],
+ 'claude-1',
+ 1,
+);
+console.log(JSON.stringify(moved));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "ids": ["codex-1", "claude-2", "claude-1"],
+            "index": 1,
+            "total": 2,
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_ids_match_detects_a_stale_filtered_grid(self):
+        match = re.search(
+            r"^function currentSessionIdsMatch\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs currentSessionIdsMatch")
+        script = match.group(0) + """
+const stable=currentSessionIdsMatch(
+ ['claude-1','claude-2'],
+ [{id:'claude-1'},{id:'claude-2'}],
+);
+const stale=currentSessionIdsMatch(
+ ['claude-1','claude-2'],
+ [{id:'codex-1'}],
+);
+console.log(JSON.stringify({stable,stale}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertTrue(rendered["stable"])
+        self.assertFalse(rendered["stale"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_current_session_filter_focus_survives_emergence_and_falls_back_on_disappearance(self):
+        match = re.search(
+            r"^function currentSessionFilterFocusTarget\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs currentSessionFilterFocusTarget")
+        script = match.group(0) + """
+const emerged=currentSessionFilterFocusTarget(
+ {selection:'claude',options:[{id:'claude'},{id:'codex'},{id:'cursor'}]},
+ 'claude',
+);
+const vanished=currentSessionFilterFocusTarget(
+ {selection:'all',options:[{id:'codex'}]},
+ 'claude',
+);
+console.log(JSON.stringify({emerged,vanished}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["emerged"], "claude")
+        self.assertEqual(rendered["vanished"], "all")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_session_flow_snapshot_uses_real_activity_and_marks_only_new_arrivals(self):
+        match = re.search(
+            r"^function sessionFlowSnapshot\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs a pure sessionFlowSnapshot")
+        script = match.group(0) + """
+const unavailable=sessionFlowSnapshot(undefined,[],false);
+const first=sessionFlowSnapshot([
+ {id:'working',activity_state:'working'},
+ {id:'waiting',activity_state:'waiting'},
+ {id:'recent',activity_state:'recent'},
+],[],false);
+const next=sessionFlowSnapshot([
+ {id:'waiting',activity_state:'waiting'},
+ {id:'arriving',activity_state:'working'},
+],first.ids,true);
+const idle=sessionFlowSnapshot([],next.ids,true);
+console.log(JSON.stringify({unavailable,first,next,idle}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["unavailable"], {
+            "evidence": "unavailable", "mode": "idle", "count": 0,
+            "working": 0, "waiting": 0, "recent": 0,
+            "ids": [], "arriving": [],
+        })
+        self.assertEqual(rendered["first"], {
+            "evidence": "available", "mode": "working", "count": 3,
+            "working": 1, "waiting": 1, "recent": 1,
+            "ids": ["working", "waiting", "recent"], "arriving": [],
+        })
+        self.assertEqual(rendered["next"], {
+            "evidence": "available", "mode": "working", "count": 2,
+            "working": 1, "waiting": 1, "recent": 0,
+            "ids": ["waiting", "arriving"], "arriving": ["arriving"],
+        })
+        self.assertEqual(rendered["idle"], {
+            "evidence": "available", "mode": "idle", "count": 0,
+            "working": 0, "waiting": 0, "recent": 0,
+            "ids": [], "arriving": [],
+        })
+
+    def test_sessions_header_and_working_cards_use_the_token_flow_motion_contract(self):
+        for marker in (
+            'class="previewHead spectrumPageHead sessionFlowHead"',
+            "id=session-flow-head",
+            "class=sessionFlowField aria-hidden=true",
+            'focusable="false"',
+            "class=sessionFlowLine",
+            "class=sessionFlowStatus",
+            "function syncSessionFlow(snapshot)",
+            "if(label.textContent!==nextLabel)",
+            "data-session-flow",
+            "class=currentSessionFlow aria-hidden=true",
+            "activity-working .currentSessionFlowLine",
+            "activity-waiting .currentSessionFlow",
+            "activity-recent .currentSessionFlow",
+            ".currentSessionCard.is-arriving",
+            "@keyframes sessionFlowDrift",
+            "@keyframes currentSessionArrive",
+            "@media(prefers-reduced-motion:reduce)",
+            ".sessionFlowLine,.sessionFlowPacket,.currentSessionFlowLine",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn("<animateMotion", self.page)
+
+    def test_collapsed_navigation_keeps_session_scope_labels_visible(self):
+        self.assertIn(
+            "body.spectrumApp .top .brandCopy,body.spectrumApp .top .tabLabel,"
+            "body.spectrumApp .top .tabShortcut{display:none}",
+            self.page,
+        )
+        self.assertIn("body.spectrumApp .top .brandCopy{display:grid}", self.page)
+        self.assertIn("body.spectrumApp .top .tabLabel{display:inline}", self.page)
+        self.assertNotIn(".brandCopy,.tabLabel,.tabShortcut{display:none}", self.page)
 
     def test_sessions_overview_shows_exact_day_spend_summary_and_tokenomics_link(self):
         for marker in (
@@ -4844,7 +5058,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "--spectrum-orange:#ffb457",
             "body.sessionRoute{",
             "--session-cyan:var(--spectrum-cyan)",
-            'class="previewHead spectrumPageHead"',
+            'class="previewHead spectrumPageHead sessionFlowHead"',
             'class="previewHeadCopy spectrumPageHeadCopy"',
             ".spectrumPageHead:before",
             ".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px;align-items:flex-start",
@@ -4864,7 +5078,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             'src:url("/assets/fonts/Tektur-Variable.ttf")',
             "--context-pressure",
             ".style.setProperty('--context-pressure'",
-            "`${count} active`",
+            "runtimeView.countLabel",
             "concept-roll seed a5c0fdde",
         ):
             self.assertIn(marker, self.page)
@@ -4897,7 +5111,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "--spectrum-card:radial-gradient",
             "--spectrum-control:radial-gradient",
             "--spectrum-active:linear-gradient",
-            '<div class="previewHead spectrumPageHead">',
+            '<div class="previewHead spectrumPageHead sessionFlowHead"',
             '<header class="capPageHead spectrumPageHead">',
             '<div class="modelHead spectrumPageHead">',
             '<div class="dailyHead spectrumPageHead">',
@@ -4966,7 +5180,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             self.page,
         )
         self.assertIn(
-            "if(currentSessionDragId||interactingCurrentSessionCard){syncCurrentSessionActivity(currentGrid,rows);return;}",
+            "if(currentSessionDragId||(interactingCurrentSessionCard&&currentSessionIdsMatch(mountedCurrentSessionIds,rows))){syncCurrentSessionActivity(currentGrid,rows);return;}",
             self.page,
         )
         self.assertIn(
@@ -5176,7 +5390,9 @@ class MenubarSourceTests(unittest.TestCase):
 
     def test_menu_bar_settings_are_visible_and_quota_threshold_is_explicit(self):
         self.assertIn('case .settings: return "Settings"', self.source)
-        self.assertIn('self.makeSettingsMenu().popUp(', self.source)
+        self.assertIn('case .settings:\n                self.openSettings()', self.source)
+        self.assertIn('NSMenuItem(title: "Menu bar settings", action: nil', self.source)
+        self.assertIn('settingsItem.submenu = makeSettingsMenu()', self.source)
         self.assertNotIn('NSMenuItem(title: "More", action: nil', self.source)
         self.assertIn('NSMenuItem(title: "Open Settings", action: #selector(openSettings)', self.source)
         self.assertIn('addAction("Quit Token Meter", #selector(quit))', self.source)

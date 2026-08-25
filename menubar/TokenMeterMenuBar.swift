@@ -1213,6 +1213,11 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         limitsItem.submenu = makeLimitsMenu()
         menu.addItem(limitsItem)
 
+        let settingsItem = NSMenuItem(title: "Menu bar settings", action: nil, keyEquivalent: "")
+        settingsItem.image = menuSymbol("gearshape", description: "Menu bar settings")
+        settingsItem.submenu = makeSettingsMenu()
+        menu.addItem(settingsItem)
+
         menu.addItem(.separator())
         addAction("Quit Token Meter", #selector(quit))
     }
@@ -1606,6 +1611,9 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
               settingsMenu.items.contains(where: {
                   $0.title == "Model Prices" && $0.action == #selector(openModelPrices)
               }),
+              menu.items.contains(where: {
+                  $0.title == "Menu bar settings" && $0.submenu != nil
+              }),
               !settingsMenu.items.contains(where: {
                   ["Open Spend", "Open Tools & Skills"].contains($0.title)
               })
@@ -1907,12 +1915,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .tools:
                 self.openToolsAndSkills()
             case .settings:
-                guard let button = self.statusItem.button else { return }
-                self.makeSettingsMenu().popUp(
-                    positioning: nil,
-                    at: NSPoint(x: button.bounds.midX, y: button.bounds.minY),
-                    in: button
-                )
+                self.openSettings()
             }
         }
     }

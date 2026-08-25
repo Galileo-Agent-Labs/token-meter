@@ -7928,6 +7928,19 @@ _DASHBOARD_ASSETS = {
         "assets/brand/logo-splunk-acc-rgb-w.png",
         "image/png",
     ),
+    **{
+        f"/{asset}": (asset, "text/javascript; charset=utf-8")
+        for asset in (
+            "assets/session-effects.js",
+            "assets/vendor/paper-shaders/get-shader-color-from-string.js",
+            "assets/vendor/paper-shaders/get-shader-noise-texture.js",
+            "assets/vendor/paper-shaders/shader-mount.js",
+            "assets/vendor/paper-shaders/shader-sizing.js",
+            "assets/vendor/paper-shaders/shader-utils.js",
+            "assets/vendor/paper-shaders/vertex-shader.js",
+            "assets/vendor/paper-shaders/shaders/pulsing-border.js",
+        )
+    },
 }
 
 

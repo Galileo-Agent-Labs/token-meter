@@ -236,16 +236,22 @@ body.spectrumApp :is(button,input,select,textarea,summary):focus-visible{outline
 body.spectrumApp .meter{background:none;color:var(--spectrum-sky);-webkit-background-clip:initial;background-clip:initial}
 body.spectrumApp .tbl th,body.spectrumApp .modelTableWrap .tbl th,body.spectrumApp .capTableWrap .tbl th{background:linear-gradient(180deg,rgba(13,23,31,.99),rgba(7,14,20,.99));box-shadow:inset 0 -1px 0 var(--spectrum-border)}
 body.spectrumApp .tbl tr:hover td{background:linear-gradient(90deg,rgba(0,188,235,.055),rgba(199,167,255,.025))}
-.spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px;align-items:flex-start;justify-content:space-between;gap:24px;margin:0 0 16px;padding:24px 30px;overflow:hidden;border:1px solid var(--spectrum-border-strong);border-radius:8px;background:radial-gradient(ellipse 48% 105% at 72% 2%,var(--view-haze-a),transparent 62%),radial-gradient(ellipse 42% 88% at 98% 96%,var(--view-haze-b),transparent 66%),linear-gradient(118deg,rgba(25,38,49,.995),rgba(11,20,28,.995) 42%,rgba(9,39,52,.975) 72%,rgba(22,17,38,.975));box-shadow:var(--spectrum-depth-focus)}
-.spectrumPageHead:before{content:"";position:absolute;z-index:-1;right:clamp(32px,8vw,104px);top:-156px;width:340px;height:340px;border-radius:50%;background:conic-gradient(from 212deg,var(--view-spectrum-a),rgba(27,160,225,.08) 26%,var(--view-spectrum-b) 56%,var(--view-spectrum-c) 77%,var(--view-spectrum-a)),radial-gradient(circle at 38% 32%,rgba(189,240,252,.72),rgba(0,188,235,.2) 36%,rgba(27,160,225,.07) 54%,transparent 69%);box-shadow:0 30px 86px rgba(0,109,146,.3),0 10px 44px rgba(199,167,255,.12);animation:spectrumFieldReveal .68s var(--spectrum-ease) both}
+.spectrumPageHeadFrame{position:relative;width:100%;margin:0 0 16px}
+.spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;height:138px;align-items:flex-start;justify-content:space-between;gap:24px;flex-direction:row;margin:0;padding:24px 30px;overflow:hidden;border:1px solid var(--spectrum-border-strong);border-radius:8px;background:linear-gradient(116deg,rgba(13,28,37,.995),rgba(7,15,22,.995) 52%,rgba(9,13,24,.99));box-shadow:var(--spectrum-depth-focus)}
+.spectrumPageHead:before{content:none}
 body.spectrumApp .spectrumPageHead:after{content:"";position:absolute;right:0;bottom:0;left:0;height:1px;background:linear-gradient(90deg,transparent 2%,rgba(0,188,235,.76) 24%,rgba(127,219,242,.7) 56%,rgba(199,167,255,.62) 79%,transparent 98%);opacity:.72}
-@keyframes spectrumFieldReveal{from{clip-path:inset(78% 0 0);opacity:.45}to{clip-path:inset(0);opacity:1}}
-.spectrumPageHeadCopy{position:relative;z-index:1;max-width:min(760px,72%);min-width:0}
+.spectrumPageHeadCopy{position:relative;z-index:3;max-width:min(760px,72%);min-width:0}
+.hasPageActions .spectrumPageHeadCopy{max-width:min(560px,48%)}
 .spectrumPageHead h1{max-width:22ch;margin:0;color:var(--fg);font-family:"Tektur Local","Avenir Next Condensed",-apple-system,BlinkMacSystemFont,sans-serif;font-size:clamp(36px,4.2vw,54px);font-stretch:88%;font-weight:610;line-height:.98;letter-spacing:-.035em;text-wrap:balance}
-.spectrumPageHead p{max-width:62ch;margin:10px 0 0;color:var(--dim);font-size:13px}
+.spectrumPageSubtitle{max-width:52ch;margin:7px 0 0;color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .spectrumPageMeta{display:block;margin-top:10px;color:var(--dim);font-size:12px}
 .dailyNavIcon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.spectrumPageHead> :not(.spectrumPageHeadCopy){position:relative;z-index:2}
+.spectrumPageActions{position:absolute;z-index:5;right:30px;bottom:24px;display:flex;max-width:62%;align-items:flex-end;justify-content:flex-end}
+.pageSignalField{position:absolute;z-index:1;top:-46%;right:-8%;bottom:-48%;width:76%;overflow:hidden;pointer-events:none;opacity:.88;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 23%,#000 94%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 23%,#000 94%,transparent 100%);transition:opacity .35s ease}
+.pageDither,.pageSignalFallback{position:absolute;inset:0}.pageDither{z-index:1;transform:scale(1.02)}.pageDither canvas{z-index:0!important;opacity:.94;filter:saturate(.92) contrast(1.05)}
+.pageSignalFallback{z-index:0;background:radial-gradient(circle,rgba(62,192,229,.32) 0 1px,transparent 1.4px) 0 0/7px 7px,linear-gradient(118deg,transparent 16%,rgba(0,188,235,.14) 56%,rgba(98,72,167,.16));opacity:.82;transition:opacity .35s ease}
+.pageDither[data-page-effect=ready]+.pageSignalFallback{opacity:.08}
+.pageHeroBorder{position:absolute;z-index:4;inset:0;overflow:hidden;pointer-events:none;border-radius:inherit;opacity:.88}.pageHeroBorder canvas{z-index:0!important;opacity:.9}
 body.sessionRoute #view-session.sessionAll{--view-spectrum-a:rgba(0,188,235,.6);--view-spectrum-b:rgba(127,219,242,.3);--view-spectrum-c:rgba(199,167,255,.22);--view-haze-a:rgba(0,188,235,.25);--view-haze-b:rgba(199,167,255,.17)}
 #view-daily{--view-spectrum-a:rgba(127,219,242,.58);--view-spectrum-b:rgba(255,180,87,.28);--view-spectrum-c:rgba(0,188,235,.34);--view-haze-a:rgba(127,219,242,.28);--view-haze-b:rgba(255,180,87,.12)}
 #view-models{--view-spectrum-a:rgba(199,167,255,.52);--view-spectrum-b:rgba(0,188,235,.38);--view-spectrum-c:rgba(127,219,242,.3);--view-haze-a:rgba(199,167,255,.23);--view-haze-b:rgba(0,188,235,.18)}
@@ -255,46 +261,25 @@ body.sessionRoute #view-session.sessionAll{--view-spectrum-a:rgba(0,188,235,.6);
 body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr));background:var(--spectrum-card)}
 body.spectrumApp .settingsMap button{grid-template-columns:1fr;border-left:1px solid var(--line);border-radius:0}
 body.spectrumApp :is(.sessionStart,.toast,.capReview,.agentDiscovery,.frustrationNotice,.previewStartStrip,.modelScopeStatus){border-left-width:1px}
-@media(max-width:900px){.spectrumPageHead{min-height:126px;align-items:flex-start;flex-direction:column;padding:22px 24px}.spectrumPageHeadCopy{max-width:78%}.spectrumPageHead:before{right:56px;top:-178px}body.spectrumApp .settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}body.spectrumApp .settingsMapIntro{grid-column:1/-1}}
-@media(max-width:520px){.spectrumPageHead{min-height:116px;padding:19px 18px}.spectrumPageHeadCopy{max-width:88%}.spectrumPageHead h1{font-size:30px;line-height:1.02}.spectrumPageHead p{font-size:12px}.spectrumPageHead:before{right:-32px;top:-126px;width:220px;height:220px}body.spectrumApp .settingsMap{grid-template-columns:1fr}}
-@media(prefers-reduced-motion:reduce){.spectrumPageHead:before{animation:none}body.spectrumApp .tbtn{transition:none}}
+@media(max-width:900px){.spectrumPageHead{height:126px;align-items:flex-start;padding:22px 24px}.spectrumPageHeadCopy,.hasPageActions .spectrumPageHeadCopy{max-width:72%}.spectrumPageActions{position:static;display:flex;width:100%;max-width:none;min-height:46px;align-items:center;justify-content:flex-start;margin-top:8px;padding:7px 8px;border:1px solid var(--spectrum-border);border-radius:8px;background:var(--spectrum-control);box-shadow:var(--shadow-soft)}.spectrumPageActions>*{width:100%}.pageSignalField{right:-18%;width:88%}body.spectrumApp .settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}body.spectrumApp .settingsMapIntro{grid-column:1/-1}}
+@media(max-width:520px){.spectrumPageHead{height:116px;padding:19px 18px}.spectrumPageHeadCopy,.hasPageActions .spectrumPageHeadCopy{max-width:62%}.spectrumPageHead h1{font-size:30px;line-height:1.02}.spectrumPageSubtitle{max-width:34ch;font-size:11px}.spectrumPageActions{padding:7px}.pageSignalField{top:-36%;right:-43%;bottom:-42%;width:112%;opacity:.78}body.spectrumApp .settingsMap{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.pageSignalField{transition:none}body.spectrumApp .tbtn{transition:none}}
 /* session-spectrum-field-v2 */
 body.sessionRoute{--session-cyan:var(--spectrum-cyan);--session-blue:var(--spectrum-blue);--session-sky:var(--spectrum-sky);--session-violet:var(--spectrum-violet);--session-orange:var(--spectrum-orange)}
-/* session-token-flow-v1 */
-body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:188px;align-items:flex-start;padding:29px 31px;background:radial-gradient(ellipse 58% 120% at 79% 48%,rgba(0,188,235,.13),transparent 66%),radial-gradient(ellipse 42% 100% at 100% 80%,rgba(199,167,255,.11),transparent 70%),linear-gradient(116deg,rgba(17,38,49,.995),rgba(7,17,24,.995) 48%,rgba(15,12,29,.985));box-shadow:0 1px 0 rgba(202,243,253,.2),0 20px 54px rgba(0,0,0,.34),0 10px 30px rgba(0,112,149,.11)}
-body.sessionRoute #view-session.sessionOverview .sessionFlowHead:before{content:none}
-body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{z-index:3;max-width:min(650px,58%)}
-body.sessionRoute #view-session.sessionOverview .sessionFlowHead h1{font-size:clamp(44px,5.2vw,66px);line-height:.92;letter-spacing:-.05em}
-body.sessionRoute #view-session.sessionOverview .sessionFlowHead p{margin-top:12px;color:#8fa4b2}
-body.sessionRoute #view-session .sessionFlowStatus{display:inline-flex;min-height:28px;align-items:center;gap:8px;margin-top:17px;padding:6px 10px;border:1px solid rgba(127,219,242,.22);border-radius:999px;background:rgba(5,17,23,.62);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);color:var(--session-sky);font:760 10px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.055em;text-transform:uppercase}
+/* session-signal-field-v1 */
+body.sessionRoute #view-session .sessionFlowStatus{display:inline-flex;width:auto;min-height:28px;align-items:center;gap:8px;margin:0;padding:6px 10px;border:1px solid rgba(127,219,242,.22);border-radius:999px;background:rgba(5,17,23,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.035);color:var(--session-sky);font:760 10px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.055em;text-transform:uppercase}
 body.sessionRoute #view-session .sessionFlowStatus i{width:6px;height:6px;flex:0 0 auto;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowStatus{border-color:rgba(102,217,144,.3);color:var(--good)}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowStatus i{animation:sessionFlowStatusPulse 2.8s ease-out infinite}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowStatus{color:var(--warn)}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=recent] .sessionFlowStatus{color:var(--session-violet)}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowStatus{color:var(--dim)}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] .sessionFlowStatus{border-style:dashed;color:var(--faint)}
-body.sessionRoute #view-session .sessionFlowField{position:absolute;z-index:1;top:-13%;right:-5%;bottom:-17%;width:68%;overflow:hidden;pointer-events:none;opacity:.82;mask-image:linear-gradient(90deg,transparent 0,#000 18%,#000 88%,transparent 100%)}
-body.sessionRoute #view-session .sessionFlowField svg{display:block;width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 9px rgba(0,188,235,.16))}
-body.sessionRoute #view-session .sessionFlowLine{fill:none;stroke:url(#session-flow-cyan);stroke-width:13;stroke-linecap:round;stroke-dasharray:9 18;animation:sessionFlowDrift 13s linear infinite}
-body.sessionRoute #view-session .sessionFlowLine.secondary{stroke:url(#session-flow-violet);stroke-width:6;stroke-dasharray:3 15;animation-duration:18s;animation-direction:reverse}
-body.sessionRoute #view-session .sessionFlowLine.detail{stroke:rgba(224,250,255,.78);stroke-width:2;stroke-dasharray:1 14;animation-duration:8.5s}
-body.sessionRoute #view-session .sessionFlowGuide{fill:none;stroke:rgba(127,219,242,.13);stroke-width:1}
-body.sessionRoute #view-session .sessionFlowPacket{position:absolute;top:45%;left:3%;width:8px;height:8px;border-radius:50%;background:#dcfaff;box-shadow:0 0 8px #b8f2ff,0 0 20px rgba(0,188,235,.38);offset-path:path("M 0 78 C 110 -10 210 135 330 45 S 505 20 670 90");animation:sessionFlowPacket 12s linear infinite}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowLine{animation-duration:8s}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowLine.secondary{animation-duration:11s}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=working] .sessionFlowPacket{animation-duration:7s}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowField{opacity:.48}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .sessionFlowLine{animation-duration:20s}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=recent] .sessionFlowField{opacity:.42}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowField{opacity:.24}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowLine{animation-duration:24s}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .sessionFlowPacket{display:none}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] .sessionFlowField{opacity:.14}
-body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] :is(.sessionFlowLine,.sessionFlowPacket){animation-play-state:paused}
-body.sessionRoute #view-session.sessionDetail .sessionFlowField,body.sessionRoute #view-session.sessionDetail .sessionFlowStatus{display:none}
-@keyframes sessionFlowDrift{to{stroke-dashoffset:-240}}
-@keyframes sessionFlowPacket{to{offset-distance:100%}}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=working] .sessionFlowStatus{border-color:rgba(102,217,144,.3);color:var(--good)}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=working] .sessionFlowStatus i{animation:sessionFlowStatusPulse 2.8s ease-out infinite}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=waiting] .sessionFlowStatus{color:var(--warn)}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=recent] .sessionFlowStatus{color:var(--session-violet)}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=idle] .sessionFlowStatus{color:var(--dim)}
+body.sessionRoute #view-session .spectrumPageHeadFrame[data-session-flow=unavailable] .sessionFlowStatus{border-style:dashed;color:var(--faint)}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=waiting] .pageSignalField{opacity:.86}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=recent] .pageSignalField{opacity:.8}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=idle] .pageSignalField{opacity:.72}
+body.sessionRoute #view-session .sessionFlowHead[data-session-flow=unavailable] .pageSignalField{opacity:.62}
+body.sessionRoute #view-session.sessionDetail .sessionFlowHead :is(.pageSignalField,.pageHeroBorder),body.sessionRoute #view-session.sessionDetail .spectrumPageActions{display:none}
 @keyframes sessionFlowStatusPulse{0%,70%{box-shadow:0 0 0 0 rgba(102,217,144,.4)}100%{box-shadow:0 0 0 9px transparent}}
 body.sessionRoute #view-session .sessionScopeTabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;width:100%;margin:-4px 0 12px;padding:4px;border-color:rgba(0,188,235,.24);background:rgba(7,12,17,.72)}
 body.sessionRoute #view-session .sessionScopeTabs .tab{display:flex;min-height:44px;align-items:center;justify-content:center;gap:8px;padding:10px 14px;text-align:center}
@@ -320,18 +305,7 @@ body.sessionRoute #view-session .currentSessionGrid{gap:12px}
 body.sessionRoute #view-session .currentSessionCard{isolation:isolate;min-height:226px;padding:19px 20px 16px;border-color:rgba(0,188,235,.16);border-radius:8px;background:radial-gradient(circle at 92% 8%,rgba(127,219,242,.1),transparent 28%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.07),transparent 34%),linear-gradient(145deg,rgba(23,33,43,.98),rgba(9,15,21,.99));box-shadow:var(--shadow-soft);transition:transform .18s cubic-bezier(.16,1,.3,1),border-color .18s,box-shadow .18s,opacity .18s}
 body.sessionRoute #view-session .currentSessionCard:before{content:none}
 body.sessionRoute #view-session .currentSessionCard.activity-working{border-color:rgba(0,188,235,.42);background:radial-gradient(circle at 88% 4%,rgba(0,188,235,.18),transparent 34%),linear-gradient(135deg,rgba(17,45,58,.98),rgba(10,19,27,.99) 56%,rgba(14,15,27,.99))}
-body.sessionRoute #view-session .currentSessionCard>:not(.currentSessionFlow){position:relative;z-index:2}
-body.sessionRoute #view-session .currentSessionFlow{position:absolute;z-index:1;right:-9%;bottom:-18px;width:72%;height:92px;overflow:hidden;pointer-events:none;opacity:0;transform:skewX(-13deg);mask-image:linear-gradient(90deg,transparent,#000 24%,#000 88%,transparent)}
-body.sessionRoute #view-session .currentSessionFlowLine{position:absolute;right:0;left:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,188,235,.2) 12%,var(--harness) 58%,rgba(127,219,242,.9) 78%,transparent);transform-origin:center;animation:currentSessionFlowDrift 8.5s ease-in-out infinite}
-body.sessionRoute #view-session .currentSessionFlowLine:nth-child(1){top:15%;animation-delay:-1.2s}body.sessionRoute #view-session .currentSessionFlowLine:nth-child(2){top:43%;animation-delay:-3.6s}body.sessionRoute #view-session .currentSessionFlowLine:nth-child(3){top:72%;animation-delay:-5.8s}
-body.sessionRoute #view-session .currentSessionCard.activity-working .currentSessionFlow{opacity:.38}
-body.sessionRoute #view-session .currentSessionCard.activity-working .currentSessionFlowLine{animation-play-state:running}
-body.sessionRoute #view-session .currentSessionCard.activity-waiting .currentSessionFlow{opacity:.13}
-body.sessionRoute #view-session .currentSessionCard.activity-waiting .currentSessionFlowLine{animation-play-state:paused}
-body.sessionRoute #view-session .currentSessionCard.activity-recent .currentSessionFlow{opacity:.055}
-body.sessionRoute #view-session .currentSessionCard.activity-recent .currentSessionFlowLine{animation-play-state:paused}
 body.sessionRoute #view-session .currentSessionCard.is-arriving{animation:currentSessionArrive .82s var(--spectrum-ease) both}
-@keyframes currentSessionFlowDrift{0%,100%{transform:translateX(-15%) scaleX(.62);opacity:.28}50%{transform:translateX(8%) scaleX(1);opacity:1}}
 @keyframes currentSessionArrive{0%{opacity:.15;transform:translateY(9px);box-shadow:0 0 0 1px rgba(0,188,235,.06)}55%{opacity:1;box-shadow:0 0 0 1px rgba(0,188,235,.58),0 0 34px rgba(0,188,235,.18)}100%{opacity:1;transform:none;box-shadow:var(--shadow-soft)}}
 body.sessionRoute #view-session .currentSessionCard:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--harness) 72%,var(--session-cyan));box-shadow:0 18px 38px rgba(0,0,0,.3)}
 body.sessionRoute #view-session .currentSessionCard:focus-visible{outline:2px solid var(--session-cyan);outline-offset:3px;border-color:var(--session-cyan);box-shadow:none}
@@ -424,13 +398,12 @@ body.sessionRoute #view-session.sessionDetail .previewTimes b{overflow:visible;w
 body.sessionRoute #view-session.sessionDetail .previewRunBudgetSlot .sessionBudget{border-color:rgba(0,188,235,.14);border-radius:8px;background:linear-gradient(145deg,rgba(17,24,32,.96),rgba(8,13,18,.98));box-shadow:none}
 body.sessionRoute #view-session.sessionDetail .previewTokenSlot .bar{border-color:rgba(0,188,235,.16);background:rgba(5,9,13,.7)}
 body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:var(--session-sky);text-shadow:none}
-@media(max-width:900px){body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:172px;padding:25px 25px}body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{max-width:66%}body.sessionRoute #view-session .sessionFlowField{right:-13%;width:76%}body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:126px}}
 @media(max-width:900px){body.sessionRoute #view-session .logsSummary .logKpis{grid-template-columns:repeat(3,minmax(0,1fr))}body.sessionRoute #view-session .logsSummary .logStat:nth-child(4){border-left:0}body.sessionRoute #view-session .logsSummary .logStat:nth-child(n+4){margin-top:9px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}}
 @media(max-width:700px){body.sessionRoute #view-session .currentSessionMetric{padding:0 8px}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}}
-@media(max-width:520px){body.sessionRoute #view-session.sessionOverview .sessionFlowHead{min-height:158px;padding:20px 18px}body.sessionRoute #view-session.sessionOverview .sessionFlowHead .spectrumPageHeadCopy{max-width:84%}body.sessionRoute #view-session.sessionOverview .sessionFlowHead h1{font-size:38px}body.sessionRoute #view-session .sessionFlowStatus{margin-top:14px;padding:5px 8px;font-size:9px}body.sessionRoute #view-session .sessionFlowField{top:-4%;right:-38%;bottom:-12%;width:108%;opacity:.36}body.sessionRoute #view-session.sessionDetail .spectrumPageHead{min-height:116px}body.sessionRoute #view-session .currentDaySummary{grid-template-columns:1fr;gap:10px;padding:11px 12px}body.sessionRoute #view-session .currentDayReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}body.sessionRoute #view-session .currentDayMetric{padding:0 10px}body.sessionRoute #view-session .currentDayMetric:nth-child(3){grid-column:1/-1;margin-top:9px;padding:9px 10px 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentDayLearn{width:100%}body.sessionRoute #view-session .currentSessionsHead{display:grid;grid-template-columns:minmax(0,1fr) auto}body.sessionRoute #view-session .currentSessionRuntimeFilters{width:100%;max-width:none}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
+@media(max-width:520px){body.sessionRoute #view-session .sessionFlowStatus{padding:5px 8px;font-size:8.5px}body.sessionRoute #view-session .currentDaySummary{grid-template-columns:1fr;gap:10px;padding:11px 12px}body.sessionRoute #view-session .currentDayReadouts{grid-template-columns:repeat(2,minmax(0,1fr))}body.sessionRoute #view-session .currentDayMetric{padding:0 10px}body.sessionRoute #view-session .currentDayMetric:nth-child(3){grid-column:1/-1;margin-top:9px;padding:9px 10px 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentDayLearn{width:100%}body.sessionRoute #view-session .currentSessionsHead{display:grid;grid-template-columns:minmax(0,1fr) auto}body.sessionRoute #view-session .currentSessionRuntimeFilters{width:100%;max-width:none}body.sessionRoute #view-session .currentSessionCard{min-height:224px;padding:16px 15px 13px}body.sessionRoute #view-session .currentSessionIdentity h3{display:-webkit-box;min-height:44px;overflow:hidden;font-size:19px;line-height:1.16;white-space:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2}body.sessionRoute #view-session .currentSessionMetrics{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:17px}body.sessionRoute #view-session .currentSessionMetric{padding:0 10px}body.sessionRoute #view-session .currentSessionMetric:nth-child(3){grid-column:1/-1;margin-top:11px;padding:11px 0 0;border-top:1px solid rgba(0,188,235,.12);border-left:0}body.sessionRoute #view-session .currentSessionMetric b,body.sessionRoute #view-session .currentSessionMetric b.mono{font-size:17px}body.sessionRoute #view-session.sessionDetail .previewCost{font-size:40px}}
 @media(max-width:520px){body.sessionRoute #view-session .allSessionsHead{display:block}body.sessionRoute #view-session .allSessionsHint{display:block;margin-top:7px}body.sessionRoute #view-session .logsSummary .logKpis{grid-template-columns:1fr}body.sessionRoute #view-session .logsSummary .logStat,body.sessionRoute #view-session .logsSummary .logStat:nth-child(4){margin-top:0;padding:11px 13px;border-top:1px solid rgba(255,255,255,.08);border-left:0}body.sessionRoute #view-session .logsSummary .logStat:first-child{border-top:0}}
 @media(max-width:520px){body.sessionRoute #view-session .currentSessionFilterGroups{display:grid;width:100%;max-width:none;overflow:visible}body.sessionRoute #view-session .currentSessionFilterGroup{min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}}
-@media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}body.sessionRoute #view-session :is(.sessionFlowLine,.sessionFlowPacket,.currentSessionFlowLine,.sessionFlowStatus i,.currentSessionCard.is-arriving){animation:none!important}body.sessionRoute #view-session .sessionFlowPacket{display:none}}
+@media(prefers-reduced-motion:reduce){body.sessionRoute #view-session .currentSessionCard{transition:none}body.sessionRoute #view-session :is(.sessionFlowStatus i,.currentSessionCard.is-arriving){animation:none!important}}
 .workloadCell strong{display:block;color:var(--fg);font-size:13px}.workloadCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px;white-space:nowrap}
 .modelKpi:hover,.modelKpi:focus-within{z-index:50}.modelKpi:nth-child(n+4) .fieldtip:after{left:auto;right:0}.modelHelp:before{content:"i";display:inline-grid;place-items:center;width:13px;height:13px;margin-right:5px;border:1px solid currentColor;border-radius:50%;font:800 9px/1 ui-monospace,"SF Mono",Menlo,monospace;opacity:.72}.modelCoverage.fieldtip{display:block}.modelCoverage.fieldtip:after{bottom:auto;top:calc(100% + 7px)}
 .learnSectionHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.learnSectionHead .subline{margin-top:4px;max-width:820px}
@@ -455,16 +428,16 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 .learnOnboarding{padding:16px;border:1px solid rgba(0,188,235,.25);border-radius:9px;background:rgba(0,188,235,.045)}.learnOnboarding .learnSectionHead{align-items:center}.learnShortcutGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.learnShortcut{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--dim);font-size:11px}.learnShortcut kbd{min-width:42px;border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:2px 6px;color:var(--fg);font:750 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;text-align:center;white-space:nowrap}
 @media(max-width:900px){.onboardingChecklist{grid-template-columns:repeat(3,minmax(0,1fr))}.learnShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.onboardingCard{padding:13px}.onboardingHead{display:grid;grid-template-columns:1fr}.onboardingHeadActions{justify-content:space-between}.onboardingNext{grid-template-columns:1fr}.onboardingNext .tbtn{justify-self:start}.onboardingChecklist,.learnShortcutGrid{grid-template-columns:1fr}.onboardingCard.collapsed .onboardingHead{grid-template-columns:minmax(0,1fr) auto;align-items:center}.onboardingCard.collapsed .onboardingHeadActions{justify-content:end}.onboardingCard.collapsed .onboardingCount{display:none}.commandCoach{align-items:stretch;flex-direction:column;padding:9px 12px}.commandCoach .tbtn{width:100%}.onboardingLesson{padding:18px}.onboardingLesson h2{font-size:20px}.onboardingLessonFoot{align-items:flex-start;flex-direction:column}.onboardingLessonFoot .tbtn{width:100%}}
-.modelHead.spectrumPageHead{overflow:visible;z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}
+.modelHead.spectrumPageHead{z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}
 .dailySpendCard:before{content:none}
 /* tools-review-workflow-v3 */
-.capPageIntro{max-width:720px;margin:4px 0 0;color:var(--dim);font-size:12px;line-height:1.45}.capFreshness{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:none;color:var(--faint);font-size:10.5px}.capFreshness .agentAccessBadge{margin:0}.capFreshness .agentAccessBadge.current{color:var(--good);border-color:rgba(102,217,144,.34);background:rgba(102,217,144,.08)}.capFreshness .agentAccessBadge.stale{color:var(--warn);border-color:rgba(255,180,87,.38);background:rgba(255,180,87,.08)}.capFreshness .agentAccessBadge.unavailable{color:var(--bad);border-color:rgba(255,111,111,.38);background:rgba(255,111,111,.08)}
+.capPageIntro{max-width:720px;margin:4px 0 0;color:var(--dim);font-size:12px;line-height:1.45}
 .capStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 0 12px;padding:0!important;overflow:hidden}.capStat{display:grid;min-width:0;min-height:88px;align-content:center;gap:2px;padding:13px 16px;border:0;border-left:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:pointer}.capStat:first-child{border-left:0}.capStat:hover{background:rgba(0,188,235,.055)}.capStat.on{background:linear-gradient(145deg,rgba(0,188,235,.13),rgba(27,160,225,.045));box-shadow:inset 0 -2px 0 var(--accent)}.capStatLabel{color:var(--dim);font-size:11px;font-weight:780}.capStat strong{font:720 22px/1.15 ui-monospace,"SF Mono",Menlo,monospace}.capStatDetail{overflow-wrap:anywhere;color:var(--faint);font-size:10.5px;line-height:1.35}
 .capReviewQueue{margin:0;overflow:hidden;border-color:rgba(0,188,235,.3);background:rgba(16,23,31,.94)}.capReviewQueue.good{border-color:rgba(102,217,144,.3)}.capReviewQueue.warn{border-color:rgba(255,180,87,.42)}.capQueueHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:17px 18px 13px}.capQueueHead h2{margin:0;font-size:18px}.capQueueDetail{max-width:780px;margin:4px 0 0;color:var(--dim);font-size:12px;line-height:1.45}.capQueueCount{flex:none;padding-top:2px;color:var(--fg);font:760 11px/1.4 ui-monospace,"SF Mono",Menlo,monospace}.capReviewCaveat{margin:0;padding:10px 18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(255,180,87,.045);color:var(--dim);font-size:11px;line-height:1.45}.capReviewCaveat[hidden]{display:none}.capReviewList{display:grid}.capQueueLoading,.capQueueEmpty{padding:24px 18px;color:var(--dim);font-size:12px}.capQueueEmpty h3{margin:0;color:var(--fg);font-size:15px}.capQueueEmpty p{max-width:760px;margin:5px 0 0;line-height:1.5}.capQueueEmpty .tbtn{margin-top:13px}.capReviewItem{padding:16px 18px;border-bottom:1px solid var(--line)}.capReviewItem:last-child{border-bottom:0}.capReviewTop{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.capReviewIdentity{min-width:0}.capReviewIdentity h3{margin:0;color:var(--fg);font-size:16px}.capReviewIdentity p{margin:3px 0 0;color:var(--faint);font-size:10.5px}.capReviewChoice{display:flex;align-items:center;gap:12px;flex:none}.capReviewChoice .stateDot{white-space:nowrap}.capSelect{display:inline-flex;min-height:36px;align-items:center;gap:7px;padding:0 9px;border:1px solid var(--line2);border-radius:7px;background:rgba(255,255,255,.035);color:var(--fg);font-size:11px;font-weight:740;cursor:pointer}.capSelect input{width:15px;height:15px;accent-color:var(--warn)}.capReviewFacts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:13px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.capReviewFacts>div{padding:10px 12px;border-left:1px solid var(--line)}.capReviewFacts>div:first-child{padding-left:0;border-left:0}.capReviewFacts dt{color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.capReviewFacts dd{margin:4px 0 0;color:var(--fg);font-size:12px;line-height:1.4}.capReviewImpact{margin:10px 0 0;color:var(--dim);font-size:11.5px;line-height:1.5}.capReviewDisclosure{margin-top:10px;color:var(--dim);font-size:11px}.capReviewDisclosure summary{width:max-content;max-width:100%;cursor:pointer;color:var(--accent);font-weight:720}.capReviewDisclosureBody{display:grid;gap:7px;margin-top:9px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:rgba(5,9,13,.28)}.capReviewDisclosureBody b{color:var(--fg)}.capReviewMembers{display:flex;flex-wrap:wrap;gap:5px}.capReviewMembers span{padding:3px 6px;border:1px solid var(--line);border-radius:5px;background:rgba(255,255,255,.025);color:var(--dim);font:650 10px/1.3 ui-monospace,"SF Mono",Menlo,monospace}.capReviewControl{overflow-wrap:anywhere;color:var(--faint);font:600 10px/1.45 ui-monospace,"SF Mono",Menlo,monospace}.capSelectionBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:11px 18px;border-top:1px solid rgba(255,180,87,.3);background:rgba(255,180,87,.06)}.capSelectionBar[hidden]{display:none}.capSelectionBar span{margin-right:auto;color:var(--fg);font-size:11.5px;font-weight:750}.capSelectionBar .tbtn{min-height:36px}
 .capInventory{margin-top:12px;padding:0!important;overflow:hidden}.capInventoryHead{display:flex;align-items:center;gap:16px;padding:15px 17px}.capInventorySummary{display:grid;gap:2px;min-width:0}.capInventorySummary h2{margin:0;font-size:14px}.capInventorySummary small{color:var(--faint);font-size:11px;font-weight:500}.capInventoryCount{margin-left:auto;color:var(--dim);font:720 11px/1.4 ui-monospace,"SF Mono",Menlo,monospace;white-space:nowrap}.capInventoryBody{padding:14px 16px 16px;border-top:1px solid var(--line)}.capCatalog{display:grid;grid-template-columns:minmax(220px,.42fr) minmax(0,1fr);align-items:center;gap:20px;margin:0 0 12px;padding:0 0 12px;border-bottom:1px solid var(--line)}.capCatalogHead{display:grid;gap:2px}.capCatalogHead b{font-size:12px}.capCatalogHead small{color:var(--faint);font-size:10.5px;font-weight:500}.capCatalogHead .subline{margin:3px 0 0}.capCatalogBody{min-width:0}.capCatalogBody>.subline{margin:0 0 6px}.capFilterControl{display:grid;gap:5px;min-width:0}.capFilterControl>span{color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.capFilters{grid-template-columns:minmax(230px,1fr) auto auto minmax(130px,auto);align-items:end;padding:12px;border:1px solid var(--line);border-radius:9px;background:rgba(17,24,32,.66)}.capFilters .searchbox,.capFilters select{width:100%;height:38px;background:rgba(7,9,12,.58)}.capFilterStatus{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-height:18px;margin:-3px 0 10px;padding:0 2px}.capFilterStatus .clearFilters{padding:4px 8px}.capTableWrap{overflow-x:auto;border:1px solid var(--line);border-radius:9px}.capTableWrap .tbl{min-width:940px}.capEvidence{display:grid;gap:2px}.capEvidence strong{color:var(--fg);font-size:12px}.capEvidence small{color:var(--faint);font-size:10.5px;line-height:1.35}.stateDot.unknown:before{background:var(--faint)}.stateDot.observed:before{background:var(--accent)}.capEmpty,.capMore{padding:28px!important;text-align:center;color:var(--faint)}.capEmpty button{margin-left:8px}.capPath{max-width:280px}
 .capCatalogHead>span:first-child{display:grid;gap:2px}
 @media(max-width:1400px){.capFilters{grid-template-columns:1fr 1fr}.capFilterControl:first-child{grid-column:1/-1}}
-@media(max-width:800px){.capFreshness{justify-content:flex-start}.capReviewFacts{grid-template-columns:1fr}.capReviewFacts>div,.capReviewFacts>div:first-child{padding:9px 0;border-left:0;border-top:1px solid var(--line)}.capReviewFacts>div:first-child{border-top:0}.capReviewTop{display:grid}.capReviewChoice{justify-content:space-between}.capInventoryHead{align-items:flex-start}.capCatalog{grid-template-columns:1fr;gap:9px}.capCatalogHead{grid-template-columns:minmax(0,1fr) auto;align-items:start}.capCatalogHead .subline{margin:0}.capFilters{grid-template-columns:1fr;padding:11px}.capFilterControl:first-child{grid-column:1}.capFilters .seg{width:100%}.capFilters .seg button{flex:1}.capTableWrap{overflow:visible;border:0;border-radius:0}.capTableWrap .tbl{display:block;min-width:0}.capTableWrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.capTableWrap tbody{display:grid;gap:8px}.capTableWrap tr{display:grid;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--spectrum-card);box-shadow:var(--shadow-soft)}.capTableWrap td{display:grid;grid-template-columns:minmax(92px,.38fr) minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.055);overflow-wrap:anywhere}.capTableWrap td:last-child{border-bottom:0}.capTableWrap td:before{content:attr(data-label);color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.capTableWrap td.nm{display:block;padding-top:2px;font-size:15px}.capTableWrap td.nm:before{display:block;margin-bottom:5px}.capTableWrap .capPath{max-width:100%;white-space:normal}.capTableWrap .capEmpty{display:block}.capTableWrap .capEmpty:before{display:none}.capFilterStatus{align-items:stretch;flex-direction:column}.capFilterStatus .clearFilters{align-self:flex-start}.capCatalogBody .legend{gap:8px}}
+@media(max-width:800px){.capReviewFacts{grid-template-columns:1fr}.capReviewFacts>div,.capReviewFacts>div:first-child{padding:9px 0;border-left:0;border-top:1px solid var(--line)}.capReviewFacts>div:first-child{border-top:0}.capReviewTop{display:grid}.capReviewChoice{justify-content:space-between}.capInventoryHead{align-items:flex-start}.capCatalog{grid-template-columns:1fr;gap:9px}.capCatalogHead{grid-template-columns:minmax(0,1fr) auto;align-items:start}.capCatalogHead .subline{margin:0}.capFilters{grid-template-columns:1fr;padding:11px}.capFilterControl:first-child{grid-column:1}.capFilters .seg{width:100%}.capFilters .seg button{flex:1}.capTableWrap{overflow:visible;border:0;border-radius:0}.capTableWrap .tbl{display:block;min-width:0}.capTableWrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.capTableWrap tbody{display:grid;gap:8px}.capTableWrap tr{display:grid;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--spectrum-card);box-shadow:var(--shadow-soft)}.capTableWrap td{display:grid;grid-template-columns:minmax(92px,.38fr) minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.055);overflow-wrap:anywhere}.capTableWrap td:last-child{border-bottom:0}.capTableWrap td:before{content:attr(data-label);color:var(--faint);font-size:9.5px;font-weight:780;text-transform:uppercase}.capTableWrap td.nm{display:block;padding-top:2px;font-size:15px}.capTableWrap td.nm:before{display:block;margin-bottom:5px}.capTableWrap .capPath{max-width:100%;white-space:normal}.capTableWrap .capEmpty{display:block}.capTableWrap .capEmpty:before{display:none}.capFilterStatus{align-items:stretch;flex-direction:column}.capFilterStatus .clearFilters{align-self:flex-start}.capCatalogBody .legend{gap:8px}}
 .capMobileSort{display:none}
 @media(max-width:800px){.capMobileSort{display:grid;grid-template-columns:auto minmax(150px,220px);align-items:center;justify-content:end;gap:8px;margin:10px 0;color:var(--faint);font-size:10px;font-weight:780;text-transform:uppercase}.capMobileSort select{height:38px}.capTableWrap .capMore{display:block}.capTableWrap .capMore:before{display:none}}
 @media(max-width:520px){.capStat{min-height:86px;padding:11px 9px}.capStat strong{font-size:20px}.capStatDetail{font-size:9.5px}.capQueueHead,.capReviewItem,.capQueueEmpty{padding-left:13px;padding-right:13px}.capQueueHead{display:grid}.capQueueCount{padding:0}.capReviewCaveat{padding:9px 13px}.capReviewChoice{align-items:stretch;flex-direction:column}.capSelect{min-height:44px;justify-content:center}.capSelectionBar{align-items:stretch;flex-wrap:wrap;padding:10px 13px}.capSelectionBar span{width:100%;margin:0}.capSelectionBar .tbtn{min-height:44px;flex:1}.capInventoryHead{padding:13px}.capInventoryBody{padding:12px}.capCatalogHead .subline{display:none}}
@@ -480,6 +453,8 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 @media(max-width:900px){.spendRangeControls{width:100%;justify-items:start}.spendRangeControls .seg{width:100%;overflow-x:auto;justify-content:flex-start}.spendKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.spendChartHead{display:grid}.spendLegend{justify-content:flex-start}.spendCustom{justify-content:flex-start}.spendEvidenceGrid,.spendInsightGrid{grid-template-columns:1fr}.spendInsightHead{align-items:flex-start;flex-direction:column}.spendInsightRange{white-space:normal}.spendScatterControls{justify-content:flex-start}}
 @media(max-width:700px){.spendShapeHeader{display:none}.spendShapeRow{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px 0}.spendShapeRail,.spendShapeValues{grid-column:1/-1}.spendShapeValues span{display:grid;gap:2px;text-align:left}.spendShapeValues span:before{content:attr(data-label);color:var(--faint);font:760 8.5px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-transform:uppercase}.spendScatterSvg{height:300px}}
 @media(max-width:520px){.spendKpis{grid-template-columns:1fr}.spendKpi .v,.spendKpi:first-child .v{font-size:22px}.spendRangeControls .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.spendRangeControls [data-spend-range=custom]{grid-column:1/-1}.spendCustom{display:grid;grid-template-columns:1fr 1fr;width:100%}.spendCustom label,.spendCustom input{width:100%;min-width:0}.spendCustom #s-range-error{grid-column:1/-1;padding:0}.spendPlatformRow{grid-template-columns:minmax(0,1fr) auto}.spendPlatformTrack{grid-column:1/-1;grid-row:2}.spendChartCard{padding-inline:13px}.spendChart{grid-template-columns:44px minmax(0,1fr)}.spendYAxis{padding-right:6px;font-size:9px}.spendLogsCard,.spendPlatformCard,.spendConcentrationCard,.spendShapeCard,.spendScatterCard{padding:14px 13px}.spendLogRow{height:86px;grid-template-columns:24px minmax(0,1fr) auto;gap:9px}.spendLogRank{width:22px;height:22px}.spendLogValue{grid-column:2/4;grid-row:2;display:flex;min-width:0;align-items:baseline;justify-content:space-between;gap:10px;text-align:left}.spendLogValue strong,.spendLogValue span{display:block;margin:0}.spendLogRow .tbtn{grid-column:3;grid-row:1;min-height:44px;padding-inline:12px}.spendConcentrationValue{font-size:38px}.spendInsightCardHead{display:grid}.spendScatterControls .seg{width:100%}.spendScatterControls .seg button{flex:1}.spendScatterSvg{height:270px}.spendScatterLegend{align-items:flex-start;flex-direction:column;gap:5px}}
+@media(max-width:900px){.spectrumPageActions .modelControls{display:grid;width:100%;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.spectrumPageActions .modelControls .filterControl{min-width:0}.spectrumPageActions .spendRangeControls{display:block;width:100%;min-width:0}.spectrumPageActions .spendRangeControls .seg{display:flex;width:100%;grid-template-columns:none;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.spectrumPageActions .spendRangeControls .seg::-webkit-scrollbar{display:none}.spectrumPageActions .spendRangeControls .seg button{flex:0 0 auto}}
+@media(max-width:520px){.spectrumPageActions .modelControls{grid-template-columns:repeat(3,minmax(0,1fr))}.spectrumPageActions .spendRangeControls .seg{display:flex;grid-template-columns:none}.spectrumPageActions .spendRangeControls .seg button{padding-inline:8px}.spectrumPageActions .spendRangeControls [data-spend-range=custom]{grid-column:auto}}
 .currentSessionRuntime:before,.badge.app:before{content:none}.runtimeMark{display:block;width:16px;height:16px;flex:0 0 auto;overflow:visible;color:currentColor}.runtimeMark path,.runtimeMark circle,.runtimeMark polygon{vector-effect:non-scaling-stroke}.currentSessionRuntime .runtimeMark{width:18px;height:18px}
 </style></head><body class=spectrumApp>
 <!--
@@ -647,13 +622,14 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
    <span class=msg id=current-budget-warning-msg></span>
    <button class=tbtn id=current-budget-settings type=button>Open budget settings</button>
   </div>
-  <div class="previewHead spectrumPageHead sessionFlowHead" id=session-flow-head data-session-flow=unavailable>
-   <div class="previewHeadCopy spectrumPageHeadCopy">
-   <h1 id=session-page-title>Sessions</h1>
-   <p id=current-description>Live traces from the last 30 minutes.</p>
-   <div class=sessionFlowStatus role=status aria-live=polite><i aria-hidden=true></i><span id=session-flow-label>Waiting for evidence</span></div>
+  <div class="spectrumPageHeadFrame hasPageActions" data-session-flow=unavailable>
+   <div class="previewHead spectrumPageHead sessionFlowHead" id=session-flow-head data-page-signal=sessions data-session-flow=unavailable>
+    <div class="previewHeadCopy spectrumPageHeadCopy">
+     <h1 id=session-page-title>Sessions</h1>
+     <p class=spectrumPageSubtitle id=current-description>Live local traces · last 30 minutes.</p>
+    </div>
    </div>
-   <div class=sessionFlowField aria-hidden=true><svg viewBox="0 0 720 240" preserveAspectRatio="none" focusable="false"><defs><linearGradient id=session-flow-cyan x1="0" x2="1"><stop stop-color="#00bceb" stop-opacity="0"/><stop offset=".32" stop-color="#00bceb"/><stop offset=".72" stop-color="#a9efff"/><stop offset="1" stop-color="#c7a7ff" stop-opacity="0"/></linearGradient><linearGradient id=session-flow-violet x1="0" x2="1"><stop stop-color="#7fdbf2" stop-opacity="0"/><stop offset=".42" stop-color="#7fdbf2"/><stop offset=".8" stop-color="#a88cff"/><stop offset="1" stop-color="#a88cff" stop-opacity="0"/></linearGradient></defs><path class=sessionFlowGuide d="M-20 177 C132 22 246 224 406 92 S650 42 760 150"/><path class=sessionFlowGuide d="M-30 79 C135 211 251 17 424 150 S655 212 760 70"/><path class=sessionFlowLine d="M-20 177 C132 22 246 224 406 92 S650 42 760 150"/><path class="sessionFlowLine secondary" d="M-30 79 C135 211 251 17 424 150 S655 212 760 70"/><path class="sessionFlowLine detail" d="M-20 125 C145 45 267 192 418 70 S658 165 760 109"/></svg><i class=sessionFlowPacket></i></div>
+   <div class=spectrumPageActions><div class=sessionFlowStatus role=status aria-live=polite><i aria-hidden=true></i><span id=session-flow-label>Waiting for evidence</span></div></div>
   </div>
 
   <div class="tabs sessionScopeTabs" id=session-scope-tabs role=tablist aria-label="Sessions view">
@@ -789,13 +765,15 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
  </div>
 
 	 <div class=view id=view-models>
-	  <div class="modelHead spectrumPageHead">
-	   <div class=spectrumPageHeadCopy><h1>Model performance</h1></div>
-	   <div class=modelControls>
+	  <div class="spectrumPageHeadFrame hasPageActions">
+	   <div class="modelHead spectrumPageHead" data-page-signal=models>
+	    <div class=spectrumPageHeadCopy><h1>Models</h1><p class=spectrumPageSubtitle>Compare model cost, speed, and context.</p></div>
+	   </div>
+	   <div class=spectrumPageActions><div class=modelControls>
 	    <label class=filterControl><span>Project</span><select class=filterSelect id=m-project aria-label="Model performance project filter"><option value="">All projects</option></select></label>
 	    <div class=filterControl><span>Models</span><details class=modelPicker id=m-model-picker><summary aria-label="Choose models to compare"><span id=m-model-summary>All models</span></summary><div class=modelPickerMenu id=m-model-options role=group aria-label="Models to compare"></div></details></div>
 	    <label class=filterControl><span>History</span><select class=filterSelect id=m-range aria-label="Models history range"><option value=today>Today</option><option value=yesterday>Yesterday</option><option value=7>Last 7 days</option><option value=30 selected>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
-	   </div>
+	   </div></div>
 	  </div>
 	  <div class=modelScopeStatus id=m-project-status aria-live=polite></div>
 	  <div class=modelHero>
@@ -839,12 +817,14 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-daily>
-	  <div class="dailyHead spectrumPageHead">
-	   <div class=spectrumPageHeadCopy><h1>Spend</h1><p>Understand where estimated agent spend is going over time.</p></div>
-	   <div class=spendRangeControls>
-	    <div class=seg id=s-range aria-label="Spend range"><button data-spend-range=today>Today</button><button data-spend-range=7>7 days</button><button data-spend-range=30>30 days</button><button data-spend-range=month>This month</button><button data-spend-range=custom>Custom range</button></div>
-	    <div class=spendCustom id=s-custom hidden><label><span>From</span><input id=s-from type=date></label><label><span>To</span><input id=s-to type=date></label><span id=s-range-error role=status aria-live=polite></span></div>
+	  <div class="spectrumPageHeadFrame hasPageActions">
+	   <div class="dailyHead spectrumPageHead" data-page-signal=spend>
+	    <div class=spectrumPageHeadCopy><h1>Spend</h1><p class=spectrumPageSubtitle>Track estimated agent spend over time.</p></div>
 	   </div>
+	   <div class=spectrumPageActions><div class=spendRangeControls>
+	    <div class=seg id=s-range aria-label="Spend range"><button data-spend-range=today>Today</button><button data-spend-range=7>7 days</button><button data-spend-range=30>30 days</button><button data-spend-range=month>Month</button><button data-spend-range=custom>Custom</button></div>
+	    <div class=spendCustom id=s-custom hidden><label><span>From</span><input id=s-from type=date></label><label><span>To</span><input id=s-to type=date></label><span id=s-range-error role=status aria-live=polite></span></div>
+	   </div></div>
 	  </div>
 	  <div class=spendKpis>
 	   <div class="card spendKpi"><div class=label>Selected-period spend</div><div class="v mono" id=s-total>--</div><div class=subline id=s-total-note></div></div>
@@ -872,7 +852,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-learn>
-	  <div class="learnHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1>Learn</h1></div></div>
+	  <div class=spectrumPageHeadFrame><div class="learnHead spectrumPageHead" data-page-signal=learn><div class=spectrumPageHeadCopy><h1>Learn</h1><p class=spectrumPageSubtitle>Learn the core Token Meter review loop.</p></div></div></div>
 	  <section class="learnSection learnOnboarding"><div class=learnSectionHead><div><h2>First five minutes</h2><div class=subline id=learn-onboarding-status>0 of 6 complete · progress stays in this browser.</div></div><button class=tbtn id=learn-onboarding-action type=button>Resume onboarding</button></div><div class=learnShortcutGrid aria-label="Command palette shortcuts">
 	   <div class=learnShortcut><kbd>&#8984;K</kbd><span>Command palette</span></div>
 	   <div class=learnShortcut><kbd>&uarr; &darr;</kbd><span>Move</span></div>
@@ -891,10 +871,11 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-capabilities>
-  <header class="capPageHead spectrumPageHead">
-   <div class=spectrumPageHeadCopy><h1>Tools</h1><div class=capPageIntro>Review user-installed skill packs that need a decision, then inspect tools, MCP servers, and skills when you need the full inventory.</div></div>
-   <div class=capFreshness><span class=agentAccessBadge id=c-evidence-status>Loading</span><span id=c-evidence-updated>Waiting for local evidence</span></div>
-  </header>
+  <div class=spectrumPageHeadFrame>
+   <header class="capPageHead spectrumPageHead" data-page-signal=capabilities>
+    <div class=spectrumPageHeadCopy><h1>Tools</h1><p class=spectrumPageSubtitle>Review installed tools, MCP servers, and skills.</p></div>
+   </header>
+  </div>
   <section class="card capStats" aria-label="Capability overview">
    <button class=capStat type=button data-cap-jump=tool aria-label="Show Tools in the capability inventory"><span class=capStatLabel>Tools</span><strong id=c-stat-tools>&mdash;</strong><span class=capStatDetail id=c-stat-tools-detail>Waiting for evidence</span></button>
    <button class=capStat type=button data-cap-jump=mcp aria-label="Show MCP servers in the capability inventory"><span class=capStatLabel>MCP servers</span><strong id=c-stat-mcps>&mdash;</strong><span class=capStatDetail id=c-stat-mcps-detail>Waiting for evidence</span></button>
@@ -930,7 +911,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	 </div>
 
 	 <div class=view id=view-settings>
-	  <div class="learnHead settingsPageHead spectrumPageHead"><div class=spectrumPageHeadCopy><h1>Settings</h1></div></div>
+	  <div class=spectrumPageHeadFrame><div class="learnHead settingsPageHead spectrumPageHead" data-page-signal=settings><div class=spectrumPageHeadCopy><h1>Settings</h1><p class=spectrumPageSubtitle>Manage budgets, connections, pricing, and updates.</p></div></div></div>
   <div class=settingsPageLayout>
    <nav class="card settingsMap" aria-label="Settings sections">
     <div class=settingsMapIntro><h2>Sections</h2></div>
@@ -1275,6 +1256,12 @@ let currentSessionRuntimeFilter='all',currentSessionActivityFilter='all';
 let currentSessionDragId='',currentSessionDropId='',currentSessionDropAfter=false;
 let currentSessionSuppressClickUntil=0;
 let currentSessionSeenIds=[],currentSessionSeenReady=false;
+const pageSignalReducedMotionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
+const pageSignalClockStartedAt=performance.now();
+let pageEffectsModulePromise=null,pageEffectsDisabled=false;
+let activePageSignalHead=null,activePageHeroHandle=null,activePageBorderHandle=null;
+let activePageSignalMounting=false,activePageSignalGeneration=0;
+let latestSessionSignalSnapshot=null;
 const usageDetails=$('usage-details');
 usageDetails.open=localStorage.getItem('tm_usage_details_open')==='1';
 usageDetails.addEventListener('toggle',()=>localStorage.setItem('tm_usage_details_open',usageDetails.open?'1':'0'));
@@ -1325,7 +1312,7 @@ function renderSessionScope(){
   button.tabIndex=selected?0:-1;
  });
  if(overview){
-  $('current-description').textContent=all?'Every locally available session.':'Live traces from the last 30 minutes.';
+  $('current-description').textContent=all?'All locally available sessions.':'Live local traces · last 30 minutes.';
   $('session-page-title').setAttribute('aria-description',all?'Search, filter, and compare local session history.':'Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.');
  }
  if(all&&LATEST){
@@ -1597,7 +1584,7 @@ function showCurrentPanel(panel){
  const pageHelp=overview?(sessionScope==='all'?'Search, filter, and compare local session history.':'Select a card to inspect it. Drag a card or press ⌥ and an arrow key to reorder.'):'Review this session.';
  $('session-page-title').setAttribute('aria-description',pageHelp);
  $('session-page-title').dataset.tip=pageHelp;
- $('current-description').textContent=overview?(sessionScope==='all'?'Every locally available session.':'Live traces from the last 30 minutes.'):(pinned?'Pinned local run · live evidence updates every two seconds.':'Live local run · evidence updates as the trace changes.');
+ $('current-description').textContent=overview?(sessionScope==='all'?'All locally available sessions.':'Live local traces · last 30 minutes.'):(pinned?'Pinned run · updates every two seconds.':'Live run · updates as the trace changes.');
  CURRENT_PANEL_KEYS.forEach(key=>$(`preview-surface-${key}`).classList.toggle('on',key===panel));
  restoreCurrentModules();
  if(panel==='sessions'){
@@ -1633,6 +1620,7 @@ function showTab(t){
  });
  const activeTop=$(spend?'tab-daily':`tab-${t}`);
  if(window.matchMedia('(max-width:760px)').matches&&activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'center'}));
+ requestAnimationFrame(syncActivePageSignalEffects);
 }
 function openTopLevelRoute(route){window.scrollTo(0,0);setHashRoute(route);}
 $('tab-session').onclick=()=>{window.scrollTo(0,0);openCurrentSessions();};
@@ -3917,13 +3905,8 @@ $('bulk-confirm').onclick=async()=>{
   showAppToast({title:'Selected capability change failed',body:error.message||String(error),kind:'warn',sticky:true});
  }
 };
-function setCapabilityAvailability(state,message=''){
+function setCapabilityAvailability(state){
  capabilityEvidenceState=state;
- const badge=$('c-evidence-status');
- badge.classList.remove('current','stale','unavailable');
- badge.classList.add(state);
- badge.textContent={current:'Current',stale:'Stale',unavailable:'Unavailable'}[state]||'Loading';
- if(message)$('c-evidence-updated').textContent=message;
  if(state!=='current'){
   [...document.querySelectorAll('#c-table [data-cap-id]')].forEach(button=>{button.disabled=true;button.dataset.evidenceLocked='1';});
   $('c-disable-selected').disabled=true;
@@ -3939,11 +3922,9 @@ function setCapabilityAvailability(state,message=''){
  }
 }
 function renderCapabilities(cap,{force=false}={}){
- if(!cap){setCapabilityAvailability('unavailable','Capability evidence is unavailable.');return;}
- const generatedAt=Number(cap.generated_at||0);
+ if(!cap){setCapabilityAvailability('unavailable');return;}
  capabilityLastGoodAt=Date.now();
  setCapabilityAvailability('current');
- $('c-evidence-updated').textContent=generatedAt?`Updated ${new Date(generatedAt*1000).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'})}`:'Current local snapshot';
  const sum=cap.summary||{}, defs=sum.definitions||{}, optional=sum.optional||{};
  const tools=sum.tools||{}, mcps=sum.mcps||{}, skills=sum.skills||{};
  $('c-stat-tools').textContent=f(tools.available||0);
@@ -5056,17 +5037,106 @@ function sessionFlowSnapshot(rows,seenIds=[],seenReady=false){
   waiting:states.waiting,
   recent:states.recent,
   ids,
-  arriving:seenReady?ids.filter(id=>!previous.has(id)):[],
+ arriving:seenReady?ids.filter(id=>!previous.has(id)):[],
  };
+}
+function pageSignalTiming(reducedMotion=false,now=performance.now()){
+ const elapsed=Math.max(0,now-pageSignalClockStartedAt);
+ return {heroSpeed:reducedMotion?0:.018,heroFrame:elapsed*.018,borderSpeed:reducedMotion?0:.016,borderFrame:9000+elapsed*.016};
+}
+function sessionSignalPresentation(snapshot,reducedMotion=false){
+ const mode=snapshot?.evidence==='available'&&['working','waiting','recent','idle'].includes(snapshot.mode)?snapshot.mode:'unavailable';
+ const strengths={working:1,waiting:.92,recent:.84,idle:.72,unavailable:.62};
+ return {...pageSignalTiming(reducedMotion||mode==='unavailable'),mode,heroStrength:strengths[mode]};
+}
+function loadPageEffectsModule(){
+ if(!pageEffectsModulePromise)pageEffectsModulePromise=import('/assets/session-effects.js');
+ return pageEffectsModulePromise;
+}
+function ensurePageSignalHosts(head){
+ let field=head.querySelector('.pageSignalField'),heroHost=head.querySelector('.pageDither');
+ if(!field){
+  field=document.createElement('div');field.className='pageSignalField';field.setAttribute('aria-hidden','true');
+  heroHost=document.createElement('div');heroHost.className='pageDither';
+  const fallback=document.createElement('div');fallback.className='pageSignalFallback';
+  field.append(heroHost,fallback);head.appendChild(field);
+ }
+ let borderHost=head.querySelector('.pageHeroBorder');
+ if(!borderHost){borderHost=document.createElement('div');borderHost.className='pageHeroBorder';borderHost.setAttribute('aria-hidden','true');head.appendChild(borderHost);}
+ return {heroHost,borderHost};
+}
+function pageSignalPresentation(head){
+ if(head?.dataset.pageSignal==='sessions'&&latestSessionSignalSnapshot){
+  return sessionSignalPresentation(latestSessionSignalSnapshot,pageSignalReducedMotionQuery.matches);
+ }
+ return {...pageSignalTiming(pageSignalReducedMotionQuery.matches),mode:'ambient',heroStrength:.76};
+}
+function pageSignalHandle(handle){
+ let disposed=false;
+ return {
+  update(presentation){if(!disposed)handle.update(presentation);},
+  dispose(){if(disposed)return;disposed=true;handle.dispose();},
+ };
+}
+function disposeActivePageSignalEffects(){
+ activePageSignalGeneration++;
+ activePageHeroHandle?.dispose();activePageBorderHandle?.dispose();
+ activePageHeroHandle=null;activePageBorderHandle=null;activePageSignalHead=null;activePageSignalMounting=false;
+}
+async function syncActivePageSignalEffects(){
+ let head=document.querySelector('.view.on .spectrumPageHead[data-page-signal]');
+ if(head?.closest('#view-session.sessionDetail'))head=null;
+ if(!head){disposeActivePageSignalEffects();return;}
+ const presentation=pageSignalPresentation(head);
+ if(activePageSignalHead===head&&activePageHeroHandle&&activePageBorderHandle){
+  activePageHeroHandle.update(presentation);activePageBorderHandle.update(presentation);return;
+ }
+ if(activePageSignalHead===head&&activePageSignalMounting)return;
+ disposeActivePageSignalEffects();activePageSignalHead=head;
+ const generation=++activePageSignalGeneration,{heroHost,borderHost}=ensurePageSignalHosts(head);
+ heroHost.dataset.pageEffect=pageEffectsDisabled?'fallback':'loading';borderHost.dataset.pageEffect=pageEffectsDisabled?'fallback':'loading';
+ if(pageEffectsDisabled)return;
+ activePageSignalMounting=true;
+ let heroHandle=null,borderHandle=null;
+ const mountIsCurrent=()=>generation===activePageSignalGeneration&&activePageSignalHead===head&&head.isConnected;
+ try{
+  const module=await loadPageEffectsModule();
+  if(!mountIsCurrent())return;
+  heroHandle=pageSignalHandle(await module.mountDitherField(heroHost,presentation));
+  if(!mountIsCurrent()){heroHandle.dispose();return;}
+  activePageHeroHandle=heroHandle;
+  const mountedBorder=await module.mountPulsingBorder(borderHost,presentation,mountIsCurrent);
+  if(!mountedBorder)return;
+  borderHandle=pageSignalHandle(mountedBorder);
+  if(!mountIsCurrent()){heroHandle.dispose();borderHandle.dispose();return;}
+  activePageBorderHandle=borderHandle;
+ }catch(error){
+  heroHandle?.dispose();borderHandle?.dispose();
+  if(activePageHeroHandle===heroHandle)activePageHeroHandle=null;
+  if(activePageBorderHandle===borderHandle)activePageBorderHandle=null;
+  if(mountIsCurrent()){
+   pageEffectsDisabled=true;
+   heroHost.replaceChildren();borderHost.replaceChildren();heroHost.dataset.pageEffect='fallback';borderHost.dataset.pageEffect='fallback';
+  }
+ }finally{
+  if(generation===activePageSignalGeneration)activePageSignalMounting=false;
+ }
+}
+function syncSessionSignal(snapshot){
+ latestSessionSignalSnapshot=snapshot;
+ if(activePageSignalHead?.dataset.pageSignal==='sessions')syncActivePageSignalEffects();
 }
 function syncSessionFlow(snapshot){
  const head=$('session-flow-head'),label=$('session-flow-label');
  if(!head||!label)return;
- head.dataset.sessionFlow=snapshot.evidence==='available'?snapshot.mode:'unavailable';
+ const mode=snapshot.evidence==='available'?snapshot.mode:'unavailable';
+ head.dataset.sessionFlow=mode;head.closest('.spectrumPageHeadFrame').dataset.sessionFlow=mode;
  const count=snapshot.count,activeLabel=`${count} active`;
  const nextLabel=snapshot.evidence!=='available'?'Waiting for evidence':!count?'Listening':snapshot.working?`${snapshot.working} working · ${activeLabel}`:activeLabel;
  if(label.textContent!==nextLabel)label.textContent=nextLabel;
+ syncSessionSignal(snapshot);
 }
+pageSignalReducedMotionQuery.addEventListener?.('change',syncActivePageSignalEffects);
 function syncCurrentSessionActivity(root,rows){
  const byId=new Map();
  rows.forEach(row=>{const id=String(row.id||'');if(id&&!byId.has(id))byId.set(id,row);});
@@ -5249,7 +5319,7 @@ function renderCurrentSessions(state=LATEST){
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
   const arriving=arrivingIds.has(String(row.id))?' is-arriving':'';
-  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}${arriving}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionFlow aria-hidden=true><i class=currentSessionFlowLine></i><i class=currentSessionFlowLine></i><i class=currentSessionFlowLine></i></div><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}${arriving}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):(filterView.activitySelection==='all'?currentSessionsEmptyHtml(state?.xsession):currentSessionsFilteredEmptyHtml(filterView.activitySelection));
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }
@@ -5424,8 +5494,8 @@ async function refreshLiveState(){
   applyLiveState(await response.json());
  }catch(error){
   if($('view-capabilities').classList.contains('on')){
-   if(capabilityLastGoodAt)setCapabilityAvailability('stale','Capability evidence could not be refreshed. Showing the last successful snapshot.');
-   else setCapabilityAvailability('unavailable','Capability evidence could not be loaded.');
+   if(capabilityLastGoodAt)setCapabilityAvailability('stale');
+   else setCapabilityAvailability('unavailable');
   }
  }
  finally{statePollBusy=false;}

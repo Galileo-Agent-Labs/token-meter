@@ -2272,11 +2272,19 @@ class SessionRouteTests(unittest.TestCase):
             page = root / "page.html"
             font = root / "assets" / "fonts" / "Tektur-Variable.ttf"
             logo = root / "assets" / "brand" / "logo-splunk-acc-rgb-w.png"
+            effects = root / "assets" / "session-effects.js"
+            dithering = root / "assets" / "vendor" / "paper-shaders" / "shaders" / "dithering.js"
+            pulsing_border = root / "assets" / "vendor" / "paper-shaders" / "shaders" / "pulsing-border.js"
             font.parent.mkdir(parents=True)
             logo.parent.mkdir(parents=True)
+            effects.parent.mkdir(parents=True, exist_ok=True)
+            dithering.parent.mkdir(parents=True)
             page.write_text("dashboard")
             font.write_bytes(b"font")
             logo.write_bytes(b"logo")
+            effects.write_text("export {}")
+            dithering.write_text("export {}")
+            pulsing_border.write_text("export {}")
             with mock.patch.object(meter, "page_path", return_value=str(page)):
                 self.assertEqual(
                     meter.dashboard_asset_path("/assets/fonts/Tektur-Variable.ttf"),
@@ -2294,8 +2302,31 @@ class SessionRouteTests(unittest.TestCase):
                     meter.dashboard_asset_content_type("/assets/brand/logo-splunk-acc-rgb-w.png"),
                     "image/png",
                 )
+                self.assertEqual(
+                    meter.dashboard_asset_path("/assets/session-effects.js"),
+                    str(effects),
+                )
+                self.assertIsNone(meter.dashboard_asset_path(
+                    "/assets/vendor/paper-shaders/shaders/dithering.js"
+                ))
+                self.assertEqual(
+                    meter.dashboard_asset_path(
+                        "/assets/vendor/paper-shaders/shaders/pulsing-border.js"
+                    ),
+                    str(pulsing_border),
+                )
+                self.assertEqual(
+                    meter.dashboard_asset_content_type("/assets/session-effects.js"),
+                    "text/javascript; charset=utf-8",
+                )
                 self.assertIsNone(meter.dashboard_asset_path("/assets/fonts/OFL-Tektur.txt"))
                 self.assertIsNone(meter.dashboard_asset_path("/assets/brand/SOURCE.md"))
+                self.assertIsNone(meter.dashboard_asset_path(
+                    "/assets/vendor/paper-shaders/shaders/neuro-noise.js"
+                ))
+                self.assertIsNone(meter.dashboard_asset_path(
+                    "/assets/vendor/paper-shaders/shaders/god-rays.js"
+                ))
                 self.assertIsNone(meter.dashboard_asset_path("/assets/../meter.py"))
 
 
@@ -2758,6 +2789,9 @@ class DashboardLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.page = Path(meter.__file__).with_name("page.html").read_text()
+        cls.session_effects = (
+            Path(meter.__file__).with_name("assets") / "session-effects.js"
+        ).read_text()
 
     def test_current_detail_excludes_all_secondary_panels(self):
         self.assertNotIn("data-panel=efficiency", self.page)
@@ -3205,7 +3239,7 @@ console.log(JSON.stringify({
             "function positionModelPickerMenu()",
             "picker.classList.toggle('opensUp',opensUp)",
             "$('m-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionModelPickerMenu))",
-            ".modelHead.spectrumPageHead{overflow:visible;z-index:2}",
+            ".modelHead.spectrumPageHead{z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:2}",
             ".modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}",
         ):
             self.assertIn(marker, self.page)
@@ -3561,8 +3595,8 @@ console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging
         for marker in (
             'aria-label="Capability overview"', "id=c-stat-tools",
             "id=c-stat-mcps", "id=c-stat-skills", "data-cap-jump=tool",
-            "id=c-review-queue", "id=c-review-list", "id=c-evidence-status",
-            "id=c-evidence-updated", "id=c-selection-bar", "id=c-disable-selected",
+            "id=c-review-queue", "id=c-review-list",
+            "id=c-selection-bar", "id=c-disable-selected",
             "id=c-inventory", "id=c-clear-filters", "id=c-active-filters",
             'aria-label="Prompt-load evidence"',
         ):
@@ -3574,6 +3608,14 @@ console.log(JSON.stringify({focused,focusedCalls,selected,selectedCalls,dragging
         self.assertNotIn("id=c-catalog-details", tools)
         self.assertIn('class="capPageHead spectrumPageHead"', tools)
         self.assertIn("class=spectrumPageHeadCopy", tools)
+        tools_head = tools.split('<section class="card capStats"', 1)[0]
+        for removed in (
+            "hasPageActions", "spectrumPageActions", "capFreshness",
+            "c-evidence-status", "c-evidence-updated",
+        ):
+            self.assertNotIn(removed, tools_head)
+        self.assertNotIn("c-evidence-status", self.page)
+        self.assertNotIn("c-evidence-updated", self.page)
         for removed in (
             "id=c-decision-panel", "id=c-opt-enabled", "id=c-opt-used",
             "id=c-opt-review", "id=c-mcp-observed",
@@ -4008,6 +4050,12 @@ console.log(JSON.stringify({
         self.assertIn("selectSession(button.dataset.spendInsightSession)", self.page)
 
     def test_non_current_views_keep_visible_copy_terse(self):
+        expected_subtitles = {
+            "models": ["Compare model cost, speed, and context."],
+            "learn": ["Learn the core Token Meter review loop."],
+            "capabilities": ["Review installed tools, MCP servers, and skills."],
+            "settings": ["Manage budgets, connections, pricing, and updates."],
+        }
         boundaries = (
             ("models", "daily"),
             ("learn", "capabilities"),
@@ -4026,13 +4074,13 @@ console.log(JSON.stringify({
             ]
             self.assertEqual(
                 [value for value in paragraphs if value],
-                [],
-                f"{view} should not carry visible explanatory paragraphs",
+                expected_subtitles[view],
+                f"{view} should carry only its concise page subtitle",
             )
             self.assertNotIn("class=foot", section)
 
         spend = self.page.split("id=view-daily", 1)[1].split("id=view-learn", 1)[0]
-        self.assertIn("Understand where estimated agent spend is going over time.", spend)
+        self.assertIn("Track estimated agent spend over time.", spend)
         self.assertIn("Bar height is total daily spend; color is platform contribution.", spend)
         self.assertNotIn("class=foot", spend)
 
@@ -4464,7 +4512,6 @@ console.log(JSON.stringify({
         self.assertIn("setCapabilityAvailability('stale'", self.page)
         self.assertIn("capabilityEvidenceState!=='current'", self.page)
         self.assertIn("Confirmation closed", self.page)
-        self.assertIn("Capability evidence could not be refreshed", self.page)
         self.assertIn("if(capabilitySort==='returned')capabilitySort='use'", self.page)
 
     def test_agent_access_has_a_dedicated_settings_tab(self):
@@ -4966,40 +5013,473 @@ console.log(JSON.stringify({unavailable,first,next,idle}));
             "ids": [], "arriving": [],
         })
 
-    def test_sessions_do_not_bundle_the_unrequested_webgl_shader_animation(self):
-        for marker in (
-            "session-shaders.js",
-            "paper-shaders",
-            "sessionShaderField",
-            "sessionShaderCanvas",
-            "currentSessionShader",
-        ):
-            self.assertNotIn(marker, self.page)
-        self.assertIsNone(meter.dashboard_asset_path("/assets/session-shaders.js"))
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_page_signal_presentations_share_one_animation_timeline(self):
+        functions = []
+        for name in ("pageSignalTiming", "sessionSignalPresentation", "pageSignalPresentation"):
+            match = re.search(
+                rf"^function {name}\(.*?^\}}\n",
+                self.page,
+                re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"dashboard needs {name}")
+            functions.append(match.group(0))
+        script = """
+let pageSignalClockStartedAt=1000;
+let clockNow=11000;
+const performance={now:()=>clockNow};
+""" + "\n".join(functions) + """
+let latestSessionSignalSnapshot={evidence:'available',mode:'working'};
+const pageSignalReducedMotionQuery={matches:false};
+const signals=['sessions','spend','models','capabilities','learn','settings'];
+const routes=Object.fromEntries(signals.map(signal=>[
+ signal,pageSignalPresentation({dataset:{pageSignal:signal}}),
+]));
+const states={};
+for(const mode of ['working','waiting','recent','idle']){
+ states[mode]=sessionSignalPresentation({evidence:'available',mode},false);
+}
+states.unavailable=sessionSignalPresentation({evidence:'unavailable',mode:'idle'},false);
+latestSessionSignalSnapshot={evidence:'unavailable',mode:'idle'};
+const unavailable=pageSignalPresentation({dataset:{pageSignal:'sessions'}});
+clockNow=17000;
+latestSessionSignalSnapshot={evidence:'available',mode:'working'};
+const continued=Object.fromEntries(signals.map(signal=>[
+ signal,pageSignalPresentation({dataset:{pageSignal:signal}}),
+]));
+pageSignalReducedMotionQuery.matches=true;
+const reduced=Object.fromEntries(signals.map(signal=>[
+ signal,pageSignalPresentation({dataset:{pageSignal:signal}}),
+]));
+console.log(JSON.stringify({routes,states,unavailable,continued,reduced}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        timing = {
+            "heroSpeed": 0.018,
+            "heroFrame": 180,
+            "borderSpeed": 0.016,
+            "borderFrame": 9160,
+        }
+        for presentation in rendered["routes"].values():
+            self.assertEqual(
+                {key: presentation[key] for key in timing},
+                timing,
+            )
+        states = rendered["states"]
+        for mode in ("working", "waiting", "recent", "idle"):
+            self.assertEqual({key: states[mode][key] for key in timing}, timing)
+        self.assertGreater(states["working"]["heroStrength"], states["idle"]["heroStrength"])
+        self.assertEqual(rendered["unavailable"]["heroSpeed"], 0)
+        self.assertEqual(rendered["unavailable"]["borderSpeed"], 0)
+        self.assertEqual(rendered["unavailable"]["heroFrame"], timing["heroFrame"])
+        self.assertEqual(rendered["unavailable"]["borderFrame"], timing["borderFrame"])
+        continued_timing = {
+            "heroSpeed": 0.018,
+            "heroFrame": 288,
+            "borderSpeed": 0.016,
+            "borderFrame": 9256,
+        }
+        for presentation in rendered["continued"].values():
+            self.assertEqual(
+                {key: presentation[key] for key in continued_timing},
+                continued_timing,
+            )
+        for presentation in rendered["reduced"].values():
+            self.assertEqual(presentation["heroSpeed"], 0)
+            self.assertEqual(presentation["borderSpeed"], 0)
+            self.assertEqual(presentation["heroFrame"], continued_timing["heroFrame"])
+            self.assertEqual(presentation["borderFrame"], continued_timing["borderFrame"])
 
-    def test_sessions_header_and_working_cards_use_the_token_flow_motion_contract(self):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_page_signal_route_change_disposes_a_partially_mounted_effect(self):
+        page_path = Path(meter.__file__).with_name("page.html")
+        script = f"""
+const fs=require('fs');
+const page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
+function extract(name){{
+ let start=page.indexOf(`function ${{name}}(`);
+ if(start<0)throw new Error(name);
+ if(page.slice(start-6,start)==='async ')start-=6;
+ let i=page.indexOf('{{',start),depth=0;
+ for(;i<page.length;i++){{
+  if(page[i]==='{{')depth++;
+  else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);
+ }}
+}}
+class El{{
+ constructor(name){{this.name=name;this.dataset={{}};this.children=[];this.isConnected=true;this.className='';}}
+ querySelector(selector){{return this.children.find(child=>selector.includes(child.className))||null;}}
+ appendChild(child){{this.children.push(child);return child;}}
+ append(...children){{this.children.push(...children);}}
+ setAttribute(){{}}
+ replaceChildren(){{this.children=[];}}
+ closest(selector){{return selector.includes('sessionDetail')?null:this;}}
+}}
+let currentHead=null;
+const document={{querySelector(){{return currentHead;}},createElement(){{return new El('created');}}}};
+let activePageSignalHead=null,activePageHeroHandle=null,activePageBorderHandle=null;
+let activePageSignalMounting=false,activePageSignalGeneration=0,pageEffectsDisabled=false;
+let live=[];
+const borderResolvers=[];
+function handle(label){{
+ live.push(label);
+ return {{update(){{}},dispose(){{live=live.filter(value=>value!==label);}}}};
+}}
+let currentMount='A';
+function loadPageEffectsModule(){{
+ return Promise.resolve({{
+  mountDitherField(){{return Promise.resolve(handle(`hero:${{currentMount}}`));}},
+  mountPulsingBorder(){{
+   const label=`border:${{currentMount}}`;
+   return new Promise(resolve=>borderResolvers.push(()=>resolve(handle(label))));
+  }},
+ }});
+}}
+function pageSignalPresentation(){{return {{}};}}
+eval(extract('ensurePageSignalHosts'));
+eval(extract('disposeActivePageSignalEffects'));
+if(page.includes('function pageSignalHandle('))eval(extract('pageSignalHandle'));
+eval(extract('syncActivePageSignalEffects'));
+(async()=>{{
+ const a=new El('A'),b=new El('B');
+ a.dataset.pageSignal='models';b.dataset.pageSignal='spend';
+ currentHead=a;currentMount='A';
+ const mountA=syncActivePageSignalEffects();
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ const afterAHero=[...live];
+ currentHead=b;currentMount='B';
+ const mountB=syncActivePageSignalEffects();
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ const afterRouteChange=[...live];
+ borderResolvers.shift()();
+ await Promise.resolve();await Promise.resolve();
+ const afterStaleBorder=[...live];
+ borderResolvers.shift()();
+ await Promise.all([mountA,mountB]);
+ console.log(JSON.stringify({{afterAHero,afterRouteChange,afterStaleBorder,complete:live}}));
+}})().catch(error=>{{console.error(error);process.exitCode=1;}});
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["afterAHero"], ["hero:A"])
+        self.assertEqual(rendered["afterRouteChange"], ["hero:B"])
+        self.assertEqual(rendered["afterStaleBorder"], ["hero:B"])
+        self.assertEqual(rendered["complete"], ["hero:B", "border:B"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_stale_same_header_mount_cannot_clear_the_new_ready_marker(self):
+        page_path = Path(meter.__file__).with_name("page.html")
+        script = f"""
+const fs=require('fs');
+const page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
+function extract(name){{
+ let start=page.indexOf(`function ${{name}}(`);
+ if(start<0)throw new Error(name);
+ if(page.slice(start-6,start)==='async ')start-=6;
+ let i=page.indexOf('{{',start),depth=0;
+ for(;i<page.length;i++){{
+  if(page[i]==='{{')depth++;
+  else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);
+ }}
+}}
+class El{{
+ constructor(name){{this.name=name;this.dataset={{}};this.children=[];this.isConnected=true;this.className='';}}
+ querySelector(selector){{
+  const wanted=selector.slice(1);
+  for(const child of this.children){{
+   if(child.className===wanted)return child;
+   const nested=child.querySelector(selector);
+   if(nested)return nested;
+  }}
+  return null;
+ }}
+ appendChild(child){{this.children.push(child);return child;}}
+ append(...children){{this.children.push(...children);}}
+ setAttribute(){{}}
+ replaceChildren(){{this.children=[];}}
+ closest(selector){{return selector.includes('sessionDetail')?null:this;}}
+}}
+let currentHead=null,currentMount='',live=[],borderQueue=[];
+const document={{querySelector(){{return currentHead;}},createElement(){{return new El('created');}}}};
+let activePageSignalHead=null,activePageHeroHandle=null,activePageBorderHandle=null;
+let activePageSignalMounting=false,activePageSignalGeneration=0,pageEffectsDisabled=false;
+function handle(label,host){{
+ live.push(label);host.dataset.pageEffect='ready';let disposed=false;
+ return {{
+  update(){{}},
+  dispose(){{
+   if(!disposed){{disposed=true;live=live.filter(value=>value!==label);}}
+   delete host.dataset.pageEffect;
+  }},
+ }};
+}}
+function loadPageEffectsModule(){{
+ return Promise.resolve({{
+  mountDitherField(host){{return Promise.resolve(handle(`hero:${{currentMount}}`,host));}},
+  mountPulsingBorder(host){{
+   const label=`border:${{currentMount}}`;
+   return new Promise(resolve=>borderQueue.push({{label,resolve:()=>resolve(handle(label,host))}}));
+  }},
+ }});
+}}
+function pageSignalPresentation(){{return {{}};}}
+eval(extract('ensurePageSignalHosts'));
+eval(extract('disposeActivePageSignalEffects'));
+if(page.includes('function pageSignalHandle('))eval(extract('pageSignalHandle'));
+eval(extract('syncActivePageSignalEffects'));
+const ticks=async(count=5)=>{{while(count--)await Promise.resolve();}};
+(async()=>{{
+ const a=new El('A'),b=new El('B');
+ a.dataset.pageSignal='models';b.dataset.pageSignal='spend';
+ currentHead=a;currentMount='A1';const mountA1=syncActivePageSignalEffects();await ticks();
+ currentHead=b;currentMount='B';const mountB=syncActivePageSignalEffects();await ticks();
+ currentHead=a;currentMount='A2';const mountA2=syncActivePageSignalEffects();await ticks();
+ const aHero=a.querySelector('.pageDither');
+ const before={{live:[...live],heroState:aHero.dataset.pageEffect||null}};
+ borderQueue.find(row=>row.label==='border:A1').resolve();await mountA1;await ticks();
+ const afterStale={{live:[...live],heroState:aHero.dataset.pageEffect||null}};
+ borderQueue.find(row=>row.label==='border:B').resolve();await mountB;await ticks();
+ borderQueue.find(row=>row.label==='border:A2').resolve();await mountA2;
+ console.log(JSON.stringify({{before,afterStale,complete:{{live,heroState:aHero.dataset.pageEffect||null}}}}));
+}})().catch(error=>{{console.error(error);process.exitCode=1;}});
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["before"], {
+            "live": ["hero:A2"], "heroState": "ready",
+        })
+        self.assertEqual(rendered["afterStale"], {
+            "live": ["hero:A2"], "heroState": "ready",
+        })
+        self.assertEqual(rendered["complete"], {
+            "live": ["hero:A2", "border:A2"], "heroState": "ready",
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_shared_border_readiness_cancels_stale_mounts_before_construction(self):
+        page_path = Path(meter.__file__).with_name("page.html")
+        script = f"""
+const fs=require('fs');
+const page=fs.readFileSync({json.dumps(str(page_path))},'utf8');
+function extract(name){{
+ let start=page.indexOf(`function ${{name}}(`);
+ if(start<0)throw new Error(name);
+ if(page.slice(start-6,start)==='async ')start-=6;
+ let i=page.indexOf('{{',start),depth=0;
+ for(;i<page.length;i++){{
+  if(page[i]==='{{')depth++;
+  else if(page[i]==='}}'&&--depth===0)return page.slice(start,i+1);
+ }}
+}}
+class El{{
+ constructor(name){{this.name=name;this.dataset={{}};this.children=[];this.isConnected=true;this.className='';}}
+ querySelector(selector){{
+  const wanted=selector.slice(1);
+  for(const child of this.children){{
+   if(child.className===wanted)return child;
+   const nested=child.querySelector(selector);
+   if(nested)return nested;
+  }}
+  return null;
+ }}
+ appendChild(child){{this.children.push(child);return child;}}
+ append(...children){{this.children.push(...children);}}
+ setAttribute(){{}}
+ replaceChildren(){{this.children=[];}}
+ closest(selector){{return selector.includes('sessionDetail')?null:this;}}
+}}
+let currentHead=null,currentMount='',live=[];
+let releaseSharedBorder;
+const sharedBorderReady=new Promise(resolve=>{{releaseSharedBorder=resolve;}});
+const document={{querySelector(){{return currentHead;}},createElement(){{return new El('created');}}}};
+let activePageSignalHead=null,activePageHeroHandle=null,activePageBorderHandle=null;
+let activePageSignalMounting=false,activePageSignalGeneration=0,pageEffectsDisabled=false;
+function handle(label,host){{
+ live.push(label);host.dataset.pageEffect='ready';host.paperShaderMount=label;let disposed=false;
+ return {{
+  update(){{}},
+  dispose(){{
+   if(disposed)throw new Error(`double dispose ${{label}}`);
+   disposed=true;live=live.filter(value=>value!==label);
+   delete host.dataset.pageEffect;delete host.paperShaderMount;
+  }},
+ }};
+}}
+function loadPageEffectsModule(){{
+ return Promise.resolve({{
+  mountDitherField(host){{return Promise.resolve(handle(`hero:${{currentMount}}`,host));}},
+  async mountPulsingBorder(host,presentation,isCurrent){{
+   const label=`border:${{currentMount}}`;
+   await sharedBorderReady;
+   if(isCurrent&&!isCurrent())return null;
+   return handle(label,host);
+  }},
+ }});
+}}
+function pageSignalPresentation(){{return {{}};}}
+eval(extract('ensurePageSignalHosts'));
+eval(extract('disposeActivePageSignalEffects'));
+if(page.includes('function pageSignalHandle('))eval(extract('pageSignalHandle'));
+eval(extract('syncActivePageSignalEffects'));
+const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
+(async()=>{{
+ const a=new El('A'),b=new El('B');
+ a.dataset.pageSignal='models';b.dataset.pageSignal='spend';
+ currentHead=a;currentMount='A1';const mountA1=syncActivePageSignalEffects();await ticks();
+ currentHead=b;currentMount='B';const mountB=syncActivePageSignalEffects();await ticks();
+ currentHead=a;currentMount='A2';const mountA2=syncActivePageSignalEffects();await ticks();
+ const aHero=a.querySelector('.pageDither'),aBorder=a.querySelector('.pageHeroBorder');
+ releaseSharedBorder();
+ await Promise.all([mountA1,mountB,mountA2]);await ticks();
+ console.log(JSON.stringify({{
+  live,
+  heroState:aHero.dataset.pageEffect||null,
+  borderState:aBorder.dataset.pageEffect||null,
+  borderOwner:aBorder.paperShaderMount||null,
+  disabled:pageEffectsDisabled,
+ }}));
+}})().catch(error=>{{console.error(error);process.exitCode=1;}});
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered, {
+            "live": ["hero:A2", "border:A2"],
+            "heroState": "ready",
+            "borderState": "ready",
+            "borderOwner": "border:A2",
+            "disabled": False,
+        })
+
+    def test_top_level_pages_share_one_dither_header_system(self):
         for marker in (
-            'class="previewHead spectrumPageHead sessionFlowHead"',
-            "id=session-flow-head",
-            "class=sessionFlowField aria-hidden=true",
-            'focusable="false"',
-            "class=sessionFlowLine",
-            "class=sessionFlowStatus",
+            "data-page-signal=sessions",
+            "data-page-signal=spend",
+            "data-page-signal=models",
+            "data-page-signal=capabilities",
+            "data-page-signal=learn",
+            "data-page-signal=settings",
+            "class=spectrumPageHeadFrame",
+            "class=\"spectrumPageHeadFrame hasPageActions\"",
+            "class=spectrumPageSubtitle",
+            "class=spectrumPageActions",
+            "function ensurePageSignalHosts(head)",
+            "function syncActivePageSignalEffects()",
+            "document.querySelector('.view.on .spectrumPageHead[data-page-signal]')",
+            "activePageHeroHandle?.dispose()",
+            "activePageBorderHandle?.dispose()",
+            "requestAnimationFrame(syncActivePageSignalEffects)",
             "function syncSessionFlow(snapshot)",
+            "import('/assets/session-effects.js')",
             "if(label.textContent!==nextLabel)",
             "data-session-flow",
-            "class=currentSessionFlow aria-hidden=true",
-            "activity-working .currentSessionFlowLine",
-            "activity-waiting .currentSessionFlow",
-            "activity-recent .currentSessionFlow",
             ".currentSessionCard.is-arriving",
-            "@keyframes sessionFlowDrift",
             "@keyframes currentSessionArrive",
             "@media(prefers-reduced-motion:reduce)",
-            ".sessionFlowLine,.sessionFlowPacket,.currentSessionFlowLine",
         ):
             self.assertIn(marker, self.page)
-        self.assertNotIn("<animateMotion", self.page)
+        for rejected_marker in (
+            "sessionFlowField",
+            "sessionFlowLine",
+            "sessionFlowPacket",
+            "currentSessionFlow",
+            "sessionAmbient",
+            "sessionGodRays",
+            "session-god-rays",
+            "sessionPrimaryBorder",
+            "session-primary-border",
+            "syncPrimarySessionBorder",
+            "primaryWorkingSessionId",
+            "neuro-noise",
+            "neuroNoise",
+            "currentSessionStateShift",
+            "<animateMotion",
+            "offset-path:path",
+        ):
+            self.assertNotIn(rejected_marker, self.page)
+
+    def test_top_level_headers_use_fixed_shared_heights_and_concise_subtitles(self):
+        for marker in (
+            ".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;height:138px",
+            "@media(max-width:900px){.spectrumPageHead{height:126px",
+            "@media(max-width:520px){.spectrumPageHead{height:116px",
+            ".spectrumPageSubtitle{max-width:52ch;margin:7px 0 0;color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+            ".spectrumPageActions{position:absolute;z-index:5;right:30px;bottom:24px",
+            ".spectrumPageActions{position:static;display:flex;width:100%;max-width:none",
+            "Live local traces · last 30 minutes.",
+            "Track estimated agent spend over time.",
+            "Compare model cost, speed, and context.",
+            "Review installed tools, MCP servers, and skills.",
+            "Learn the core Token Meter review loop.",
+            "Manage budgets, connections, pricing, and updates.",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertEqual(self.page.count("data-page-signal="), 6)
+        self.assertEqual(self.page.count("class=spectrumPageSubtitle"), 6)
+        self.assertNotIn(".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px", self.page)
+
+    def test_shared_header_effect_adapter_exposes_generic_mounts(self):
+        for marker in (
+            "orderedDitherRainFragmentShader",
+            "export async function mountDitherField",
+            "export async function mountPulsingBorder(element, presentation, isCurrent = () => true)",
+            "if (!isCurrent()) return null;",
+        ):
+            self.assertIn(marker, self.session_effects)
+        self.assertNotIn("export async function mountSessionHero", self.session_effects)
+        self.assertNotIn("export async function mountSessionBorder", self.session_effects)
+
+    def test_desktop_action_headers_keep_titles_inside_their_text_slot(self):
+        titles = re.findall(
+            r'class="spectrumPageHeadFrame hasPageActions".*?<h1(?:\s[^>]*)?>([^<]+)</h1>',
+            self.page,
+            re.DOTALL,
+        )
+        self.assertEqual(titles, ["Sessions", "Models", "Spend"])
+        self.assertTrue(all(len(title) <= 12 for title in titles))
+
+    def test_mobile_header_action_rows_scroll_instead_of_stacking(self):
+        for marker in (
+            ".spectrumPageActions .modelControls{display:grid;width:100%;grid-template-columns:repeat(3,minmax(0,1fr))",
+            ".spectrumPageActions .spendRangeControls .seg{display:flex;width:100%",
+            ".spectrumPageActions .spendRangeControls .seg button{flex:0 0 auto}",
+            ".spectrumPageActions .spendRangeControls .seg::-webkit-scrollbar{display:none}",
+            ".spectrumPageActions .spendRangeControls [data-spend-range=custom]{grid-column:auto}",
+            "data-spend-range=month>Month</button>",
+            "data-spend-range=custom>Custom</button>",
+            ".spectrumPageActions .spendRangeControls .seg button{padding-inline:8px}",
+        ):
+            self.assertIn(marker, self.page)
+
+    def test_session_shader_border_tracks_the_hero_edges(self):
+        for marker in (
+            "u_marginLeft: 0.002",
+            "u_marginRight: 0.002",
+            "u_marginTop: 0.002",
+            "u_marginBottom: 0.002",
+        ):
+            self.assertIn(marker, self.session_effects)
+        self.assertNotIn("u_marginLeft: 0.014", self.session_effects)
+        self.assertNotIn("u_marginTop: 0.024", self.session_effects)
+
+    def test_session_dither_uses_downward_ordered_pixel_streams(self):
+        for marker in (
+            "orderedDitherRainFragmentShader",
+            "const int bayer4x4[16]",
+            "float fallingPhase",
+            "cell.y + u_time * speed",
+            "float streamHead",
+        ):
+            self.assertIn(marker, self.session_effects)
+        self.assertNotIn("DitheringShapes.", self.session_effects)
 
     def test_collapsed_navigation_keeps_session_scope_labels_visible(self):
         self.assertIn(
@@ -5197,7 +5677,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
         for marker in (
             '<h1 id=session-page-title>Sessions</h1>',
             '<h2>All sessions</h2>',
-            '<h1>Model performance</h1>',
+            '<h1>Models</h1>',
             '<h1>Spend</h1>',
             '<h1>Learn</h1>',
             '<h1>Tools</h1>',
@@ -5224,7 +5704,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             'class="previewHead spectrumPageHead sessionFlowHead"',
             'class="previewHeadCopy spectrumPageHeadCopy"',
             ".spectrumPageHead:before",
-            ".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px;align-items:flex-start",
+            ".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;height:138px;align-items:flex-start",
             ".currentSessionCard:before{content:none}",
             ".currentSessionCard.activity-working",
             ".currentSessionGrip",
@@ -5275,11 +5755,11 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "--spectrum-control:radial-gradient",
             "--spectrum-active:linear-gradient",
             '<div class="previewHead spectrumPageHead sessionFlowHead"',
-            '<header class="capPageHead spectrumPageHead">',
-            '<div class="modelHead spectrumPageHead">',
-            '<div class="dailyHead spectrumPageHead">',
-            '<div class="learnHead spectrumPageHead">',
-            '<div class="learnHead settingsPageHead spectrumPageHead">',
+            '<header class="capPageHead spectrumPageHead"',
+            '<div class="modelHead spectrumPageHead"',
+            '<div class="dailyHead spectrumPageHead"',
+            '<div class="learnHead spectrumPageHead"',
+            '<div class="learnHead settingsPageHead spectrumPageHead"',
             "<h1>Tools</h1>",
             "<span class=allSessionsHint id=g-hint>Recent activity</span>",
             "vertical-navigation-rail-v1",

@@ -7511,6 +7511,9 @@ def menubar_project_name(value):
 
 
 def menubar_session_name(source):
+    session_name = compact_text(source.get("session_name") or "", 52).strip()
+    if session_name and session_name.lower() not in ("untitled", "untitled session"):
+        return session_name
     title = compact_text(source.get("title") or "", 52).strip()
     if title and title.lower() not in ("untitled", "untitled session"):
         return title
@@ -7520,7 +7523,14 @@ def menubar_session_name(source):
     return str(source.get("id") or "session")[:12]
 
 
-def menubar_recent_sessions(sources, selected_id=None, limit=5):
+def menubar_recent_sessions(sources, selected_id=None, limit=5, summaries=None):
+    summary_names = {}
+    for summary in summaries or ():
+        key = (str(summary.get("provider") or ""), str(summary.get("id") or ""))
+        name = compact_text(summary.get("session_name") or "", 52).strip()
+        if key[1] and name and key not in summary_names:
+            summary_names[key] = name
+
     ordered, seen = [], set()
     for source in sorted(sources or [], key=lambda row: -(row.get("mtime") or 0)):
         sid = str(source.get("id") or "")
@@ -7534,14 +7544,21 @@ def menubar_recent_sessions(sources, selected_id=None, limit=5):
     if selected and selected not in choices and limit > 0:
         choices = [selected] + [row for row in ordered if row is not selected][:limit - 1]
 
-    return [{
-        "id": row.get("id"),
-        "provider": row.get("provider"),
-        "client": row.get("client") or row.get("provider"),
-        "label": row.get("label"),
-        "name": menubar_session_name(row),
-        "mtime": row.get("mtime") or 0,
-    } for row in choices]
+    result = []
+    for row in choices:
+        display_row = dict(row)
+        key = (str(row.get("provider") or ""), str(row.get("id") or ""))
+        if summary_names.get(key):
+            display_row["session_name"] = summary_names[key]
+        result.append({
+            "id": row.get("id"),
+            "provider": row.get("provider"),
+            "client": row.get("client") or row.get("provider"),
+            "label": row.get("label"),
+            "name": menubar_session_name(display_row),
+            "mtime": row.get("mtime") or 0,
+        })
+    return result
 
 
 def menubar_context_pulse(st, limit=18):
@@ -7710,7 +7727,10 @@ def menubar_state(session_id=None):
             "missing": missing,
         },
         "recent_sessions": menubar_recent_sessions(
-            sources, selected_id=effective_selected_id, limit=5
+            sources,
+            selected_id=effective_selected_id,
+            limit=5,
+            summaries=(cross.get("current_sessions") or []) + (cross.get("sessions") or []),
         ),
         "context_pulse": menubar_context_pulse(st),
         "provider_quotas": provider_quota_snapshots(),

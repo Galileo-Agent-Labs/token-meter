@@ -5040,7 +5040,8 @@ class MenubarSourceTests(unittest.TestCase):
         cls.source = Path(meter.__file__).with_name("menubar").joinpath("TokenMeterMenuBar.swift").read_text()
 
     def test_spend_action_opens_cross_session_spend_route(self):
-        self.assertIn('NSMenuItem(title: "Open Spend", action: #selector(openDailyBrief)', self.source)
+        self.assertIn('case .spend: return "Spend"', self.source)
+        self.assertIn('case .spend:\n                self.openDailyBrief()', self.source)
         self.assertIn('@objc private func openDailyBrief()', self.source)
         self.assertIn('openDashboardPanel("spend", includePinnedSession: false)', self.source)
 
@@ -5064,18 +5065,13 @@ class MenubarSourceTests(unittest.TestCase):
             self.source.index("    private var activeShortcutKeyCode")
         ]
         self.assertNotIn('addMetricRow("Output', rebuild)
-        self.assertIn(r'Output speed: \(outputSpeedLabel)', self.source)
-        self.assertIn('snapshot.outputSpeedTooltip', self.source)
         self.assertIn(r'· \(outputSpeedLabel) · \(model)', self.source)
         self.assertIn('formatTokenRate(rate)', self.source)
-        self.assertIn('Tool execution time may be included.', self.source)
         self.assertIn(
             'return "\\(formatTokenRate(rate)) tok/s\\(estimatedTokens ? " est" : "")"',
             self.source,
         )
         self.assertNotIn('tok/s\\(live)', self.source)
-        self.assertIn('completed \\(stepWord)', self.source)
-        self.assertIn('replaced by the final completed-response measurement', self.source)
         self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
 
     def test_core_info_starts_with_amount_and_omits_operational_rows(self):
@@ -5098,7 +5094,6 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
         self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
         self.assertIn('addMetricRow("Cost", snapshot.costLabel', self.source)
-        self.assertIn('Cursor output uses trace-visible text estimated at four characters per token.', self.source)
 
     def test_live_polling_bypasses_cached_menubar_responses(self):
         self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
@@ -5128,7 +5123,7 @@ class MenubarSourceTests(unittest.TestCase):
             self.source.index("    private var activeShortcutKeyCode")
         ]
         self.assertLess(
-            rebuild.index('addAction("Open Dashboard", #selector(openDashboard))'),
+            rebuild.index("addQuickActions()"),
             rebuild.index("addSoftwareUpdateItem()"),
         )
         self.assertLess(
@@ -5154,9 +5149,10 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('func runMenuSmoke() throws', app)
         self.assertIn('TOKEN_METER_MENUBAR_MENU_SMOKE', self.source)
         self.assertIn('native-menu=ready sessions=direct follow-latest=direct', self.source)
+        self.assertIn('native-quick-actions=Dashboard,Spend,Tools,Settings height=26', self.source)
         self.assertNotIn('private let popover = NSPopover()', app)
         self.assertNotIn('popover.show(relativeTo: button.bounds', app)
-        self.assertNotIn('NSSegmentedControl', app)
+        self.assertIn('NSSegmentedControl', app)
 
     def test_native_menu_exposes_direct_session_following(self):
         self.assertIn('let selectedSessionID = string(selection["selected_id"])', self.source)
@@ -5166,7 +5162,6 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('NSMenuItem(title: session.menuTitle, action: #selector(pinSession(_:))', self.source)
         self.assertIn('item.state = pinnedSessionID == session.id ? .on : .off', self.source)
         self.assertIn('item.representedObject = session.id', self.source)
-        self.assertIn(r'item.toolTip = "Follow this session · \(session.toolTip)"', self.source)
         self.assertIn('@objc private func followLatest()', self.source)
         self.assertIn('@objc private func pinSession(_ sender: NSMenuItem)', self.source)
         self.assertIn('let maximumNameLength = 36', self.source)
@@ -5179,7 +5174,6 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('for providerID in providerIDs', self.source)
         self.assertIn('for window in provider.windows', self.source)
         self.assertIn('"\\(window.label) · \\(window.percentLabel) used"', self.source)
-        self.assertIn('window.resetLabel, window.pace?.summary, provider.freshnessLabel', self.source)
         self.assertIn('coverageNote: string(dict["coverage_note"]) ?? ""', self.source)
         self.assertIn('coverage=\\(coverage)', self.source)
         self.assertIn('case "opencode": return "gearshape.2"', self.source)
@@ -5191,8 +5185,10 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('Native Provider limits omitted the OpenCode monthly budget.', self.source)
 
     def test_menu_bar_settings_are_visible_and_quota_threshold_is_explicit(self):
-        self.assertIn('NSMenuItem(title: "More", action: nil', self.source)
-        self.assertIn('moreItem.submenu = makeSettingsMenu()', self.source)
+        self.assertIn('case .settings: return "Settings"', self.source)
+        self.assertIn('self.makeSettingsMenu().popUp(', self.source)
+        self.assertNotIn('NSMenuItem(title: "More", action: nil', self.source)
+        self.assertIn('NSMenuItem(title: "Open Settings", action: #selector(openSettings)', self.source)
         self.assertIn('addAction("Quit Token Meter", #selector(quit))', self.source)
         self.assertNotIn('Quit Token Meter Menubar', self.source)
         self.assertIn('NSMenuItem(title: "Quota alert threshold (\\(quotaAlertThreshold)%)"', self.source)
@@ -5210,7 +5206,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let title = presentation.accessibilityTitle', self.source)
         self.assertIn('let text = snapshot.menuBarCostLabel', self.source)
         self.assertIn('let text = snapshot.menuBarOutputSpeedLabel', self.source)
-        self.assertIn('let text = snapshot.contextLabel', self.source)
+        self.assertIn('let text = snapshot.menuBarContextLabel', self.source)
         self.assertIn('let text = snapshot.model', self.source)
         self.assertIn('let accessibilityText = limitsStatusTitle()', self.source)
         self.assertIn('symbol: runtimeCatalog[constrained.provider.id]?.symbol', self.source)
@@ -5218,7 +5214,8 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('private func limitsStatusTitle() -> String?', self.source)
         self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel)"', self.source)
         self.assertNotIn('constrained.window.compactKind', self.source)
-        self.assertIn('var toolTip = "Token Meter · \\(title)\\n\\(snapshot.statusTooltip)"', self.source)
+        self.assertIn('Native menu still exposes hover tooltips.', self.source)
+        self.assertIn('guard statusItem.button?.toolTip == nil, !menuContainsToolTip(menu)', self.source)
         self.assertIn('if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }', self.source)
         self.assertIn('let thresholds = Array(Set([quotaAlertThreshold, 95, 100])).sorted()', self.source)
         self.assertIn('guard var previous = quotaNotificationStates[key] else', self.source)
@@ -5232,6 +5229,12 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('private func splunkChevronImage(', self.source)
         self.assertIn('private func statusTitleImage(_ presentation: StatusTitlePresentation) -> NSImage', self.source)
         self.assertIn('private func runtimeMarkImage(symbol: String', self.source)
+        self.assertIn('var providerSymbol: String', self.source)
+        self.assertIn('var providerAccessibilityText: String', self.source)
+        self.assertIn('symbol: presentation.providerSymbol', self.source)
+        self.assertIn('let providerSymbol = runtimeCatalog[snapshot.provider]?.symbol ?? "runtime.generic"', self.source)
+        self.assertIn('let presentationWithoutLimits = selectedStatusTitlePresentation()', self.source)
+        self.assertIn('presentationWithoutLimits.providerSymbol == expectedProviderSymbol', self.source)
         self.assertIn('button.image = splunkChevronImage()', self.source)
         self.assertNotIn('systemSymbolName: "waveform.path.ecg"', self.source)
         self.assertIn('button.imagePosition = .imageOnly', self.source)
@@ -5242,7 +5245,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('button.contentTintColor = nil', self.source)
         self.assertIn('button.setAccessibilityLabel("Token Meter")', self.source)
         self.assertIn('button.setAccessibilityValue(title)', self.source)
-        self.assertIn('var toolTip = "Token Meter · \\(title)\\n\\(snapshot.statusTooltip)"', self.source)
+        self.assertNotIn('button.toolTip =', self.source)
         self.assertIn('button.contentTintColor = budgetExceeded', self.source)
         self.assertIn('enum StatusDisplayMode: String, CaseIterable', self.source)
         self.assertIn('StatusDisplayMode.text.rawValue', self.source)
@@ -5806,6 +5809,50 @@ class MenubarSessionTests(unittest.TestCase):
         self.assertEqual([row["id"] for row in pinned], ["s0", "s6", "s5", "s4", "s3"])
         self.assertEqual(pinned[0]["name"], "Task 0")
         self.assertNotIn("project", pinned[0])
+
+    def test_recent_sessions_use_sanitized_summary_name_when_discovery_has_no_title(self):
+        sources = [{
+            "id": "claude-session", "provider": "claude", "label": "Claude Code",
+            "path": "/tmp/claude-session.jsonl", "session": "claude-session.jsonl",
+            "project": "/repo/token-meter", "mtime": 10, "title": None,
+        }]
+        summaries = [{
+            "id": "claude-session", "provider": "claude",
+            "session_name": "Default model configuration opus 5",
+        }]
+
+        recent = meter.menubar_recent_sessions(sources, summaries=summaries)
+
+        self.assertEqual(recent[0]["name"], "Default model configuration opus 5")
+
+    def test_menubar_state_joins_recent_session_names_from_cross_session_summaries(self):
+        source = {
+            "id": "claude-session", "provider": "claude", "label": "Claude Code",
+            "path": "/tmp/claude-session.jsonl", "session": "claude-session.jsonl",
+            "project": "/repo/token-meter", "mtime": 10, "title": None,
+        }
+        state = {
+            "provider": "claude", "source": source, "session": "claude-session.jsonl",
+            "project": "/repo/token-meter", "context": {}, "cache": {}, "trace": [],
+            "insights": [], "executions": [], "throughput": {}, "live_throughput": {},
+        }
+        cross = {
+            "current_sessions": [{
+                "id": "claude-session", "provider": "claude",
+                "session_name": "Default model configuration opus 5",
+            }],
+            "sessions": [],
+        }
+        with mock.patch.object(meter, "STATE", state), \
+                mock.patch.object(meter, "cached_session_sources", return_value=([source], True)), \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]), \
+                mock.patch.dict(meter._xsess, {"data": cross}, clear=False):
+            payload = meter.menubar_state()
+
+        self.assertEqual(
+            payload["recent_sessions"][0]["name"],
+            "Default model configuration opus 5",
+        )
 
     def test_menubar_state_uses_requested_session_and_marks_pin(self):
         sources = [{

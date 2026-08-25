@@ -117,15 +117,35 @@ class CatalogAwareClientSourceTests(unittest.TestCase):
             "const runtimeBadgeContent=", 1
         )[0]
         self.assertIn("aria-hidden=true", mark_helper)
+        self.assertIn('viewBox="0 0 100 100"', mark_helper)
+        self.assertIn("M83.7733 42.8087", mark_helper)
+        self.assertIn("M25.7146 63.2153", mark_helper)
         self.assertNotIn("http://", mark_helper)
         self.assertNotIn("https://", mark_helper)
+        self.assertIn(
+            ".runtimeMark{display:block;width:16px;height:16px",
+            self.page,
+        )
+        self.assertIn(
+            ".currentSessionRuntime .runtimeMark{width:18px;height:18px}",
+            self.page,
+        )
 
         for marker in (
             "private struct StatusTitleSegment",
+            "var providerSymbol: String",
+            "var providerAccessibilityText: String",
             "private func runtimeMarkImage(symbol: String",
+            "symbol: presentation.providerSymbol",
+            'let providerSymbol = runtimeCatalog[snapshot.provider]?.symbol ?? "runtime.generic"',
+            "let providerAccessibilityText = runtimeCatalog[snapshot.provider]?.label ?? snapshot.provider",
+            "providerSymbol: providerSymbol",
+            "providerAccessibilityText: providerAccessibilityText",
             "symbol: runtimeCatalog[constrained.provider.id]?.symbol",
             "let accessibilityText = limitsStatusTitle()",
             "accessibilityText: accessibilityText",
+            "let presentationWithoutLimits = selectedStatusTitlePresentation()",
+            "presentationWithoutLimits.providerSymbol == expectedProviderSymbol",
         ):
             self.assertIn(marker, self.swift)
 

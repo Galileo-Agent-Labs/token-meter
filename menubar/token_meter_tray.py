@@ -699,9 +699,6 @@ class TokenMeterTray:
                 "Open Budget Settings",
                 lambda *_: self.open_url("#settings-budgets", include_pinned_session=False),
             ),
-            "Open Trace": self._action_item(
-                "Open Trace", lambda *_: self.open_url("#activity"),
-            ),
             "Open Tools": self._action_item(
                 "Open Tools",
                 lambda *_: self.open_url("#capabilities", include_pinned_session=False),

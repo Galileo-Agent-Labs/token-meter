@@ -2759,10 +2759,10 @@ class DashboardLayoutTests(unittest.TestCase):
     def setUpClass(cls):
         cls.page = Path(meter.__file__).with_name("page.html").read_text()
 
-    def test_current_tabs_exclude_efficiency_panel(self):
+    def test_current_detail_excludes_all_secondary_panels(self):
         self.assertNotIn("data-panel=efficiency", self.page)
         self.assertNotIn("id=panel-efficiency", self.page)
-        self.assertIn("const PANEL_KEYS=['summary','activity','tools','insights','alerts'];", self.page)
+        self.assertIn("const PANEL_KEYS=['summary'];", self.page)
         self.assertIn("efficiency:'summary'", self.page)
 
     def test_dashboard_uses_splunk_favicon_and_bundled_wordmark(self):
@@ -2817,6 +2817,20 @@ console.log(JSON.stringify({
         self.assertGreaterEqual(self.page.count("sessionDisplayThroughput(s)"), 2)
         self.assertIn("sessionDisplayThroughput(row)", self.page)
 
+    def test_session_detail_is_one_run_surface_without_subtabs(self):
+        for marker in (
+            "id=current-tabs", "data-current-panel=", "id=preview-surface-activity",
+            "id=preview-surface-tools", "id=preview-surface-insights",
+            "id=preview-surface-alerts", "id=panel-activity", "id=panel-tools",
+            "id=panel-insights", "id=panel-alerts", "function renderTrace(",
+            "function renderTools(", "function renderInsights(",
+        ):
+            self.assertNotIn(marker, self.page)
+        self.assertIn("const PANEL_KEYS=['summary'];", self.page)
+        self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run'];", self.page)
+        for removed_route in ("activity", "tools", "insights", "alerts"):
+            self.assertIn(f"{removed_route}:'summary'", self.page)
+
     def test_codex_session_detail_links_to_the_desktop_thread(self):
         for marker in (
             'id=session-desktop-link',
@@ -2832,7 +2846,7 @@ console.log(JSON.stringify({
             self.assertIn(marker, self.page)
 
     def test_browser_operational_alerts_are_budget_only(self):
-        self.assertIn("function renderInsights(ins)", self.page)
+        self.assertNotIn("function renderInsights(", self.page)
         self.assertNotIn("function isNotifiableInsight(i)", self.page)
         self.assertNotIn("fireNotification('Token insight'", self.page)
         self.assertNotIn("id=spike", self.page)
@@ -2852,10 +2866,6 @@ console.log(JSON.stringify({
             self.page,
         )
         settings = self.page[self.page.index("id=view-settings"):]
-        alerts = self.page[
-            self.page.index("id=panel-alerts"):
-            self.page.index("id=view-models")
-        ]
         rail = self.page[self.page.index("<div class=top aria-label="):self.page.index("<div id=session-depot")]
         for marker in (
             "class=budgetBrowserAlerts", "class=budgetBrowserAlertsCopy",
@@ -2863,10 +2873,10 @@ console.log(JSON.stringify({
         ):
             self.assertNotIn(marker, settings)
         for marker in (
-            "id=notify role=switch",
-            'aria-label="Toggle browser budget alerts"',
+            "id=panel-alerts", "id=notify role=switch", "id=notify-test",
+            "id=notify-log", 'aria-label="Toggle browser budget alerts"',
         ):
-            self.assertIn(marker, alerts)
+            self.assertNotIn(marker, self.page)
         self.assertNotIn("id=notify", rail)
 
     def test_budget_alert_controls_share_the_set_budgets_header(self):
@@ -2933,11 +2943,7 @@ console.log(JSON.stringify({
     def test_current_summary_keeps_session_budget_slider(self):
         summary = self.page[
             self.page.index("id=panel-summary"):
-            self.page.index("id=panel-activity")
-        ]
-        alerts = self.page[
-            self.page.index("id=panel-alerts"):
-            self.page.index("id=view-models")
+            self.page.index("<div class=foot>")
         ]
         for marker in (
             "id=session-budget-control", "id=budget-slider type=range",
@@ -2948,9 +2954,8 @@ console.log(JSON.stringify({
             self.assertIn(marker, self.page)
         self.assertIn("id=budget-slider type=range", summary)
         self.assertIn("id=budget type=number", summary)
-        self.assertNotIn("id=budget type=number", alerts)
-        self.assertNotIn("id=spike", alerts)
-        self.assertIn("Only budget crossings create alerts.", alerts)
+        self.assertNotIn("id=panel-alerts", self.page)
+        self.assertNotIn("Only budget crossings create alerts.", self.page)
         self.assertNotIn(
             "Set a live-run cap without changing the machine-wide monthly budget.",
             summary,
@@ -2970,17 +2975,9 @@ console.log(JSON.stringify({
     def test_promoted_current_is_dense_complete_and_settings_stay_dedicated(self):
         for marker in (
             "id=tab-session", 'class="view on" id=view-session',
-            "id=current-tabs", "id=preview-run-chart-slot",
+            "id=preview-run-chart-slot",
             "id=preview-run-budget-slot", "id=preview-token-split-slot",
-            "id=preview-activity-slot", "id=preview-tools-slot",
-            "id=preview-insights-slot", "id=preview-alerts-slot",
-            "id=preview-surface-run", "id=preview-surface-activity",
-            "id=preview-surface-tools", "id=preview-surface-insights",
-            "id=preview-surface-alerts", "id=session-activity-home",
-            "id=session-tools-home", "id=session-insights-home",
-            "id=session-alerts-home", "data-current-panel=run",
-            "data-current-panel=activity", "data-current-panel=tools",
-            "data-current-panel=insights", "data-current-panel=alerts",
+            "id=preview-surface-run",
             "id=session-token-split-home", "id=session-token-split-module",
             "class=\"card previewStartStrip\"", "class=settingsPageLayout",
             "class=\"card settingsMap\"", "data-settings-target=agent-access",
@@ -3003,8 +3000,7 @@ console.log(JSON.stringify({
         ):
             self.assertNotIn(f"id={removed_id}", self.page)
         for unique_id in (
-            "iochart", "sembar", "session-token-split-module", "panel-activity",
-            "panel-tools", "trace", "tooltbl", "execTools", "budget", "agent-access",
+            "iochart", "sembar", "session-token-split-module", "budget", "agent-access",
             "frustration-settings", "model-pricing-settings", "update-settings",
         ):
             self.assertEqual(
@@ -3049,34 +3045,21 @@ console.log(JSON.stringify({
             "['session-token-split-home','session-token-split-module']",
             self.page,
         )
-        self.assertIn(
-            "['session-activity-home','panel-activity']",
-            self.page,
-        )
-        self.assertIn(
-            "['session-tools-home','panel-tools']",
-            self.page,
-        )
-        self.assertIn(
-            "['session-insights-home','panel-insights']",
-            self.page,
-        )
-        self.assertIn(
-            "['session-alerts-home','panel-alerts']",
-            self.page,
-        )
-        self.assertIn(
+        for marker in (
+            "id=current-tabs", "data-current-panel=", "id=preview-activity-slot",
+            "id=preview-tools-slot", "id=preview-insights-slot",
+            "id=preview-alerts-slot", "id=preview-surface-activity",
+            "id=preview-surface-tools", "id=preview-surface-insights",
+            "id=preview-surface-alerts", "id=session-activity-home",
+            "id=session-tools-home", "id=session-insights-home",
+            "id=session-alerts-home", "id=panel-activity", "id=panel-tools",
+            "id=panel-insights", "id=panel-alerts",
             "mountCurrentModule(`preview-${panel}-slot`,`panel-${panel}`)",
-            self.page,
-        )
-        self.assertIn(
             "const button=event.target.closest('[data-current-panel]');",
-            self.page,
-        )
-        self.assertIn(
-            "setHashRoute(CURRENT_PANEL_ROUTES[button.dataset.currentPanel]);",
-            self.page,
-        )
+        ):
+            self.assertNotIn(marker, self.page)
+        self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run'];", self.page)
+        self.assertIn("const PANEL_KEYS=['summary'];", self.page)
         self.assertNotIn("mountCurrentModule('preview-settings", self.page)
 
     def test_model_stats_is_a_first_class_top_level_route(self):
@@ -4630,10 +4613,10 @@ console.log(JSON.stringify({
             "provider-cursor",
         ):
             self.assertIn(marker, self.page)
-        self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run','activity','tools','insights','alerts'];",
+        self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run'];",
                       self.page)
         self.assertNotIn("data-current-panel=sessions", self.page)
-        self.assertIn('id=current-tabs aria-label="Session views" data-current-detail', self.page)
+        self.assertNotIn('id=current-tabs', self.page)
         self.assertRegex(self.page, r"id=tab-session[^>]*>.*?<span class=tabLabel>Sessions</span>")
         self.assertIn("if(h==='sessions'||h==='sessions-all'||h==='current-sessions')", self.page)
         self.assertIn("history.replaceState(null,'','/#sessions')", self.page)
@@ -5059,6 +5042,13 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('@objc private func openModelPrices()', self.source)
         self.assertIn('openDashboardPanel("model-pricing", includePinnedSession: false)', self.source)
 
+    def test_native_menu_does_not_advertise_removed_session_trace_view(self):
+        for marker in (
+            'NSMenuItem(title: "Open Trace"', '#selector(openTrace)',
+            '@objc private func openTrace()', 'openDashboardPanel("activity")',
+        ):
+            self.assertNotIn(marker, self.source)
+
     def test_output_speed_remains_available_without_a_standing_menu_row(self):
         rebuild = self.source[
             self.source.index("    private func rebuildMenu()"):
@@ -5440,6 +5430,10 @@ class TraySourceTests(unittest.TestCase):
         ):
             self.assertIn(marker, self.source)
 
+    def test_linux_tray_does_not_advertise_removed_session_trace_view(self):
+        self.assertNotIn('"Open Trace"', self.source)
+        self.assertNotIn('self.open_url("#activity")', self.source)
+
     def test_linux_tray_exposes_tabs_title_metrics_and_notifications(self):
         for marker in (
             '("overview", "All")',
@@ -5751,6 +5745,16 @@ class HealthStateTests(unittest.TestCase):
 
 
 class MenubarSessionTests(unittest.TestCase):
+    def test_recommendations_always_target_the_single_run_surface(self):
+        states = (
+            {"context": {"latest_pct": 0.9}, "executions": [], "insights": []},
+            {"context": {}, "last_turn_cost": 0, "executions": [],
+             "insights": [{"kind": "warn", "text": "Check this signal"}]},
+        )
+        for state in states:
+            with self.subTest(state=state):
+                self.assertEqual(meter.menubar_recommendation(state)["target"], "summary")
+
     def test_menubar_reuses_watcher_state_for_the_live_selected_session(self):
         source = {
             "id": "live", "provider": "codex", "label": "Codex",
@@ -6462,6 +6466,17 @@ class AgentDataContractTests(unittest.TestCase):
         self.assertIn("20%", result["answer"])
         self.assertIn("context", result["recommended_action"].lower())
 
+    def test_check_dashboard_url_targets_the_single_run_surface(self):
+        state = {**self.state, "context": {"latest": 180000, "window": 200000,
+                                           "latest_pct": 0.9}}
+        with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
+                mock.patch.object(meter, "recompute", return_value=state):
+            result = meter.agent_check(caller={
+                "runtime": "codex", "project": "/Users/test/work/repository",
+            })
+
+        self.assertTrue(result["dashboard_url"].endswith("#summary"))
+
     def test_tools_check_answers_the_tool_volume_question(self):
         with mock.patch.object(meter, "all_session_sources", return_value=[self.source]), \
                 mock.patch.object(meter, "recompute", return_value=self.state):
@@ -6491,6 +6506,34 @@ class AgentDataContractTests(unittest.TestCase):
         verdict = meter.menubar_verdict(state, recommendation)
         self.assertIn("not reported", verdict["detail"])
         self.assertNotIn("Context is 0%", verdict["detail"])
+
+    def test_dashboard_omits_removed_session_tab_payloads(self):
+        state = {
+            "source": {"id": "session", "provider": "codex"},
+            "trace": [{"kind": "usage"}],
+            "insights": [{"kind": "warn"}],
+            "tools": {
+                "total_calls": 7,
+                "total_output_tokens": 1000,
+                "unique_used": 1,
+                "by_namespace": [{"namespace": "shell"}],
+                "by_name": [{"name": "exec"}],
+                "by_execution": [{"execution": 2}],
+            },
+        }
+        registry = mock.Mock()
+        registry.descriptors = ()
+        with mock.patch.object(meter, "runtime_registry", return_value=registry):
+            projected = meter.dashboard_state_payload(state)
+
+        self.assertNotIn("trace", projected)
+        self.assertNotIn("insights", projected)
+        self.assertEqual(projected["tools"]["total_calls"], 7)
+        self.assertEqual(projected["tools"]["total_output_tokens"], 1000)
+        self.assertEqual(projected["tools"]["unique_used"], 1)
+        for removed in ("by_namespace", "by_name", "by_execution"):
+            self.assertNotIn(removed, projected["tools"])
+        self.assertEqual(state["trace"], [{"kind": "usage"}])
 
     def test_check_refuses_to_fall_back_across_projects(self):
         with mock.patch.object(meter, "all_session_sources", return_value=[self.source]):

@@ -1602,9 +1602,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
               settingsMenu.items.contains(where: {
                   $0.title == "Open Settings" && $0.action == #selector(openSettings)
               }),
-              settingsMenu.items.contains(where: {
-                  $0.title == "Open Trace" && $0.action == #selector(openTrace)
-              }),
+              !settingsMenu.items.contains(where: { $0.title == "Open Trace" }),
               settingsMenu.items.contains(where: {
                   $0.title == "Model Prices" && $0.action == #selector(openModelPrices)
               }),
@@ -1830,10 +1828,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let openSettings = NSMenuItem(title: "Open Settings", action: #selector(openSettings), keyEquivalent: "")
         openSettings.target = self
         settingsMenu.addItem(openSettings)
-        let trace = NSMenuItem(title: "Open Trace", action: #selector(openTrace), keyEquivalent: "")
-        trace.target = self
-        trace.isEnabled = snapshot.connected
-        settingsMenu.addItem(trace)
         let modelPrices = NSMenuItem(title: "Model Prices", action: #selector(openModelPrices), keyEquivalent: "")
         modelPrices.target = self
         settingsMenu.addItem(modelPrices)
@@ -2222,10 +2216,6 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.refreshMenu()
             }
         }.resume()
-    }
-
-    @objc private func openTrace() {
-        openDashboardPanel("activity")
     }
 
     @objc private func openToolsAndSkills() {

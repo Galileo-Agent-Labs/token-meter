@@ -82,13 +82,8 @@ and select it from **Sessions**.
 history by project, application, or activity window. Selecting a session opens
 a durable local URL such as `/sessions/<id>#summary`.
 
-Within a session:
-
-- **Run** shows usage, timing, and the session budget cap.
-- **Activity** shows normalized events.
-- **Tools** shows capability evidence.
-- **Insights** shows bounded derived signals.
-- **Alerts** shows session-budget and notification state.
+Within a session, **Run** shows usage, timing, tool activity, and the session
+budget cap in one view.
 
 Session deletion is available only where the runtime and platform expose a
 safe, recoverable target.

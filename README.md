@@ -81,8 +81,8 @@ unavailable instead of appearing as a misleading zero.
 
 ### Follow a session
 
-Run, Activity, Tools, Insights, and Alerts keep usage, execution, and budget
-evidence connected to the session that produced it.
+Run keeps usage, execution, tool, and budget evidence together on one focused
+session page.
 
 <p align="center">
   <img src="images/dashboard.png" alt="Token Meter session detail with live cost, token, context, and execution metrics" width="900">

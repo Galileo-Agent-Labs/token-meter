@@ -5011,6 +5011,17 @@ def dashboard_state_payload(state):
     if not isinstance(state, dict):
         return state
     payload = dict(state)
+    for removed in ("trace", "insights", "recommendation", "verdict"):
+        payload.pop(removed, None)
+    if isinstance(state.get("tools"), dict):
+        public_tools = dict(state["tools"])
+        for removed in (
+            "by_namespace", "by_name", "by_execution",
+            "execution_rows_truncated", "execution_rows_shown",
+            "execution_calls_shown", "namespaces_used",
+        ):
+            public_tools.pop(removed, None)
+        payload["tools"] = public_tools
     payload["runtime_catalog"] = _runtime_catalog(runtime_registry().descriptors)
     cross = state.get("xsession")
     if isinstance(cross, dict):
@@ -6739,7 +6750,7 @@ def agent_check(focus="continue", execution=None, session_id=None, caller=None):
                    if cursor_estimate else
                    "Costs are estimates based on public API rates." if state.get("cost_approx") else
                    "Tool-result volume is trace-observed and may not include content the client did not log."),
-        "dashboard_url": agent_dashboard_url(source.get("id"), recommendation.get("target") or "summary"),
+        "dashboard_url": agent_dashboard_url(source.get("id"), "summary"),
         "as_of": agent_as_of(),
         "data_scope": "matched_current_run",
         "approximate_fields": (["cost"] if state.get("cost_approx") and cost_available else []) +
@@ -7171,28 +7182,28 @@ def menubar_recommendation(st):
             "label": "Compact now",
             "detail": f"Context is {pct * 100:.0f}% of the model window.",
             "severity": "bad",
-            "target": "activity",
+            "target": "summary",
         }
     if cost_available and last_cost >= MENUBAR_COST_SPIKE:
         return {
             "label": "Review spike",
             "detail": f"Last execution cost ${last_cost:.2f}.",
             "severity": "bad",
-            "target": "activity",
+            "target": "summary",
         }
     if low_yield_actionable:
         return {
             "label": "Summarize soon",
             "detail": "Latest execution replayed large context for low output.",
             "severity": "warn",
-            "target": "activity",
+            "target": "summary",
         }
     if pct >= MENUBAR_CONTEXT_WATCH_PCT:
         return {
             "label": "Summarize soon",
             "detail": f"Context is {pct * 100:.0f}%; prepare before 85%.",
             "severity": "warn",
-            "target": "activity",
+            "target": "summary",
         }
     if pct >= MENUBAR_CONTEXT_SOFT_PCT:
         return {
@@ -7206,7 +7217,7 @@ def menubar_recommendation(st):
             "label": "Check signal",
             "detail": warn.get("text") or "A warning signal is active.",
             "severity": "warn",
-            "target": "insights",
+            "target": "summary",
         }
     return {
         "label": "Let it run",

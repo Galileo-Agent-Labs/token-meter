@@ -1704,6 +1704,92 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertTrue(row["terminal"])
         self.assertEqual(row["usage_basis"], "reported")
 
+    def claude_source_without_title(self):
+        return {
+            "id": "session", "path": "/tmp/session.jsonl", "provider": "claude",
+            "client": "claude", "label": "Claude", "project": "/repo",
+            "mtime": 1, "title": None, "model": None,
+        }
+
+    def claude_usage_row(self, ts="2026-07-02T00:00:00.000Z"):
+        return {
+            "type": "assistant", "timestamp": ts,
+            "message": {
+                "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+                "stop_reason": "end_turn",
+            },
+        }
+
+    def test_claude_summary_prefers_custom_title_record_over_prompt_heuristic(self):
+        objs = [
+            {"type": "user", "timestamp": "2026-07-02T00:00:00.000Z",
+             "message": {"content": "What does this function do?"}},
+            self.claude_usage_row(),
+            {"type": "custom-title", "customTitle": "release-triage",
+             "sessionId": "session"},
+        ]
+        row = meter.claude_summary(self.claude_source_without_title(), objs)
+        self.assertEqual(row["title"], "release-triage")
+        self.assertEqual(row["session_name"], "release-triage")
+
+    def test_claude_summary_uses_ai_title_when_no_custom_title(self):
+        objs = [
+            self.claude_usage_row(),
+            {"type": "ai-title", "aiTitle": "Process codex reviews for issue #40",
+             "sessionId": "session"},
+        ]
+        row = meter.claude_summary(self.claude_source_without_title(), objs)
+        self.assertEqual(row["title"], "Process codex reviews for issue #40")
+        self.assertEqual(row["session_name"], "Process codex reviews for issue #40")
+
+    def test_claude_summary_desktop_title_outranks_custom_and_ai_title(self):
+        source = self.claude_source_without_title()
+        source["title"] = "Desktop sidecar title"
+        objs = [
+            self.claude_usage_row(),
+            {"type": "custom-title", "customTitle": "release-triage",
+             "sessionId": "session"},
+            {"type": "ai-title", "aiTitle": "Process codex reviews",
+             "sessionId": "session"},
+        ]
+        row = meter.claude_summary(source, objs)
+        self.assertEqual(row["title"], "Desktop sidecar title")
+        self.assertEqual(row["session_name"], "Desktop sidecar title")
+
+    def test_claude_summary_keeps_last_custom_title_when_multiple_records(self):
+        objs = [
+            self.claude_usage_row(),
+            {"type": "custom-title", "customTitle": "first-name",
+             "sessionId": "session"},
+            {"type": "custom-title", "customTitle": "second-name",
+             "sessionId": "session"},
+        ]
+        row = meter.claude_summary(self.claude_source_without_title(), objs)
+        self.assertEqual(row["title"], "second-name")
+        self.assertEqual(row["session_name"], "second-name")
+
+    def test_claude_summary_falls_back_to_untitled_when_no_declared_title_and_no_human_prompt(self):
+        objs = [
+            self.claude_usage_row(),
+            {"type": "user", "isMeta": True,
+             "timestamp": "2026-07-02T00:00:00.000Z",
+             "message": {"content": "Base directory for this skill: /Users/pat"}},
+        ]
+        row = meter.claude_summary(self.claude_source_without_title(), objs)
+        self.assertEqual(row["title"], "(untitled log)")
+        self.assertEqual(row["session_name"], "")
+
+    def test_claude_summary_prompt_fallback_title_does_not_populate_session_name(self):
+        objs = [
+            self.claude_usage_row(),
+            {"type": "user", "timestamp": "2026-07-02T00:00:00.000Z",
+             "message": {"content": "What does this function do?"}},
+        ]
+        row = meter.claude_summary(self.claude_source_without_title(), objs)
+        self.assertEqual(row["title"], "What does this function do?")
+        self.assertEqual(row["session_name"], "")
+
     def test_codex_summary_carries_live_throughput_into_current_sessions(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-01T00:00:00.000Z",
@@ -5120,12 +5206,14 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('for metric in TitleMetric.allCases', self.source)
         self.assertIn('#selector(toggleTitleMetric(_:))', self.source)
         self.assertIn('TitleMetric.allCases.filter(titleMetrics.contains).map(\\.rawValue)', self.source)
-        self.assertIn('let title = selectedStatusTitle()', self.source)
-        self.assertIn('case .cost: return snapshot.costLabel', self.source)
-        self.assertIn('case .speed: return snapshot.outputSpeedLabel', self.source)
-        self.assertIn('case .context: return snapshot.contextLabel', self.source)
-        self.assertIn('case .model: return snapshot.model', self.source)
-        self.assertIn('case .limits: return limitsStatusTitle()', self.source)
+        self.assertIn('let presentation = selectedStatusTitlePresentation()', self.source)
+        self.assertIn('let title = presentation.accessibilityTitle', self.source)
+        self.assertIn('let text = snapshot.menuBarCostLabel', self.source)
+        self.assertIn('let text = snapshot.menuBarOutputSpeedLabel', self.source)
+        self.assertIn('let text = snapshot.contextLabel', self.source)
+        self.assertIn('let text = snapshot.model', self.source)
+        self.assertIn('let accessibilityText = limitsStatusTitle()', self.source)
+        self.assertIn('symbol: runtimeCatalog[constrained.provider.id]?.symbol', self.source)
         self.assertNotIn('private func compactStatusTitle()', self.source)
         self.assertIn('private func limitsStatusTitle() -> String?', self.source)
         self.assertIn('return "\\(constrained.provider.label) \\(constrained.window.percentLabel)"', self.source)
@@ -5142,13 +5230,14 @@ class MenubarSourceTests(unittest.TestCase):
     def test_status_item_uses_a_compact_cross_display_hit_target(self):
         self.assertIn('NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)', self.source)
         self.assertIn('private func splunkChevronImage(', self.source)
-        self.assertIn('private func statusTitleImage(_ title: String) -> NSImage', self.source)
+        self.assertIn('private func statusTitleImage(_ presentation: StatusTitlePresentation) -> NSImage', self.source)
+        self.assertIn('private func runtimeMarkImage(symbol: String', self.source)
         self.assertIn('button.image = splunkChevronImage()', self.source)
         self.assertNotIn('systemSymbolName: "waveform.path.ecg"', self.source)
         self.assertIn('button.imagePosition = .imageOnly', self.source)
         self.assertIn('.foregroundColor: NSColor.black', self.source)
         self.assertIn('image.isTemplate = true', self.source)
-        self.assertIn('let titleImage = statusTitleImage(title)', self.source)
+        self.assertIn('let titleImage = statusTitleImage(presentation)', self.source)
         self.assertIn('statusItem.length = titleImage.size.width + 16', self.source)
         self.assertIn('button.contentTintColor = nil', self.source)
         self.assertIn('button.setAccessibilityLabel("Token Meter")', self.source)
@@ -5227,7 +5316,7 @@ class MenubarSourceTests(unittest.TestCase):
             'budgetExceededMonthsDefaultsKey',
             'budgetExceededNotificationMonths',
             'title: "Overall monthly budget exceeded"',
-            'return monthlyBudget?.anyExceeded == true ? "⚠︎ \\(base)" : base',
+            'warning: monthlyBudget?.anyExceeded == true',
             'button.contentTintColor = budgetExceeded',
             'NSColor.systemRed',
             'button.setAccessibilityLabel("Token Meter")',

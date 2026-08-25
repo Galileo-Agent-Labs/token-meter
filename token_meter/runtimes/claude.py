@@ -826,6 +826,7 @@ class ClaudeRuntimeAdapter:
         add_model_summary = compat["add_model_summary"]
         analyze_language_signals = compat["analyze_language_signals"]
         attach_language_signals = compat["attach_language_signals"]
+        claude_human_text = compat["claude_human_text"]
         claude_performance_samples = compat["claude_performance_samples"]
         claude_tool_call_evidence = compat["claude_tool_call_evidence"]
         claude_wait_samples = compat["claude_wait_samples"]
@@ -836,7 +837,6 @@ class ClaudeRuntimeAdapter:
         price_for = compat["price_for"]
         summarize_tool_evidence = compat["summarize_tool_evidence"]
         summary_row = compat["summary_row"]
-        text_from_content = compat["text_from_content"]
         usage_tokens = compat["usage_tokens"]
         msgs = self.logical_messages(objs, timestamp_parser=parse_iso)
         cost = 0.0
@@ -882,21 +882,33 @@ class ClaudeRuntimeAdapter:
                 day = time.strftime("%Y-%m-%d", time.localtime(rec["ts"]))
                 day_cost[day] += c
     
-        title = source.get("title")
+        custom_title = ai_title = ""
+        for obj in objs:
+            record_type = obj.get("type")
+            if record_type == "custom-title":
+                value = _compact(obj.get("customTitle"))
+                if value:
+                    custom_title = value
+            elif record_type == "ai-title":
+                value = _compact(obj.get("aiTitle"))
+                if value:
+                    ai_title = value
+        declared_title = source.get("title") or custom_title or ai_title
+
+        title = declared_title or None
         if not title:
             for obj in objs:
-                if obj.get("type") == "user":
-                    msg = obj.get("message") if isinstance(obj.get("message"), dict) else {}
-                    txt = text_from_content(msg.get("content")).strip()
-                    if txt and not txt.startswith("<") and "command-" not in txt[:20]:
-                        title = compact_text(txt, 60)
-                        break
-    
+                txt = claude_human_text(obj)
+                if txt and txt.strip():
+                    title = compact_text(txt.strip(), 60)
+                    break
+
         performance = claude_performance_samples(objs)
         wait_samples = claude_wait_samples(objs)
         row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
-                          list(model_daily.values()), performance, wait_samples)
+                          list(model_daily.values()), performance, wait_samples,
+                          session_name=declared_title)
         row["primary_model"] = primary_model
         row["context"] = {
             "latest": latest_context,

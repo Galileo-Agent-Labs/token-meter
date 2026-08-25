@@ -104,6 +104,31 @@ class CatalogAwareClientSourceTests(unittest.TestCase):
         self.assertIn("state.get('runtime_catalog')", self.tray)
         self.assertNotIn('if value == "codex"', self.tray)
 
+    def test_provider_marks_keep_dashboard_labels_and_native_accessibility(self):
+        for marker in (
+            "const runtimeMarkSvg=session=>",
+            "const runtimeBadgeContent=(session,label)=>",
+            "runtimeBadgeContent(s,source.label||s.provider||'source')",
+            "${runtimeMarkSvg(s)}${esc(s.label||s.provider)}",
+            "${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span>",
+        ):
+            self.assertIn(marker, self.page)
+        mark_helper = self.page.split("const runtimeMarkSvg=session=>", 1)[1].split(
+            "const runtimeBadgeContent=", 1
+        )[0]
+        self.assertIn("aria-hidden=true", mark_helper)
+        self.assertNotIn("http://", mark_helper)
+        self.assertNotIn("https://", mark_helper)
+
+        for marker in (
+            "private struct StatusTitleSegment",
+            "private func runtimeMarkImage(symbol: String",
+            "symbol: runtimeCatalog[constrained.provider.id]?.symbol",
+            "let accessibilityText = limitsStatusTitle()",
+            "accessibilityText: accessibilityText",
+        ):
+            self.assertIn(marker, self.swift)
+
 
 if __name__ == "__main__":
     unittest.main()

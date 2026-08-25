@@ -1971,6 +1971,7 @@ def _claude_compatibility():
         "attach_language_signals": attach_language_signals,
         "build_insights": build_insights,
         "build_state": build_state,
+        "claude_human_text": _claude_human_text,
         "claude_performance_samples": claude_performance_samples,
         "claude_tool_call_evidence": claude_tool_call_evidence,
         "claude_tool_results": claude_tool_results,
@@ -4576,7 +4577,7 @@ def codex_summary(source, objs):
 def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                 active_timing=None, input_tokens=0, output_tokens=0, model_stats=None,
                 model_daily=None, performance_samples=None, wait_samples=None,
-                availability=None):
+                availability=None, session_name=None):
     active_timing = active_timing or {}
     model_stats = model_stats or {}
     model_daily = model_daily or []
@@ -4594,7 +4595,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "desktop_session_id": source.get("desktop_session_id"),
         "project": source.get("project") or "",
         "title": title or source.get("title") or "(untitled log)",
-        "session_name": compact_text(str(source.get("title") or ""), 90),
+        "session_name": compact_text(str(session_name or source.get("title") or ""), 90),
         "reasoning_effort": compact_text(str(source.get("reasoning_effort") or ""), 20),
         "cost": cost,
         "cost_approx": bool(approx),

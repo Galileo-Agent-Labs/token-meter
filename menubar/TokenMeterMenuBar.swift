@@ -70,28 +70,143 @@ private func splunkChevronImage(accessibilityDescription: String = "Splunk Token
     return image
 }
 
-private func statusTitleImage(_ title: String) -> NSImage {
+private struct StatusTitleSegment {
+    var text: String
+    var symbol: String?
+    var accessibilityText: String
+}
+
+private struct StatusTitlePresentation {
+    var segments: [StatusTitleSegment]
+    var warning: Bool
+
+    var accessibilityTitle: String {
+        let base = segments.map(\.accessibilityText).joined(separator: "  ")
+        return warning ? "⚠︎ \(base)" : base
+    }
+}
+
+private func runtimeMarkImage(symbol: String, accessibilityDescription: String) -> NSImage {
+    let size = NSSize(width: 14, height: 14)
+    let image = NSImage(size: size, flipped: false) { rect in
+        let inset = rect.insetBy(dx: 1, dy: 1)
+        NSColor.black.setStroke()
+        NSColor.black.setFill()
+
+        func path(_ points: [NSPoint], closed: Bool = false) -> NSBezierPath {
+            let value = NSBezierPath()
+            guard let first = points.first else { return value }
+            value.move(to: first)
+            for point in points.dropFirst() { value.line(to: point) }
+            if closed { value.close() }
+            value.lineWidth = 1.45
+            value.lineCapStyle = .round
+            value.lineJoinStyle = .round
+            return value
+        }
+
+        switch symbol {
+        case "runtime.claude":
+            for points in [
+                [NSPoint(x: 7, y: 1), NSPoint(x: 7, y: 13)],
+                [NSPoint(x: 1, y: 7), NSPoint(x: 13, y: 7)],
+                [NSPoint(x: 2.7, y: 2.7), NSPoint(x: 11.3, y: 11.3)],
+                [NSPoint(x: 11.3, y: 2.7), NSPoint(x: 2.7, y: 11.3)],
+            ] {
+                path(points).stroke()
+            }
+        case "runtime.codex":
+            let outer = path([
+                NSPoint(x: 7, y: 1), NSPoint(x: 12.2, y: 4),
+                NSPoint(x: 12.2, y: 10), NSPoint(x: 7, y: 13),
+                NSPoint(x: 1.8, y: 10), NSPoint(x: 1.8, y: 4),
+            ], closed: true)
+            outer.stroke()
+            NSBezierPath(ovalIn: NSRect(x: 4.7, y: 4.7, width: 4.6, height: 4.6)).stroke()
+            for points in [
+                [NSPoint(x: 7, y: 1), NSPoint(x: 7, y: 4.7)],
+                [NSPoint(x: 12.2, y: 10), NSPoint(x: 9, y: 8.2)],
+                [NSPoint(x: 1.8, y: 10), NSPoint(x: 5, y: 8.2)],
+            ] {
+                path(points).stroke()
+            }
+        case "runtime.cursor":
+            path([
+                NSPoint(x: 7, y: 1.2), NSPoint(x: 12.5, y: 4.5),
+                NSPoint(x: 7, y: 7.8), NSPoint(x: 1.5, y: 4.5),
+            ], closed: true).stroke()
+            path([
+                NSPoint(x: 1.5, y: 4.5), NSPoint(x: 7, y: 7.8),
+                NSPoint(x: 7, y: 13), NSPoint(x: 1.5, y: 9.7),
+            ], closed: true).stroke()
+            path([
+                NSPoint(x: 12.5, y: 4.5), NSPoint(x: 7, y: 7.8),
+                NSPoint(x: 7, y: 13), NSPoint(x: 12.5, y: 9.7),
+            ], closed: true).stroke()
+        case "runtime.opencode":
+            path([
+                NSPoint(x: 5.7, y: 2.2), NSPoint(x: 1.8, y: 7),
+                NSPoint(x: 5.7, y: 11.8),
+            ]).stroke()
+            path([
+                NSPoint(x: 8.3, y: 2.2), NSPoint(x: 12.2, y: 7),
+                NSPoint(x: 8.3, y: 11.8),
+            ]).stroke()
+        default:
+            let ring = NSBezierPath(ovalIn: inset)
+            ring.lineWidth = 1.45
+            ring.stroke()
+            NSBezierPath(ovalIn: NSRect(x: 5.4, y: 5.4, width: 3.2, height: 3.2)).fill()
+        }
+        return true
+    }
+    image.isTemplate = true
+    image.accessibilityDescription = accessibilityDescription
+    return image
+}
+
+private func statusTitleImage(_ presentation: StatusTitlePresentation) -> NSImage {
     let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-    let attributedTitle = NSAttributedString(
-        string: title,
-        attributes: [
-            .foregroundColor: NSColor.black,
-            .font: font,
-        ]
-    )
-    let measuredSize = attributedTitle.size()
-    let imageSize = NSSize(width: ceil(measuredSize.width), height: 18)
+    let attributes: [NSAttributedString.Key: Any] = [
+        .foregroundColor: NSColor.black,
+        .font: font,
+    ]
+    let gap = NSAttributedString(string: "  ", attributes: attributes).size().width
+    let prefix = presentation.warning ? NSAttributedString(string: "⚠︎ ", attributes: attributes) : nil
+    let layouts = presentation.segments.map { segment -> (StatusTitleSegment, NSAttributedString, CGFloat) in
+        let title = NSAttributedString(string: segment.text, attributes: attributes)
+        let markWidth: CGFloat = segment.symbol == nil ? 0 : 18
+        return (segment, title, markWidth + title.size().width)
+    }
+    let contentWidth = (prefix?.size().width ?? 0)
+        + layouts.reduce(CGFloat(0)) { $0 + $1.2 }
+        + gap * CGFloat(max(0, layouts.count - 1))
+    let imageSize = NSSize(width: ceil(contentWidth), height: 18)
     let image = NSImage(size: imageSize, flipped: false) { rect in
-        attributedTitle.draw(at: NSPoint(
-            x: 0,
-            y: floor((rect.height - measuredSize.height) / 2)
-        ))
+        var x: CGFloat = 0
+        if let prefix = prefix {
+            let size = prefix.size()
+            prefix.draw(at: NSPoint(x: x, y: floor((rect.height - size.height) / 2)))
+            x += size.width
+        }
+        for (index, layout) in layouts.enumerated() {
+            let (segment, title, _) = layout
+            if index > 0 { x += gap }
+            if let symbol = segment.symbol {
+                runtimeMarkImage(symbol: symbol, accessibilityDescription: segment.accessibilityText)
+                    .draw(in: NSRect(x: x, y: 2, width: 14, height: 14))
+                x += 18
+            }
+            let size = title.size()
+            title.draw(at: NSPoint(x: x, y: floor((rect.height - size.height) / 2)))
+            x += size.width
+        }
         return true
     }
     // The glyphs are a mask. macOS owns the final black/white tint, using the
     // actual menu-bar material rather than this process's effective appearance.
     image.isTemplate = true
-    image.accessibilityDescription = title
+    image.accessibilityDescription = presentation.accessibilityTitle
     return image
 }
 
@@ -799,6 +914,10 @@ struct MeterSnapshot {
 
     var costLabel: String { costAvailable ? "\(formatMoney(totalCost))\(estimatedCost ? " est" : "")" : "--" }
 
+    var menuBarCostLabel: String {
+        costAvailable ? String(format: "$%.0f", totalCost) : "--"
+    }
+
     var contextLabel: String {
         guard let pct = contextPct else { return "--% ctx" }
         return "\(Int((pct * 100).rounded()))% ctx"
@@ -814,6 +933,11 @@ struct MeterSnapshot {
     var outputSpeedLabel: String {
         guard let rate = outputTokensPerSecond, rate > 0 else { return "-- tok/s" }
         return "\(formatTokenRate(rate)) tok/s\(estimatedTokens ? " est" : "")"
+    }
+
+    var menuBarOutputSpeedLabel: String {
+        guard let rate = outputTokensPerSecond, rate > 0 else { return "-- tok/s" }
+        return "\(String(format: "%.0f", rate)) tok/s"
     }
 
     var outputSpeedTooltip: String {
@@ -1443,10 +1567,21 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recentSessions = (smokePayload["recent_sessions"] as? [[String: Any]] ?? [])
             .compactMap { RecentSession.fromJSON($0, catalog: runtimeCatalog) }
         rebuildMenu()
-        let expectedTitle = selectedStatusTitle()
+        let expectedPresentation = selectedStatusTitlePresentation()
+        let expectedTitle = expectedPresentation.accessibilityTitle
+        let expectedTitleSegments = expectedTitle.components(separatedBy: "  ")
         let renderedTitle = statusItem.button?.accessibilityValue() as? String
+        let limitSegment = expectedPresentation.segments.first { $0.symbol != nil }
 
         guard statusItem.menu === menu,
+              expectedTitleSegments.count >= 4,
+              !expectedTitle.contains("·"),
+              !expectedTitleSegments[0].contains("."),
+              !expectedTitleSegments[1].contains("."),
+              !expectedTitleSegments[0].contains(" est"),
+              !expectedTitleSegments[1].contains(" est"),
+              limitSegment?.text.hasSuffix("%") == true,
+              limitSegment?.accessibilityText.contains(limitSegment?.text ?? "") == true,
               renderedTitle == expectedTitle,
               menu.items.contains(where: { $0.title == "Follow latest" }),
               menu.items.filter({ $0.representedObject is String }).count == recentSessions.prefix(5).count,
@@ -1457,7 +1592,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             throw NSError(
                 domain: "TokenMeterMenuBar",
                 code: 4,
-                userInfo: [NSLocalizedDescriptionKey: "Native menu did not expose direct session following and compact submenus."]
+                userInfo: [NSLocalizedDescriptionKey: "Native menu title did not use whole numbers without centered separators, or compact submenus did not match."]
             )
         }
         softwareUpdate = SoftwareUpdateSnapshot(
@@ -1506,7 +1641,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateStatusTitle() {
-        let title = selectedStatusTitle()
+        let presentation = selectedStatusTitlePresentation()
+        let title = presentation.accessibilityTitle
         let budgetExceeded = monthlyBudget?.anyExceeded == true
         guard let button = statusItem.button else { return }
         button.contentTintColor = budgetExceeded
@@ -1514,7 +1650,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             : (snapshot.connected ? NSColor.tokenMeterBlue : NSColor.secondaryLabelColor)
         switch effectiveStatusDisplayMode() {
         case .text:
-            let titleImage = statusTitleImage(title)
+            let titleImage = statusTitleImage(presentation)
             statusItem.length = titleImage.size.width + 16
             button.title = ""
             button.attributedTitle = NSAttributedString(string: "")
@@ -1550,19 +1686,50 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func selectedStatusTitle() -> String {
-        guard snapshot.connected else { return snapshot.verdict.prefix }
-        let parts = TitleMetric.allCases.compactMap { metric -> String? in
+        selectedStatusTitlePresentation().accessibilityTitle
+    }
+
+    private func selectedStatusTitlePresentation() -> StatusTitlePresentation {
+        guard snapshot.connected else {
+            let text = snapshot.verdict.prefix
+            return StatusTitlePresentation(
+                segments: [StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)],
+                warning: false
+            )
+        }
+        let parts = TitleMetric.allCases.compactMap { metric -> StatusTitleSegment? in
             guard titleMetrics.contains(metric) else { return nil }
             switch metric {
-            case .cost: return snapshot.costLabel
-            case .speed: return snapshot.outputSpeedLabel
-            case .context: return snapshot.contextLabel
-            case .model: return snapshot.model
-            case .limits: return limitsStatusTitle()
+            case .cost:
+                let text = snapshot.menuBarCostLabel
+                return StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)
+            case .speed:
+                let text = snapshot.menuBarOutputSpeedLabel
+                return StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)
+            case .context:
+                let text = snapshot.contextLabel
+                return StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)
+            case .model:
+                let text = snapshot.model
+                return StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)
+            case .limits:
+                guard let constrained = mostConstrainedQuota(),
+                      let accessibilityText = limitsStatusTitle()
+                else { return nil }
+                return StatusTitleSegment(
+                    text: constrained.window.percentLabel,
+                    symbol: runtimeCatalog[constrained.provider.id]?.symbol ?? "runtime.generic",
+                    accessibilityText: accessibilityText
+                )
             }
         }
-        let base = parts.isEmpty ? "TM" : parts.joined(separator: " · ")
-        return monthlyBudget?.anyExceeded == true ? "⚠︎ \(base)" : base
+        let segments = parts.isEmpty
+            ? [StatusTitleSegment(text: "TM", symbol: nil, accessibilityText: "TM")]
+            : parts
+        return StatusTitlePresentation(
+            segments: segments,
+            warning: monthlyBudget?.anyExceeded == true
+        )
     }
 
     private func limitsStatusTitle() -> String? {
@@ -2145,10 +2312,18 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         guard chevron.isTemplate, chevron.size == NSSize(width: 18, height: 18) else {
             throw NSError(domain: "TokenMeterMenuBar", code: 11, userInfo: [NSLocalizedDescriptionKey: "Splunk status-item chevron is invalid."])
         }
-        let titleImage = statusTitleImage("$9.16 est · 36.2 tok/s")
+        let titleImage = statusTitleImage(StatusTitlePresentation(
+            segments: [
+                StatusTitleSegment(text: "$9", symbol: nil, accessibilityText: "$9"),
+                StatusTitleSegment(text: "36 tok/s", symbol: nil, accessibilityText: "36 tok/s"),
+                StatusTitleSegment(text: "80%", symbol: "runtime.claude", accessibilityText: "Claude 80%"),
+            ],
+            warning: false
+        ))
         guard titleImage.isTemplate,
-              titleImage.size.width > 100,
-              titleImage.size.height == 18
+              titleImage.size.width > 0,
+              titleImage.size.height == 18,
+              titleImage.accessibilityDescription == "$9  36 tok/s  Claude 80%"
         else {
             throw NSError(domain: "TokenMeterMenuBar", code: 12, userInfo: [NSLocalizedDescriptionKey: "Adaptive template status-title image is invalid."])
         }
@@ -2181,16 +2356,19 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
         let baseTitle = TitleMetric.allCases.compactMap { metric -> String? in
             guard savedMetrics.contains(metric) else { return nil }
             switch metric {
-            case .cost: return snapshot.costLabel
-            case .speed: return snapshot.outputSpeedLabel
+            case .cost: return snapshot.menuBarCostLabel
+            case .speed: return snapshot.menuBarOutputSpeedLabel
             case .context: return snapshot.contextLabel
             case .model: return snapshot.model
             case .limits:
                 guard let constrained = constrained else { return nil }
                 return "\(constrained.provider.label) \(constrained.window.percentLabel)"
             }
-        }.joined(separator: " · ")
+        }.joined(separator: "  ")
         let activeTitle = budget?.anyExceeded == true ? "⚠︎ \(baseTitle)" : baseTitle
+        guard !activeTitle.contains("·"), !activeTitle.contains(" est") else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 15, userInfo: [NSLocalizedDescriptionKey: "Compact status title contains centered-dot separators or estimate suffixes."])
+        }
         print("native-menu=system chevron=template status-title=adaptive-template sessions=\(sessions.prefix(5).count) direct-follow=true")
         print(snapshot.statusTitle)
         print(snapshot.outputSpeedLabel)

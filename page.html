@@ -444,6 +444,7 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 @media(max-width:900px){.spendRangeControls{width:100%;justify-items:start}.spendRangeControls .seg{width:100%;overflow-x:auto;justify-content:flex-start}.spendKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.spendChartHead{display:grid}.spendLegend{justify-content:flex-start}.spendCustom{justify-content:flex-start}.spendEvidenceGrid,.spendInsightGrid{grid-template-columns:1fr}.spendInsightHead{align-items:flex-start;flex-direction:column}.spendInsightRange{white-space:normal}.spendScatterControls{justify-content:flex-start}}
 @media(max-width:700px){.spendShapeHeader{display:none}.spendShapeRow{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:11px 0}.spendShapeRail,.spendShapeValues{grid-column:1/-1}.spendShapeValues span{display:grid;gap:2px;text-align:left}.spendShapeValues span:before{content:attr(data-label);color:var(--faint);font:760 8.5px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-transform:uppercase}.spendScatterSvg{height:300px}}
 @media(max-width:520px){.spendKpis{grid-template-columns:1fr}.spendKpi .v,.spendKpi:first-child .v{font-size:22px}.spendRangeControls .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.spendRangeControls [data-spend-range=custom]{grid-column:1/-1}.spendCustom{display:grid;grid-template-columns:1fr 1fr;width:100%}.spendCustom label,.spendCustom input{width:100%;min-width:0}.spendCustom #s-range-error{grid-column:1/-1;padding:0}.spendPlatformRow{grid-template-columns:minmax(0,1fr) auto}.spendPlatformTrack{grid-column:1/-1;grid-row:2}.spendChartCard{padding-inline:13px}.spendChart{grid-template-columns:44px minmax(0,1fr)}.spendYAxis{padding-right:6px;font-size:9px}.spendLogsCard,.spendPlatformCard,.spendConcentrationCard,.spendShapeCard,.spendScatterCard{padding:14px 13px}.spendLogRow{height:86px;grid-template-columns:24px minmax(0,1fr) auto;gap:9px}.spendLogRank{width:22px;height:22px}.spendLogValue{grid-column:2/4;grid-row:2;display:flex;min-width:0;align-items:baseline;justify-content:space-between;gap:10px;text-align:left}.spendLogValue strong,.spendLogValue span{display:block;margin:0}.spendLogRow .tbtn{grid-column:3;grid-row:1;min-height:44px;padding-inline:12px}.spendConcentrationValue{font-size:38px}.spendInsightCardHead{display:grid}.spendScatterControls .seg{width:100%}.spendScatterControls .seg button{flex:1}.spendScatterSvg{height:270px}.spendScatterLegend{align-items:flex-start;flex-direction:column;gap:5px}}
+.currentSessionRuntime:before,.badge.app:before{content:none}.runtimeMark{display:block;width:12px;height:12px;flex:0 0 auto;overflow:visible;color:currentColor}.runtimeMark path,.runtimeMark circle,.runtimeMark polygon{vector-effect:non-scaling-stroke}.currentSessionRuntime .runtimeMark{width:14px;height:14px}
 </style></head><body class=spectrumApp>
 <!--
 THESIS: Sessions are live instruments, not a generic grid of dark cards.
@@ -1236,6 +1237,17 @@ const hasLocalEstimate=row=>['local_estimate','mixed'].includes(usageBasis(row))
 const estimateSuffix=row=>usageBasis(row)==='local_estimate'?' est':usageBasis(row)==='mixed'?' incl. est':'';
 const runtimeId=session=>String(session?.provider||session?.runtime_id||session?.client||'unknown-runtime');
 const runtimeMeta=session=>RUNTIME_CATALOG[runtimeId(session)]||RUNTIME_CATALOG['unknown-runtime']||{label:'Unknown Runtime',symbol:'runtime.generic',color:'runtime-neutral',capabilities:['sessions']};
+const runtimeMarkSvg=session=>{
+ const symbol=runtimeMeta(session).symbol;
+ const mark={
+  'runtime.claude':'<path d="M8 1.5v13M1.5 8h13M3.4 3.4l9.2 9.2M12.6 3.4l-9.2 9.2" fill=none stroke=currentColor stroke-width=1.6 stroke-linecap=round/>',
+  'runtime.codex':'<path d="M8 1.4l5.2 3v6L8 13.4l-5.2-3v-6zM8 1.4v3.7m5.2 5.3L10 8.55m-7.2 1.85L6 8.55" fill=none stroke=currentColor stroke-width=1.4 stroke-linejoin=round stroke-linecap=round/><circle cx=8 cy=8 r=2.5 fill=none stroke=currentColor stroke-width=1.4/>',
+  'runtime.cursor':'<polygon points="8,1.4 13.3,4.7 8,8 2.7,4.7" fill=none stroke=currentColor stroke-width=1.35 stroke-linejoin=round/><polygon points="2.7,4.7 8,8 8,13.3 2.7,10" fill=none stroke=currentColor stroke-width=1.35 stroke-linejoin=round/><polygon points="13.3,4.7 8,8 8,13.3 13.3,10" fill=none stroke=currentColor stroke-width=1.35 stroke-linejoin=round/>',
+  'runtime.opencode':'<path d="M6.2 2.5 2 8l4.2 5.5M9.8 2.5 14 8l-4.2 5.5" fill=none stroke=currentColor stroke-width=1.6 stroke-linecap=round stroke-linejoin=round/>',
+ }[symbol]||'<circle cx=8 cy=8 r=5.7 fill=none stroke=currentColor stroke-width=1.4/><circle cx=8 cy=8 r=1.6 fill=currentColor/>';
+ return `<svg class=runtimeMark viewBox="0 0 16 16" aria-hidden=true focusable=false>${mark}</svg>`;
+};
+const runtimeBadgeContent=(session,label)=>`${runtimeMarkSvg(session)}<span>${esc(label)}</span>`;
 const runtimeLabel=session=>session?.runtime||session?.label||runtimeMeta(session).label;
 const runtimeHarness=session=>({'runtime-claude':'#f59b45','runtime-codex':'#b08cff','runtime-cursor':'#e7edf4','runtime-opencode':'#f08cae'}[runtimeMeta(session).color]||'#dfe5ec');
 const appBadgeClass=session=>String(runtimeMeta(session).color||'runtime-neutral').replace(/^runtime-/,'');
@@ -3516,7 +3528,7 @@ function renderCurrentRun(s){
  const costAvailable=metricAvailable(s,'cost'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput');
  const contextPct=Math.max(0,Math.min(1,Number(context.latest_pct)||0)),toolResultTokens=tools.total_output_tokens||0;
  const alert=sessionAlert(s),frozen=!!s.ended,cursorEstimate=s.provider==='cursor',cap=dollarInputValue('budget',Infinity),costPerTask=s.analyses?.cost_per_task||{};
- $('preview-provider').textContent=source.label||s.provider||'source';
+ $('preview-provider').innerHTML=runtimeBadgeContent(s,source.label||s.provider||'source');
  $('preview-provider').className='badge app '+appBadgeClass(s);
  $('preview-project').textContent=s.project||source.project||'';
  $('preview-model').textContent=s.primary_model||'model unavailable';
@@ -3564,7 +3576,7 @@ function renderSession(s){
  loadBudgetForSession(s);
  renderCurrentBudgetWarning(s.xsession?.budget||LATEST?.xsession?.budget);
  const frozen=!!s.ended, source=s.source||{};
- $('s-provider').textContent=source.label||s.provider||'source';
+ $('s-provider').innerHTML=runtimeBadgeContent(s,source.label||s.provider||'source');
  $('s-provider').className='badge app '+appBadgeClass(s);
  $('s-repo').textContent=s.project||source.project||'';
  $('s-id').textContent=s.session||source.id||'';
@@ -4905,7 +4917,7 @@ function logRowContent(s){
  const rowCost=metricAvailable(s,'cost'),rowTokens=metricAvailable(s,'tokens'),localEstimate=hasLocalEstimate(s),avg=rowCost&&s.turns?money((s.cost||0)/s.turns)+estimateSuffix(s):'--';
  const wait=s.wait_time||{},waitText=wait.available?`${waitFmt(wait.total_s)} wait · ${waitFmt(wait.avg_s)} avg`:'wait unavailable';
  const modelText=(s.models||[]).join(', ')||'--',throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
- return `<div><span class="badge app ${appBadgeClass(s)}">${esc(s.label||s.provider)}</span></div>
+ return `<div><span class="badge app ${appBadgeClass(s)}">${runtimeMarkSvg(s)}${esc(s.label||s.provider)}</span></div>
   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i></i></div></div>
   <div class="badge models">${esc(modelText)}</div>
   <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
@@ -5307,7 +5319,7 @@ function renderCurrentSessions(state=LATEST){
   const speed=speedAvailable?`${speedFmt(throughput.output_tps)} tok/s${row.token_estimate?' est':''}`:'--';
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
-  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime><span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):currentSessionsEmptyHtml(state?.xsession);
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }

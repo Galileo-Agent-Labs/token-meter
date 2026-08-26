@@ -112,7 +112,6 @@ from token_meter.models.catalog import (
     GPT_56_LONG_CONTEXT_TOKENS,
     GPT_56_PRICE_UPDATE_AT,
     MODEL_PRICE_FIELDS,
-    OPENCODE_PROXY_PRICE,
     OPENAI_PRICE,
     ZERO_PRICE,
     canonical_model_provider,
@@ -123,6 +122,7 @@ from token_meter.models.pricing import (
     builtin_price_table as _catalog_builtin_price_table,
     effective_price_table as _catalog_effective_price_table,
     matching_price as _catalog_matching_price,
+    model_alias_matches as _catalog_model_alias_matches,
     price_period_key as _catalog_price_period_key,
     quote_for as _catalog_quote_for,
     revision_at as _catalog_revision_at,
@@ -1980,6 +1980,7 @@ def _claude_compatibility():
         "compact_text": compact_text,
         "cost_of": cost_of,
         "execution_timing": execution_timing,
+        "metric_availability": metric_availability,
         "parse_iso": parse_iso,
         "performance_summary": performance_summary,
         "price_for": price_for,
@@ -2046,6 +2047,7 @@ def _codex_compatibility():
         "compact_text": compact_text,
         "cost_of": cost_of,
         "execution_timing": execution_timing,
+        "metric_availability": metric_availability,
         "home_shorten": home_shorten,
         "new_codex_pending": new_codex_pending,
         "normalize_dynamic_tools": normalize_dynamic_tools,
@@ -2451,7 +2453,8 @@ def source_from_path(path):
         return {
             "provider": "codex", "label": "Codex", "id": sid, "session": os.path.basename(path),
             "path": path, "project": home_shorten(meta.get("cwd") or os.path.dirname(path)),
-            "mtime": safe_mtime(path), "title": None, "model": meta.get("model") or DEFAULT_OPENAI_MODEL,
+            "mtime": safe_mtime(path), "title": None,
+            "model": meta.get("model") or "unknown-model",
             "tools_loaded": meta.get("tools_loaded") or 0,
             "tools_eager": meta.get("tools_eager") or 0,
             "tools_deferred": meta.get("tools_deferred") or 0,
@@ -2610,7 +2613,6 @@ def cursor_model_parameters(composer, model=None):
     """Return persisted parameters for the selected Cursor model."""
     config = composer.get("modelConfig") if isinstance(composer, dict) else {}
     selected = config.get("selectedModels") if isinstance(config, dict) else []
-    fallback = {}
     for row in selected or []:
         if not isinstance(row, dict):
             continue
@@ -2618,17 +2620,15 @@ def cursor_model_parameters(composer, model=None):
             str(item.get("id")): item.get("value")
             for item in (row.get("parameters") or []) if isinstance(item, dict) and item.get("id")
         }
-        fallback = fallback or params
         if not model or str(row.get("modelId") or "") == str(model):
             return params
-    return fallback
+    return {}
 
 
 def cursor_price_variant(composer, model):
-    compact = str(model or "").replace(" ", "-").lower()
-    if not compact.startswith("composer-2.5"):
+    if not _catalog_model_alias_matches(model, "cursor", "composer-2.5"):
         return ""
-    fast = cursor_model_parameters(composer, model).get("fast")
+    fast = cursor_model_parameters(composer, "composer-2.5").get("fast")
     if str(fast).lower() == "true":
         return "fast"
     if str(fast).lower() == "false":
@@ -2682,18 +2682,9 @@ def price_quote(query, path=None):
 
 
 def _resolved_price_quote(model, provider="claude", variant=None, at=None):
-    """Resolve compatibility fallback policy while retaining the typed quote."""
+    """Resolve compatibility estimates without borrowing another model's price."""
 
     if provider == "cursor":
-        compact = str(model or "").replace(" ", "-").lower()
-        if compact.startswith("composer-2.5"):
-            quote = price_quote(_price_query_from_compat("cursor", model, variant, at))
-            if quote.available:
-                return quote, True
-            return _compat_price_quote(
-                "cursor", str(model or "unknown-model"), str(variant or ""),
-                0.0, 0.0, 0.0, 0.0,
-            ), True
         for model_provider in ("cursor", "openai", "anthropic"):
             quote = price_quote(_price_query_from_compat(model_provider, model, variant, at))
             if quote.available:
@@ -2711,24 +2702,12 @@ def _resolved_price_quote(model, provider="claude", variant=None, at=None):
         quote = price_quote(_price_query_from_compat("opencode", model, variant, at))
         if quote.available:
             return quote, False
-        # No custom price — estimate from the token-weight proxy ratios.
-        # The per-1M-token baselines are conservative defaults; the relative
-        # cache discounts are the meaningful signal for savings computation.
-        return _compat_price_quote(
-            "opencode", str(model or "unknown-model"), str(variant or ""),
-            float(OPENCODE_PROXY_PRICE["input"]),
-            float(OPENCODE_PROXY_PRICE["output"]),
-            float(OPENCODE_PROXY_PRICE["cache_read"]),
-            float(OPENCODE_PROXY_PRICE["cache_write"]),
-        ), True
-    model = model or (DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL)
+        return quote, True
     model_provider = canonical_model_provider(provider)
-    default = DEFAULT_OPENAI_MODEL if provider == "codex" else DEFAULT_CLAUDE_MODEL
     quote = price_quote(_price_query_from_compat(model_provider, model, variant, at))
     if quote.available:
         return quote, False
-    fallback = price_quote(_price_query_from_compat(model_provider, default, None, at))
-    return fallback, True
+    return quote, True
 
 
 def price_for(model, provider="claude", variant=None, at=None):
@@ -2852,7 +2831,7 @@ def claude_performance_samples(objs):
         if duration_s <= 0:
             return
         records = [messages[mid] for mid in group["message_ids"] if mid in messages and not messages[mid].get("side")]
-        models = {rec.get("model") or DEFAULT_CLAUDE_MODEL for rec in records if rec.get("usage")}
+        models = {rec.get("model") or "unknown-model" for rec in records if rec.get("usage")}
         if len(models) != 1:
             return
         input_tokens = output_tokens = 0
@@ -2927,7 +2906,7 @@ def claude_performance_samples(objs):
 
 def codex_performance_samples(objs, default_model=None):
     """Return completed Codex task samples with model-attributable timing."""
-    model = default_model or DEFAULT_OPENAI_MODEL
+    model = default_model or "unknown-model"
     samples = []
     current = None
 
@@ -3183,7 +3162,7 @@ def claude_wait_samples(objs):
 def codex_wait_samples(objs, default_model=None):
     """Return completed Codex task prompt-to-response wait samples."""
     samples = []
-    model = default_model or DEFAULT_OPENAI_MODEL
+    model = default_model or "unknown-model"
     current = None
 
     def close_task(end_ts=0, duration_ms=0, allow_observed=False):
@@ -3397,7 +3376,7 @@ def _dedupe_user_turns(turns, window_seconds=2.0):
 def claude_user_turns(objs, default_model=None):
     turns = []
     pending = []
-    current_model = default_model or DEFAULT_CLAUDE_MODEL
+    current_model = default_model or "unknown-model"
     for obj in objs or []:
         text = _claude_human_text(obj)
         if text is not None:
@@ -3435,7 +3414,7 @@ def _codex_fallback_user_text(payload):
 
 def codex_user_turns(objs, default_model=None):
     """Prefer canonical user_message events; fall back for older Codex logs."""
-    current_model = default_model or DEFAULT_OPENAI_MODEL
+    current_model = default_model or "unknown-model"
     event_turns = []
     fallback_turns = []
     for obj in objs or []:
@@ -4033,7 +4012,7 @@ def cursor_pricing_note(model, variant, supported):
     basis = "one context snapshot per execution plus trace-visible model text"
     if not supported:
         return f"Local Cursor token estimate ({basis}); no configured public rate for {model}."
-    if str(model or "").replace(" ", "-").lower().startswith("composer-2.5"):
+    if _catalog_model_alias_matches(model, "cursor", "composer-2.5"):
         rate = f"Composer 2.5 {variant.title()} public rates"
     else:
         rate = "selected-model public API rates"
@@ -4308,6 +4287,9 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
         timing=bool(active_available or wait_samples),
         tool_results=True,
     )
+    if availability.get("cost") is False:
+        for field in ("saved", "cost", "read_cost", "write_cost"):
+            cache[field] = None
     cache["available"] = bool(availability.get("cache"))
     tool_data["results_available"] = bool(availability.get("tool_results"))
     insights = enrich_insights(insights, executions, tool_data, context_window, context_latest, context_peak,
@@ -7687,7 +7669,9 @@ def menubar_state(session_id=None):
         },
         "session": st.get("session"),
         "project": project_name,
-        "total_cost": st.get("total_cost", 0),
+        "total_cost": (
+            st.get("total_cost", 0) if availability.get("cost") is not False else None
+        ),
         "cost_approx": st.get("cost_approx", False),
         "total_tokens": st.get("total_tokens", 0),
         "turns": st.get("turns", 0),
@@ -7724,7 +7708,10 @@ def menubar_state(session_id=None):
             "window": context.get("window"),
             "latest_pct": context.get("latest_pct"),
         },
-        "last_turn_cost": st.get("last_turn_cost", 0),
+        "last_turn_cost": (
+            st.get("last_turn_cost", 0)
+            if availability.get("cost") is not False else None
+        ),
         "idle_s": st.get("idle_s", 0),
         "ended": st.get("ended", False),
         "activity": activity,

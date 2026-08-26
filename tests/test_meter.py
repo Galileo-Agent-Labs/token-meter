@@ -355,6 +355,28 @@ class CursorTraceTests(unittest.TestCase):
         self.assertEqual(meter.cursor_price_variant(self.snapshot()["composer"], "composer-2.5"),
                          "fast")
 
+    def test_cursor_pricing_rejects_composer_lookalikes_and_accepts_qualified_alias(self):
+        composer = self.snapshot()["composer"]
+        composer["modelConfig"]["selectedModels"].insert(0, {
+            "modelId": "some-other-model",
+            "parameters": [{"id": "fast", "value": "false"}],
+        })
+        qualified, approximate = meter.price_for(
+            "cursor.composer-2.5", "cursor", "fast"
+        )
+        self.assertTrue(approximate)
+        self.assertEqual((qualified["input"], qualified["output"]), (3.0, 15.0))
+        self.assertEqual(
+            meter.cursor_price_variant(composer, "cursor.composer-2.5"), "fast"
+        )
+
+        for model in ("composer-2.5ish", "composer-2.5-future"):
+            with self.subTest(model=model):
+                price, unavailable = meter.price_for(model, "cursor", "fast")
+                self.assertTrue(unavailable)
+                self.assertEqual(price, meter.ZERO_PRICE)
+                self.assertEqual(meter.cursor_price_variant(self.snapshot()["composer"], model), "")
+
     def test_cursor_agent_check_reports_local_estimate_and_caveat(self):
         with mock.patch.object(meter, "cursor_snapshot", return_value=self.snapshot()), \
                 mock.patch.object(meter, "cursor_request_spans", return_value=self.spans()):
@@ -593,6 +615,25 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(after.hits, before.hits + 1)
         self.assertLessEqual(after.maxsize, 65536)
+
+    def test_codex_performance_without_model_identity_stays_unknown(self):
+        objs = [
+            {"timestamp": "2026-07-01T00:00:00.000Z",
+             "payload": {"type": "task_started"}},
+            {"timestamp": "2026-07-01T00:00:01.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "output_tokens": 10,
+                    "total_tokens": 110,
+                }},
+            }},
+            {"timestamp": "2026-07-01T00:00:02.000Z", "payload": {
+                "type": "task_complete", "duration_ms": 2000,
+            }},
+        ]
+
+        samples = meter.codex_performance_samples(objs)
+
+        self.assertEqual(samples[0]["model"], "unknown-model")
 
     def test_claude_tool_free_turn_uses_reported_turn_duration(self):
         objs = [
@@ -1290,6 +1331,32 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(price, {"input": 2.0, "output": 10.0, "cache_write": 2.5, "cache_read": 0.2})
         self.assertFalse(approximate)
 
+    def test_unknown_models_do_not_inherit_runtime_default_prices(self):
+        for provider, model, default_price in (
+            ("claude", "claude-future-unknown", meter.CLAUDE_PRICE[meter.DEFAULT_CLAUDE_MODEL]),
+            ("codex", "gpt-future-unknown", meter.OPENAI_PRICE[meter.DEFAULT_OPENAI_MODEL]),
+            ("opencode", "future-model", {
+                "input": 2.0, "output": 10.0,
+                "cache_write": 2.5, "cache_read": 0.2,
+            }),
+        ):
+            with self.subTest(provider=provider, model=model):
+                price, unavailable = meter.price_for(model, provider)
+                self.assertEqual(price, meter.ZERO_PRICE)
+                self.assertNotEqual(price, default_price)
+                self.assertTrue(unavailable)
+
+    def test_codex_path_discovery_does_not_invent_a_default_model(self):
+        path = os.path.expanduser("~/.codex/sessions/model-less.jsonl")
+        with (
+            mock.patch.object(meter, "all_session_sources", return_value=[]),
+            mock.patch.object(meter, "codex_meta", return_value={}),
+            mock.patch.object(meter, "safe_mtime", return_value=0),
+        ):
+            source = meter.source_from_path(path)
+
+        self.assertEqual(source["model"], "unknown-model")
+
     def test_gpt_5_6_uses_sol_api_rates(self):
         price, approximate = meter.price_for("gpt-5.6", "codex")
         self.assertEqual(price, {"input": 5.0, "output": 30.0, "cache_write": 6.25, "cache_read": 0.5})
@@ -1704,6 +1771,48 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertTrue(row["terminal"])
         self.assertEqual(row["usage_basis"], "reported")
 
+    def test_claude_summary_keeps_missing_model_pricing_unavailable(self):
+        row = meter.claude_summary(self.source("claude"), [{
+            "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+            "message": {
+                "id": "msg-1", "content": [],
+                "usage": {"input_tokens": 100_000, "output_tokens": 1_000},
+                "stop_reason": "end_turn",
+            },
+        }])
+
+        self.assertEqual(row["primary_model"], "unknown-model")
+        self.assertFalse(row["availability"]["cost"])
+        self.assertEqual(row["cost"], 0.0)
+
+    def test_unknown_model_keeps_cache_money_unavailable(self):
+        record = {
+            "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+            "message": {
+                "id": "msg-1", "content": [],
+                "usage": {
+                    "input_tokens": 10, "cache_creation_input_tokens": 5_000,
+                    "cache_read_input_tokens": 5_000, "output_tokens": 10,
+                },
+                "stop_reason": "end_turn",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "session.jsonl"
+            path.write_text(json.dumps(record) + "\n")
+            source = {
+                **self.source("claude"), "path": str(path),
+                "session": path.name,
+            }
+            state = meter.recompute_claude(source)
+
+        self.assertFalse(state["availability"]["cost"])
+        self.assertTrue(state["availability"]["cache"])
+        self.assertEqual(state["cache"]["total"], 10_000)
+        self.assertIsNone(state["cache"]["saved"])
+        self.assertIsNone(state["cache"]["cost"])
+        self.assertIsNone(state["cache_saved"])
+
     def claude_source_without_title(self):
         return {
             "id": "session", "path": "/tmp/session.jsonl", "provider": "claude",
@@ -1809,6 +1918,19 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertIn("live_throughput", row)
         self.assertEqual(row["live_throughput"]["output_tps"], 10)
         self.assertEqual(row["live_throughput"]["completed_steps"], 1)
+
+    def test_codex_summary_keeps_missing_model_pricing_unavailable(self):
+        row = meter.codex_summary(self.source("codex"), [{
+            "timestamp": "2026-07-02T00:00:01.000Z",
+            "payload": {"type": "token_count", "info": {"last_token_usage": {
+                "input_tokens": 100_000, "output_tokens": 1_000,
+                "total_tokens": 101_000,
+            }}},
+        }])
+
+        self.assertEqual(row["primary_model"], "unknown-model")
+        self.assertFalse(row["availability"]["cost"])
+        self.assertEqual(row["cost"], 0.0)
 
     def test_codex_summary_exposes_input_output_and_model_stats(self):
         objs = [
@@ -5587,7 +5709,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "Your next live session appears here",
             "Next live session",
             "Cost",
-            "Context",
+            "Context in use",
             "Speed",
             "8 past sessions",
             "At least $3.25 est tracked",
@@ -5637,6 +5759,10 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "class=currentSessionContextValue",
             "const contextSpark=currentSessionContextSparkline(row)",
             "${contextSpark.html}",
+            "<span>Context in use</span>",
+            ">Context in use</div><div class=\"v mono\" id=ov-context>",
+            ">Context in use</div><div class=\"v mono\" id=preview-context>",
+            "costAvailable&&cacheAvailable?money(cache.saved||s.cache_saved||0):'--'",
             "const cardDescription=`${contextSpark.summary}",
         ):
             self.assertIn(marker, self.page)

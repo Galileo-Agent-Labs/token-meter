@@ -406,7 +406,10 @@ class ClaudeRuntimeAdapter:
                 *_file_signature(record.get("metadata_path") or ""),
                 str(record.get("title") or ""),
             )),
-            model_ref=ModelRef("anthropic", record.get("model") or self.default_model),
+            model_ref=(
+                ModelRef("anthropic", record["model"])
+                if record.get("model") else None
+            ),
             account_provider_id="anthropic",
         ) for record in self._legacy_records())
 
@@ -458,7 +461,7 @@ class ClaudeRuntimeAdapter:
             if logical is None:
                 logical = {
                     "id": message_id,
-                    "model": message.get("model", self.default_model),
+                    "model": message.get("model") or "unknown-model",
                     "usage": message.get("usage") or {},
                     "stop_reason": message.get("stop_reason"),
                     "ts": timestamp_parser(row.get("timestamp")) or 0,
@@ -591,7 +594,6 @@ class ClaudeRuntimeAdapter:
     def recompute_legacy(self, source):
         compat = self._require_compatibility()
         CHARS_PER_TOKEN = compat["chars_per_token"]
-        DEFAULT_CLAUDE_MODEL = compat["default_model"]
         analysis_block = compat["analysis_block"]
         build_insights = compat["build_insights"]
         build_state = compat["build_state"]
@@ -601,6 +603,7 @@ class ClaudeRuntimeAdapter:
         claude_wait_samples = compat["claude_wait_samples"]
         cost_of = compat["cost_of"]
         execution_timing = compat["execution_timing"]
+        metric_availability = compat["metric_availability"]
         parse_iso = compat["parse_iso"]
         performance_summary = compat["performance_summary"]
         price_for = compat["price_for"]
@@ -636,6 +639,7 @@ class ClaudeRuntimeAdapter:
         model_tok, model_cost = defaultdict(int), defaultdict(float)
         side_cost = side_turns = 0
         approx_cost = False
+        price_complete = True
     
         for rec in msgs:
             usage = rec["usage"]
@@ -656,6 +660,7 @@ class ClaudeRuntimeAdapter:
             c = cost_of(usage, model, "claude", at=ts)
             _, approx = price_for(model, "claude", at=ts)
             approx_cost = approx_cost or approx
+            price_complete = price_complete and not approx
             tc = sum(c.values())
             for key in cost:
                 cost[key] += c[key]
@@ -802,7 +807,7 @@ class ClaudeRuntimeAdapter:
             "retrieval": retrieval_tokens,
             "coordination": side_out,
         }
-        primary_model = max(model_tok, key=model_tok.get) if model_tok else DEFAULT_CLAUDE_MODEL
+        primary_model = max(model_tok, key=model_tok.get) if model_tok else "unknown-model"
         analyses = analysis_block(tot, total_cost, think_out, think_turns, think_cost, model_tok, model_cost,
                                   tool_data, side_cost, side_turns, completed)
         insights = build_insights(tot, cost, total_cost, cache_ratio, biggest, len(series), analyses,
@@ -812,7 +817,9 @@ class ClaudeRuntimeAdapter:
         state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                             analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
                             primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs),
-                            wait_samples)
+                            wait_samples, availability=metric_availability(
+                                "claude", cost=price_complete,
+                            ))
         state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
         return state
 
@@ -821,7 +828,6 @@ class ClaudeRuntimeAdapter:
         if objs is None:
             objs, _corrupt, _available = self.load_rows(source.get("path") or "")
         CURRENT_SESSION_CONTEXT_SAMPLES = compat["context_sample_limit"]
-        DEFAULT_CLAUDE_MODEL = compat["default_model"]
         add_model_daily = compat["add_model_daily"]
         add_model_summary = compat["add_model_summary"]
         analyze_language_signals = compat["analyze_language_signals"]
@@ -833,6 +839,7 @@ class ClaudeRuntimeAdapter:
         compact_text = compat["compact_text"]
         cost_of = compat["cost_of"]
         execution_timing = compat["execution_timing"]
+        metric_availability = compat["metric_availability"]
         parse_iso = compat["parse_iso"]
         price_for = compat["price_for"]
         summarize_tool_evidence = compat["summarize_tool_evidence"]
@@ -849,9 +856,10 @@ class ClaudeRuntimeAdapter:
         input_tokens = output_tokens = 0
         day_cost = defaultdict(float)
         approx = False
+        price_complete = True
         latest_context = 0
         context_samples = []
-        primary_model = source.get("model") or DEFAULT_CLAUDE_MODEL
+        primary_model = source.get("model") or "unknown-model"
         for rec in msgs:
             usage = rec["usage"]
             if not usage:
@@ -866,6 +874,7 @@ class ClaudeRuntimeAdapter:
             c = sum(cost_of(usage, rec["model"], "claude", at=rec["ts"]).values())
             _, missing = price_for(rec["model"], "claude", at=rec["ts"])
             approx = approx or missing
+            price_complete = price_complete and not missing
             toks = usage_tokens(usage)
             cost += c
             tokens += toks
@@ -908,6 +917,7 @@ class ClaudeRuntimeAdapter:
         row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                           list(model_daily.values()), performance, wait_samples,
+                          availability=metric_availability("claude", cost=price_complete),
                           session_name=declared_title)
         row["primary_model"] = primary_model
         row["context"] = {
@@ -919,7 +929,7 @@ class ClaudeRuntimeAdapter:
         row["_context_samples"] = context_samples[-CURRENT_SESSION_CONTEXT_SAMPLES:]
         row["terminal"] = bool(msgs and msgs[-1].get("stop_reason") == "end_turn")
         signal_rollups, signal_events = analyze_language_signals(
-            "claude", objs, default_model=source.get("model") or DEFAULT_CLAUDE_MODEL
+            "claude", objs, default_model=source.get("model") or "unknown-model"
         )
         attach_language_signals(row, signal_rollups, signal_events)
         row["_tool_evidence"] = summarize_tool_evidence(claude_tool_call_evidence(objs, msgs))

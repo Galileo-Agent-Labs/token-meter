@@ -148,6 +148,9 @@ def session_projection(source, summary=None, now=None):
         or (models[0] if len(models) == 1 else ""),
         160,
     )
+    availability = _availability(
+        summary.get("availability") or source.get("availability")
+    )
     result = {
         "id": safe_identity(source.get("id"), 240),
         "runtime": safe_identity(source.get("provider")),
@@ -158,14 +161,13 @@ def session_projection(source, summary=None, now=None):
         "model": model or None,
         "state": _session_state(summary, last_activity, now),
         "last_activity_at": last_activity or None,
-        "availability": _availability(
-            summary.get("availability") or source.get("availability")
-        ),
+        "availability": availability,
     }
     _put_number(result, "total_tokens", summary.get("tokens"), integer=True)
     _put_number(result, "input_tokens", summary.get("input_tokens"), integer=True)
     _put_number(result, "output_tokens", summary.get("output_tokens"), integer=True)
-    _put_number(result, "cost_usd", summary.get("cost"))
+    if availability.get("cost") is not False:
+        _put_number(result, "cost_usd", summary.get("cost"))
     _put_number(result, "active_seconds", summary.get("duration_s"))
     return result
 
@@ -174,6 +176,7 @@ def _trace_session_projection(source, state):
     state = _mapping(state)
     timing = _mapping(state.get("timing"))
     state_source = _mapping(state.get("source"))
+    availability = _availability(state.get("availability"))
     result = {
         "id": safe_identity(source.get("id"), 240),
         "runtime": safe_identity(state.get("provider") or source.get("provider")),
@@ -187,10 +190,13 @@ def _trace_session_projection(source, state):
             state.get("primary_model") or source.get("model"), 160,
         ) or None,
         "state": "completed" if state.get("ended") else "current",
-        "availability": _availability(state.get("availability")),
+        "availability": availability,
         "estimated_fields": sorted(
             key for key, estimated in {
-                "cost_usd": bool(state.get("cost_approx")),
+                "cost_usd": (
+                    bool(state.get("cost_approx"))
+                    and availability.get("cost") is not False
+                ),
                 "tokens": bool(state_source.get("token_estimate")),
             }.items() if estimated
         ),
@@ -199,14 +205,15 @@ def _trace_session_projection(source, state):
         ("started_at", timing.get("start_ts"), False),
         ("ended_at", timing.get("end_ts"), False),
         ("total_tokens", state.get("total_tokens"), True),
-        ("cost_usd", state.get("total_cost"), False),
         ("active_seconds", timing.get("duration_s"), False),
     ):
         _put_number(result, key, value, integer=integer)
+    if availability.get("cost") is not False:
+        _put_number(result, "cost_usd", state.get("total_cost"))
     return result
 
 
-def _execution_projection(row):
+def _execution_projection(row, cost_available=True):
     row = _mapping(row)
     tokens = _mapping(row.get("tokens"))
     result = {
@@ -261,7 +268,8 @@ def _execution_projection(row):
     ):
         _put_number(result["counts"], key, value, integer=True)
     _put_number(result, "timestamp", row.get("ts"))
-    _put_number(result, "cost_usd", row.get("cost"))
+    if cost_available:
+        _put_number(result, "cost_usd", row.get("cost"))
     return result
 
 
@@ -272,7 +280,7 @@ def _event_type(row):
     return SAFE_EVENT_TYPES.get(kind, "")
 
 
-def _event_projection(row, sequence):
+def _event_projection(row, sequence, cost_available=True):
     row = _mapping(row)
     event_type = _event_type(row)
     if not event_type:
@@ -287,10 +295,11 @@ def _event_projection(row, sequence):
         ("timestamp", row.get("ts"), False),
         ("execution", row.get("execution"), True),
         ("tokens", row.get("tokens"), True),
-        ("cost_usd", row.get("cost"), False),
         ("duration_ms", row.get("duration_ms"), False),
     ):
         _put_number(result, key, value, integer=integer)
+    if cost_available:
+        _put_number(result, "cost_usd", row.get("cost"))
     model = safe_identity(row.get("model"), 160)
     tool = safe_identity(row.get("tool") or (
         row.get("label") if event_type in {"tool_call", "tool_result"} else ""
@@ -347,6 +356,7 @@ def standardized_trace_projection(source, state, sections=None,
     state = _mapping(state)
     sections = tuple(sections or ALL_TRACE_SECTIONS)
     event_types = set(event_types or ())
+    cost_available = _availability(state.get("availability")).get("cost") is not False
     result = {"schema_version": SCHEMA_VERSION}
     if "session" in sections:
         result["session"] = _trace_session_projection(source, state)
@@ -354,7 +364,7 @@ def standardized_trace_projection(source, state, sections=None,
         result["executions"] = [
             projected for row in (state.get("executions") or [])
             if execution is None or safe_number(row.get("idx"), integer=True) == execution
-            for projected in (_execution_projection(row),)
+            for projected in (_execution_projection(row, cost_available),)
         ]
     if "events" in sections:
         events = []
@@ -363,7 +373,7 @@ def standardized_trace_projection(source, state, sections=None,
                 _mapping(row).get("execution"), integer=True,
             ) != execution:
                 continue
-            projected = _event_projection(row, sequence)
+            projected = _event_projection(row, sequence, cost_available)
             if projected and (not event_types or projected["type"] in event_types):
                 events.append(projected)
         result["events"] = events
@@ -375,11 +385,15 @@ def standardized_trace_projection(source, state, sections=None,
     if "context" in sections:
         result["context"] = _context_projection(state.get("context"))
     if "coverage" in sections:
+        availability = _availability(state.get("availability"))
         result["coverage"] = {
-            "availability": _availability(state.get("availability")),
+            "availability": availability,
             "estimated_fields": sorted(
                 key for key, estimated in {
-                    "cost_usd": bool(state.get("cost_approx")),
+                    "cost_usd": (
+                        bool(state.get("cost_approx"))
+                        and availability.get("cost") is not False
+                    ),
                     "tokens": bool(_mapping(state.get("source")).get("token_estimate")),
                 }.items() if estimated
             ),
@@ -396,6 +410,7 @@ def standardized_trace_projection(source, state, sections=None,
 def native_structure_projection(source, state, execution=None, event_types=None):
     del source
     event_types = set(event_types or ())
+    cost_available = _availability(_mapping(state).get("availability")).get("cost") is not False
     rows = []
     for sequence, event in enumerate(_mapping(state).get("trace") or [], 1):
         event = _mapping(event)
@@ -426,13 +441,14 @@ def native_structure_projection(source, state, execution=None, event_types=None)
             result["timestamp"] = timestamp
         for key, value, integer in (
             ("tokens", event.get("tokens"), True),
-            ("cost_usd", event.get("cost"), False),
             ("duration_ms", event.get("duration_ms"), False),
             ("context_tokens", event.get("context_tokens"), True),
             ("context_window", event.get("context_window"), True),
             ("tools_loaded", event.get("tools_loaded"), True),
         ):
             _put_number(result["numeric"], key, value, integer=integer)
+        if cost_available:
+            _put_number(result["numeric"], "cost_usd", event.get("cost"))
         status = str(event.get("status") or "")
         if status in SAFE_STATUSES:
             result["status"] = status

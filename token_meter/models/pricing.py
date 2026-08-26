@@ -1,5 +1,6 @@
 """Pure effective-dated price resolution over the model catalog."""
 
+import re
 import time
 from datetime import timezone
 
@@ -99,15 +100,60 @@ def effective_price_table(provider_id, observed_at=None, histories=None, now=Non
     return table
 
 
-def matching_price(model_id, table):
-    """Return the longest matching catalog rule and its price table row."""
+def _model_alias_candidates(model_id, provider_id=None):
+    """Return bounded provider-scoped aliases for one native model id."""
+
+    compact = str(model_id or "").strip().replace(" ", "-").lower()
+    candidates = [compact]
+    provider = str(provider_id or "").strip().lower()
+    if not provider:
+        return candidates
+    native_ids = [compact]
+    arn = re.fullmatch(
+        r"arn:aws(?:-[a-z0-9-]+)?:bedrock:[a-z0-9-]+:[0-9]{12}:"
+        r"inference-profile/(.+)",
+        compact,
+    )
+    if arn:
+        native_ids.append(arn.group(1))
+    for native_id in native_ids:
+        prefixes = [provider + separator for separator in (".", "/", ":")]
+        prefixes.extend(
+            region + "." + provider + "."
+            for region in ("us", "eu", "apac", "global")
+        )
+        for prefix in prefixes:
+            if not native_id.startswith(prefix):
+                continue
+            alias = native_id[len(prefix):]
+            if alias and alias not in candidates:
+                candidates.append(alias)
+    return candidates
+
+
+def model_alias_matches(model_id, provider_id, canonical_id):
+    """Return whether one native id is an exact bounded alias of a catalog id."""
+
+    canonical = str(canonical_id or "").strip().replace(" ", "-").lower()
+    return canonical in _model_alias_candidates(model_id, provider_id)
+
+
+def matching_price(model_id, table, provider_id=None):
+    """Return the longest provider-scoped catalog rule for one model id."""
 
     if model_id in table:
         return model_id, table[model_id]
-    compact = str(model_id or "").replace(" ", "-").lower()
-    for rule in sorted(table, key=len, reverse=True):
-        if compact.startswith(str(rule).replace(" ", "-").lower()):
-            return rule, table[rule]
+    for candidate in _model_alias_candidates(model_id, provider_id):
+        for rule in sorted(table, key=len, reverse=True):
+            compact_rule = str(rule).replace(" ", "-").lower()
+            suffix = candidate[len(compact_rule):]
+            if (candidate.startswith(compact_rule) and
+                    (not suffix or re.fullmatch(
+                        r"(?:(?:[._:/@+-](?:v[0-9]+(?::[0-9]+)?|[0-9]{8}))|"
+                        r"(?:[._:/@+-][0-9]{4}-[0-9]{2}-[0-9]{2}))+",
+                        suffix,
+                    ))):
+                return rule, table[rule]
     return None, None
 
 
@@ -122,10 +168,10 @@ def quote_for(query, effective_table=None):
         if effective_table is None else effective_table
     )
     model_id = query.model.model_id
-    compact_model_id = str(model_id).replace(" ", "-").lower()
-    if provider_id == "cursor" and compact_model_id.startswith("composer-2.5"):
+    if (provider_id == "cursor" and
+            model_alias_matches(model_id, provider_id, "composer-2.5")):
         model_id = "composer-2.5-{}".format(query.model.variant or "")
-    matched_rule, prices = matching_price(model_id, table)
+    matched_rule, prices = matching_price(model_id, table, provider_id)
     if prices is None:
         return PriceQuote.unavailable(query.model)
     if any(field not in prices for field in MODEL_PRICE_FIELDS):

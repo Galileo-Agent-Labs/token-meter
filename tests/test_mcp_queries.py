@@ -432,6 +432,31 @@ class MCPQueryServiceTests(unittest.TestCase):
         )
         self.assertIsNotNone(result["page"]["next_cursor"])
 
+    def test_unavailable_session_cost_is_not_projected_as_measured_zero(self):
+        service = synthetic_query_service()
+        for state in service.states.values():
+            state["availability"]["cost"] = False
+            state["total_cost"] = 0.0
+            state["executions"][0]["cost"] = 0.0
+
+        sessions = service.sessions(scope="all", limit=20)
+        trace = service.trace(
+            session_id="session-1", sections=("session", "executions"), limit=20,
+        )
+        stats = service.stats(
+            metrics=("cost_usd",), group_by=("session_id",), limit=20,
+        )
+
+        self.assertNotIn("cost_usd", sessions["sessions"][0])
+        self.assertNotIn("cost_usd", trace["session"])
+        self.assertNotIn("cost_usd", trace["executions"][0])
+        self.assertNotIn("cost_usd", trace["session"]["estimated_fields"])
+        self.assertIsNone(stats["totals"]["cost_usd"])
+        self.assertEqual(stats["coverage"]["cost_usd"], {
+            "covered": 0,
+            "unavailable": 2,
+        })
+
     def test_stats_time_window_filters_executions_inside_matching_sessions(self):
         service = synthetic_query_service()
         state = service.states["session-1"]

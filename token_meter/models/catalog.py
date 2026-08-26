@@ -123,11 +123,6 @@ DEFAULT_MODELS = {
     "openai": "gpt-5.5",
 }
 ZERO_PRICE = {"input": 0.0, "output": 0.0, "cache_write": 0.0, "cache_read": 0.0}
-OPENCODE_PROXY_PRICE = {
-    "input": 2.0, "output": 10.0, "cache_write": 2.50, "cache_read": 0.20,
-}
-
-
 def canonical_model_provider(provider_id):
     """Map a legacy runtime/settings provider to its explicit model provider."""
 

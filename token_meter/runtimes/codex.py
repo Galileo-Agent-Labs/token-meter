@@ -89,7 +89,7 @@ def _numeric_usage_signature(value):
     return tuple(sorted(fields))
 
 
-def _token_events(rows, default_model=DEFAULT_MODEL):
+def _token_events(rows, default_model="unknown-model"):
     model = default_model
     events = []
     for row_index, row in enumerate(rows):
@@ -130,7 +130,7 @@ def _inherited_token_prefix(child_events, parent_events):
     return count
 
 
-def _corrected_rows(rows, inherited_count, default_model=DEFAULT_MODEL):
+def _corrected_rows(rows, inherited_count, default_model="unknown-model"):
     rows = tuple(rows)
     events = _token_events(rows, default_model)
     inherited_count = max(0, min(int(inherited_count), len(events)))
@@ -451,7 +451,7 @@ class CodexRuntimeAdapter:
                 "project": self.project_resolver(cwd),
                 "mtime": os.path.getmtime(path) if os.path.exists(path) else 0.0,
                 "title": _compact(title) or None,
-                "model": metadata.get("model") or self.default_model,
+                "model": metadata.get("model"),
                 "model_provider": metadata.get("model_provider") or "openai",
                 "tools_loaded": metadata.get("tools_loaded") or 0,
                 "tools_eager": metadata.get("tools_eager") or 0,
@@ -508,7 +508,10 @@ class CodexRuntimeAdapter:
                 str(record["title"] or ""),
                 *record["lineage_revision"],
             )),
-            model_ref=ModelRef(record["model_provider"], record["model"]),
+            model_ref=(
+                ModelRef(record["model_provider"], record["model"])
+                if record.get("model") else None
+            ),
             account_provider_id="openai",
         ) for record in self._records())
 
@@ -599,7 +602,7 @@ class CodexRuntimeAdapter:
             rows, _corrupt, available = self.load_rows(path)
             if not available:
                 return ()
-        events = _token_events(rows, self.default_model)
+        events = _token_events(rows)
         self._token_event_cache[path] = {
             "signature": signature,
             "events": events,
@@ -640,15 +643,15 @@ class CodexRuntimeAdapter:
         path = os.path.abspath(os.path.expanduser(str(path)))
         record = self._record_for_path(path)
         if not record or self._has_lineage_cycle(record):
-            return _corrected_rows(rows, 0, self.default_model)
+            return _corrected_rows(rows, 0)
         parent_id = record.get("lineage_parent_id")
         parent = self._record_by_physical_id.get(parent_id)
         if not parent or parent.get("path") == path:
-            return _corrected_rows(rows, 0, self.default_model)
-        child_events = _token_events(rows, self.default_model)
+            return _corrected_rows(rows, 0)
+        child_events = _token_events(rows)
         parent_events = self._token_events_for_path(parent["path"])
         inherited_count = _inherited_token_prefix(child_events, parent_events)
-        return _corrected_rows(rows, inherited_count, self.default_model)
+        return _corrected_rows(rows, inherited_count)
 
     def load(self, source, detail):
         if isinstance(source, dict):
@@ -769,7 +772,6 @@ class CodexRuntimeAdapter:
     def recompute_legacy(self, source):
         compat = self._require_compatibility()
         CHARS_PER_TOKEN = compat["chars_per_token"]
-        DEFAULT_OPENAI_MODEL = compat["default_model"]
         analysis_block = compat["analysis_block"]
         build_insights = compat["build_insights"]
         build_state = compat["build_state"]
@@ -781,6 +783,7 @@ class CodexRuntimeAdapter:
         compact_text = compat["compact_text"]
         cost_of = compat["cost_of"]
         execution_timing = compat["execution_timing"]
+        metric_availability = compat["metric_availability"]
         home_shorten = compat["home_shorten"]
         new_codex_pending = compat["new_codex_pending"]
         normalize_dynamic_tools = compat["normalize_dynamic_tools"]
@@ -802,7 +805,7 @@ class CodexRuntimeAdapter:
             return None
         objs = self._accounting_rows(source, objs)
     
-        model = source.get("model") or DEFAULT_OPENAI_MODEL
+        model = source.get("model") or "unknown-model"
         meta_cwd = source.get("project")
         tot = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
         cost = {"input": 0.0, "cache_write": 0.0, "cache_read": 0.0, "output": 0.0}
@@ -814,6 +817,7 @@ class CodexRuntimeAdapter:
         biggest = None
         completed = 0
         approx_cost = True
+        price_complete = True
         task_start_ts = None
         context_window = None
         tools_loaded = int(source.get("tools_loaded") or 0)
@@ -1016,6 +1020,7 @@ class CodexRuntimeAdapter:
                 c = cost_of(usage, model, "codex", at=ts)
                 _, missing_price = price_for(model, "codex", at=ts)
                 approx_cost = approx_cost or missing_price
+                price_complete = price_complete and not missing_price
                 tc = sum(c.values())
                 for key in cost:
                     cost[key] += c[key]
@@ -1149,7 +1154,9 @@ class CodexRuntimeAdapter:
         state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                             analyses, insights, first_ts, last_ts, idle, biggest, len(coord_execs), True,
                             primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs),
-                            wait_samples)
+                            wait_samples, availability=metric_availability(
+                                "codex", cost=price_complete,
+                            ))
         state["throughput"] = performance_summary(codex_performance_samples(objs, source.get("model")), tot["output"])
         state["live_throughput"] = codex_live_performance_summary(objs)
         return state
@@ -1160,7 +1167,6 @@ class CodexRuntimeAdapter:
             objs, _corrupt, _available = self.load_rows(source.get("path") or "")
         objs = self._accounting_rows(source, tuple(objs or ()))
         CURRENT_SESSION_CONTEXT_SAMPLES = compat["context_sample_limit"]
-        DEFAULT_OPENAI_MODEL = compat["default_model"]
         add_model_daily = compat["add_model_daily"]
         add_model_summary = compat["add_model_summary"]
         analyze_language_signals = compat["analyze_language_signals"]
@@ -1172,11 +1178,13 @@ class CodexRuntimeAdapter:
         compact_text = compat["compact_text"]
         cost_of = compat["cost_of"]
         execution_timing = compat["execution_timing"]
+        metric_availability = compat["metric_availability"]
         parse_iso = compat["parse_iso"]
+        price_for = compat["price_for"]
         summarize_tool_evidence = compat["summarize_tool_evidence"]
         summary_row = compat["summary_row"]
         usage_tokens = compat["usage_tokens"]
-        model = source.get("model") or DEFAULT_OPENAI_MODEL
+        model = source.get("model") or "unknown-model"
         reasoning_effort = ""
         cost = 0.0
         tokens = 0
@@ -1189,6 +1197,7 @@ class CodexRuntimeAdapter:
         input_tokens = output_tokens = 0
         day_cost = defaultdict(float)
         approx = True
+        price_complete = True
         context_window = 0
         latest_context = 0
         context_samples = []
@@ -1218,6 +1227,8 @@ class CodexRuntimeAdapter:
             context_samples.append(latest_context)
             ts = parse_iso(obj.get("timestamp", ""))
             c = sum(cost_of(usage, model, "codex", at=ts).values())
+            _, missing_price = price_for(model, "codex", at=ts)
+            price_complete = price_complete and not missing_price
             toks = usage_tokens(usage)
             turns += 1
             cost += c
@@ -1246,7 +1257,8 @@ class CodexRuntimeAdapter:
         wait_samples = codex_wait_samples(objs, source.get("model"))
         row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
-                          list(model_daily.values()), performance, wait_samples)
+                          list(model_daily.values()), performance, wait_samples,
+                          availability=metric_availability("codex", cost=price_complete))
         row["primary_model"] = model
         row["reasoning_effort"] = reasoning_effort
         row["context"] = {
@@ -1259,7 +1271,7 @@ class CodexRuntimeAdapter:
         row["terminal"] = terminal
         row["live_throughput"] = codex_live_performance_summary(objs)
         signal_rollups, signal_events = analyze_language_signals(
-            "codex", objs, default_model=source.get("model") or DEFAULT_OPENAI_MODEL
+            "codex", objs, default_model=source.get("model") or "unknown-model"
         )
         attach_language_signals(row, signal_rollups, signal_events)
         row["_tool_evidence"] = summarize_tool_evidence(codex_tool_call_evidence(objs), source.get("tool_catalog") or [])

@@ -60,6 +60,69 @@ class ModelPricingBoundaryTests(unittest.TestCase):
         self.assertEqual(quote.input_per_million, 0.75)
         self.assertEqual(quote.matched_rule, "gpt-5.4-mini")
 
+    def test_provider_qualified_model_aliases_resolve_inside_the_provider_catalog(self):
+        aliases = (
+            "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "arn:aws:bedrock:us-east-1:123456789012:inference-profile/"
+            "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        )
+
+        for model_id in aliases:
+            with self.subTest(model_id=model_id):
+                quote = quote_for(PriceQuery(ModelRef("anthropic", model_id)))
+                self.assertEqual(quote.matched_rule, "claude-haiku-4-5")
+                self.assertEqual(quote.input_per_million, 1.0)
+                self.assertEqual(quote.output_per_million, 5.0)
+
+        openai_quote = quote_for(PriceQuery(ModelRef(
+            "openai", "openai.gpt-5.4-mini-2026-07-01",
+        )))
+        self.assertEqual(openai_quote.matched_rule, "gpt-5.4-mini")
+        self.assertEqual(openai_quote.input_per_million, 0.75)
+
+        application_profile = quote_for(PriceQuery(ModelRef(
+            "anthropic",
+            "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/"
+            "anthropic.claude-haiku-4-5-20251001-v1:0",
+        )))
+        self.assertFalse(application_profile.available)
+        self.assertIsNone(application_profile.matched_rule)
+
+    def test_provider_alias_matching_does_not_cross_provider_boundaries(self):
+        quote = quote_for(PriceQuery(
+            ModelRef("anthropic", "openai.claude-haiku-4-5-20251001")
+        ))
+
+        self.assertFalse(quote.available)
+        self.assertEqual(quote.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertIsNone(quote.matched_rule)
+
+    def test_prefix_matching_requires_a_version_or_namespace_boundary(self):
+        for model_id in (
+            "claude-haiku-4-5ish",
+            "anthropic.claude-haiku-4-5ish",
+            "claude-haiku-4-5-ish",
+            "openai.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "evil/anthropic/claude-haiku-4-5-20251001-v1:0",
+        ):
+            with self.subTest(model_id=model_id):
+                quote = quote_for(PriceQuery(ModelRef("anthropic", model_id)))
+                self.assertFalse(quote.available)
+                self.assertIsNone(quote.matched_rule)
+
+        unknown_openai_variant = quote_for(PriceQuery(
+            ModelRef("openai", "gpt-5.6-mars")
+        ))
+        self.assertFalse(unknown_openai_variant.available)
+        self.assertIsNone(unknown_openai_variant.matched_rule)
+
+        short_numeric_variant = quote_for(PriceQuery(
+            ModelRef("openai", "gpt-5.6-99")
+        ))
+        self.assertFalse(short_numeric_variant.available)
+        self.assertIsNone(short_numeric_variant.matched_rule)
+
     def test_cursor_variant_is_canonicalized_inside_the_model_boundary(self):
         quote = quote_for(
             PriceQuery(ModelRef("cursor", "Composer 2.5", variant="fast"))
@@ -68,6 +131,20 @@ class ModelPricingBoundaryTests(unittest.TestCase):
         self.assertEqual(quote.input_per_million, 3.0)
         self.assertEqual(quote.output_per_million, 15.0)
         self.assertEqual(quote.matched_rule, "composer-2.5-fast")
+
+        qualified = quote_for(PriceQuery(
+            ModelRef("cursor", "cursor.composer-2.5", variant="fast")
+        ))
+        self.assertTrue(qualified.available)
+        self.assertEqual(qualified.matched_rule, "composer-2.5-fast")
+
+        for model_id in ("composer-2.5ish", "composer-2.5-future"):
+            with self.subTest(model_id=model_id):
+                unknown = quote_for(PriceQuery(
+                    ModelRef("cursor", model_id, variant="fast")
+                ))
+                self.assertFalse(unknown.available)
+                self.assertIsNone(unknown.matched_rule)
 
 
 if __name__ == "__main__":

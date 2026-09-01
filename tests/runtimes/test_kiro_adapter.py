@@ -220,6 +220,54 @@ class KiroRuntimeAdapterTests(unittest.TestCase):
                         "sanitized tool result"):
             self.assertNotIn(private, encoded)
 
+    def test_mixed_pricing_preserves_priced_model_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = self.fixture_adapter(root)
+            adapter.compatibility = meter._kiro_compatibility()
+            turns = [
+                {"input_tokens": 100, "output_tokens": 20,
+                 "start": 1_784_548_800, "end": 1_784_548_801, "tools": []},
+                {"input_tokens": 100, "output_tokens": 30,
+                 "start": 1_784_548_802, "end": 1_784_548_803, "tools": []},
+            ]
+            priced = mock.Mock(model_id="claude-sonnet-4-6")
+            unknown = mock.Mock(model_id="unknown-model")
+            with mock.patch.object(adapter, "_legacy_rows", return_value=turns), \
+                    mock.patch.object(adapter, "_legacy_turn", side_effect=[
+                        (priced, {"input": 0.04, "output": 0.06}, True),
+                        (unknown, {}, False),
+                    ]):
+                row = adapter.summarize_legacy({
+                    "id": "kiro-mixed", "provider": "kiro", "client": "kiro",
+                    "runtime": "Kiro", "label": "Kiro", "title": "Mixed",
+                    "mtime": 1_784_548_803, "path": str(root / "mixed.jsonl"),
+                })
+
+        self.assertFalse(row["availability"]["cost"])
+        stats = {item["model"]: item for item in row["model_stats"]}
+        self.assertTrue(stats["claude-sonnet-4-6"]["availability"]["cost"])
+        self.assertEqual(stats["claude-sonnet-4-6"]["cost_covered_executions"], 1)
+        self.assertEqual(stats["claude-sonnet-4-6"]["cost_covered_output_tokens"], 20)
+        self.assertAlmostEqual(stats["claude-sonnet-4-6"]["cost_covered_cost"], 0.1)
+        self.assertFalse(stats["unknown-model"]["availability"]["cost"])
+
+        daily = {item["model"]: item for item in row["_model_daily"]}
+        self.assertTrue(daily["claude-sonnet-4-6"]["availability"]["cost"])
+        self.assertFalse(daily["unknown-model"]["availability"]["cost"])
+
+        aggregate = {
+            item["model"]: item for item in meter.aggregate_model_stats([row])["models"]
+        }
+        self.assertTrue(aggregate["claude-sonnet-4-6"]["availability"]["cost"])
+        self.assertEqual(
+            aggregate["claude-sonnet-4-6"]["cost_covered_output_tokens"], 20,
+        )
+        self.assertAlmostEqual(
+            aggregate["claude-sonnet-4-6"]["cost_covered_cost"], 0.1,
+        )
+        self.assertFalse(aggregate["unknown-model"]["availability"]["cost"])
+
 
 if __name__ == "__main__":
     unittest.main()

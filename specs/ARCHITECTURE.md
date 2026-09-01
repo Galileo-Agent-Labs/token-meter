@@ -141,8 +141,17 @@ allowlisted fields or discovered canonical identifiers.
 ## Client Interfaces
 
 The browser polls live state and renders all top-level review surfaces from
-`page.html`. Dashboard order is `Sessions → Daily → Models → Tools → Learn →
-Settings`; Sessions owns Current and All session modes.
+`page.html`. Dashboard order is `Sessions → Daily → Models → Tools → Efficiency →
+Learn → Settings`; Sessions owns Current and All session modes. Efficiency derives
+mechanical token-efficiency ratios and daily trends from the same runtime-scoped
+model aggregates. Its sortable model table defaults to spend descending and
+preserves unavailable and partial evidence. A Claude thinking-block observation
+is projected only as a bounded execution count; it never substitutes total
+output for an unavailable thinking-token split. The selected-session Run surface
+reuses those same aggregate formulas for a compact Output/$ and Reasoning ratio
+module. `/session` projects that selected source's bounded model statistics
+directly, so older All Sessions entries do not depend on the 60-row cross-session
+preview. Charts and model comparison remain on the top-level Efficiency route.
 
 Native companions never parse traces. macOS AppKit, Linux AppIndicator, and
 Windows NotifyIcon clients read the compact `/menubar` projection and use the

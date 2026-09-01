@@ -1102,20 +1102,57 @@ class CursorRuntimeAdapter:
         day_cost = defaultdict(float)
         performance_samples = []
         wait_samples = []
+
+        def merge_execution_availability(target, evidence):
+            target_availability = target.setdefault("availability", {})
+            for metric, value in evidence.items():
+                target_availability[metric] = (
+                    target_availability.get(metric) is True or value is True
+                )
+
         for execution in executions:
             model = execution.get("model") or "unknown"
             token_data = execution.get("tokens") or {}
-            input_tokens = int(token_data.get("input") or 0)
-            output_tokens = int(token_data.get("output") or 0)
+            execution_availability = execution.get("availability") or availability
+            input_available = execution_availability.get("input_tokens") is True
+            output_available = execution_availability.get("output_tokens") is True
+            input_tokens = int(token_data.get("input") or 0) if input_available else 0
+            output_tokens = int(token_data.get("output") or 0) if output_available else 0
+            reasoning_tokens = max(0, min(
+                output_tokens, int(execution.get("reasoning_tokens") or 0)
+            ))
             execution_cost = float(execution.get("cost") or 0)
             stats = model_stats.setdefault(model, {
                 "cost": 0.0, "tokens": 0, "input_tokens": 0,
-                "output_tokens": 0, "executions": 0, "availability": availability,
+                "output_tokens": 0, "cache_read_tokens": 0,
+                "cache_write_tokens": 0, "reasoning_tokens": 0,
+                "reasoning_output_tokens": 0, "reasoning_executions": 0,
+                "reasoning_unavailable_executions": 0,
+                "token_covered_executions": 0,
+                "io_covered_executions": 0,
+                "cost_covered_executions": 0,
+                "cost_covered_output_tokens": 0, "executions": 0,
+                "cost_covered_cost": 0.0,
+                "availability": {},
             })
+            merge_execution_availability(stats, execution_availability)
             stats["cost"] += execution_cost
             stats["tokens"] += input_tokens + output_tokens
             stats["input_tokens"] += input_tokens
             stats["output_tokens"] += output_tokens
+            if output_available:
+                stats["reasoning_tokens"] += reasoning_tokens
+                stats["reasoning_output_tokens"] += output_tokens
+                stats["reasoning_executions"] += 1
+                stats["token_covered_executions"] += 1
+            else:
+                stats["reasoning_unavailable_executions"] += 1
+            if input_available and output_available:
+                stats["io_covered_executions"] += 1
+            if execution_availability.get("cost") is True and output_available:
+                stats["cost_covered_executions"] += 1
+                stats["cost_covered_output_tokens"] += output_tokens
+                stats["cost_covered_cost"] += execution_cost
             stats["executions"] += 1
             model_cost[model] += execution_cost
             model_tok[model] += input_tokens + output_tokens
@@ -1125,12 +1162,35 @@ class CursorRuntimeAdapter:
                 day_cost[day] += execution_cost
                 daily = model_daily.setdefault((model, day), {
                     "model": model, "day": day, "cost": 0.0,
-                    "input_tokens": 0, "output_tokens": 0, "executions": 0,
-                    "availability": availability,
+                    "input_tokens": 0, "output_tokens": 0,
+                    "cache_read_tokens": 0, "cache_write_tokens": 0,
+                    "reasoning_tokens": 0, "reasoning_output_tokens": 0,
+                    "reasoning_executions": 0,
+                    "reasoning_unavailable_executions": 0,
+                    "token_covered_executions": 0,
+                    "io_covered_executions": 0,
+                    "cost_covered_executions": 0,
+                    "cost_covered_output_tokens": 0, "executions": 0,
+                    "cost_covered_cost": 0.0,
+                    "availability": {},
                 })
+                merge_execution_availability(daily, execution_availability)
                 daily["cost"] += execution_cost
                 daily["input_tokens"] += input_tokens
                 daily["output_tokens"] += output_tokens
+                if output_available:
+                    daily["reasoning_tokens"] += reasoning_tokens
+                    daily["reasoning_output_tokens"] += output_tokens
+                    daily["reasoning_executions"] += 1
+                    daily["token_covered_executions"] += 1
+                else:
+                    daily["reasoning_unavailable_executions"] += 1
+                if input_available and output_available:
+                    daily["io_covered_executions"] += 1
+                if execution_availability.get("cost") is True and output_available:
+                    daily["cost_covered_executions"] += 1
+                    daily["cost_covered_output_tokens"] += output_tokens
+                    daily["cost_covered_cost"] += execution_cost
                 daily["executions"] += 1
             duration_s = float(execution.get("duration_ms") or 0) / 1000.0
             if output_tokens and duration_s:
@@ -1146,6 +1206,13 @@ class CursorRuntimeAdapter:
                     "tool_calls": int(execution.get("tool_count") or 0),
                     "timing_basis": execution.get("timing_basis") or "observed",
                 })
+                attempts = int(execution.get("attempts") or 0)
+                if attempts > 0:
+                    performance_samples[-1].update({
+                        "attempts": attempts,
+                        "retries": int(execution.get("retries") or 0),
+                        "failed_attempts": int(execution.get("failed_attempts") or 0),
+                    })
         for sample in (state.get("wait_time") or {}).get("samples") or []:
             ts = float(sample.get("ts") or 0)
             wait_samples.append({

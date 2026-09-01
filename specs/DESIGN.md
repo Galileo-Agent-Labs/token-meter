@@ -182,7 +182,7 @@ The global dashboard pairs a centered content field of up to 1320px with a stick
 
 Sessions opens with one layered spectrum field header, then a two-column instrument grid with a 12px gap. On detail, the working chart and decision instrument form an asymmetric two-column layout that tightens at the 1024-pixel laptop target. Supporting KPIs form an attached ledger with three columns at that laptop target.
 
-The rail keeps frequent monitoring routes near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At laptop widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. The supported desktop shell does not convert into mobile top navigation.
+The rail keeps frequent monitoring routes, including Efficiency, near the top and anchors Learn and Settings as a separated bottom group. The brand and navigation remain the rail's only persistent content; configuration and connection-status controls do not live there. At laptop widths the rail contracts to icon-only navigation while retaining accessible names and shortcut hints. The supported desktop shell does not convert into mobile top navigation.
 
 ### Named Rules
 
@@ -240,7 +240,7 @@ The Token Meter system uses compact 8px corners for cards, controls, fields, and
 
 ### Navigation
 
-Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Spend, Models, and Tools form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide desktop widths and contracts to icons at laptop widths; destinations remain available through the persistent rail.
+Global top-level navigation uses a compact left rail and preserves the product order. Sessions, Spend, Models, Tools, and Efficiency form the primary monitoring group; Learn and Settings form a separated secondary group anchored to the bottom. Sessions owns prominent Current sessions/All sessions tabs directly below its header: Current is the recent-active card field, while All contains searchable history, filters, a compact selection summary, and an expandable model breakdown. The internal tabs use the same icon, active gradient, hover, and focus treatment as the primary navigation, but remain visibly scoped beneath the Sessions heading. The rail contains no connection-status ornament or configuration controls. The command palette remains keyboard-first through `⌘K`, and browser budget-alert delivery belongs in Settings beside the monthly alert controls. The rail keeps labels at wide desktop widths and contracts to icons at laptop widths; destinations remain available through the persistent rail.
 
 The brand lockup pairs Splunk's unmodified white corporate wordmark with the Token Meter product name. At the laptop icon-only rail width, the wordmark remains visible and the product-name text hides.
 
@@ -255,6 +255,24 @@ must remain distinct from full-session input, execution, and active-time
 evidence. Coverage counts, local estimates, and unavailable timing stay visible;
 the surface describes unusual shape and concentration without claiming
 productivity or model quality.
+
+### Efficiency Field
+
+Efficiency leads with two large readings: output per covered dollar and the
+reasoning share of reasoning-covered output. Each reading includes a compact
+daily trend. Context load and output per token-covered execution are the only
+supporting diagnostics. One range control governs both the overall readings and
+a runtime-scoped model table. Rows default to spend descending; sortable column
+headers allow direct comparison without changing that materiality-first default.
+Coverage and local estimate labels stay adjacent to each number, and the
+surface never assigns a universal score, threshold, or quality verdict. Claude
+thinking activity remains visible when observed, while the ratio stays
+unavailable unless the trace reports a separate thinking-token count.
+
+The selected Run surface repeats only Output/$ and Reasoning ratio in a compact
+card above the session budget. It keeps the same coverage and thinking-fallback
+semantics; daily charts and per-model comparison stay on the main Efficiency
+page.
 
 ### Session Instrument Card
 

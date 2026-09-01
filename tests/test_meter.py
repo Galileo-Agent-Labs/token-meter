@@ -419,6 +419,112 @@ class CursorTraceTests(unittest.TestCase):
         self.assertTrue(model["availability"]["tokens"])
         self.assertEqual(model["input_tokens"], 80448)
         self.assertEqual(model["output_tokens"], 6)
+        self.assertEqual(model["reasoning_tokens"], 4)
+        self.assertEqual(model["reasoning_output_tokens"], 6)
+        self.assertEqual(model["reasoning_executions"], 1)
+        self.assertTrue(model["availability"]["reasoning_tokens"])
+        self.assertEqual((model["attempts"], model["retries"], model["failed_attempts"]),
+                         (2, 1, 1))
+        self.assertTrue(model["availability"]["attempts"])
+
+    def test_cursor_summary_keeps_priced_model_coverage_in_mixed_session(self):
+        session_availability = meter.metric_availability(
+            "cursor", cost=False, tokens=True, input_tokens=True,
+            output_tokens=True,
+        )
+
+        def execution(model, output_tokens, cost, cost_available, ts):
+            return {
+                "model": model, "ts": ts, "cost": cost,
+                "tokens": {"input": 100, "output": output_tokens},
+                "context_tokens": 100, "reasoning_tokens": 0,
+                "availability": meter.metric_availability(
+                    "cursor", cost=cost_available, tokens=True,
+                    input_tokens=True, output_tokens=True,
+                ),
+                "tools": [], "tool_count": 0, "model_calls": 1,
+            }
+
+        state = {
+            "availability": session_availability,
+            "executions": [
+                execution("composer-2.5", 20, 0.1, True, 1_784_548_801),
+                execution("unknown-model", 30, 0.0, False, 1_784_548_802),
+            ],
+            "total_cost": 0.1, "total_tokens": 250,
+            "tokens": {"input": 200, "output": 50},
+            "cost_approx": True, "token_estimate": True,
+            "timing": {}, "wait_time": {}, "context": {},
+        }
+        with mock.patch.object(meter, "recompute_cursor", return_value=state):
+            row = meter.cursor_summary(self.source())
+
+        self.assertFalse(row["availability"]["cost"])
+        stats = {item["model"]: item for item in row["model_stats"]}
+        self.assertTrue(stats["composer-2.5"]["availability"]["cost"])
+        self.assertEqual(stats["composer-2.5"]["cost_covered_executions"], 1)
+        self.assertEqual(stats["composer-2.5"]["cost_covered_output_tokens"], 20)
+        self.assertFalse(stats["unknown-model"]["availability"]["cost"])
+        daily = {item["model"]: item for item in row["_model_daily"]}
+        self.assertTrue(daily["composer-2.5"]["availability"]["cost"])
+        self.assertFalse(daily["unknown-model"]["availability"]["cost"])
+
+        aggregate = {
+            item["model"]: item for item in meter.aggregate_model_stats([row])["models"]
+        }
+        self.assertTrue(aggregate["composer-2.5"]["availability"]["cost"])
+        self.assertEqual(
+            aggregate["composer-2.5"]["cost_covered_output_tokens"], 20,
+        )
+        self.assertFalse(aggregate["unknown-model"]["availability"]["cost"])
+
+    def test_cursor_efficiency_coverage_requires_output_evidence(self):
+        session_availability = meter.metric_availability(
+            "cursor", cost=True, tokens=True, input_tokens=True,
+            output_tokens=False,
+        )
+
+        def execution(output_tokens, output_available, cost, ts):
+            return {
+                "model": "composer-2.5", "ts": ts, "cost": cost,
+                "tokens": {"input": 100, "output": output_tokens},
+                "context_tokens": 100, "reasoning_tokens": output_tokens // 2,
+                "availability": meter.metric_availability(
+                    "cursor", cost=True, tokens=True, input_tokens=True,
+                    output_tokens=output_available,
+                ),
+                "tools": [], "tool_count": 0, "model_calls": 1,
+            }
+
+        state = {
+            "availability": session_availability,
+            "executions": [
+                execution(20, True, 0.1, 1_784_548_801),
+                execution(0, False, 0.05, 1_784_548_802),
+            ],
+            "total_cost": 0.15, "total_tokens": 220,
+            "tokens": {"input": 200, "output": 20},
+            "cost_approx": True, "token_estimate": True,
+            "timing": {}, "wait_time": {}, "context": {},
+        }
+        with mock.patch.object(meter, "recompute_cursor", return_value=state):
+            row = meter.cursor_summary(self.source())
+
+        stats = row["model_stats"][0]
+        self.assertEqual(stats["executions"], 2)
+        self.assertEqual(stats["token_covered_executions"], 1)
+        self.assertEqual(stats["io_covered_executions"], 1)
+        self.assertEqual(stats["cost_covered_executions"], 1)
+        self.assertEqual(stats["cost_covered_output_tokens"], 20)
+        self.assertAlmostEqual(stats["cost_covered_cost"], 0.1)
+        self.assertEqual(stats["reasoning_executions"], 1)
+        self.assertEqual(stats["reasoning_unavailable_executions"], 1)
+
+        aggregate = meter.aggregate_model_stats([row])["models"][0]
+        self.assertFalse(aggregate["coverage"]["cost"]["complete"])
+        self.assertFalse(aggregate["coverage"]["reasoning_tokens"]["complete"])
+        self.assertEqual(aggregate["io_covered_executions"], 1)
+        self.assertAlmostEqual(aggregate["cost_covered_cost"], 0.1)
 
     def test_usage_provenance_distinguishes_reported_estimated_and_mixed(self):
         reported = {"id": "reported", "provider": "codex", "cost": 1, "tokens": 10}
@@ -839,6 +945,217 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(row["daily"][0]["wait_durations_s"], [8, 12])
         self.assertEqual(row["daily"][0]["max_wait_s"], 12)
 
+    def test_model_efficiency_counters_preserve_reasoning_cache_and_missing_evidence(self):
+        stats = {}
+        meter.add_model_summary(stats, "gpt-5.6", {
+            "input_tokens": 100,
+            "cache_read_input_tokens": 60,
+            "cache_creation_input_tokens": 20,
+            "output_tokens": 40,
+            "reasoning_output_tokens": 12,
+            "reasoning_available": True,
+        }, 0.5)
+        meter.add_model_summary(stats, "gpt-5.6", {
+            "input_tokens": 50,
+            "output_tokens": 10,
+        }, 0.1)
+
+        self.assertEqual(stats["gpt-5.6"], {
+            "cost": 0.6,
+            "tokens": 280,
+            "input_tokens": 230,
+            "output_tokens": 50,
+            "cache_read_tokens": 60,
+            "cache_write_tokens": 20,
+            "reasoning_tokens": 12,
+            "reasoning_output_tokens": 40,
+            "reasoning_executions": 1,
+            "reasoning_unavailable_executions": 1,
+            "thinking_executions": 0,
+            "thinking_covered_executions": 0,
+            "token_covered_executions": 2,
+            "io_covered_executions": 2,
+            "executions": 2,
+            "input_evidence": True,
+            "output_evidence": True,
+        })
+
+    def test_reasoning_requires_numeric_evidence(self):
+        from token_meter.runtimes.codex import codex_usage as native_codex_usage
+
+        for value in (
+            None, False, True, "12", -1, 12.5, float("inf"), float("nan"),
+            10 ** 400,
+        ):
+            codex = native_codex_usage({
+                "output_tokens": 20, "reasoning_output_tokens": value,
+            })
+            opencode = meter._opencode_usage({
+                "tokens": {"output": 20, "reasoning": value},
+            })
+            self.assertFalse(codex["reasoning_available"])
+            self.assertEqual(codex["reasoning_output_tokens"], 0)
+            self.assertFalse(opencode["reasoning_available"])
+            self.assertEqual(opencode["reasoning_tokens"], 0)
+            self.assertEqual(meter._opencode_context_tokens(opencode), 20)
+        self.assertTrue(native_codex_usage({
+            "output_tokens": 20, "reasoning_output_tokens": 0,
+        })["reasoning_available"])
+        self.assertTrue(meter._opencode_usage({
+            "tokens": {"output": 20, "reasoning": 0},
+        })["reasoning_available"])
+        self.assertEqual(native_codex_usage({
+            "output_tokens": 20, "reasoning_output_tokens": 12.0,
+        })["reasoning_output_tokens"], 12)
+        for normalizer in (native_codex_usage, meter.codex_usage):
+            oversized = normalizer({
+                "input_tokens": 10,
+                "output_tokens": 20,
+                "reasoning_output_tokens": 21,
+            })
+            self.assertFalse(oversized["reasoning_available"])
+            self.assertEqual(oversized["reasoning_output_tokens"], 0)
+
+        stats = {}
+        meter.add_model_summary(stats, "gpt-5.6", {
+            "input_tokens": 10,
+            "output_tokens": 20,
+            "reasoning_output_tokens": 21,
+            "reasoning_available": True,
+        }, 0.1)
+        self.assertEqual(stats["gpt-5.6"]["reasoning_tokens"], 0)
+        self.assertEqual(stats["gpt-5.6"]["reasoning_executions"], 0)
+        self.assertEqual(stats["gpt-5.6"]["reasoning_unavailable_executions"], 1)
+
+    def test_model_aggregation_exposes_efficiency_counts_and_coverage(self):
+        sessions = [{
+            "id": "session-a", "provider": "codex", "runtime": "Codex",
+            "availability": meter.metric_availability("codex"),
+            "model_stats": [{
+                "model": "gpt-5.6", "cost": 2.0, "tokens": 360,
+                "input_tokens": 300, "output_tokens": 60, "executions": 3,
+                "cache_read_tokens": 120, "cache_write_tokens": 10,
+                "reasoning_tokens": 15, "reasoning_output_tokens": 50,
+                "reasoning_executions": 2,
+                "reasoning_unavailable_executions": 1,
+            }],
+            "_model_daily": [{
+                "model": "gpt-5.6", "day": "2026-08-27", "cost": 2.0,
+                "input_tokens": 300, "output_tokens": 60, "executions": 3,
+                "cache_read_tokens": 120, "cache_write_tokens": 10,
+                "reasoning_tokens": 15, "reasoning_output_tokens": 50,
+                "reasoning_executions": 2,
+                "reasoning_unavailable_executions": 1,
+            }],
+            "_performance_samples": [{
+                "model": "gpt-5.6", "day": "2026-08-27", "ts": 10,
+                "input_tokens": 300, "output_tokens": 60,
+                "duration_s": 3, "generation_s": 3,
+                "tool_calls": 2, "model_calls": 2,
+                "attempts": 3, "retries": 2, "failed_attempts": 1,
+            }],
+            "_wait_samples": [],
+        }]
+
+        row = meter.aggregate_model_stats(sessions)["models"][0]
+
+        self.assertEqual(row["cache_read_tokens"], 120)
+        self.assertEqual(row["cache_write_tokens"], 10)
+        self.assertEqual(row["cost_covered_output_tokens"], 60)
+        self.assertEqual(row["cost_covered_executions"], 3)
+        self.assertEqual(row["cache_covered_input_tokens"], 300)
+        self.assertEqual(row["token_covered_executions"], 3)
+        self.assertEqual(row["reasoning_tokens"], 15)
+        self.assertEqual(row["reasoning_output_tokens"], 50)
+        self.assertEqual(row["reasoning_executions"], 2)
+        self.assertEqual(row["reasoning_unavailable_executions"], 1)
+        self.assertEqual(row["attempts"], 3)
+        self.assertEqual(row["retries"], 2)
+        self.assertEqual(row["failed_attempts"], 1)
+        self.assertEqual(row["attempt_samples"], 1)
+        self.assertEqual(row["coverage"]["reasoning_tokens"], {
+            "covered_executions": 2,
+            "total_executions": 3,
+            "complete": False,
+        })
+        self.assertFalse(row["coverage"]["attempts"]["complete"])
+        self.assertEqual(row["daily"][0]["reasoning_tokens"], 15)
+        self.assertEqual(row["daily"][0]["attempts"], 3)
+
+    def test_efficiency_denominators_exclude_uncovered_cost_and_cache_rows(self):
+        covered = {
+            "id": "covered", "provider": "codex", "runtime": "Codex",
+            "availability": meter.metric_availability(
+                "codex", cost=True, tokens=True, cache=True,
+            ),
+            "model_stats": [{
+                "model": "gpt-5.6", "cost": 2.0, "tokens": 360,
+                "input_tokens": 300, "output_tokens": 60, "executions": 1,
+                "cache_read_tokens": 120,
+            }],
+            "_model_daily": [{
+                "model": "gpt-5.6", "day": "2026-08-27", "cost": 2.0,
+                "input_tokens": 300, "output_tokens": 60, "executions": 1,
+                "cache_read_tokens": 120,
+            }],
+        }
+        uncovered = {
+            "id": "uncovered", "provider": "codex", "runtime": "Codex",
+            "availability": meter.metric_availability(
+                "codex", cost=False, tokens=True, cache=False,
+            ),
+            "model_stats": [{
+                "model": "gpt-5.6", "cost": 0.0, "tokens": 1100,
+                "input_tokens": 1000, "output_tokens": 100,
+                "executions": 1,
+            }],
+            "_model_daily": [{
+                "model": "gpt-5.6", "day": "2026-08-27", "cost": 0.0,
+                "input_tokens": 1000, "output_tokens": 100,
+                "executions": 1,
+            }],
+        }
+
+        row = meter.aggregate_model_stats([covered, uncovered])["models"][0]
+
+        self.assertEqual(row["output_tokens"], 160)
+        self.assertEqual(row["cost_covered_output_tokens"], 60)
+        self.assertEqual(row["cache_covered_input_tokens"], 300)
+        self.assertFalse(row["coverage"]["cost"]["complete"])
+        self.assertFalse(row["coverage"]["cache"]["complete"])
+
+    def test_input_only_model_evidence_keeps_output_unavailable(self):
+        availability = meter.metric_availability(
+            "opencode", cost=True, tokens=True, input_tokens=True,
+            output_tokens=False, cache=True,
+        )
+        stats = {
+            "model": "model-a", "cost": 1.0, "input_tokens": 10,
+            "output_tokens": 0, "executions": 1,
+            "token_covered_executions": 0, "cost_covered_executions": 0,
+            "cost_covered_output_tokens": 0,
+            "cache_covered_input_tokens": 10,
+            "availability": availability,
+        }
+        row = meter.aggregate_model_stats([{
+            "id": "input-only", "provider": "opencode", "runtime": "OpenCode",
+            "availability": meter.metric_availability(
+                "opencode", cost=True, tokens=True, input_tokens=True,
+                output_tokens=True, cache=True,
+            ),
+            "model_stats": [stats],
+            "_model_daily": [{**stats, "day": "2026-08-27"}],
+            "_wait_samples": [{
+                "model": "model-a", "day": "2026-08-27",
+                "duration_s": 1, "output_tokens": 0,
+            }],
+        }])["models"][0]
+
+        self.assertTrue(row["availability"]["tokens"])
+        self.assertTrue(row["availability"]["input_tokens"])
+        self.assertFalse(row["availability"]["output_tokens"])
+        self.assertFalse(row["daily"][0]["availability"]["output_tokens"])
+
     def test_mixed_speed_coverage_counts_all_completed_output(self):
         summary = meter.performance_summary([
             {"output_tokens": 10, "duration_s": 2, "generation_s": 1, "tool_calls": 0, "ts": 1},
@@ -850,13 +1167,48 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(summary["timing_coverage"], 1)
 
     def test_model_aggregation_omits_rows_without_io(self):
+        availability = meter.metric_availability(
+            "claude", cost=False, tokens=True, input_tokens=True,
+            output_tokens=True, cache=False,
+        )
         result = meter.aggregate_model_stats([{
-            "provider": "claude",
+            "provider": "claude", "availability": availability,
             "model_stats": [{"model": "<synthetic>", "input_tokens": 0,
-                             "output_tokens": 0, "executions": 2, "cost": 0}],
+                             "output_tokens": 0, "executions": 2, "cost": 0,
+                             "token_covered_executions": 2,
+                             "availability": availability}],
         }])
         self.assertEqual(result["models"], [])
         self.assertEqual(result["total_models"], 0)
+
+    def test_model_aggregation_keeps_explicitly_covered_zero_io(self):
+        availability = meter.metric_availability(
+            "opencode", cost=True, tokens=True, input_tokens=True,
+            output_tokens=True, cache=True,
+        )
+        stats = {
+            "model": "model-a", "cost": 1.0,
+            "input_tokens": 0, "output_tokens": 0, "executions": 1,
+            "token_covered_executions": 1, "cost_covered_executions": 1,
+            "cost_covered_output_tokens": 0,
+            "cache_covered_input_tokens": 0,
+            "availability": availability,
+        }
+
+        result = meter.aggregate_model_stats([{
+            "id": "covered-zero", "provider": "opencode", "runtime": "OpenCode",
+            "availability": availability, "model_stats": [stats],
+            "_model_daily": [{**stats, "day": "2026-08-27"}],
+        }])
+
+        self.assertEqual(result["total_models"], 1)
+        row = result["models"][0]
+        self.assertEqual(row["input_tokens"], 0)
+        self.assertEqual(row["output_tokens"], 0)
+        self.assertEqual(row["cost_covered_output_tokens"], 0)
+        self.assertTrue(row["availability"]["input_tokens"])
+        self.assertTrue(row["availability"]["output_tokens"])
+        self.assertTrue(row["daily"][0]["availability"]["output_tokens"])
 
     def test_model_aggregation_splits_same_model_by_runtime(self):
         def session(runtime, output):
@@ -873,10 +1225,88 @@ class ModelPerformanceTests(unittest.TestCase):
         self.assertEqual(
             {(row["model"], row["runtime"], row["id"]) for row in result["models"]},
             {
-                ("claude-opus", "Claude Code", "claude-opus::Claude Code"),
-                ("claude-opus", "Claude-3P", "claude-opus::Claude-3P"),
+                ("claude-opus", "Claude Code", "claude-opus::Claude Code::unavailable"),
+                ("claude-opus", "Claude-3P", "claude-opus::Claude-3P::unavailable"),
             },
         )
+
+    def test_model_aggregation_gives_unreported_effort_an_explicit_identity(self):
+        result = meter.aggregate_model_stats([{
+            "provider": "codex", "runtime": "Codex",
+            "model_stats": [{
+                "model": "gpt-5.6", "cost": 1, "tokens": 100,
+                "input_tokens": 80, "output_tokens": 20, "executions": 1,
+            }],
+            "_model_daily": [], "_performance_samples": [], "_wait_samples": [],
+        }])
+        self.assertEqual(result["models"][0]["id"], "gpt-5.6::Codex::unavailable")
+
+    def test_model_aggregation_keeps_trace_reported_session_effort_per_runtime(self):
+        def session(effort):
+            return {
+                "provider": "codex", "runtime": "Codex",
+                "reasoning_effort": effort,
+                "model_stats": [{
+                    "model": "gpt-5.6", "cost": 1, "tokens": 100,
+                    "input_tokens": 80, "output_tokens": 20, "executions": 1,
+                }],
+                "_model_daily": [], "_performance_samples": [], "_wait_samples": [],
+            }
+
+        rows = meter.aggregate_model_stats([
+            session("high"), session("xhigh"), session("private client note 42"),
+            session(""),
+        ])["models"]
+
+        self.assertEqual(
+            {(row.get("reasoning_effort"), tuple(row.get("reasoning_efforts") or ()))
+             for row in rows},
+            {("high", ("high",)), ("xhigh", ("xhigh",)), (None, ())},
+        )
+
+    def test_model_aggregation_scopes_effort_to_single_model_sessions_and_days(self):
+        def stats(model):
+            return {
+                "model": model, "cost": 1, "tokens": 100,
+                "input_tokens": 80, "output_tokens": 20, "executions": 1,
+            }
+
+        result = meter.aggregate_model_stats([
+            {
+                "provider": "codex", "runtime": "Codex", "reasoning_effort": "high",
+                "model_stats": [stats("gpt-5.6")],
+                "_model_daily": [{**stats("gpt-5.6"), "day": "2026-08-30"}],
+            },
+            {
+                "provider": "codex", "runtime": "Codex", "reasoning_effort": "xhigh",
+                "model_stats": [stats("gpt-5.6")],
+                "_model_daily": [{**stats("gpt-5.6"), "day": "2026-08-31"}],
+            },
+            {
+                "provider": "codex", "runtime": "Codex", "reasoning_effort": "ultra",
+                "primary_model": "gpt-a",
+                "model_stats": [stats("gpt-a"), stats("gpt-b")],
+                "_model_daily": [
+                    {**stats("gpt-a"), "day": "2026-08-31"},
+                    {**stats("gpt-b"), "day": "2026-08-31"},
+                ],
+            },
+        ])
+        by_model_effort = {
+            (row["model"], row.get("reasoning_effort")): row
+            for row in result["models"]
+        }
+
+        self.assertEqual(
+            by_model_effort[("gpt-5.6", "high")]["daily"][0]["reasoning_efforts"],
+            ["high"],
+        )
+        self.assertEqual(
+            by_model_effort[("gpt-5.6", "xhigh")]["daily"][0]["reasoning_efforts"],
+            ["xhigh"],
+        )
+        self.assertEqual(by_model_effort[("gpt-a", "ultra")]["reasoning_efforts"], ["ultra"])
+        self.assertEqual(by_model_effort[("gpt-b", None)]["reasoning_efforts"], [])
 
     def test_project_model_stats_scopes_exactly_and_omits_session_identity(self):
         def session(session_id, project, output):
@@ -931,6 +1361,32 @@ class ModelPerformanceTests(unittest.TestCase):
             Path(meter.IMPLEMENTATION_FILE).read_text(),
         )
 
+    def test_project_model_stats_groups_non_folder_labels_as_other_local_sessions(self):
+        def session(session_id, project):
+            return {
+                "id": session_id, "project": project, "provider": "codex",
+                "runtime": "Codex", "model_stats": [{
+                    "model": "gpt-5.6", "cost": 1, "tokens": 100,
+                    "input_tokens": 80, "output_tokens": 20, "executions": 1,
+                }],
+                "_model_daily": [], "_performance_samples": [], "_wait_samples": [],
+            }
+
+        saved_cache = dict(meter._xsess)
+        try:
+            meter._xsess.update({
+                "internal_rows": (session("cli", "CLI"), session("none", "No project")),
+                "project_model_stats": {},
+            })
+            with mock.patch.object(meter, "cross_session", return_value={"generated_at": 123}):
+                payload, status = meter.project_model_stats("__other_local_sessions__")
+        finally:
+            meter._xsess.clear()
+            meter._xsess.update(saved_cache)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["model_stats"]["total_models"], 1)
+
     def test_model_project_options_are_sorted_and_bounded(self):
         sessions = [
             {"project": f"/repo/{index:04d}", "provider": "codex",
@@ -966,7 +1422,7 @@ class ModelPerformanceTests(unittest.TestCase):
         }
         result = meter.aggregate_model_stats([cursor, codex])
         self.assertEqual({row["id"] for row in result["models"]},
-                         {"gpt-5.6::Cursor", "gpt-5.6::Codex"})
+                         {"gpt-5.6::Cursor::unavailable", "gpt-5.6::Codex::unavailable"})
         self.assertFalse(any(
             any("::Cursor" in value for value in (pair["a_id"], pair["b_id"]))
             for pairs in result["matched_pace"]["windows"].values() for pair in pairs
@@ -1764,12 +2220,182 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertEqual(row["output_tokens"], 10)
         self.assertEqual(row["model_stats"][0]["model"], "claude-sonnet-4-6")
         self.assertEqual(row["model_stats"][0]["executions"], 1)
+        self.assertEqual(row["model_stats"][0]["reasoning_executions"], 0)
+        self.assertEqual(row["model_stats"][0]["reasoning_unavailable_executions"], 1)
         self.assertEqual(row["primary_model"], "claude-sonnet-4-6")
         self.assertEqual(row["context"]["latest"], 150)
         self.assertIsNone(row["context"]["window"])
         self.assertEqual(row["_context_samples"], [150])
         self.assertTrue(row["terminal"])
         self.assertEqual(row["usage_basis"], "reported")
+
+    def test_claude_summary_keeps_thinking_visible_without_inventing_reasoning_tokens(self):
+        objs = [
+            {
+                "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+                "message": {
+                    "id": "msg-1", "model": "claude-opus-4-8",
+                    "content": [{"type": "thinking", "thinking": "hidden"}],
+                    "usage": {"input_tokens": 100, "output_tokens": 40},
+                    "stop_reason": "end_turn",
+                },
+            },
+            {
+                "type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+                "message": {
+                    "id": "msg-1", "model": "claude-opus-4-8",
+                    "content": [{"type": "text", "text": "answer"}],
+                    "usage": {"input_tokens": 100, "output_tokens": 40},
+                    "stop_reason": "end_turn",
+                },
+            },
+        ]
+
+        row = meter.claude_summary(self.source("claude"), objs)
+        stats = row["model_stats"][0]
+        self.assertEqual(stats["executions"], 1)
+        self.assertEqual(stats["reasoning_tokens"], 0)
+        self.assertEqual(stats["reasoning_output_tokens"], 0)
+        self.assertEqual(stats["reasoning_executions"], 0)
+        self.assertEqual(stats["reasoning_unavailable_executions"], 1)
+        self.assertEqual(stats["thinking_executions"], 1)
+        self.assertEqual(stats["thinking_covered_executions"], 0)
+        aggregate = meter.aggregate_model_stats([row])["models"][0]
+        self.assertEqual(aggregate["reasoning_tokens"], 0)
+        self.assertEqual(aggregate["reasoning_output_tokens"], 0)
+        self.assertFalse(aggregate["availability"]["reasoning_tokens"])
+        self.assertFalse(aggregate["coverage"]["reasoning_tokens"]["complete"])
+        self.assertEqual(aggregate["thinking_executions"], 1)
+        self.assertEqual(aggregate["thinking_covered_executions"], 0)
+        self.assertEqual(aggregate["daily"][0]["reasoning_tokens"], 0)
+        self.assertEqual(aggregate["daily"][0]["thinking_executions"], 1)
+        self.assertEqual(aggregate["daily"][0]["thinking_covered_executions"], 0)
+
+    def test_claude_summary_accepts_separate_thinking_token_stat(self):
+        row = meter.claude_summary(self.source("claude"), [{
+            "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+            "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "thinking", "thinking": "hidden"}],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 40,
+                    "thinking_tokens": 30,
+                },
+                "stop_reason": "end_turn",
+            },
+        }])
+
+        stats = row["model_stats"][0]
+        self.assertEqual(stats["reasoning_tokens"], 30)
+        self.assertEqual(stats["reasoning_output_tokens"], 40)
+        self.assertEqual(stats["reasoning_executions"], 1)
+        self.assertEqual(stats["thinking_executions"], 1)
+        self.assertEqual(stats["thinking_covered_executions"], 1)
+
+    def test_claude_split_messages_preserve_separate_thinking_token_stat(self):
+        thinking = {
+            "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+            "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "thinking", "thinking": "hidden"}],
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 40,
+                    "thinking_tokens": 30,
+                },
+                "stop_reason": None,
+            },
+        }
+        answer = {
+            "type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+            "message": {
+                "id": "msg-1", "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": "answer"}],
+                "usage": {"input_tokens": 100, "output_tokens": 40},
+                "stop_reason": "end_turn",
+            },
+        }
+
+        for records in ([thinking, answer], [answer, thinking]):
+            with self.subTest(exact_stat_first=records[0] is thinking):
+                row = meter.claude_summary(self.source("claude"), records)
+                stats = row["model_stats"][0]
+                self.assertEqual(stats["reasoning_tokens"], 30)
+                self.assertEqual(stats["reasoning_output_tokens"], 40)
+                self.assertEqual(stats["thinking_covered_executions"], 1)
+
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "claude-thinking.jsonl"
+                    path.write_text("".join(
+                        json.dumps(record) + "\n" for record in records
+                    ))
+                    selected = meter.recompute_claude({
+                        **self.source("claude"),
+                        "path": str(path),
+                        "session": path.name,
+                    })
+                self.assertEqual(selected["semantic"]["reasoning"], 30)
+                self.assertEqual(selected["semantic"]["output"], 10)
+
+    def test_claude_selected_session_never_substitutes_output_for_thinking_tokens(self):
+        def recompute(thinking_tokens=None, block_type="thinking"):
+            usage = {"input_tokens": 100, "output_tokens": 40}
+            if thinking_tokens is not None:
+                usage["thinking_tokens"] = thinking_tokens
+            records = [
+                {
+                    "type": "assistant", "timestamp": "2026-07-02T00:00:00.000Z",
+                    "message": {
+                        "id": "msg-1", "model": "claude-opus-4-8",
+                        "content": [{"type": block_type, "thinking": "hidden"}],
+                        "usage": usage, "stop_reason": "end_turn",
+                    },
+                },
+                {
+                    "type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+                    "message": {
+                        "id": "msg-1", "model": "claude-opus-4-8",
+                        "content": [{"type": "text", "text": "answer"}],
+                        "usage": usage, "stop_reason": "end_turn",
+                    },
+                },
+            ]
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "claude-thinking.jsonl"
+                path.write_text("".join(json.dumps(record) + "\n" for record in records))
+                return meter.recompute_claude({
+                    **self.source("claude"), "path": str(path), "session": path.name,
+                })
+
+        unavailable = recompute()
+        self.assertEqual(unavailable["semantic"]["reasoning"], 0)
+        self.assertEqual(unavailable["semantic"]["output"], 40)
+        self.assertEqual(unavailable["analyses"]["reasoning"]["tokens"], 0)
+        self.assertEqual(unavailable["analyses"]["reasoning"]["think_turns"], 0)
+        self.assertEqual(unavailable["series"][0]["reasoning"], 0)
+        self.assertEqual(unavailable["executions"][0]["reasoning_tokens"], 0)
+        self.assertEqual(unavailable["executions"][0]["tokens"]["reasoning"], 0)
+        self.assertFalse(any(
+            event["kind"] == "reasoning" for event in unavailable["trace"]
+        ))
+        message = next(
+            event for event in unavailable["trace"] if event["kind"] == "message"
+        )
+        self.assertEqual(message["reasoning_tokens"], 0)
+
+        redacted = recompute(block_type="redacted_thinking")
+        self.assertEqual(redacted["semantic"]["reasoning"], 0)
+        self.assertEqual(redacted["executions"][0]["reasoning_tokens"], 0)
+
+        exact = recompute(30)
+        self.assertEqual(exact["semantic"]["reasoning"], 30)
+        self.assertEqual(exact["semantic"]["output"], 10)
+        self.assertEqual(exact["analyses"]["reasoning"]["tokens"], 30)
+        self.assertEqual(exact["analyses"]["reasoning"]["think_turns"], 1)
+        self.assertEqual(exact["series"][0]["reasoning"], 30)
+        self.assertEqual(exact["executions"][0]["reasoning_tokens"], 30)
+        self.assertEqual(exact["executions"][0]["tokens"]["reasoning"], 30)
 
     def test_claude_summary_keeps_missing_model_pricing_unavailable(self):
         row = meter.claude_summary(self.source("claude"), [{
@@ -1784,6 +2410,148 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertEqual(row["primary_model"], "unknown-model")
         self.assertFalse(row["availability"]["cost"])
         self.assertEqual(row["cost"], 0.0)
+
+    def test_claude_and_codex_malformed_token_counts_fail_closed(self):
+        for value in ("bad", True, -1, 1.5, float("inf"), 10 ** 400):
+            with self.subTest(runtime="claude", value_type=type(value).__name__):
+                claude = meter.claude_summary(self.source("claude"), [
+                    {"type": "user", "timestamp": "2026-07-02T00:00:00.000Z",
+                     "message": {"content": "start"}},
+                    {"type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+                     "message": {
+                         "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
+                         "usage": {"input_tokens": value, "output_tokens": value},
+                         "stop_reason": "end_turn",
+                     }},
+                    {"type": "user", "timestamp": "2026-07-02T00:00:02.000Z",
+                     "message": {"content": "next"}},
+                ])
+                self.assertFalse(claude["availability"]["tokens"])
+                self.assertFalse(claude["availability"]["input_tokens"])
+                self.assertFalse(claude["availability"]["output_tokens"])
+                self.assertFalse(claude["availability"]["cost"])
+                self.assertEqual(claude["model_stats"][0]["token_covered_executions"], 0)
+                self.assertEqual(claude["model_stats"][0]["io_covered_executions"], 0)
+                self.assertEqual(claude["model_stats"][0]["cost_covered_executions"], 0)
+
+            with self.subTest(runtime="codex", value_type=type(value).__name__):
+                codex = meter.codex_summary(self.source("codex", "gpt-5.6-sol"), [{
+                    "timestamp": "2026-07-02T00:00:00.000Z",
+                    "type": "event_msg",
+                    "payload": {"type": "token_count", "info": {
+                        "last_token_usage": {
+                            "input_tokens": value, "output_tokens": value,
+                        },
+                    }},
+                }])
+                self.assertFalse(codex["availability"]["tokens"])
+                self.assertFalse(codex["availability"]["input_tokens"])
+                self.assertFalse(codex["availability"]["output_tokens"])
+                self.assertFalse(codex["availability"]["cost"])
+                self.assertEqual(codex["model_stats"][0]["token_covered_executions"], 0)
+                self.assertEqual(codex["model_stats"][0]["io_covered_executions"], 0)
+                self.assertEqual(codex["model_stats"][0]["cost_covered_executions"], 0)
+
+        output_only = meter.codex_summary(
+            self.source("codex", "gpt-5.6-sol"), [{
+                "timestamp": "2026-07-02T00:00:00.000Z",
+                "type": "event_msg",
+                "payload": {"type": "token_count", "info": {
+                    "last_token_usage": {"input_tokens": "bad", "output_tokens": 20},
+                }},
+            }],
+        )
+        self.assertFalse(output_only["availability"]["cache"])
+        self.assertFalse(output_only["model_stats"][0]["availability"]["cache"])
+        aggregate = meter.aggregate_model_stats([output_only])["models"][0]
+        self.assertFalse(aggregate["availability"]["cache"])
+        self.assertFalse(aggregate["coverage"]["cache"]["complete"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "claude-malformed.jsonl"
+            records = [
+                {"type": "user", "timestamp": "2026-07-02T00:00:00.000Z",
+                 "message": {"content": "start"}},
+                {"type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+                 "message": {
+                     "id": "msg-1", "model": "claude-sonnet-4-6", "content": [],
+                     "usage": {"input_tokens": "bad", "output_tokens": "bad"},
+                     "stop_reason": "end_turn",
+                 }},
+                {"type": "user", "timestamp": "2026-07-02T00:00:02.000Z",
+                 "message": {"content": "next"}},
+            ]
+            path.write_text("".join(json.dumps(record) + "\n" for record in records))
+            state = meter.recompute_claude({
+                **self.source("claude"), "path": str(path), "session": path.name,
+            })
+        self.assertIsNotNone(state)
+        self.assertFalse(state["availability"]["tokens"])
+        self.assertFalse(state["availability"]["cost"])
+
+    def test_claude_summary_keeps_priced_model_coverage_in_mixed_session(self):
+        def message(message_id, model, timestamp, output_tokens):
+            return {
+                "type": "assistant", "timestamp": timestamp,
+                "message": {
+                    "id": message_id, "model": model, "content": [],
+                    "usage": {
+                        "input_tokens": 100, "output_tokens": output_tokens,
+                    },
+                    "stop_reason": "end_turn",
+                },
+            }
+
+        row = meter.claude_summary(self.source("claude"), [
+            message("msg-known", "claude-sonnet-4-6", "2026-07-02T00:00:01.000Z", 20),
+            message("msg-unknown", "unknown-model", "2026-07-02T00:00:02.000Z", 30),
+        ])
+
+        self.assertFalse(row["availability"]["cost"])
+        stats = {item["model"]: item for item in row["model_stats"]}
+        self.assertTrue(stats["claude-sonnet-4-6"]["availability"]["cost"])
+        self.assertEqual(stats["claude-sonnet-4-6"]["cost_covered_executions"], 1)
+        self.assertEqual(stats["claude-sonnet-4-6"]["cost_covered_output_tokens"], 20)
+        self.assertFalse(stats["unknown-model"]["availability"]["cost"])
+        self.assertEqual(stats["unknown-model"]["cost_covered_executions"], 0)
+        daily = {item["model"]: item for item in row["_model_daily"]}
+        self.assertTrue(daily["claude-sonnet-4-6"]["availability"]["cost"])
+        self.assertFalse(daily["unknown-model"]["availability"]["cost"])
+
+        aggregate = {
+            item["model"]: item for item in meter.aggregate_model_stats([row])["models"]
+        }
+        known = aggregate["claude-sonnet-4-6"]
+        self.assertTrue(known["availability"]["cost"])
+        self.assertEqual(known["cost_covered_executions"], 1)
+        self.assertEqual(known["cost_covered_output_tokens"], 20)
+        self.assertTrue(known["daily"][0]["availability"]["cost"])
+        self.assertFalse(aggregate["unknown-model"]["availability"]["cost"])
+
+    def test_claude_summary_ignores_zero_usage_synthetic_marker_for_cost_coverage(self):
+        def message(message_id, model, input_tokens, output_tokens):
+            return {
+                "type": "assistant", "timestamp": "2026-07-02T00:00:01.000Z",
+                "message": {
+                    "id": message_id, "model": model, "content": [],
+                    "usage": {
+                        "input_tokens": input_tokens,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0,
+                        "output_tokens": output_tokens,
+                    },
+                    "stop_reason": "end_turn",
+                },
+            }
+
+        row = meter.claude_summary(self.source("claude"), [
+            message("msg-known", "claude-sonnet-4-6", 100, 20),
+            message("msg-synthetic", "<synthetic>", 0, 0),
+        ])
+
+        self.assertTrue(row["availability"]["cost"])
+        self.assertFalse(row["cost_approx"])
+        self.assertGreater(row["cost"], 0)
 
     def test_unknown_model_keeps_cache_money_unavailable(self):
         record = {
@@ -1932,6 +2700,47 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertFalse(row["availability"]["cost"])
         self.assertEqual(row["cost"], 0.0)
 
+    def test_codex_summary_keeps_priced_model_coverage_in_mixed_session(self):
+        row = meter.codex_summary(self.source("codex", "gpt-5.6"), [
+            {"type": "turn_context", "timestamp": "2026-07-02T00:00:00.000Z",
+             "payload": {"model": "gpt-5.6"}},
+            {"timestamp": "2026-07-02T00:00:01.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "output_tokens": 20, "total_tokens": 120,
+                }},
+            }},
+            {"type": "turn_context", "timestamp": "2026-07-02T00:00:02.000Z",
+             "payload": {"model": "unknown-model"}},
+            {"timestamp": "2026-07-02T00:00:03.000Z", "payload": {
+                "type": "token_count", "info": {"last_token_usage": {
+                    "input_tokens": 100, "output_tokens": 30, "total_tokens": 130,
+                }},
+            }},
+        ])
+
+        self.assertFalse(row["availability"]["cost"])
+        stats = {item["model"]: item for item in row["model_stats"]}
+        self.assertTrue(stats["gpt-5.6"]["availability"]["cost"])
+        self.assertEqual(stats["gpt-5.6"]["cost_covered_executions"], 1)
+        self.assertEqual(stats["gpt-5.6"]["cost_covered_output_tokens"], 20)
+        self.assertFalse(stats["unknown-model"]["availability"]["cost"])
+        self.assertEqual(stats["unknown-model"]["cost_covered_executions"], 0)
+        daily = {item["model"]: item for item in row["_model_daily"]}
+        self.assertTrue(daily["gpt-5.6"]["availability"]["cost"])
+        self.assertFalse(daily["unknown-model"]["availability"]["cost"])
+
+        aggregate = {
+            item["model"]: item for item in meter.aggregate_model_stats([row])["models"]
+        }
+        self.assertTrue(aggregate["gpt-5.6"]["availability"]["cost"])
+        self.assertEqual(aggregate["gpt-5.6"]["cost_covered_executions"], 1)
+        self.assertEqual(aggregate["gpt-5.6"]["cost_covered_output_tokens"], 20)
+        self.assertTrue(aggregate["gpt-5.6"]["daily"][0]["availability"]["cost"])
+        self.assertEqual(
+            aggregate["gpt-5.6"]["daily"][0]["cost_covered_output_tokens"], 20,
+        )
+        self.assertFalse(aggregate["unknown-model"]["availability"]["cost"])
+
     def test_codex_summary_exposes_input_output_and_model_stats(self):
         objs = [
             {"type": "turn_context", "timestamp": "2026-07-02T00:00:00.000Z",
@@ -1943,7 +2752,8 @@ class SessionSummaryStatsTests(unittest.TestCase):
                 "type": "token_count", "info": {"model_context_window": 200000,
                                                 "last_token_usage": {
                     "input_tokens": 100, "cached_input_tokens": 40,
-                    "output_tokens": 20, "total_tokens": 120,
+                    "output_tokens": 20, "reasoning_output_tokens": 8,
+                    "total_tokens": 120,
                 }},
             }},
             {"timestamp": "2026-07-02T00:00:02.000Z", "payload": {
@@ -1955,6 +2765,10 @@ class SessionSummaryStatsTests(unittest.TestCase):
         self.assertEqual(row["output_tokens"], 20)
         self.assertEqual(row["model_stats"][0]["model"], "gpt-5.6")
         self.assertEqual(row["model_stats"][0]["tokens"], 120)
+        self.assertEqual(row["model_stats"][0]["reasoning_tokens"], 8)
+        self.assertEqual(row["model_stats"][0]["reasoning_output_tokens"], 20)
+        self.assertEqual(row["model_stats"][0]["reasoning_executions"], 1)
+        self.assertEqual(row["model_stats"][0]["reasoning_unavailable_executions"], 0)
         self.assertEqual(row["primary_model"], "gpt-5.6")
         self.assertEqual(row["reasoning_effort"], "xhigh")
         self.assertEqual(row["session_name"], "Summary stats")
@@ -2664,15 +3478,23 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
     def test_session_detail_reuses_cached_cross_session_snapshot(self):
         handler = object.__new__(meter.H)
         handler.path = "/session?id=session-1"
-        handler._send = lambda *_args, **_kwargs: None
+        sent = []
+        handler._send = lambda body, *_args, **_kwargs: sent.append(json.loads(body))
         cached = {"current_sessions": []}
         rebuilder = mock.Mock(return_value={"current_sessions": []})
         state = {"source": {"id": "session-1"}, "timing": {}}
+        source = {"id": "session-1", "path": "/logs/exact.jsonl"}
+        summary = {
+            "model_stats": [{"model": "exact-model", "executions": 2}],
+            "usage_basis": "reported",
+            "provenance": {"usage_basis": "reported"},
+        }
         saved_cache = dict(meter._xsess)
         try:
             meter._xsess["data"] = cached
-            with mock.patch.object(meter, "find_session", return_value={"id": "session-1"}), \
+            with mock.patch.object(meter, "find_session", return_value=source), \
                     mock.patch.object(meter, "cached_session_state", return_value=state), \
+                    mock.patch.object(meter, "session_summary", return_value=summary) as selected_summary, \
                     mock.patch.object(meter, "cross_session", rebuilder), \
                     mock.patch.object(meter, "attach_cross_session") as attach:
                 handler.do_GET()
@@ -2682,6 +3504,8 @@ class LiveCrossSessionRefreshTests(unittest.TestCase):
 
         rebuilder.assert_not_called()
         attach.assert_called_once_with(state, cached)
+        selected_summary.assert_called_once_with(source)
+        self.assertEqual(sent[0]["selected_stats"], summary)
 
     def test_full_sse_queue_keeps_subscriber_and_coalesces_to_latest_state(self):
         q_ = meter.queue.Queue(maxsize=2)
@@ -2919,7 +3743,7 @@ class DashboardLayoutTests(unittest.TestCase):
         self.assertNotIn("data-panel=efficiency", self.page)
         self.assertNotIn("id=panel-efficiency", self.page)
         self.assertIn("const PANEL_KEYS=['summary'];", self.page)
-        self.assertIn("efficiency:'summary'", self.page)
+        self.assertNotIn("efficiency:'summary'", self.page)
 
     def test_dashboard_uses_splunk_favicon_and_bundled_wordmark(self):
         self.assertIn('rel=icon type="image/svg+xml"', self.page)
@@ -2979,13 +3803,15 @@ console.log(JSON.stringify({
             "id=preview-surface-tools", "id=preview-surface-insights",
             "id=preview-surface-alerts", "id=panel-activity", "id=panel-tools",
             "id=panel-insights", "id=panel-alerts", "function renderTrace(",
-            "function renderTools(", "function renderInsights(",
+            "function renderTools(",
         ):
             self.assertNotIn(marker, self.page)
         self.assertIn("const PANEL_KEYS=['summary'];", self.page)
         self.assertIn("const CURRENT_PANEL_KEYS=['sessions','run'];", self.page)
-        for removed_route in ("activity", "tools", "insights", "alerts"):
+        for removed_route in ("activity", "tools", "alerts"):
             self.assertIn(f"{removed_route}:'summary'", self.page)
+        self.assertNotIn("insights:'summary'", self.page)
+        self.assertNotIn("efficiency:'summary'", self.page)
 
     def test_codex_session_detail_links_to_the_desktop_thread(self):
         for marker in (
@@ -3002,7 +3828,6 @@ console.log(JSON.stringify({
             self.assertIn(marker, self.page)
 
     def test_browser_operational_alerts_are_budget_only(self):
-        self.assertNotIn("function renderInsights(", self.page)
         self.assertNotIn("function isNotifiableInsight(i)", self.page)
         self.assertNotIn("fireNotification('Token insight'", self.page)
         self.assertNotIn("id=spike", self.page)
@@ -3203,7 +4028,7 @@ console.log(JSON.stringify({
         )
         for marker in (
             "id=current-tabs", "data-current-panel=", "id=preview-activity-slot",
-            "id=preview-tools-slot", "id=preview-insights-slot",
+            "id=preview-tools-slot", "id=preview-efficiency-slot",
             "id=preview-alerts-slot", "id=preview-surface-activity",
             "id=preview-surface-tools", "id=preview-surface-insights",
             "id=preview-surface-alerts", "id=session-activity-home",
@@ -3223,13 +4048,1168 @@ console.log(JSON.stringify({
                        "id=m-table", "renderModelStats", "aggregateModelDays"):
             self.assertIn(marker, self.page)
         self.assertRegex(self.page, r"id=tab-models[^>]*>.*?<span class=tabLabel>Models</span>")
-        self.assertIn("function openTopLevelRoute(route){window.scrollTo(0,0);setHashRoute(route);}", self.page)
+        self.assertIn("if(routedSessionId()&&history.pushState)", self.page)
         self.assertIn("$('tab-models').onclick=()=>openTopLevelRoute('models')", self.page)
         self.assertIn("if(h==='models'||h==='frustration')", self.page)
         self.assertLess(self.page.index("id=tab-session"), self.page.index("id=tab-models"))
         self.assertNotIn("Timing evidence", self.page)
         self.assertIn("Observed output pace is a secondary diagnostic.", self.page)
         self.assertIn("colspan=8", self.page)
+
+    def test_selected_session_token_split_fills_the_chart_column_gap(self):
+        run_grid = self.page.split('<div class=previewRunGrid>', 1)[1].split(
+            '<aside class=previewDecision>', 1
+        )[0]
+        self.assertIn('class=previewChartColumn', run_grid)
+        self.assertIn('id=preview-run-chart-slot', run_grid)
+        self.assertIn('id=preview-token-split-slot', run_grid)
+        self.assertLess(
+            run_grid.index('id=preview-run-chart-slot'),
+            run_grid.index('id=preview-token-split-slot'),
+        )
+        self.assertIn(
+            ".previewChartColumn{display:grid;align-content:start;gap:12px;min-width:0}",
+            self.page,
+        )
+
+    def test_efficiency_is_the_only_top_level_name_and_route(self):
+        for marker in (
+            "id=tab-efficiency", "id=view-efficiency", "data-page-signal=efficiency",
+            "id=e-project", "id=e-model-picker", "id=e-model-options", "id=e-model-summary",
+            "id=e-range", "id=e-output-dollar", "id=e-reasoning-ratio",
+            "id=e-output-dollar-chart", "id=e-reasoning-chart",
+            "id=e-context-load", "id=e-output-execution", "id=e-model-table",
+            "data-efficiency-sort=cost", "data-efficiency-sort=output_per_dollar",
+            "function renderEfficiency", "function efficiencyMetrics",
+            "function renderEfficiencyChart", "function sortEfficiencyRows",
+            "y2=\"${pad.top}\"", "r=\"3.5\"",
+            "$('tab-efficiency').onclick=()=>openTopLevelRoute('efficiency')",
+            "if(h==='efficiency')", "renderActiveEfficiency()",
+            "tm_efficiency_range",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertRegex(
+            self.page,
+            r"id=tab-efficiency[^>]*>.*?<span class=tabLabel>Efficiency</span>",
+        )
+        nav_ids = [
+            "tab-session", "tab-daily", "tab-models", "tab-efficiency",
+            "tab-learn", "tab-capabilities", "tab-settings",
+        ]
+        positions = [self.page.index(f"id={tab_id}") for tab_id in nav_ids]
+        self.assertEqual(positions, sorted(positions))
+        efficiency = self.page.split("<div class=view id=view-efficiency>", 1)[1].split(
+            "<div class=view id=view-learn>", 1
+        )[0]
+        self.assertIn("Output / $", efficiency)
+        self.assertIn("Reasoning ratio", efficiency)
+        self.assertIn("Mechanical efficiency", efficiency)
+        self.assertIn("Spend", efficiency)
+        self.assertNotIn("Cache leverage", efficiency)
+        self.assertNotIn("Retry waste", efficiency)
+        self.assertNotIn("Efficiency score", efficiency)
+        self.assertNotIn("recommendation", efficiency.lower())
+        for stale in (
+            "id=tab-insights", "id=view-insights", "route:'insights'",
+            "tm_insights_range", "function renderInsights",
+        ):
+            self.assertNotIn(stale, self.page)
+
+    def test_efficiency_table_keeps_model_app_and_effort_as_columns(self):
+        efficiency = self.page.split("<div class=view id=view-efficiency>", 1)[1].split(
+            "<div class=view id=view-learn>", 1
+        )[0]
+        for header in (">Model<", ">App<", ">Reasoning effort<"):
+            self.assertIn(header, efficiency)
+        self.assertIn(
+            "<td><div class=modelName title=\"${esc(row.model)}\">${esc(row.model)}</div></td><td>${esc(row.runtime)}",
+            self.page,
+        )
+
+    def test_models_table_labels_effort_qualified_runtime_rows(self):
+        self.assertIn(
+            "querySelectorAll('.modelRuntime').forEach((cell,index)=>cell.append(document.createTextNode(` · ${modelEffortLabel(tableRows[index])}`)))",
+            self.page,
+        )
+
+    def test_selected_session_has_a_compact_two_metric_efficiency_module(self):
+        summary = self.page.split('<div class="session-panel on" id=panel-summary>', 1)[1].split(
+            '<details class=usageDetails', 1
+        )[0]
+        for marker in (
+            "id=session-efficiency", "id=session-output-dollar",
+            "id=session-output-dollar-note", "id=session-reasoning-ratio",
+            "id=session-reasoning-ratio-note", "function renderSessionEfficiency",
+            "function sessionEfficiencySource", "aggregateModelDays(source.model_stats||[])",
+            "id=preview-run-efficiency-slot",
+            "mountCurrentModule('preview-run-efficiency-slot','session-efficiency')",
+            "['session-efficiency-home','session-efficiency']",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertLess(summary.index("id=session-efficiency"), summary.index("id=session-budget-home"))
+        session_efficiency = summary.split("id=session-efficiency", 1)[1].split(
+            "id=session-budget-home", 1
+        )[0]
+        self.assertEqual(session_efficiency.count("class=sessionEfficiencyMetric"), 2)
+        self.assertIn("Output / $", session_efficiency)
+        self.assertIn("Reasoning ratio", session_efficiency)
+        self.assertNotIn("<svg", session_efficiency)
+        self.assertNotIn("By model", session_efficiency)
+
+    def test_selected_session_efficiency_is_inside_the_run_status_card(self):
+        run_surface = self.page.split('id=preview-surface-run', 1)[1].split(
+            '<div class=previewKpis', 1
+        )[0]
+        status_card = run_surface.split('id=preview-status-card', 1)[1].split(
+            '</section>', 1
+        )[0]
+        self.assertIn('id=preview-run-efficiency-slot', status_card)
+        self.assertLess(
+            status_card.index('id=preview-run-efficiency-slot'),
+            status_card.index('class=previewPressure'),
+        )
+        self.assertIn(
+            ".previewStatus .previewRunEfficiencySlot .sessionEfficiency{grid-template-columns:repeat(2",
+            self.page,
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_session_efficiency_uses_the_matching_cross_session_summary(self):
+        match = re.search(
+            r"function sessionEfficiencySource\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = r"""
+const stateSessionId=state=>state?.source?.id||null;
+""" + match.group(0) + r"""
+const matched={source:{id:'selected',path:'/sessions/right.jsonl'},model_stats:[],xsession:{sessions:[
+  {id:'other',path:'/sessions/other.jsonl',model_stats:[{model:'wrong-id'}]},
+  {id:'selected',path:'/sessions/wrong.jsonl',model_stats:[{model:'wrong-trace'}]},
+  {id:'selected',path:'/sessions/right.jsonl',model_stats:[{model:'right'}],usage_basis:'reported'},
+]}};
+const direct={source:{id:'direct'},model_stats:[{model:'fallback'}],xsession:{sessions:[]}};
+const stale={source:{id:'selected',path:'/sessions/missing.jsonl'},model_stats:[{model:'fail-closed'}],xsession:{sessions:[
+  {id:'selected',path:'/sessions/wrong.jsonl',model_stats:[{model:'wrong-trace'}]},
+]}};
+const attached={source:{id:'selected',path:'/sessions/right.jsonl'},selected_stats:{model_stats:[{model:'attached-exact'}],usage_basis:'reported'},xsession:{sessions:[
+  {id:'selected',path:'/sessions/right.jsonl',model_stats:[{model:'stale-cross'}]},
+]}};
+console.log(JSON.stringify({matched:sessionEfficiencySource(matched),direct:sessionEfficiencySource(direct),stale:sessionEfficiencySource(stale),attached:sessionEfficiencySource(attached)}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["matched"]["model_stats"][0]["model"], "right")
+        self.assertEqual(payload["matched"]["usage_basis"], "reported")
+        self.assertEqual(payload["direct"]["model_stats"][0]["model"], "fallback")
+        self.assertEqual(payload["stale"]["model_stats"][0]["model"], "fail-closed")
+        self.assertEqual(payload["attached"]["model_stats"][0]["model"], "attached-exact")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_session_efficiency_recovers_explicit_reasoning_coverage_from_summary_counts(self):
+        match = re.search(
+            r"function normalizeSessionEfficiencyAggregate\(.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  exact:normalizeSessionEfficiencyAggregate({
+    executions:10,reasoning_executions:8,reasoning_tokens:30,
+    reasoning_output_tokens:80,availability:{reasoning_tokens:false},
+  }),
+  structural:normalizeSessionEfficiencyAggregate({
+    executions:10,reasoning_executions:0,reasoning_tokens:0,
+    reasoning_output_tokens:0,thinking_executions:4,availability:{},
+  }),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["exact"]["availability"]["reasoning_tokens"])
+        self.assertFalse(payload["structural"]["availability"]["reasoning_tokens"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_metrics_are_bounded_and_keep_unavailable_evidence_null(self):
+        match = re.search(
+            r"function efficiencyMetrics\(row\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs one shared efficiency formula")
+        script = match.group(0) + r"""
+const complete = efficiencyMetrics({
+  input_tokens:1000, output_tokens:200, cost:2, executions:2,
+  token_covered_executions:2, io_covered_executions:2,
+  cost_covered_output_tokens:200, cost_covered_cost:2,
+  cache_read_tokens:500, reasoning_tokens:50, reasoning_output_tokens:100,
+  reasoning_executions:1, reasoning_unavailable_executions:1,
+  attempts:4, retries:1, failed_attempts:1, attempt_samples:1,
+  availability:{tokens:true,cost:true,cache:true,reasoning_tokens:true,attempts:true},
+});
+const missing = efficiencyMetrics({
+  input_tokens:100, output_tokens:20, cost:0, executions:0,
+  availability:{tokens:true,cost:false,cache:false,reasoning_tokens:false,attempts:false},
+});
+const partial = efficiencyMetrics({
+  input_tokens:110, output_tokens:110, cost:.1, executions:3,
+  token_covered_executions:2, io_covered_executions:1,
+  cost_covered_output_tokens:10, cost_covered_cost:.1,
+  coverage:{tokens:{complete:false}},
+  availability:{tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+const coveredZero = efficiencyMetrics({
+  input_tokens:10, output_tokens:0, cost:1, executions:1,
+  token_covered_executions:1, io_covered_executions:1,
+  cost_covered_executions:1, cost_covered_output_tokens:0,
+  cost_covered_cost:1,
+  availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+const inputOnly = efficiencyMetrics({
+  input_tokens:10, output_tokens:0, cost:1, executions:1,
+  token_covered_executions:0, io_covered_executions:0,
+  cost_covered_executions:0,
+  cost_covered_output_tokens:0,
+  availability:{tokens:true,input_tokens:true,output_tokens:false,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+const zeroInput = efficiencyMetrics({
+  input_tokens:0, output_tokens:10, cost:1, executions:1,
+  token_covered_executions:1, io_covered_executions:1,
+  cost_covered_executions:1, cost_covered_output_tokens:10,
+  cost_covered_cost:1,
+  availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false,reasoning_tokens:false,attempts:false},
+});
+console.log(JSON.stringify({complete,missing,partial,coveredZero,inputOnly,zeroInput}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["complete"], {
+            "output_per_dollar": 100,
+            "reasoning_ratio": 0.5,
+            "context_load": 5,
+            "cache_leverage": 0.5,
+            "retry_waste": 0.25,
+            "failure_rate": 0.25,
+            "output_per_execution": 100,
+        })
+        self.assertEqual(payload["missing"], {
+            "output_per_dollar": None,
+            "reasoning_ratio": None,
+            "context_load": 5,
+            "cache_leverage": None,
+            "retry_waste": None,
+            "failure_rate": None,
+            "output_per_execution": None,
+        })
+        self.assertEqual(payload["partial"]["output_per_dollar"], 100)
+        self.assertEqual(payload["partial"]["output_per_execution"], 55)
+        self.assertIsNone(payload["partial"]["context_load"])
+        self.assertEqual(payload["coveredZero"]["output_per_dollar"], 0)
+        self.assertEqual(payload["coveredZero"]["output_per_execution"], 0)
+        self.assertIsNone(payload["inputOnly"]["output_per_dollar"])
+        self.assertIsNone(payload["inputOnly"]["output_per_execution"])
+        self.assertEqual(payload["zeroInput"]["context_load"], 0)
+
+    def test_efficiency_uses_one_range_for_overall_and_per_model_statistics(self):
+        for marker in (
+            "const EFFICIENCY_RANGES=['today','yesterday','7','30','90','all']",
+            "tm_efficiency_range", "tm_efficiency_project", "efficiencyRangeWindow", "efficiencyModelRows",
+            "aggregateModelDays(efficiencyModelRows", "efficiencyMetrics(overall)",
+            "efficiencyMetrics(row.window)", "efficiencyTrendDays",
+            "Thinking / reasoning coverage", "thinking_executions",
+            "token ratio unavailable", "e-reasoning-chart",
+            "includes local estimates", "token_covered_executions",
+            "Compare similar work · no quality judgment.",
+        ):
+            self.assertIn(marker, self.page)
+
+        self.assertIn(
+            "metric.output_per_dollar===null?'unavailable':data.coverage?.cost?.complete?'covered':'partial'",
+            self.page,
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_model_filters_keep_runtime_identities_distinct(self):
+        match = re.search(
+            r"function filterEfficiencyModels\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Efficiency needs to filter by model-runtime ID")
+        script = match.group(0) + r"""
+const rows=[
+  {id:'gpt-5.6::Codex',model:'gpt-5.6',runtime:'Codex'},
+  {id:'gpt-5.6::Cursor',model:'gpt-5.6',runtime:'Cursor'},
+  {id:'claude-opus::Claude Code',model:'claude-opus',runtime:'Claude Code'},
+];
+console.log(JSON.stringify({
+  all:filterEfficiencyModels(rows,[]).map(row=>row.id),
+  selected:filterEfficiencyModels(rows,['gpt-5.6::Cursor']).map(row=>row.id),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "all": ["gpt-5.6::Codex", "gpt-5.6::Cursor", "claude-opus::Claude Code"],
+            "selected": ["gpt-5.6::Cursor"],
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_legacy_model_runtime_filter_expands_to_effort_rows(self):
+        match = re.search(
+            r"function migrateModelRuntimeFilters\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Legacy model filters need effort-row migration")
+        script = match.group(0) + r"""
+const rows=[
+  {id:'gpt-5.6::Codex::high',model:'gpt-5.6',runtime:'Codex'},
+  {id:'gpt-5.6::Codex::xhigh',model:'gpt-5.6',runtime:'Codex'},
+  {id:'gpt-5.6::Codex::unavailable',model:'gpt-5.6',runtime:'Codex'},
+  {id:'gpt-5.6::Cursor::unavailable',model:'gpt-5.6',runtime:'Cursor'},
+];
+console.log(JSON.stringify({
+  legacy:migrateModelRuntimeFilters(['gpt-5.6::Codex'],rows),
+  unavailable:migrateModelRuntimeFilters(['gpt-5.6::Codex::unavailable'],rows),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "legacy": [
+                "gpt-5.6::Codex::high", "gpt-5.6::Codex::xhigh",
+                "gpt-5.6::Codex::unavailable",
+            ],
+            "unavailable": ["gpt-5.6::Codex::unavailable"],
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_model_toggle_waits_for_the_selected_project_scope(self):
+        match = re.search(
+            r"function rerenderActiveEfficiency\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Efficiency needs to avoid rendering stale project stats")
+        script = match.group(0) + r"""
+let activeEfficiencyStats={models:['all-projects']};
+let activeEfficiencyScope='';
+let efficiencyProject='project-b';
+let rendered=0,requested=0;
+function renderEfficiency(){rendered++;}
+function renderActiveEfficiency(){requested++;}
+rerenderActiveEfficiency();
+activeEfficiencyScope='project-b';
+rerenderActiveEfficiency();
+console.log(JSON.stringify({rendered,requested}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {"rendered": 1, "requested": 1})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_model_effort_label_keeps_known_and_unavailable_budgets_separate(self):
+        match = re.search(r"function modelEffortLabel\(.*?\n\}", self.page, re.DOTALL)
+        self.assertIsNotNone(match, "Model rows need an explicit effort-group label")
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  known:modelEffortLabel({reasoning_effort:'xhigh'}),
+  opus:modelEffortLabel({thinking_executions:2}),
+  missing:modelEffortLabel({}),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "known": "xhigh",
+            "opus": "thinking unavailable",
+            "missing": "unavailable",
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_delta_compares_latest_two_covered_days(self):
+        match = re.search(r"function efficiencyTrendDelta\(.*?\n\}", self.page, re.DOTALL)
+        self.assertIsNotNone(match, "Efficiency charts need a comparable-day delta helper")
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  up:efficiencyTrendDelta([
+    {metrics:{output_per_dollar:100}}, {metrics:{output_per_dollar:null}},
+    {metrics:{output_per_dollar:125}},
+  ],'output_per_dollar'),
+  down:efficiencyTrendDelta([
+    {metrics:{reasoning_ratio:.5}}, {metrics:{reasoning_ratio:.4}},
+  ],'reasoning_ratio'),
+  unavailable:efficiencyTrendDelta([
+    {metrics:{output_per_dollar:0}}, {metrics:{output_per_dollar:25}},
+  ],'output_per_dollar'),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "up": {"text": "↑ 25.0% vs prior covered day", "direction": "up"},
+            "down": {"text": "↓ 20.0% vs prior covered day", "direction": "down"},
+            "unavailable": {"text": "No comparable prior day", "direction": ""},
+        })
+        self.assertIn('id=e-output-dollar-change', self.page)
+        self.assertIn('id=e-reasoning-change', self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_charts_smooth_daily_segments_and_default_to_seven_days(self):
+        match = re.search(
+            r"function efficiencyChartSmoothPath\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(
+            match, "Efficiency charts need a smooth path helper for daily segments",
+        )
+        script = match.group(0) + r"""
+const rows=[
+  {index:0,value:50}, {index:1,value:30}, {index:2,value:10},
+];
+console.log(JSON.stringify({
+  smooth:efficiencyChartSmoothPath(rows,row=>row.index*10,value=>value),
+  pair:efficiencyChartSmoothPath(rows.slice(0,2),row=>row.index*10,value=>value),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "smooth": "M0.0 50.0 C3.3 43.3 6.7 36.7 10.0 30.0 C13.3 23.3 16.7 16.7 20.0 10.0",
+            "pair": "M0.0 50.0 L10.0 30.0",
+        })
+        self.assertIn("let efficiencyRange=localStorage.getItem('tm_efficiency_range')||'7';", self.page)
+        self.assertIn("if(!EFFICIENCY_RANGES.includes(efficiencyRange))efficiencyRange='7';", self.page)
+        self.assertIn('<option value=7 selected>Last 7 days</option>', self.page)
+        self.assertIn(
+            "renderEfficiencyTrendDelta('e-reasoning-change',reasoningDelta,'down',!comparison);",
+            self.page,
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_period_comparison_matches_today_yesterday_and_range_windows(self):
+        date_key = re.search(r"function dateKeyAgo\(.*\n", self.page)
+        self.assertIsNotNone(date_key, "Efficiency windows need date-key arithmetic")
+        functions = ["function localDateKey(date){return String(date.getFullYear())+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');}", date_key.group(0)]
+        for name in (
+            "modelRangeWindow", "efficiencyComparisonWindows", "efficiencyPeriodDelta",
+        ):
+            match = re.search(rf"function {name}\(.*?\n\}}", self.page, re.DOTALL)
+            self.assertIsNotNone(match, f"Efficiency needs {name} for matched comparisons")
+            functions.append(match.group(0))
+        script = "\n".join(functions) + r"""
+const now=new Date(2026,8,1,15,20,0);
+const today=efficiencyComparisonWindows('today',now);
+const yesterday=efficiencyComparisonWindows('yesterday',now);
+const seven=efficiencyComparisonWindows('7',now);
+console.log(JSON.stringify({
+  all:efficiencyComparisonWindows('all',now),
+  today:{current:today.current.days,prior:today.prior.days,label:today.label},
+  yesterday:{current:yesterday.current.days,prior:yesterday.prior.days,label:yesterday.label},
+  seven:{current:seven.current.days,prior:seven.prior.days,label:seven.label},
+  increase:efficiencyPeriodDelta({output_per_dollar:125},{output_per_dollar:100},'output_per_dollar','yesterday'),
+  unavailable:efficiencyPeriodDelta({output_per_dollar:25},{output_per_dollar:0},'output_per_dollar','yesterday'),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "all": None,
+            "today": {
+                "current": ["2026-09-01"], "prior": ["2026-08-31"],
+                "label": "yesterday",
+            },
+            "yesterday": {
+                "current": ["2026-08-31"], "prior": ["2026-08-30"],
+                "label": "the day before",
+            },
+            "seven": {
+                "current": ["2026-08-26", "2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30", "2026-08-31", "2026-09-01"],
+                "prior": ["2026-08-19", "2026-08-20", "2026-08-21", "2026-08-22", "2026-08-23", "2026-08-24", "2026-08-25"],
+                "label": "prior 7 days",
+            },
+            "increase": {"text": "↑ 25.0% vs yesterday", "direction": "up"},
+            "unavailable": {"text": "No comparable prior period", "direction": ""},
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_comparison_badge_hides_without_a_matching_period(self):
+        tone_match = re.search(
+            r"function efficiencyTrendTone\(.*?\n\}", self.page, re.DOTALL,
+        )
+        render_match = re.search(
+            r"function renderEfficiencyTrendDelta\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(tone_match)
+        self.assertIsNotNone(render_match)
+        script = tone_match.group(0) + "\n" + render_match.group(0) + r"""
+const badge={hidden:false,dataset:{},primary:{textContent:''},secondary:{textContent:''},querySelector(selector){return selector==='strong'?this.primary:this.secondary;}};
+const $=id=>badge;
+renderEfficiencyTrendDelta('e-output-dollar-change',{text:'No comparable prior period',direction:''},'up',true);
+console.log(JSON.stringify({hidden:badge.hidden,direction:badge.dataset.direction}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {"hidden": True, "direction": ""})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_comparison_badge_keeps_the_prior_day_relation(self):
+        tone_match = re.search(
+            r"function efficiencyTrendTone\(.*?\n\}", self.page, re.DOTALL,
+        )
+        match = re.search(
+            r"function renderEfficiencyTrendDelta\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(tone_match)
+        self.assertIsNotNone(match, "Efficiency badges need one renderer for comparison copy")
+        script = tone_match.group(0) + "\n" + match.group(0) + r"""
+const badge={dataset:{},primary:{textContent:''},secondary:{textContent:''},querySelector(selector){return selector==='strong'?this.primary:this.secondary;}};
+const $=id=>badge;
+renderEfficiencyTrendDelta('e-output-dollar-change',{text:'↓ 7.5% vs prior covered day',direction:'down'});
+const available={primary:badge.primary.textContent,secondary:badge.secondary.textContent,direction:badge.dataset.direction};
+renderEfficiencyTrendDelta('e-output-dollar-change',{text:'No comparable prior day',direction:''});
+console.log(JSON.stringify({available,unavailable:{primary:badge.primary.textContent,secondary:badge.secondary.textContent,direction:badge.dataset.direction}}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "available": {
+                "primary": "↓ 7.5%",
+                "secondary": "vs prior covered day",
+                "direction": "down",
+            },
+            "unavailable": {
+                "primary": "No comparable prior day",
+                "secondary": "",
+                "direction": "",
+            },
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_comparison_tone_respects_each_metric_direction(self):
+        match = re.search(
+            r"function efficiencyTrendTone\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Efficiency badges need an explicit metric direction rule")
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  outputUp:efficiencyTrendTone({direction:'up'},'up'),
+  outputDown:efficiencyTrendTone({direction:'down'},'up'),
+  contextDown:efficiencyTrendTone({direction:'down'},'down'),
+  contextUp:efficiencyTrendTone({direction:'up'},'down'),
+  unavailable:efficiencyTrendTone({direction:''},'up'),
+  neutral:efficiencyTrendTone({direction:'up'},''),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "outputUp": "improving",
+            "outputDown": "degrading",
+            "contextDown": "improving",
+            "contextUp": "degrading",
+            "unavailable": "",
+            "neutral": "",
+        })
+
+    def test_efficiency_headlines_keep_prior_day_comparisons_beside_values(self):
+        efficiency = self.page.split("<div class=view id=view-efficiency>", 1)[1].split(
+            "<div class=view id=view-learn>", 1,
+        )[0]
+        for value_id, comparison_id in (
+            ("e-output-dollar", "e-output-dollar-change"),
+            ("e-reasoning-ratio", "e-reasoning-change"),
+        ):
+            self.assertRegex(
+                efficiency,
+                rf'<div class=efficiencyValueRow><div class="v mono" id={value_id}>.*?</div><div class=efficiencyTrendDelta id={comparison_id}[^>]*>',
+            )
+        self.assertIn(
+            ".efficiencyValueRow,.efficiencySupportValueRow{display:flex;align-items:center;justify-content:space-between",
+            self.page,
+        )
+        self.assertIn(
+            ".efficiencyTrendDelta{display:grid;justify-items:start;flex:0 0 auto",
+            self.page,
+        )
+        self.assertIn(
+            ".efficiencyTrendDelta{display:grid;justify-items:start;flex:0 0 auto;gap:2px;width:132px",
+            self.page,
+        )
+        self.assertIn(
+            ".efficiencySupportDelta{width:132px;padding:6px 9px}",
+            self.page,
+        )
+        self.assertIn(
+            ".efficiencySupportDelta strong{font-size:16px}",
+            self.page,
+        )
+        self.assertIn(
+            ".efficiencySupportDelta span{font-size:10px}",
+            self.page,
+        )
+        self.assertNotIn(
+            ".efficiencyHeadline.reasoning .efficiencyTrendDelta{", self.page,
+            "directional reasoning badges must not be forced to the neutral violet tone",
+        )
+        for marker in (
+            "id=e-context-load-change",
+            "id=e-output-execution-change",
+            "efficiencySupportDelta",
+        ):
+            self.assertIn(marker, efficiency)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_presentation_labels_each_metric(self):
+        match = re.search(
+            r"function efficiencyChartMetricPresentation\(.*?\n\}", self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(
+            match, "Efficiency charts need metric-specific visible labels",
+        )
+        script = r"""
+function compactNumber(value){return value>=1000?(value/1000).toFixed(1).replace(/\.0$/,'')+'K':String(value);}
+function pct(value){return (value*100).toFixed(1)+'%';}
+function efficiencyDecimal(value){return String(value)+'x';}
+""" + match.group(0) + r"""
+console.log(JSON.stringify({
+  dollar:efficiencyChartMetricPresentation(5200,'output_per_dollar'),
+  reasoning:efficiencyChartMetricPresentation(.34,'reasoning_ratio'),
+  context:efficiencyChartMetricPresentation(256,'context_load'),
+  execution:efficiencyChartMetricPresentation(484,'output_per_execution'),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "dollar": {"axis": "5.2K", "detail": "5,200 output tokens / $"},
+            "reasoning": {"axis": "34.0%", "detail": "34.0% reasoning"},
+            "context": {"axis": "256x", "detail": "256x context / output"},
+            "execution": {"axis": "484", "detail": "484 output tokens / exec"},
+        })
+
+    def test_efficiency_support_cards_include_compact_daily_charts(self):
+        efficiency = self.page.split("<div class=view id=view-efficiency>", 1)[1].split(
+            "<div class=view id=view-learn>", 1,
+        )[0]
+        for metric, label in (
+            ("context-load", "Daily context load"),
+            ("output-execution", "Daily output per execution"),
+        ):
+            self.assertIn(
+                f'id=e-{metric}-chart viewBox="0 0 520 96" preserveAspectRatio=none role=img tabindex=0 aria-label="{label}"',
+                efficiency,
+            )
+        self.assertIn(".efficiencySupportItem .efficiencyChart{height:56px}", self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_project_filter_groups_non_folder_labels(self):
+        match = re.search(r"function projectFilterValue\(.*?\n\}", self.page, re.DOTALL)
+        self.assertIsNotNone(match, "Project filters need folder-only values")
+        script = "const OTHER_LOCAL_SESSIONS_PROJECT='__other_local_sessions__';\n" + match.group(0) + r"""
+console.log(JSON.stringify([
+  projectFilterValue('~/Documents/github/token-meter'),
+  projectFilterValue('/repo/a'), projectFilterValue('CLI'),
+  projectFilterValue('No project'), projectFilterValue('/private/tmp/run'),
+  projectFilterValue('~/Documents/Codex/2026-08-31/task'),
+]));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), [
+            "~/Documents/github/token-meter", "/repo/a",
+            "__other_local_sessions__", "__other_local_sessions__",
+            "__other_local_sessions__",
+            "__other_local_sessions__",
+        ])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_saved_non_folder_project_filters_migrate_to_other_local_sessions(self):
+        value_match = re.search(r"function projectFilterValue\(.*?\n\}", self.page, re.DOTALL)
+        filter_match = re.search(r"function storedModelFilterId\(.*?\n\}", self.page, re.DOTALL)
+        migration_match = re.search(r"function migrateStoredProjectFilters\(.*?\n\}", self.page, re.DOTALL)
+        self.assertIsNotNone(value_match, "Project filters need folder-only values")
+        self.assertIsNotNone(filter_match, "Stored project filter values need a safe aggregate-ID boundary")
+        self.assertIsNotNone(migration_match, "Stored project filters need a grouping migration")
+        script = "const OTHER_LOCAL_SESSIONS_PROJECT='__other_local_sessions__';\n" + value_match.group(0) + "\n" + filter_match.group(0) + "\n" + migration_match.group(0) + r"""
+const storage=new Map([
+ ['tm_model_project','CLI'],
+ ['tm_efficiency_project','No project'],
+ ['tm_global_project','~/Documents/Codex/2026-08-31/task'],
+ ['tm_model_project_filters',JSON.stringify({CLI:['gpt::Codex','gpt-5.6::Codex::xhigh','/Users/alice/private-project','gpt::Codex\t','gpt::Codex\u0000']})],
+ ['tm_efficiency_project_filters',JSON.stringify({'No project':['gpt::Codex']})],
+]);
+globalThis.localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value)),removeItem:key=>storage.delete(key)};
+['tm_model_project','tm_efficiency_project','tm_global_project'].forEach(key=>migrateStoredProjectFilters(key));
+migrateStoredProjectFilters('tm_model_project_filters',true);
+migrateStoredProjectFilters('tm_efficiency_project_filters',true);
+console.log(JSON.stringify(Object.fromEntries(storage)));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        stored = json.loads(result.stdout)
+        other = "__other_local_sessions__"
+        self.assertEqual(stored["tm_model_project"], other)
+        self.assertEqual(stored["tm_efficiency_project"], other)
+        self.assertEqual(stored["tm_global_project"], other)
+        self.assertEqual(json.loads(stored["tm_model_project_filters"]), {other: ["gpt::Codex", "gpt-5.6::Codex::xhigh"]})
+        self.assertEqual(json.loads(stored["tm_efficiency_project_filters"]), {other: ["gpt::Codex"]})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_range_aggregation_keeps_only_efforts_in_range(self):
+        match = re.search(
+            r"function aggregateModelDays\(rows\)\{.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match, "Efficiency needs range-scoped model aggregation")
+        script = r"""
+const MODEL_COUNTER_KEYS=[],MODEL_ARRAY_KEYS=[];
+const metricAvailable=()=>false,metricPartial=()=>false,hasLocalEstimate=()=>false;
+const usageBasis=()=> 'reported',modelWaitDistribution=()=>({median_wait_s:0,p95_wait_s:0});
+const modelMedian=()=>0;
+""" + match.group(0) + r"""
+console.log(JSON.stringify(aggregateModelDays([
+  {reasoning_efforts:['high']}, {reasoning_efforts:['xhigh', 'high']},
+]).reasoning_efforts));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), ["high", "xhigh"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_inspection_reports_exact_values_and_missing_days(self):
+        index_match = re.search(
+            r"function efficiencyChartPointerIndex\(.*?\n\}", self.page, re.DOTALL,
+        )
+        detail_match = re.search(
+            r"function efficiencyChartInspection\(.*?\n\}", self.page, re.DOTALL,
+        )
+        presentation_match = re.search(
+            r"function efficiencyChartMetricPresentation\(.*?\n\}", self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(index_match)
+        self.assertIsNotNone(detail_match)
+        self.assertIsNotNone(presentation_match)
+        script = "\n".join((
+            "function compactNumber(value){return String(Math.round(value));}",
+            "function pct(value){return (value*100).toFixed(1)+'%';}",
+            "function efficiencyDecimal(value){return String(value)+'x';}",
+            index_match.group(0), presentation_match.group(0), detail_match.group(0), r"""
+const samples=[
+  {day:'2026-08-25',index:0,value:5143.4},
+  {day:'2026-08-26',index:1,value:null},
+  {day:'2026-08-27',index:2,value:.3421},
+];
+const rect={left:100,width:520};
+console.log(JSON.stringify({
+  first:efficiencyChartPointerIndex(109,rect,3),
+  middle:efficiencyChartPointerIndex(360,rect,3),
+  last:efficiencyChartPointerIndex(611,rect,3),
+  output:efficiencyChartInspection(samples[0],'output_per_dollar'),
+  missing:efficiencyChartInspection(samples[1],'output_per_dollar'),
+  reasoning:efficiencyChartInspection(samples[2],'reasoning_ratio'),
+}));
+""",
+        ))
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "first": 0,
+            "middle": 1,
+            "last": 2,
+            "output": {
+                "date": "Aug 25",
+                "value": "5,143 output tokens / $",
+            },
+            "missing": {"date": "Aug 26", "value": "No data"},
+            "reasoning": {"date": "Aug 27", "value": "34.2% reasoning"},
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_hover_survives_live_refresh(self):
+        names = (
+            "efficiencyChartPointerIndex",
+            "efficiencyChartMetricPresentation",
+            "efficiencyChartInspection",
+            "efficiencyChartAnnouncement",
+            "efficiencyChartSmoothPath",
+            "renderEfficiencyChart",
+        )
+        functions = []
+        for name in names:
+            match = re.search(
+                rf"function {name}\(.*?\n\}}", self.page, re.DOTALL,
+            )
+            self.assertIsNotNone(match)
+            functions.append(match.group(0))
+        script = "\n".join((*functions, r"""
+class AttrNode {
+  constructor(){this.attrs={};}
+  setAttribute(name,value){this.attrs[name]=String(value);}
+}
+class InspectNode extends AttrNode {
+  constructor(){super();this.line=new AttrNode();this.dot=new AttrNode();}
+  querySelector(selector){return selector==='line'?this.line:this.dot;}
+}
+class SvgNode extends AttrNode {
+  constructor(parent){super();this.parentElement=parent;this.dataset={};this.hovered=false;this.inspect=null;}
+  set innerHTML(value){this.html=value;this.inspect=new InspectNode();}
+  get innerHTML(){return this.html;}
+  querySelector(selector){return selector==='.efficiencyChartInspect'?this.inspect:null;}
+  getBoundingClientRect(){return {left:0,width:520};}
+  matches(selector){return selector===':hover'&&this.hovered;}
+}
+const tip={hidden:true,textContent:'',style:{}},status={textContent:''};
+const parent={querySelector(selector){return selector==='.efficiencyChartTip'?tip:status;}};
+const svg=new SvgNode(parent),$=()=>svg,esc=value=>String(value);
+const pct=value=>`${Math.round(value*100)}%`,compactNumber=value=>String(Math.round(value));
+const trend=[
+  {day:'2026-08-25',metrics:{output_per_dollar:5143.4}},
+  {day:'2026-08-26',metrics:{output_per_dollar:7777}},
+  {day:'2026-08-27',metrics:{output_per_dollar:9123}},
+];
+renderEfficiencyChart('chart',trend,'output_per_dollar','Output per covered dollar');
+svg.hovered=true;
+svg.onpointermove({clientX:260});
+const first={hidden:tip.hidden,text:tip.textContent,ratio:svg.dataset.efficiencyHoverRatio};
+renderEfficiencyChart('chart',trend,'output_per_dollar','Output per covered dollar');
+const rerender={hidden:tip.hidden,text:tip.textContent,visibility:svg.inspect.attrs.visibility};
+svg.onpointermove({clientX:510});
+const moved={hidden:tip.hidden,text:tip.textContent};
+svg.hovered=false;
+svg.onpointerleave();
+const left={hidden:tip.hidden,ratio:svg.dataset.efficiencyHoverRatio||null,visibility:svg.inspect.attrs.visibility};
+svg.hovered=true;
+svg.dataset.efficiencyHoverRatio='0.5';
+renderEfficiencyChart('chart',[],'output_per_dollar','Output per covered dollar');
+const empty={hidden:tip.hidden,ratio:svg.dataset.efficiencyHoverRatio||null};
+console.log(JSON.stringify({first,rerender,moved,left,empty}));
+"""))
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "first": {
+                "hidden": False,
+                "text": "Aug 26 · 7,777 output tokens / $",
+                "ratio": "0.5",
+            },
+            "rerender": {
+                "hidden": False,
+                "text": "Aug 26 · 7,777 output tokens / $",
+                "visibility": "visible",
+            },
+            "moved": {
+                "hidden": False,
+                "text": "Aug 27 · 9,123 output tokens / $",
+            },
+            "left": {"hidden": True, "ratio": None, "visibility": "hidden"},
+            "empty": {"hidden": True, "ratio": None},
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_inspection_is_keyboard_accessible(self):
+        match = re.search(
+            r"function efficiencyChartKeyIndex\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  left:efficiencyChartKeyIndex('ArrowLeft',2,5),
+  leftBound:efficiencyChartKeyIndex('ArrowLeft',0,5),
+  right:efficiencyChartKeyIndex('ArrowRight',2,5),
+  rightBound:efficiencyChartKeyIndex('ArrowRight',4,5),
+  home:efficiencyChartKeyIndex('Home',3,5),
+  end:efficiencyChartKeyIndex('End',1,5),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "left": 1,
+            "leftBound": 0,
+            "right": 3,
+            "rightBound": 4,
+            "home": 0,
+            "end": 4,
+        })
+        for marker in (
+            "tabindex=0",
+            "aria-live=polite",
+            "svg.onfocus",
+            "svg.onkeydown",
+            "svg.onblur",
+            "Use Left and Right arrow keys to inspect daily values.",
+        ):
+            self.assertIn(marker, self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_chart_accessibility_uses_one_fresh_announcement_path(self):
+        match = re.search(
+            r"function efficiencyChartAnnouncement\(.*?\n\}", self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = match.group(0) + r"""
+const detail={date:'Aug 26',value:'No data'};
+console.log(JSON.stringify({
+  keyboard:efficiencyChartAnnouncement(detail,true),
+  pointer:efficiencyChartAnnouncement(detail,false),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "keyboard": "Aug 26 · No data",
+            "pointer": "",
+        })
+        self.assertNotIn("aria-describedby=e-output-dollar-status", self.page)
+        self.assertNotIn("aria-describedby=e-reasoning-status", self.page)
+        self.assertIn(
+            "status.textContent=efficiencyChartAnnouncement(detail,announce)",
+            self.page,
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_reasoning_cell_falls_back_to_measured_thinking_share(self):
+        match = re.search(
+            r"function efficiencyReasoningPresentation\(.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = r"""
+const f=value=>Math.round(value||0).toLocaleString('en-US');
+const pct=value=>Math.round((value||0)*100)+'%';
+""" + match.group(0) + r"""
+console.log(JSON.stringify({
+  exact:efficiencyReasoningPresentation(
+    {executions:10,reasoning_executions:8,thinking_executions:8},
+    {reasoning_ratio:.375}
+  ),
+  thinking:efficiencyReasoningPresentation(
+    {executions:960,reasoning_executions:0,thinking_executions:402},
+    {reasoning_ratio:null}
+  ),
+  missing:efficiencyReasoningPresentation(
+    {executions:4,reasoning_executions:0,thinking_executions:0},
+    {reasoning_ratio:null}
+  ),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "exact": {"value": "38%", "note": "8 / 10 exec"},
+            "thinking": {
+                "value": "42% thinking execs",
+                "note": "token ratio unavailable",
+            },
+            "missing": {"value": "--", "note": "unavailable"},
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_session_efficiency_presentation_preserves_coverage_and_thinking_fallback(self):
+        metric_match = re.search(
+            r"function efficiencyMetrics\(row\)\{.*?\n\}", self.page, re.DOTALL,
+        )
+        reasoning_match = re.search(
+            r"function efficiencyReasoningPresentation\(.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        summary_match = re.search(
+            r"function efficiencySummaryPresentation\(.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(metric_match)
+        self.assertIsNotNone(reasoning_match)
+        self.assertIsNotNone(summary_match)
+        script = r"""
+const f=value=>Math.round(value||0).toLocaleString('en-US');
+const pct=value=>Math.round((value||0)*100)+'%';
+const compactNumber=value=>Math.round(value||0).toLocaleString('en-US');
+const hasLocalEstimate=row=>Boolean(row?.estimated);
+""" + "\n".join((
+            metric_match.group(0), reasoning_match.group(0), summary_match.group(0),
+        )) + r"""
+const exact=efficiencySummaryPresentation({
+  output_tokens:200,cost:2,executions:10,token_covered_executions:10,
+  cost_covered_executions:10,cost_covered_output_tokens:200,cost_covered_cost:2,
+  reasoning_tokens:30,reasoning_output_tokens:80,reasoning_executions:8,
+  thinking_executions:8,availability:{tokens:true,output_tokens:true,cost:true,reasoning_tokens:true},
+  coverage:{cost:{complete:true}},
+});
+const thinking=efficiencySummaryPresentation({
+  output_tokens:100,cost:1,executions:10,token_covered_executions:10,
+  cost_covered_executions:8,cost_covered_output_tokens:80,cost_covered_cost:1,
+  reasoning_executions:0,thinking_executions:4,
+  availability:{tokens:true,output_tokens:true,cost:true,reasoning_tokens:false},
+  coverage:{cost:{complete:false}},estimated:true,
+});
+const missing=efficiencySummaryPresentation({
+  executions:2,availability:{tokens:false,output_tokens:false,cost:false,reasoning_tokens:false},
+});
+console.log(JSON.stringify({exact,thinking,missing}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "exact": {
+                "output": {"value": "100 / $", "note": "covered"},
+                "reasoning": {"value": "38%", "note": "8 / 10 exec"},
+            },
+            "thinking": {
+                "output": {"value": "80 / $", "note": "partial · local est"},
+                "reasoning": {
+                    "value": "40% thinking execs",
+                    "note": "token ratio unavailable · local est",
+                },
+            },
+            "missing": {
+                "output": {"value": "--", "note": "unavailable"},
+                "reasoning": {"value": "--", "note": "unavailable"},
+            },
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_only_marks_thinking_token_splits_unavailable_when_uncovered(self):
+        match = re.search(
+            r"function thinkingUnavailableExecutions\(row\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        script = match.group(0) + r"""
+console.log(JSON.stringify({
+  unavailable:thinkingUnavailableExecutions({thinking_executions:2,thinking_covered_executions:0,reasoning_executions:0}),
+  partial:thinkingUnavailableExecutions({thinking_executions:3,thinking_covered_executions:1,reasoning_executions:1}),
+  exact:thinkingUnavailableExecutions({thinking_executions:1,thinking_covered_executions:1,reasoning_executions:1}),
+  unrelated:thinkingUnavailableExecutions({thinking_executions:1,thinking_covered_executions:0,reasoning_executions:4}),
+  codexOnly:thinkingUnavailableExecutions({thinking_executions:0,thinking_covered_executions:0,reasoning_executions:4}),
+}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(json.loads(result.stdout), {
+            "unavailable": 2,
+            "partial": 2,
+            "exact": 0,
+            "unrelated": 1,
+            "codexOnly": 0,
+        })
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_efficiency_model_table_defaults_to_spend_descending_and_sorts_nulls_last(self):
+        metric_match = re.search(
+            r"function efficiencyMetrics\(row\)\{.*?\n\}", self.page, re.DOTALL,
+        )
+        value_match = re.search(
+            r"function efficiencySortValue\(row,key\)\{.*?\n\}", self.page, re.DOTALL,
+        )
+        sort_match = re.search(
+            r"function sortEfficiencyRows\(rows,sort=efficiencySort\)\{.*?\n\}",
+            self.page, re.DOTALL,
+        )
+        self.assertIsNotNone(metric_match)
+        self.assertIsNotNone(value_match)
+        self.assertIsNotNone(sort_match)
+        script = "\n".join((
+            metric_match.group(0),
+            "const modelRuntimeLabel=row=>`${row.model} · ${row.runtime}`;",
+            "const efficiencySort={key:'cost',direction:'desc'};",
+            value_match.group(0), sort_match.group(0),
+            r"""
+const rows=[
+  {model:'low',runtime:'Claude Code',window:{cost:1,availability:{cost:true}}},
+  {model:'missing',runtime:'Claude Code',window:{cost:0,availability:{cost:false}}},
+  {model:'high',runtime:'Codex',window:{cost:4,availability:{cost:true}}},
+];
+console.log(JSON.stringify({
+  spend:sortEfficiencyRows(rows).map(row=>row.model),
+  efficiency:sortEfficiencyRows(rows,{key:'output_per_dollar',direction:'desc'}).map(row=>row.model),
+}));
+""",
+        ))
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["spend"], ["high", "low", "missing"])
+        self.assertEqual(payload["efficiency"][-1], "missing")
+
+    def test_model_day_merge_preserves_partial_source_coverage(self):
+        merge_match = re.search(
+            r"function mergeModelDays\(models,window\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        aggregate_match = re.search(
+            r"function aggregateModelDays\(rows\)\{.*?\n\}",
+            self.page,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(merge_match, "dashboard needs the shared day merge")
+        self.assertIsNotNone(aggregate_match, "dashboard needs the shared day aggregate")
+        script = r"""
+const MODEL_COUNTER_KEYS=['cost','input_tokens','output_tokens','executions'];
+const MODEL_ARRAY_KEYS=[];
+const modelDayInRange=()=>true;
+const metricAvailable=(row,key)=>row.availability?.[key]===true;
+const metricPartial=(row,key)=>row.coverage?.[key]?.complete===false;
+const hasLocalEstimate=()=>false;
+const usageBasis=()=> 'reported';
+const modelWaitDistribution=()=>({median_wait_s:0,p95_wait_s:0});
+const modelMedian=()=>0;
+""" + aggregate_match.group(0) + "\n" + merge_match.group(0) + r"""
+const rows=mergeModelDays([{daily:[{
+  day:'2026-08-27',cost:1,input_tokens:10,output_tokens:2,executions:2,
+  availability:{tokens:true,input_tokens:true,output_tokens:false,cost:true,cache:true},
+  coverage:{
+    tokens:{complete:false},cost:{complete:false},cache:{complete:false},
+  },
+}]}],{});
+const selectedSession=aggregateModelDays([{
+  cost:1,input_tokens:10,output_tokens:4,executions:2,
+  cost_covered_executions:1,cost_covered_output_tokens:2,cost_covered_cost:.5,
+  availability:{tokens:true,input_tokens:true,output_tokens:true,cost:true,cache:false},
+}]);
+console.log(JSON.stringify({merged:rows[0],total:aggregateModelDays(rows),selectedSession}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        payload = json.loads(result.stdout)
+        coverage = payload["merged"]["coverage"]
+        self.assertFalse(coverage["tokens"]["complete"])
+        self.assertFalse(coverage["cost"]["complete"])
+        self.assertFalse(coverage["cache"]["complete"])
+        self.assertTrue(payload["merged"]["availability"]["input_tokens"])
+        self.assertFalse(payload["merged"]["availability"]["output_tokens"])
+        self.assertTrue(payload["total"]["availability"]["input_tokens"])
+        self.assertFalse(payload["total"]["availability"]["output_tokens"])
+        self.assertFalse(payload["selectedSession"]["coverage"]["cost"]["complete"])
 
     def test_model_stats_supports_multi_model_comparison(self):
         for marker in (
@@ -3361,10 +5341,16 @@ console.log(JSON.stringify({
             "function positionModelPickerMenu()",
             "picker.classList.toggle('opensUp',opensUp)",
             "$('m-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionModelPickerMenu))",
-            ".modelHead.spectrumPageHead{z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:2}",
+            ":is(.modelHead,.efficiencyHead).spectrumPageHead{overflow:hidden;z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:10}",
             ".modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}",
         ):
             self.assertIn(marker, self.page)
+
+    def test_efficiency_model_filter_stacks_above_its_chart(self):
+        self.assertIn(
+            ".spectrumPageHeadFrame:has(.modelControls){z-index:10}",
+            self.page,
+        )
 
     def test_model_project_background_refresh_does_not_shift_the_page(self):
         for marker in (
@@ -4363,7 +6349,7 @@ console.log(JSON.stringify({
             "<div class=softwareUpdatePromise",
         ):
             self.assertNotIn(removed, settings)
-        self.assertIn('href="#learn-agent-access"', settings)
+        self.assertNotIn('href="#learn-agent-access"', settings)
         self.assertIn("id=learn-agent-access", self.page)
         self.assertIn("Connections stay local and read-only.", settings)
         self.assertIn('aria-describedby=positive-terms-count', settings)
@@ -4396,13 +6382,13 @@ console.log(JSON.stringify({
     def test_primary_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
             "tab-session", "tab-daily", "tab-models",
-            "tab-capabilities", "tab-learn", "tab-settings",
+            "tab-efficiency", "tab-learn", "tab-capabilities", "tab-settings",
         ]
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit6'",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
             "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
             "event.key==='Enter'",
             "class=tabs aria-label=\"Primary navigation\"",
@@ -4411,7 +6397,11 @@ console.log(JSON.stringify({
         ):
             self.assertIn(marker, self.page)
         self.assertIn("if(command.latest)goToLatestSession()", self.page)
-        self.assertIn("else setHashRoute(command.route)", self.page)
+        self.assertIn("action:'selected-session'", self.page)
+        self.assertIn("function openSelectedSessionRoute(route='summary')", self.page)
+        self.assertIn("history.pushState({sessionScope:sessionReturnScope},'',sessionRoute(pinned))", self.page)
+        self.assertIn("if(command.action==='selected-session'){openSelectedSessionRoute(command.route);return;}", self.page)
+        self.assertIn("else openTopLevelRoute(command.route)", self.page)
         self.assertNotIn("shortcut:'⌥", self.page)
         self.assertNotIn("id=command-trigger", self.page)
         self.assertNotIn("Local evidence", self.page)
@@ -4423,6 +6413,14 @@ console.log(JSON.stringify({
         self.assertNotIn("$('livetxt')", self.page)
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
+
+    def test_tools_is_in_the_secondary_rail_above_settings(self):
+        secondary = self.page.split("<div class=navSecondary>", 1)[1].split(
+            "</div>", 1
+        )[0]
+        self.assertIn("id=tab-capabilities", secondary)
+        self.assertLess(secondary.index("id=tab-learn"), secondary.index("id=tab-capabilities"))
+        self.assertLess(secondary.index("id=tab-capabilities"), secondary.index("id=tab-settings"))
 
     def test_current_onboarding_uses_six_closeable_teaching_lessons(self):
         current = self.page.split('<div class="view on" id=view-session>', 1)[1].split(
@@ -4522,7 +6520,8 @@ console.log(JSON.stringify({
         self.assertIn("const appFilterGroup=session=>runtimeId(session)", self.page)
         self.assertIn("const appFilterLabel=session=>runtimeMeta(session).label", self.page)
         self.assertIn("['claude_code','claude_desktop'].includes(globalApp)", self.page)
-        self.assertIn("globalProject&&(s.project||'No project')!==globalProject", self.page)
+        self.assertIn("globalProject&&projectFilterValue(s.project)!==globalProject", self.page)
+        self.assertIn("Other local sessions", self.page)
         self.assertIn("Date.now()/1000-rangeSeconds", self.page)
         self.assertIn("tm_global_app", self.page)
         self.assertIn("tm_global_project", self.page)
@@ -4661,6 +6660,16 @@ console.log(JSON.stringify({
                         settings.index("id=model-pricing-settings"))
         self.assertLess(settings.index("id=model-pricing-settings"),
                         settings.index("id=frustration-settings"))
+
+    def test_settings_has_no_agent_defaults_surface_or_loader(self):
+        settings = self.page.split("<div class=view id=view-settings>", 1)[1].split(
+            "</div>\n</div>\n<dialog class=commandPalette", 1
+        )[0]
+        self.assertNotIn("id=agent-default-settings", settings)
+        self.assertNotIn("id=agent-defaults", settings)
+        self.assertNotIn("function renderAgentDefaults", self.page)
+        self.assertNotIn("function loadAgentDefaultSettings", self.page)
+        self.assertNotIn("/settings/agent-defaults", self.page)
 
     def test_agent_access_status_loads_only_when_settings_is_opened(self):
         startup = self.page[self.page.rindex(
@@ -5153,7 +7162,7 @@ const performance={now:()=>clockNow};
 """ + "\n".join(functions) + """
 let latestSessionSignalSnapshot={evidence:'available',mode:'working'};
 const pageSignalReducedMotionQuery={matches:false};
-const signals=['sessions','spend','models','capabilities','learn','settings'];
+const signals=['sessions','spend','models','capabilities','efficiency','learn','settings'];
 const routes=Object.fromEntries(signals.map(signal=>[
  signal,pageSignalPresentation({dataset:{pageSignal:signal}}),
 ]));
@@ -5540,12 +7549,13 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             "Track estimated agent spend over time.",
             "Compare model cost, speed, and context.",
             "Review installed tools, MCP servers, and skills.",
+            "Token efficiency from local stats.",
             "Learn the core Token Meter review loop.",
             "Manage budgets, connections, pricing, and updates.",
         ):
             self.assertIn(marker, self.page)
-        self.assertEqual(self.page.count("data-page-signal="), 6)
-        self.assertEqual(self.page.count("class=spectrumPageSubtitle"), 6)
+        self.assertEqual(self.page.count("data-page-signal="), 7)
+        self.assertEqual(self.page.count("class=spectrumPageSubtitle"), 7)
         self.assertNotIn(".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px", self.page)
 
     def test_shared_header_effect_adapter_exposes_generic_mounts(self):
@@ -5565,7 +7575,7 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             self.page,
             re.DOTALL,
         )
-        self.assertEqual(titles, ["Sessions", "Models", "Spend"])
+        self.assertEqual(titles, ["Sessions", "Models", "Spend", "Efficiency"])
         self.assertTrue(all(len(title) <= 12 for title in titles))
 
     def test_mobile_header_action_rows_scroll_instead_of_stacking(self):
@@ -5629,9 +7639,10 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             "days.find(row=>row.day===yesterdayKey)",
             "if(todayPartial)comparisonNote='Withheld for partial coverage'",
             "else if(yesterdayPartial)comparisonNote='Withheld · yesterday is partial'",
-            'href="https://www.google.com/search?q=site%3Asplunk.com+tokenomics"',
+            'href="https://www.splunk.com/en_us/products/tokenomics.html"',
             'target=_blank rel="noopener noreferrer"',
-            ">Learn Tokenomics<",
+            'aria-label="Get Enterprise Tokenomics from Splunk (opens in a new tab)"',
+            ">Get Enterprise Tokenomics<",
         ):
             self.assertIn(marker, self.page)
         self.assertLess(self.page.index("class=currentDaySummary"), self.page.index("id=current-session-grid"))
@@ -5834,7 +7845,6 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             ".currentSessionCard:before{content:none}",
             ".currentSessionCard.activity-working",
             ".currentSessionGrip",
-            "#view-session.sessionDetail .previewStatus:before",
             "@media(prefers-reduced-motion:reduce)",
             "document.body.classList.toggle('sessionRoute',t==='session');",
             "$('view-session').classList.toggle('sessionOverview',overview);",
@@ -5845,8 +7855,6 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "<svg class=currentSessionGrip",
             'font-family:"Tektur Local"',
             'src:url("/assets/fonts/Tektur-Variable.ttf")',
-            "--context-pressure",
-            ".style.setProperty('--context-pressure'",
             "filterView.countLabel",
             "concept-roll seed a5c0fdde",
         ):
@@ -5858,7 +7866,15 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
         self.assertNotIn("稼働状況", self.page)
         self.assertNotIn("session-solar-field-v1", self.page)
         self.assertNotIn("body.sessionRoute #view-session.sessionDetail .previewHead{min-height:152px}", self.page)
+        self.assertNotIn("body.sessionRoute #view-session.sessionDetail .previewStatus:before", self.page)
         self.assertNotIn("body.sessionRoute #view-session.sessionDetail .previewStatus:after", self.page)
+
+    def test_run_status_card_has_no_decorative_context_circle(self):
+        self.assertNotIn("#view-session.sessionDetail .previewStatus:before", self.page)
+        self.assertNotIn("--context-pressure", self.page)
+        self.assertNotIn(".style.setProperty('--context-pressure'", self.page)
+        self.assertIn('id=preview-context-bar', self.page)
+        self.assertIn("$('preview-context-bar').querySelector('i').style.width=", self.page)
 
     def test_top_level_views_share_the_spectrum_design_primitives(self):
         for marker in (
@@ -8321,6 +10337,377 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(meter.session_action_capability()["destination"], "Trash")
 
 
+class RemovedAgentDefaultsEndpointTests(unittest.TestCase):
+    def test_removed_agent_defaults_endpoint_returns_not_found(self):
+        for method in ("do_GET", "do_POST"):
+            with self.subTest(method=method):
+                handler = object.__new__(meter.H)
+                handler.path = "/settings/agent-defaults"
+                errors, responses = [], []
+                handler.send_error = lambda status: errors.append(status)
+                handler._send = lambda *args, **kwargs: responses.append((args, kwargs))
+                if method == "do_POST":
+                    handler.headers = {}
+                getattr(handler, method)()
+                self.assertEqual(errors, [404])
+                self.assertEqual(responses, [])
+
+
+@unittest.skip("Agent defaults feature removed")
+class AgentDefaultSettingsTests(unittest.TestCase):
+    def test_agent_default_status_does_not_project_model_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text(
+                'model = "existing-codex-model"\nmodel_reasoning_effort = "high"\n'
+            )
+            claude_path.write_text(json.dumps({
+                "model": "existing-claude-model",
+                "modelOverrides": {"alias": "existing-provider-model"},
+                "effortLevel": "high",
+            }))
+
+            status = meter.agent_default_settings(
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+
+        serialized = json.dumps(status)
+        for client in status["clients"]:
+            self.assertNotIn("model", client["defaults"])
+            self.assertNotIn("hidden_model", client)
+        for configured_model in (
+            "existing-codex-model", "existing-claude-model", "existing-provider-model",
+        ):
+            self.assertNotIn(configured_model, serialized)
+
+    def test_saving_agent_behavior_defaults_preserves_existing_model_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text(
+                'model = "existing-codex-model"\nmodel_reasoning_effort = "low"\n'
+            )
+            claude_path.write_text(json.dumps({
+                "model": "existing-claude-model",
+                "modelOverrides": {"alias": "existing-provider-model"},
+                "effortLevel": "low",
+            }))
+
+            codex = meter.set_agent_default_settings(
+                "codex", {
+                    "model": "legacy-request-model", "preserve_model": False,
+                    "reasoning_effort": "high", "context_limit": 128000,
+                },
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            claude = meter.set_agent_default_settings(
+                "claude", {
+                    "model": "legacy-request-model", "preserve_model": False,
+                    "reasoning_effort": "xhigh", "context_limit": 500000,
+                },
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            codex_text = codex_path.read_text()
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertIn('model = "existing-codex-model"', codex_text)
+        self.assertEqual(claude_json["model"], "existing-claude-model")
+        self.assertEqual(
+            claude_json["modelOverrides"], {"alias": "existing-provider-model"},
+        )
+        self.assertNotIn("model", codex["defaults"])
+        self.assertNotIn("model", claude["defaults"])
+
+    def test_agent_default_save_rejects_concurrent_model_changes_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text(
+                'model = "initial-codex-model"\nmodel_reasoning_effort = "low"\n'
+            )
+            claude_path.write_text(json.dumps({
+                "model": "initial-claude-model",
+                "modelOverrides": {"alias": "initial-provider-model"},
+                "effortLevel": "low",
+            }))
+            original_write = meter.atomic_write_text
+
+            def concurrent_codex_write(path, text, *args, **kwargs):
+                codex_path.write_text(
+                    codex_path.read_text().replace(
+                        "initial-codex-model", "concurrent-codex-model",
+                    )
+                )
+                return original_write(path, text, *args, **kwargs)
+
+            with mock.patch.object(
+                    meter, "atomic_write_text", side_effect=concurrent_codex_write):
+                codex = meter.set_agent_default_settings(
+                    "codex", {"reasoning_effort": "high", "context_limit": 128000},
+                    codex_config=str(codex_path), claude_settings=str(claude_path),
+                )
+
+            def concurrent_claude_write(path, text, *args, **kwargs):
+                concurrent = json.loads(claude_path.read_text())
+                concurrent["model"] = "concurrent-claude-model"
+                concurrent["modelOverrides"] = {"alias": "concurrent-provider-model"}
+                claude_path.write_text(json.dumps(concurrent))
+                return original_write(path, text, *args, **kwargs)
+
+            with mock.patch.object(
+                    meter, "atomic_write_text", side_effect=concurrent_claude_write):
+                claude = meter.set_agent_default_settings(
+                    "claude", {"reasoning_effort": "xhigh", "context_limit": 500000},
+                    codex_config=str(codex_path), claude_settings=str(claude_path),
+                )
+
+            codex_text = codex_path.read_text()
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertFalse(codex["ok"])
+        self.assertFalse(claude["ok"])
+        self.assertIn('model = "concurrent-codex-model"', codex_text)
+        self.assertEqual(claude_json["model"], "concurrent-claude-model")
+        self.assertEqual(
+            claude_json["modelOverrides"], {"alias": "concurrent-provider-model"},
+        )
+        for secret in (
+            "concurrent-codex-model", "concurrent-claude-model",
+            "concurrent-provider-model",
+        ):
+            self.assertNotIn(secret, json.dumps({"codex": codex, "claude": claude}))
+
+    def test_codex_defaults_report_cli_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text('model = "gpt-5.6-terra"\n')
+            claude_path.write_text("{}\n")
+
+            status = meter.agent_default_settings(
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            saved = meter.set_agent_default_settings(
+                "codex", {"reasoning_effort": "high", "context_limit": 128000},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+
+        codex = status["clients"][0]
+        self.assertEqual(codex["scope"], "cli")
+        self.assertEqual(codex["label"], "Codex CLI")
+        self.assertEqual(saved["scope"], "cli")
+        self.assertIn("Codex CLI defaults saved", saved["message"])
+        self.assertNotIn("Desktop", saved["message"])
+
+    def test_agent_default_settings_update_only_the_supported_client_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text(
+                '# Keep this comment.\nmodel = "old-model"\n'
+                'model_reasoning_effort = "low"\n\n'
+                '[mcp_servers.local]\ncommand = "keep-me"\n'
+            )
+            claude_path.write_text(json.dumps({
+                "model": "old-model",
+                "effortLevel": "low",
+                "env": {"KEEP": "value"},
+                "enabledPlugins": {"keep@personal": True},
+            }))
+
+            codex = meter.set_agent_default_settings(
+                "codex", {"reasoning_effort": "high", "context_limit": 128000},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            claude = meter.set_agent_default_settings(
+                "claude", {"reasoning_effort": "xhigh", "context_limit": 500000},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            codex_text = codex_path.read_text()
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertTrue(codex["ok"])
+        self.assertTrue(codex["verified"])
+        self.assertTrue(claude["ok"])
+        self.assertTrue(claude["verified"])
+        self.assertIn('model = "old-model"', codex_text)
+        self.assertIn('model_reasoning_effort = "high"', codex_text)
+        self.assertIn("model_context_window = 128000", codex_text)
+        self.assertIn('[mcp_servers.local]\ncommand = "keep-me"', codex_text)
+        self.assertEqual(claude_json["model"], "old-model")
+        self.assertEqual(claude_json["effortLevel"], "xhigh")
+        self.assertEqual(claude_json["env"], {
+            "KEEP": "value", "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "500000",
+        })
+        self.assertEqual(claude_json["enabledPlugins"], {"keep@personal": True})
+
+    def test_clearing_agent_default_settings_removes_only_the_saved_overrides(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text(
+                'model = "gpt-5.6-terra"\nmodel_reasoning_effort = "high"\n'
+                'model_context_window = 256000\n[features]\nskills = true\n'
+            )
+            claude_path.write_text(json.dumps({
+                "model": "claude-sonnet-4-6", "effortLevel": "high",
+                "env": {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "256000", "KEEP": "value"},
+            }))
+
+            codex = meter.set_agent_default_settings(
+                "codex", {"reasoning_effort": "", "context_limit": None},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            claude = meter.set_agent_default_settings(
+                "claude", {"reasoning_effort": "", "context_limit": None},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+            codex_text = codex_path.read_text()
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertTrue(codex["ok"])
+        self.assertTrue(claude["ok"])
+        self.assertIn('model = "gpt-5.6-terra"', codex_text)
+        self.assertNotIn("model_reasoning_effort", codex_text)
+        self.assertNotIn("model_context_window", codex_text)
+        self.assertIn("[features]\nskills = true", codex_text)
+        self.assertEqual(claude_json["model"], "claude-sonnet-4-6")
+        self.assertNotIn("effortLevel", claude_json)
+        self.assertEqual(claude_json["env"], {"KEEP": "value"})
+
+    def test_agent_default_settings_reject_an_invalid_context_limit_without_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text('model = "keep"\n')
+            claude_path.write_text(json.dumps({"model": "keep"}))
+
+            result = meter.set_agent_default_settings(
+                "claude", {"reasoning_effort": "high", "context_limit": 99999},
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+
+            codex_text = codex_path.read_text()
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertFalse(result["ok"])
+        self.assertIn("Context limit", result["error"])
+        self.assertEqual(codex_text, 'model = "keep"\n')
+        self.assertEqual(claude_json, {"model": "keep"})
+
+    def test_agent_default_settings_reject_a_fractional_context_limit_without_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            claude_path = Path(tmp) / "settings.json"
+            claude_path.write_text(json.dumps({"model": "keep"}))
+
+            result = meter.set_agent_default_settings(
+                "claude", {"reasoning_effort": "high", "context_limit": 128000.5},
+                claude_settings=str(claude_path),
+            )
+
+            claude_json = json.loads(claude_path.read_text())
+
+        self.assertFalse(result["ok"])
+        self.assertIn("whole number", result["error"])
+        self.assertEqual(claude_json, {"model": "keep"})
+
+    def test_agent_defaults_accept_only_documented_persistent_reasoning_efforts(self):
+        for effort in ("minimal", "low", "medium", "high", "xhigh"):
+            with self.subTest(effort=effort):
+                defaults = meter.normalize_agent_default_settings(
+                    "codex", {"reasoning_effort": effort, "context_limit": 128000},
+                )
+                self.assertEqual(defaults["reasoning_effort"], effort)
+        for client, efforts in (("codex", ("none", "max", "ultra")),
+                                ("claude", ("minimal", "none", "max", "ultra"))):
+            for effort in efforts:
+                with self.subTest(client=client, effort=effort):
+                    with self.assertRaisesRegex(ValueError, "not supported"):
+                        meter.normalize_agent_default_settings(
+                            client, {"reasoning_effort": effort, "context_limit": 128000},
+                        )
+
+    def test_codex_agent_defaults_preserve_triple_quoted_root_content_and_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            codex_path.write_text(
+                'developer_instructions = """\n[keep this literal instruction]\n"""\n'
+                'model = "gpt#old"\n[features]\nskills = true\n'
+            )
+
+            result = meter.set_agent_default_settings(
+                "codex", {"reasoning_effort": "minimal", "context_limit": 128000},
+                codex_config=str(codex_path),
+            )
+            text = codex_path.read_text()
+
+        self.assertTrue(result["ok"])
+        self.assertIn('developer_instructions = """\n[keep this literal instruction]\n"""', text)
+        self.assertIn('model = "gpt#old"', text)
+        self.assertLess(text.index("model_context_window = 128000"), text.index("[features]"))
+        self.assertIn("[features]\nskills = true", text)
+
+    def test_codex_agent_defaults_preserve_multiline_arrays_before_tables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            codex_path.write_text('matrix = [\n  [1, 2]\n]\n[features]\nskills = true\n')
+
+            result = meter.set_agent_default_settings(
+                "codex", {"reasoning_effort": "minimal", "context_limit": 128000},
+                codex_config=str(codex_path),
+            )
+            text = codex_path.read_text()
+
+        self.assertTrue(result["ok"])
+        self.assertIn("matrix = [\n  [1, 2]\n]\n", text)
+        self.assertLess(text.index("model_context_window = 128000"), text.index("[features]"))
+        self.assertIn("[features]\nskills = true", text)
+
+    def test_agent_default_status_redacts_unvalidated_or_sensitive_config_values(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_path = Path(tmp) / "config.toml"
+            claude_path = Path(tmp) / "settings.json"
+            codex_path.write_text('model = "/very/secret/path"\nmodel_reasoning_effort = "secret"\n')
+            claude_path.write_text(json.dumps({
+                "model": "arn:aws:bedrock:private-account:application/profile",
+                "effortLevel": "super-secret-token",
+                "env": {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "999999999999999999999"},
+            }))
+
+            status = meter.agent_default_settings(
+                codex_config=str(codex_path), claude_settings=str(claude_path),
+            )
+
+        serialized = json.dumps(status)
+        self.assertEqual(status["clients"][0]["defaults"], {
+            "reasoning_effort": None, "context_limit": None,
+        })
+        self.assertEqual(status["clients"][1]["defaults"], {
+            "reasoning_effort": None, "context_limit": None,
+        })
+        for secret in ("/very/secret/path", "private-account", "super-secret-token", "999999999999999999999"):
+            self.assertNotIn(secret, serialized)
+
+    def test_legacy_model_fields_are_ignored_when_saving_other_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            claude_path = Path(tmp) / "settings.json"
+            hidden_model = "arn:aws:bedrock:private-account:application/profile"
+            claude_path.write_text(json.dumps({"model": hidden_model, "effortLevel": "high"}))
+
+            result = meter.set_agent_default_settings(
+                "claude", {"model": "", "preserve_model": True, "reasoning_effort": "xhigh",
+                           "context_limit": 500000},
+                claude_settings=str(claude_path),
+            )
+            saved = json.loads(claude_path.read_text())
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(saved["model"], hidden_model)
+        self.assertEqual(saved["effortLevel"], "xhigh")
+        self.assertNotIn("private-account", json.dumps(result))
+
+
 class AgentAccessTests(unittest.TestCase):
     def test_client_environment_prepends_wrapper_runtime_directory(self):
         with mock.patch.dict(meter.os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
@@ -9190,6 +11577,12 @@ class McpDocumentationContractTests(unittest.TestCase):
 class OpenCodeTests(unittest.TestCase):
     """OpenCode is discovered from its read-only SQLite database."""
 
+    def test_reported_cost_rejects_unrepresentable_numbers(self):
+        for value in (10 ** 400, float("inf"), float("nan"), -1, True, "1"):
+            self.assertEqual(meter._opencode_reported_cost({"cost": value}), (0.0, False))
+        self.assertEqual(meter._opencode_reported_cost({"cost": 0}), (0.0, True))
+        self.assertEqual(meter._opencode_reported_cost({"cost": 1.25}), (1.25, True))
+
     def _build_db(self, root):
         db_path = Path(root) / "opencode.db"
         conn = sqlite3.connect(db_path)
@@ -9672,9 +12065,89 @@ class OpenCodeTests(unittest.TestCase):
         self.assertEqual({item["model"]: item["executions"] for item in row["model_stats"]},
                          {"model-a": 1, "model-b": 1})
         model_b = next(item for item in row["model_stats"] if item["model"] == "model-b")
+        model_a = next(item for item in row["model_stats"] if item["model"] == "model-a")
         self.assertTrue(model_b["availability"]["cost"])
+        self.assertEqual((model_a["cache_read_tokens"], model_a["cache_write_tokens"]),
+                         (3, 0))
+        self.assertEqual((model_a["reasoning_tokens"], model_a["reasoning_output_tokens"]),
+                         (2, 6))
+        self.assertEqual(model_a["reasoning_executions"], 1)
+        self.assertEqual((model_b["cache_read_tokens"], model_b["cache_write_tokens"]),
+                         (0, 2))
+        self.assertEqual((model_b["reasoning_tokens"], model_b["reasoning_output_tokens"]),
+                         (3, 6))
+        self.assertEqual(model_b["reasoning_executions"], 1)
         self.assertEqual({item["day"] for item in row["_model_daily"]},
                          {"2026-01-31", "2026-02-01"})
+
+    def test_opencode_efficiency_denominators_exclude_uncovered_messages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conn = self._build_db(root)
+            ts = int(datetime.datetime(
+                2026, 8, 27, 12, tzinfo=datetime.timezone.utc,
+            ).timestamp() * 1000)
+            top = self._session_row(
+                "ses_coverage", "/repo", "Mixed evidence", "model-a",
+                0.1, 110, 110, 0, 0, 0, ts + 4000,
+            )
+            conn.execute(
+                "INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                tuple(top.values()),
+            )
+            messages = [
+                self._message("a1", "ses_coverage", {
+                    "role": "assistant", "modelID": "model-a",
+                    "tokens": {"input": 10, "output": 10}, "cost": 0.1,
+                    "time": {"created": ts, "completed": ts + 1000},
+                }, ts),
+                self._message("a2", "ses_coverage", {
+                    "role": "assistant", "modelID": "model-a",
+                    "tokens": {"input": 100, "output": 100},
+                    "time": {"created": ts + 1000, "completed": ts + 2000},
+                }, ts + 1000),
+                self._message("a3", "ses_coverage", {
+                    "role": "assistant", "modelID": "model-a",
+                    "time": {"created": ts + 2000, "completed": ts + 3000},
+                }, ts + 2000),
+                self._message("a4", "ses_coverage", {
+                    "role": "assistant", "modelID": "model-a", "tokens": {},
+                    "time": {"created": ts + 3000, "completed": ts + 3500},
+                }, ts + 3000),
+                self._message("a5", "ses_coverage", {
+                    "role": "assistant", "modelID": "model-a",
+                    "tokens": {"input": "50", "output": "20"},
+                    "time": {"created": ts + 3500, "completed": ts + 4000},
+                }, ts + 3500),
+            ]
+            for message in messages:
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?)", message)
+            conn.commit()
+            conn.close()
+            with mock.patch.object(meter, "OPENCODE_DB", str(root / "opencode.db")), \
+                    mock.patch.object(meter, "_opencode_model_window", return_value=1000):
+                session = meter.opencode_summary({
+                    "provider": "opencode", "id": "ses_coverage",
+                    "model": "model-a", "label": "OpenCode", "runtime": "OpenCode",
+                    "session": "ses_coverage", "path": "opencode:ses_coverage",
+                    "project": "/repo", "mtime": ts / 1000,
+                })
+
+        stats = session["model_stats"][0]
+        self.assertEqual(stats["executions"], 5)
+        self.assertEqual(stats["input_tokens"], 110)
+        self.assertEqual(stats["output_tokens"], 110)
+        self.assertEqual(stats["token_covered_executions"], 2)
+        self.assertEqual(stats["cache_covered_input_tokens"], 110)
+        self.assertEqual(stats["cost_covered_executions"], 1)
+        self.assertEqual(stats["cost_covered_output_tokens"], 10)
+        aggregate = meter.aggregate_model_stats([session])["models"][0]
+        self.assertEqual(aggregate["cost_covered_output_tokens"], 10)
+        self.assertEqual(aggregate["token_covered_executions"], 2)
+        self.assertFalse(aggregate["coverage"]["cost"]["complete"])
+        self.assertEqual(aggregate["daily"][0]["cost_covered_output_tokens"], 10)
+        self.assertEqual(aggregate["daily"][0]["token_covered_executions"], 2)
+        self.assertFalse(aggregate["daily"][0]["coverage"]["tokens"]["complete"])
 
     def test_opencode_budget_defaults_and_distribute_cost(self):
         with mock.patch.object(meter, "OPENCODE_DB", str(Path("/nonexistent/opencode.db"))):

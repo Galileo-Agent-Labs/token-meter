@@ -13,6 +13,7 @@ from collections import defaultdict
 from token_meter.domain.usage import (
     make_usage_provenance,
     metric_available,
+    normalize_reported_token_count,
     usage_io_token_counts,
     usage_provenance,
 )
@@ -21,6 +22,9 @@ from token_meter.domain.insights import insight, normalize_insights
 
 WORKLOAD_SAMPLE_LIMIT = 2_000
 MATCHED_PACE_SAMPLE_LIMIT = 500
+REPORTED_REASONING_EFFORTS = frozenset({
+    "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+})
 
 
 def _compact_text(value, limit):
@@ -28,45 +32,134 @@ def _compact_text(value, limit):
     return value[:limit - 1] + "…" if len(value) > limit else value
 
 
-def add_model_summary(stats, model, usage, cost):
+def add_model_summary(stats, model, usage, cost, cost_available=None):
     """Accumulate a compatibility model summary from normalized token counts."""
+    input_available = usage.get("input_available") is not False
+    output_available = usage.get("output_available") is not False
     input_tokens, output_tokens = usage_io_token_counts(
         usage.get("input_tokens", 0),
         usage.get("output_tokens", 0),
         usage.get("cache_read_input_tokens", 0),
         usage.get("cache_creation_input_tokens", 0),
     )
+    input_tokens = input_tokens if input_available else 0
+    output_tokens = output_tokens if output_available else 0
     row = stats.setdefault(model or "unknown", {
         "cost": 0.0, "tokens": 0, "input_tokens": 0,
-        "output_tokens": 0, "executions": 0,
+        "output_tokens": 0, "cache_read_tokens": 0,
+        "cache_write_tokens": 0, "reasoning_tokens": 0,
+        "reasoning_output_tokens": 0, "reasoning_executions": 0,
+        "reasoning_unavailable_executions": 0,
+        "thinking_executions": 0, "thinking_covered_executions": 0,
+        "token_covered_executions": 0, "io_covered_executions": 0,
+        "executions": 0,
     })
+    reasoning_tokens, reasoning_reported = normalize_reported_token_count(
+        usage.get("reasoning_output_tokens", usage.get("reasoning_tokens"))
+    )
+    reasoning_available = (
+        usage.get("reasoning_available") is True
+        and reasoning_reported
+        and reasoning_tokens <= output_tokens
+    )
     row["cost"] += float(cost or 0)
     row["tokens"] += input_tokens + output_tokens
     row["input_tokens"] += input_tokens
     row["output_tokens"] += output_tokens
+    row["cache_read_tokens"] += int(usage.get("cache_read_input_tokens") or 0)
+    row["cache_write_tokens"] += int(usage.get("cache_creation_input_tokens") or 0)
+    if reasoning_available and output_available:
+        row["reasoning_tokens"] += min(output_tokens, reasoning_tokens)
+        row["reasoning_output_tokens"] += output_tokens
+        row["reasoning_executions"] += 1
+    else:
+        row["reasoning_unavailable_executions"] += 1
+    if usage.get("thinking_observed") is True:
+        row["thinking_executions"] += 1
+        if reasoning_available and output_available:
+            row["thinking_covered_executions"] += 1
+    if output_available:
+        row["token_covered_executions"] += 1
+    if input_available and output_available:
+        row["io_covered_executions"] += 1
+    row["input_evidence"] = row.get("input_evidence") is True or input_available
+    row["output_evidence"] = row.get("output_evidence") is True or output_available
+    if cost_available is not None:
+        row.setdefault("cost_covered_executions", 0)
+        row.setdefault("cost_covered_output_tokens", 0)
+        row.setdefault("cost_covered_cost", 0.0)
+        if cost_available and output_available:
+            row["cost_covered_executions"] += 1
+            row["cost_covered_output_tokens"] += output_tokens
+            row["cost_covered_cost"] += float(cost or 0)
     row["executions"] += 1
     return input_tokens, output_tokens
 
 
-def add_model_daily(stats, model, usage, cost, timestamp, localtime=time.localtime):
+def add_model_daily(stats, model, usage, cost, timestamp, localtime=time.localtime,
+                    cost_available=None):
     """Accumulate model I/O into local calendar days."""
     if not timestamp:
         return
+    input_available = usage.get("input_available") is not False
+    output_available = usage.get("output_available") is not False
     input_tokens, output_tokens = usage_io_token_counts(
         usage.get("input_tokens", 0),
         usage.get("output_tokens", 0),
         usage.get("cache_read_input_tokens", 0),
         usage.get("cache_creation_input_tokens", 0),
     )
+    input_tokens = input_tokens if input_available else 0
+    output_tokens = output_tokens if output_available else 0
     day = time.strftime("%Y-%m-%d", localtime(timestamp))
     key = (model or "unknown", day)
     row = stats.setdefault(key, {
         "model": model or "unknown", "day": day, "cost": 0.0,
-        "input_tokens": 0, "output_tokens": 0, "executions": 0,
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_read_tokens": 0, "cache_write_tokens": 0,
+        "reasoning_tokens": 0, "reasoning_output_tokens": 0,
+        "reasoning_executions": 0, "reasoning_unavailable_executions": 0,
+        "thinking_executions": 0, "thinking_covered_executions": 0,
+        "token_covered_executions": 0, "io_covered_executions": 0,
+        "executions": 0,
     })
+    reasoning_tokens, reasoning_reported = normalize_reported_token_count(
+        usage.get("reasoning_output_tokens", usage.get("reasoning_tokens"))
+    )
+    reasoning_available = (
+        usage.get("reasoning_available") is True
+        and reasoning_reported
+        and reasoning_tokens <= output_tokens
+    )
     row["cost"] += float(cost or 0)
     row["input_tokens"] += input_tokens
     row["output_tokens"] += output_tokens
+    row["cache_read_tokens"] += int(usage.get("cache_read_input_tokens") or 0)
+    row["cache_write_tokens"] += int(usage.get("cache_creation_input_tokens") or 0)
+    if reasoning_available and output_available:
+        row["reasoning_tokens"] += min(output_tokens, reasoning_tokens)
+        row["reasoning_output_tokens"] += output_tokens
+        row["reasoning_executions"] += 1
+    else:
+        row["reasoning_unavailable_executions"] += 1
+    if usage.get("thinking_observed") is True:
+        row["thinking_executions"] += 1
+        if reasoning_available and output_available:
+            row["thinking_covered_executions"] += 1
+    if output_available:
+        row["token_covered_executions"] += 1
+    if input_available and output_available:
+        row["io_covered_executions"] += 1
+    row["input_evidence"] = row.get("input_evidence") is True or input_available
+    row["output_evidence"] = row.get("output_evidence") is True or output_available
+    if cost_available is not None:
+        row.setdefault("cost_covered_executions", 0)
+        row.setdefault("cost_covered_output_tokens", 0)
+        row.setdefault("cost_covered_cost", 0.0)
+        if cost_available and output_available:
+            row["cost_covered_executions"] += 1
+            row["cost_covered_output_tokens"] += output_tokens
+            row["cost_covered_cost"] += float(cost or 0)
     row["executions"] += 1
 
 
@@ -1103,7 +1196,8 @@ def global_tool_waste(session_rows, runtime_resolver=None):
 
 
 def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finalizer=None,
-                          matched_pace=None, project_option_limit=500):
+                          matched_pace=None, project_option_limit=500,
+                          project_resolver=None):
     """Aggregate model I/O by runtime and build workload-matched pace comparisons."""
     session_rows = list(session_rows or [])
     if throughput_finalizer is None or matched_pace is None:
@@ -1111,14 +1205,29 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
     models = {}
     pace_groups = defaultdict(list)
 
-    def model_row(name, runtime):
+    def model_row(name, runtime, reasoning_effort=""):
         name = name or "unknown"
         runtime = runtime or "unknown runtime"
-        row_id = f"{name}::{runtime}"
+        reasoning_effort = reasoning_effort or ""
+        row_id = f"{name}::{runtime}::{reasoning_effort or 'unavailable'}"
         return models.setdefault(row_id, {
             "id": row_id, "model": name, "runtime": runtime,
+            "reasoning_effort": reasoning_effort or None,
             "providers": set(), "logs": 0,
-            "executions": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
+            "executions": 0, "token_covered_executions": 0,
+            "io_covered_executions": 0,
+            "cost_covered_executions": 0,
+            "input_tokens": 0, "output_tokens": 0,
+            "cost_covered_output_tokens": 0,
+            "cost_covered_cost": 0.0,
+            "cache_read_tokens": 0, "cache_write_tokens": 0,
+            "cache_covered_input_tokens": 0,
+            "reasoning_tokens": 0, "reasoning_output_tokens": 0,
+            "reasoning_executions": 0, "reasoning_unavailable_executions": 0,
+            "reasoning_efforts": {reasoning_effort} if reasoning_effort else set(),
+            "thinking_executions": 0, "thinking_covered_executions": 0,
+            "attempts": 0, "retries": 0, "failed_attempts": 0,
+            "attempt_samples": 0, "cost": 0.0,
             "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0, "last_ts": 0, "daily": {},
@@ -1128,14 +1237,28 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
             "workload_tool_calls": [], "workload_model_calls": [],
             "workload_cache_ratios": [],
             "_log_ids": set(), "_cost_covered_ids": set(), "_token_covered_ids": set(),
+            "_input_covered_ids": set(), "_output_covered_ids": set(),
             "_cache_covered_ids": set(), "_estimated_ids": set(),
             "_estimated_cost": 0.0, "_estimated_tokens": 0,
+            "_explicit_output_evidence": False,
         })
 
     def daily_row(parent, day):
         return parent["daily"].setdefault(day, {
             "day": day, "input_tokens": 0, "output_tokens": 0,
-            "executions": 0, "cost": 0.0,
+            "cost_covered_output_tokens": 0,
+            "cache_read_tokens": 0, "cache_write_tokens": 0,
+            "cache_covered_input_tokens": 0,
+            "reasoning_tokens": 0, "reasoning_output_tokens": 0,
+            "reasoning_executions": 0, "reasoning_unavailable_executions": 0,
+            "reasoning_efforts": set(),
+            "thinking_executions": 0, "thinking_covered_executions": 0,
+            "attempts": 0, "retries": 0, "failed_attempts": 0,
+            "attempt_samples": 0, "executions": 0,
+            "token_covered_executions": 0, "io_covered_executions": 0,
+            "cost_covered_executions": 0,
+            "cost_covered_cost": 0.0,
+            "cost": 0.0,
             "timed_output_tokens": 0, "timed_seconds": 0.0, "timed_samples": 0,
             "tool_free_output_tokens": 0, "tool_free_seconds": 0.0, "tool_free_samples": 0,
             "ttft_total_s": 0.0, "ttft_samples": 0,
@@ -1145,33 +1268,155 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
             "workload_tool_calls": [], "workload_model_calls": [],
             "workload_cache_ratios": [],
             "_log_ids": set(), "_cost_covered_ids": set(), "_token_covered_ids": set(),
+            "_input_covered_ids": set(), "_output_covered_ids": set(),
             "_cache_covered_ids": set(), "_estimated_ids": set(),
             "_estimated_cost": 0.0, "_estimated_tokens": 0,
         })
 
     def mark_model_coverage(target, session, session_id, availability=None):
-        availability = availability or session.get("availability") or {}
+        explicit_availability = isinstance(availability, dict)
+        first_session_evidence = session_id not in target["_log_ids"]
+        availability = availability if explicit_availability else {}
+
+        def evidence_available(metric):
+            if metric in availability:
+                return availability.get(metric) is True
+            return metric_available(session, metric)
+
         target["_log_ids"].add(session_id)
-        if availability.get("cost") is not False and metric_available(session, "cost"):
-            target["_cost_covered_ids"].add(session_id)
-        if availability.get("tokens") is not False and metric_available(session, "tokens"):
-            target["_token_covered_ids"].add(session_id)
-        if availability.get("cache") is not False and metric_available(session, "cache"):
-            target["_cache_covered_ids"].add(session_id)
         if session.get("token_estimate"):
             target["_estimated_ids"].add(session_id)
+        if not explicit_availability and not first_session_evidence:
+            return
+        if evidence_available("cost"):
+            target["_cost_covered_ids"].add(session_id)
+        token_available = evidence_available("tokens")
+        if token_available:
+            target["_token_covered_ids"].add(session_id)
+        if token_available and evidence_available("input_tokens"):
+            target["_input_covered_ids"].add(session_id)
+        if token_available and evidence_available("output_tokens"):
+            target["_output_covered_ids"].add(session_id)
+        if evidence_available("cache"):
+            target["_cache_covered_ids"].add(session_id)
+
+    def mark_explicit_output_evidence(target, stats):
+        availability = stats.get("availability")
+        if (isinstance(availability, dict)
+                and availability.get("output_tokens") is True
+                and int(stats.get("token_covered_executions") or 0) > 0):
+            target["_explicit_output_evidence"] = True
+
+    def session_reasoning_efforts(session, models):
+        effort = _compact_text(session.get("reasoning_effort") or "", 20).lower()
+        if effort not in REPORTED_REASONING_EFFORTS:
+            return {}
+        if len(models) == 1:
+            return {next(iter(models)): effort}
+        primary_model = str(session.get("primary_model") or "")
+        return {primary_model: effort} if primary_model in models else {}
+
+    def mark_reasoning_effort(target, effort):
+        if effort:
+            target["reasoning_efforts"].add(effort)
 
     for session in session_rows:
         provider = session.get("provider") or "unknown"
         runtime = session.get("runtime") or (runtime_resolver(session) if runtime_resolver else None) or session.get("label") or provider
         session_id = session.get("id") or session.get("path") or f"session-{id(session)}"
+        session_models = {
+            str(stats.get("model") or "unknown-model")
+            for stats in [*(session.get("model_stats") or []),
+                          *(session.get("_model_daily") or [])]
+        }
+        efforts_by_model = session_reasoning_efforts(session, session_models)
         for stats in session.get("model_stats") or []:
-            row = model_row(stats.get("model"), runtime)
+            effort = efforts_by_model.get(
+                str(stats.get("model") or "unknown-model"), ""
+            )
+            row = model_row(stats.get("model"), runtime, effort)
             row["providers"].add(provider)
-            mark_model_coverage(row, session, session_id, stats.get("availability"))
-            row["executions"] += int(stats.get("executions") or 0)
+            mark_reasoning_effort(row, effort)
+            stats_availability = stats.get("availability") or {}
+            mark_model_coverage(row, session, session_id, stats_availability)
+            mark_explicit_output_evidence(row, stats)
+            executions = int(stats.get("executions") or 0)
+            row["executions"] += executions
+            if "token_covered_executions" in stats:
+                row["token_covered_executions"] += int(
+                    stats.get("token_covered_executions") or 0
+                )
+            elif (stats_availability.get("tokens") is not False
+                    and metric_available(session, "tokens")):
+                row["token_covered_executions"] += executions
+            if "io_covered_executions" in stats:
+                row["io_covered_executions"] += int(
+                    stats.get("io_covered_executions") or 0
+                )
+            elif (stats_availability.get("tokens") is not False
+                  and stats_availability.get("input_tokens") is not False
+                  and stats_availability.get("output_tokens") is not False
+                  and metric_available(session, "tokens")):
+                row["io_covered_executions"] += executions
+            if "cost_covered_executions" in stats:
+                row["cost_covered_executions"] += int(
+                    stats.get("cost_covered_executions") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                    and metric_available(session, "cost")):
+                row["cost_covered_executions"] += executions
             row["input_tokens"] += int(stats.get("input_tokens") or 0)
             row["output_tokens"] += int(stats.get("output_tokens") or 0)
+            if "cost_covered_output_tokens" in stats:
+                row["cost_covered_output_tokens"] += int(
+                    stats.get("cost_covered_output_tokens") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                    and metric_available(session, "cost")):
+                row["cost_covered_output_tokens"] += int(
+                    stats.get("output_tokens") or 0
+                )
+            if "cost_covered_cost" in stats:
+                row["cost_covered_cost"] += float(
+                    stats.get("cost_covered_cost") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                  and metric_available(session, "cost")):
+                row["cost_covered_cost"] += float(stats.get("cost") or 0)
+            row["cache_read_tokens"] += int(stats.get("cache_read_tokens") or 0)
+            row["cache_write_tokens"] += int(stats.get("cache_write_tokens") or 0)
+            if "cache_covered_input_tokens" in stats:
+                row["cache_covered_input_tokens"] += int(
+                    stats.get("cache_covered_input_tokens") or 0
+                )
+            elif (stats_availability.get("cache") is not False
+                    and metric_available(session, "cache")):
+                row["cache_covered_input_tokens"] += int(
+                    stats.get("input_tokens") or 0
+                )
+            row["reasoning_tokens"] += int(stats.get("reasoning_tokens") or 0)
+            row["reasoning_output_tokens"] += int(
+                stats.get("reasoning_output_tokens") or 0
+            )
+            row["reasoning_executions"] += int(
+                stats.get("reasoning_executions") or 0
+            )
+            row["thinking_executions"] += int(
+                stats.get("thinking_executions") or 0
+            )
+            row["thinking_covered_executions"] += int(
+                stats.get("thinking_covered_executions") or 0
+            )
+            row["reasoning_unavailable_executions"] += int(
+                stats.get(
+                    "reasoning_unavailable_executions",
+                    max(
+                        0,
+                        int(stats.get("executions") or 0)
+                        - int(stats.get("reasoning_executions") or 0),
+                    ),
+                ) or 0
+            )
             row["cost"] += float(stats.get("cost") or 0)
             if session.get("token_estimate"):
                 row["_estimated_cost"] += float(stats.get("cost") or 0)
@@ -1180,20 +1425,96 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
             day = stats.get("day") or ""
             if not day:
                 continue
-            row = model_row(stats.get("model"), runtime)
+            effort = efforts_by_model.get(
+                str(stats.get("model") or "unknown-model"), ""
+            )
+            row = model_row(stats.get("model"), runtime, effort)
             row["providers"].add(provider)
+            mark_reasoning_effort(row, effort)
             daily = daily_row(row, day)
-            mark_model_coverage(row, session, session_id, stats.get("availability"))
-            mark_model_coverage(daily, session, session_id, stats.get("availability"))
-            for key in ("input_tokens", "output_tokens", "executions"):
+            mark_reasoning_effort(daily, effort)
+            stats_availability = stats.get("availability") or {}
+            mark_model_coverage(row, session, session_id, stats_availability)
+            mark_model_coverage(daily, session, session_id, stats_availability)
+            mark_explicit_output_evidence(row, stats)
+            for key in (
+                "input_tokens", "output_tokens", "cache_read_tokens",
+                "cache_write_tokens", "reasoning_tokens",
+                "reasoning_output_tokens", "reasoning_executions",
+                "thinking_executions", "thinking_covered_executions",
+                "executions",
+            ):
                 daily[key] += int(stats.get(key) or 0)
+            executions = int(stats.get("executions") or 0)
+            if "token_covered_executions" in stats:
+                daily["token_covered_executions"] += int(
+                    stats.get("token_covered_executions") or 0
+                )
+            elif (stats_availability.get("tokens") is not False
+                    and metric_available(session, "tokens")):
+                daily["token_covered_executions"] += executions
+            if "io_covered_executions" in stats:
+                daily["io_covered_executions"] += int(
+                    stats.get("io_covered_executions") or 0
+                )
+            elif (stats_availability.get("tokens") is not False
+                  and stats_availability.get("input_tokens") is not False
+                  and stats_availability.get("output_tokens") is not False
+                  and metric_available(session, "tokens")):
+                daily["io_covered_executions"] += executions
+            if "cost_covered_executions" in stats:
+                daily["cost_covered_executions"] += int(
+                    stats.get("cost_covered_executions") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                    and metric_available(session, "cost")):
+                daily["cost_covered_executions"] += executions
+            if "cost_covered_output_tokens" in stats:
+                daily["cost_covered_output_tokens"] += int(
+                    stats.get("cost_covered_output_tokens") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                    and metric_available(session, "cost")):
+                daily["cost_covered_output_tokens"] += int(
+                    stats.get("output_tokens") or 0
+                )
+            if "cost_covered_cost" in stats:
+                daily["cost_covered_cost"] += float(
+                    stats.get("cost_covered_cost") or 0
+                )
+            elif (stats_availability.get("cost") is not False
+                  and metric_available(session, "cost")):
+                daily["cost_covered_cost"] += float(stats.get("cost") or 0)
+            if "cache_covered_input_tokens" in stats:
+                daily["cache_covered_input_tokens"] += int(
+                    stats.get("cache_covered_input_tokens") or 0
+                )
+            elif (stats_availability.get("cache") is not False
+                    and metric_available(session, "cache")):
+                daily["cache_covered_input_tokens"] += int(
+                    stats.get("input_tokens") or 0
+                )
+            daily["reasoning_unavailable_executions"] += int(
+                stats.get(
+                    "reasoning_unavailable_executions",
+                    max(
+                        0,
+                        int(stats.get("executions") or 0)
+                        - int(stats.get("reasoning_executions") or 0),
+                    ),
+                ) or 0
+            )
             daily["cost"] += float(stats.get("cost") or 0)
             if session.get("token_estimate"):
                 daily["_estimated_cost"] += float(stats.get("cost") or 0)
                 daily["_estimated_tokens"] += int(stats.get("input_tokens") or 0) + int(stats.get("output_tokens") or 0)
         for sample in session.get("_performance_samples") or []:
-            row = model_row(sample.get("model"), runtime)
+            effort = efforts_by_model.get(
+                str(sample.get("model") or "unknown-model"), ""
+            )
+            row = model_row(sample.get("model"), runtime, effort)
             row["providers"].add(provider)
+            mark_reasoning_effort(row, effort)
             mark_model_coverage(row, session, session_id)
             day = sample.get("day") or ""
             targets = [row]
@@ -1237,6 +1558,16 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
                     target["workload_model_calls"].append(model_calls)
                     if metric_available(session, "cache"):
                         target["workload_cache_ratios"].append(cache_ratio)
+                attempts = int(sample.get("attempts") or 0)
+                if attempts > 0:
+                    target["attempts"] += attempts
+                    target["retries"] += min(
+                        attempts, max(0, int(sample.get("retries") or 0))
+                    )
+                    target["failed_attempts"] += min(
+                        attempts, max(0, int(sample.get("failed_attempts") or 0))
+                    )
+                    target["attempt_samples"] += 1
             if (not session.get("token_estimate") and duration_s > 0
                     and input_tokens > 0 and output_tokens > 0
                     and len(pace_groups[row["id"]]) < MATCHED_PACE_SAMPLE_LIMIT):
@@ -1252,8 +1583,10 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
             model = sample.get("model") or ""
             if not model or model in ("mixed", "unknown"):
                 continue
-            row = model_row(model, runtime)
+            effort = efforts_by_model.get(str(model), "")
+            row = model_row(model, runtime, effort)
             row["providers"].add(provider)
+            mark_reasoning_effort(row, effort)
             mark_model_coverage(row, session, session_id)
             day = sample.get("day") or ""
             targets = [row]
@@ -1288,19 +1621,52 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
         total_logs = len(log_ids)
         cost_ids = set(row.pop("_cost_covered_ids", set()))
         token_ids = set(row.pop("_token_covered_ids", set()))
+        input_ids = set(row.pop("_input_covered_ids", set()))
+        output_ids = set(row.pop("_output_covered_ids", set()))
         cache_ids = set(row.pop("_cache_covered_ids", set()))
         estimated_ids = set(row.pop("_estimated_ids", set()))
         covered_cost = len(cost_ids)
         covered_tokens = len(token_ids)
+        covered_input = len(input_ids)
+        covered_output = len(output_ids)
         covered_cache = len(cache_ids)
+        executions = int(row.get("executions") or 0)
+        cost_covered_executions = int(row.get("cost_covered_executions") or 0)
+        token_covered_executions = int(row.get("token_covered_executions") or 0)
+        io_covered_executions = int(row.get("io_covered_executions") or 0)
         row["logs"] = total_logs
         row["coverage"] = {
             "cost": {"covered_sessions": covered_cost, "total_sessions": total_logs,
-                     "complete": covered_cost == total_logs},
+                     "complete": (
+                         covered_cost == total_logs
+                         and cost_covered_executions >= executions
+                     )},
             "tokens": {"covered_sessions": covered_tokens, "total_sessions": total_logs,
-                       "complete": covered_tokens == total_logs},
+                       "complete": (
+                           covered_tokens == total_logs
+                           and token_covered_executions >= executions
+                       )},
+            "io": {"covered_executions": io_covered_executions,
+                   "total_executions": executions,
+                   "complete": io_covered_executions >= executions},
             "cache": {"covered_sessions": covered_cache, "total_sessions": total_logs,
                       "complete": covered_cache == total_logs},
+            "reasoning_tokens": {
+                "covered_executions": int(row.get("reasoning_executions") or 0),
+                "total_executions": int(row.get("executions") or 0),
+                "complete": (
+                    int(row.get("reasoning_executions") or 0)
+                    == int(row.get("executions") or 0)
+                ),
+            },
+            "attempts": {
+                "covered_executions": int(row.get("attempt_samples") or 0),
+                "total_executions": int(row.get("executions") or 0),
+                "complete": (
+                    int(row.get("attempt_samples") or 0)
+                    >= int(row.get("executions") or 0)
+                ),
+            },
         }
         row["provenance"] = make_usage_provenance(
             log_ids, estimated_ids, cost_ids | token_ids,
@@ -1310,10 +1676,12 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
         row["availability"] = {
             "cost": covered_cost > 0,
             "tokens": covered_tokens > 0,
-            "input_tokens": covered_tokens > 0,
-            "output_tokens": covered_tokens > 0,
+            "input_tokens": covered_input > 0,
+            "output_tokens": covered_output > 0,
             "cache": covered_cache > 0,
-            "throughput": covered_tokens > 0 and int(row.get("throughput_samples") or 0) > 0,
+            "reasoning_tokens": int(row.get("reasoning_executions") or 0) > 0,
+            "attempts": int(row.get("attempt_samples") or 0) > 0,
+            "throughput": covered_output > 0 and int(row.get("throughput_samples") or 0) > 0,
             "context": True,
             "timing": int(row.get("wait_samples") or 0) > 0,
             "tool_results": True,
@@ -1322,14 +1690,20 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
 
     result = []
     for row in models.values():
+        explicit_output_evidence = bool(row.pop("_explicit_output_evidence", False))
+        placeholder_model = row.get("model") == "<synthetic>"
         if (not row.get("input_tokens") and not row.get("output_tokens")
+                and (not explicit_output_evidence or placeholder_model)
                 and (not row.get("executions") and not row.get("wait_samples")
                      or len(row.get("_token_covered_ids") or ()) == len(row.get("_log_ids") or ()))):
             continue
-        daily = [finalize_coverage(throughput_finalizer(item))
-                 for item in row.pop("daily").values()]
+        daily = []
+        for item in row.pop("daily").values():
+            item["reasoning_efforts"] = sorted(item["reasoning_efforts"])[:8]
+            daily.append(finalize_coverage(throughput_finalizer(item)))
         daily.sort(key=lambda item: item["day"])
         row["providers"] = sorted(row["providers"])
+        row["reasoning_efforts"] = sorted(row["reasoning_efforts"])[:8]
         row["daily"] = daily
         result.append(finalize_coverage(throughput_finalizer(row)))
     result.sort(key=lambda row: (-row["output_tokens"], -row["input_tokens"],
@@ -1337,6 +1711,7 @@ def aggregate_model_stats(session_rows, runtime_resolver=None, throughput_finali
                                  row["model"], row["runtime"]))
     valid_ids = {row["id"] for row in result}
     projects = sorted({
+        project_resolver(session.get("project")) if project_resolver else
         str(session.get("project") or "No project")
         for session in session_rows
     }, key=str.casefold)

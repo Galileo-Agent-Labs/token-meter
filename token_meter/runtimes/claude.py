@@ -27,6 +27,7 @@ from token_meter.contracts import (
     TurnSummary,
     UsageEvidence,
 )
+from token_meter.domain.usage import normalize_reported_token_count
 
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -66,10 +67,81 @@ def _datetime(value):
 
 
 def _safe_int(value):
-    try:
-        return max(0, int(value or 0))
-    except (TypeError, ValueError, OverflowError):
-        return 0
+    normalized, _ = normalize_reported_token_count(value)
+    return normalized
+
+
+def _normalized_usage(usage):
+    usage = usage if isinstance(usage, dict) else {}
+    input_tokens, input_reported = normalize_reported_token_count(
+        usage.get("input_tokens")
+    )
+    cache_read, cache_read_reported = normalize_reported_token_count(
+        usage.get("cache_read_input_tokens", 0)
+    )
+    cache_write, cache_write_reported = normalize_reported_token_count(
+        usage.get("cache_creation_input_tokens", 0)
+    )
+    output_tokens, output_reported = normalize_reported_token_count(
+        usage.get("output_tokens")
+    )
+    reasoning_value = (
+        usage.get("thinking_tokens")
+        if "thinking_tokens" in usage
+        else usage.get("reasoning_output_tokens")
+    )
+    reasoning_tokens, reasoning_reported = normalize_reported_token_count(
+        reasoning_value
+    )
+    input_available = (
+        input_reported and cache_read_reported and cache_write_reported
+    )
+    reasoning_available = (
+        output_reported
+        and reasoning_reported
+        and reasoning_tokens <= output_tokens
+    )
+    return {
+        **usage,
+        "input_tokens": input_tokens if input_available else 0,
+        "cache_read_input_tokens": cache_read if input_available else 0,
+        "cache_creation_input_tokens": cache_write if input_available else 0,
+        "output_tokens": output_tokens if output_reported else 0,
+        "input_available": input_available,
+        "output_available": output_reported,
+        "reasoning_output_tokens": reasoning_tokens if reasoning_available else 0,
+        "reasoning_available": reasoning_available,
+    }
+
+
+def _has_thinking_block(content):
+    return any(
+        isinstance(block, dict)
+        and block.get("type") in ("thinking", "redacted_thinking")
+        for block in (content or ())
+    )
+
+
+def _with_thinking_observation(usage, content):
+    """Keep structural thinking evidence without inventing a token split."""
+    return {**usage, "thinking_observed": _has_thinking_block(content)}
+
+
+def _cost_coverage_complete(usage, priced):
+    """Ignore unpriced records that contain no billable usage."""
+    if not usage["input_available"] or not usage["output_available"]:
+        return False
+    if priced:
+        return True
+    return not any(
+        usage.get(field, 0)
+        for field in (
+            "input_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+            "output_tokens",
+        )
+    )
 
 
 def _compact(value, limit=90):
@@ -477,9 +549,14 @@ class ClaudeRuntimeAdapter:
                     block for block in content if isinstance(block, dict)
                 )
             usage = message.get("usage") or {}
-            if _safe_int(usage.get("output_tokens")) >= _safe_int(
-                    logical["usage"].get("output_tokens")):
+            output_tokens = _safe_int(usage.get("output_tokens"))
+            current_output_tokens = _safe_int(
+                logical["usage"].get("output_tokens")
+            )
+            if output_tokens > current_output_tokens:
                 logical["usage"] = usage or logical["usage"]
+            elif output_tokens == current_output_tokens and usage:
+                logical["usage"] = {**logical["usage"], **usage}
             if message.get("stop_reason"):
                 logical["stop_reason"] = message["stop_reason"]
             logical["last_ts"] = max(
@@ -504,25 +581,30 @@ class ClaudeRuntimeAdapter:
         if not available:
             return self._empty(source, detail, ("source_unavailable",))
         messages = self.logical_messages(rows)
-        usage_available = False
+        usage_seen = False
+        input_complete = True
+        output_complete = True
         counts = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
         turns = []
         tools = []
         for message in messages:
-            usage = message.get("usage") or {}
-            if usage:
-                usage_available = True
-                counts["input"] += _safe_int(usage.get("input_tokens"))
-                counts["output"] += _safe_int(usage.get("output_tokens"))
-                counts["cache_read"] += _safe_int(usage.get("cache_read_input_tokens"))
-                counts["cache_write"] += _safe_int(usage.get("cache_creation_input_tokens"))
+            raw_usage = message.get("usage") or {}
+            if raw_usage:
+                usage_seen = True
+                usage = _normalized_usage(raw_usage)
+                input_complete = input_complete and usage["input_available"]
+                output_complete = output_complete and usage["output_available"]
+                counts["input"] += usage["input_tokens"]
+                counts["output"] += usage["output_tokens"]
+                counts["cache_read"] += usage["cache_read_input_tokens"]
+                counts["cache_write"] += usage["cache_creation_input_tokens"]
                 if len(turns) < self.max_detail_turns:
                     turns.append(TurnSummary(
                         len(turns) + 1,
                         _datetime(message.get("ts")),
                         _datetime(message.get("last_ts")),
-                        EvidenceValue(
-                            _safe_int(usage.get("output_tokens")), EvidenceBasis.MEASURED
+                        self._evidence(
+                            usage["output_tokens"], usage["output_available"]
                         ),
                     ))
             for block in message.get("content") or ():
@@ -543,7 +625,9 @@ class ClaudeRuntimeAdapter:
         warning_codes = []
         if corrupt:
             warning_codes.append("corrupt_rows")
-        if not usage_available:
+        input_available = usage_seen and input_complete
+        output_available = usage_seen and output_complete
+        if not input_available or not output_available:
             warning_codes.append("usage_unavailable")
         if len(turns) >= self.max_detail_turns or len(tools) >= self.max_tool_events:
             warning_codes.append("history_truncated")
@@ -557,10 +641,10 @@ class ClaudeRuntimeAdapter:
             started_at=_datetime(min(timestamps)) if timestamps else None,
             ended_at=_datetime(max(timestamps)) if timestamps else None,
             usage=UsageEvidence(
-                self._evidence(counts["input"], usage_available),
-                self._evidence(counts["output"], usage_available),
-                self._evidence(counts["cache_read"], usage_available),
-                self._evidence(counts["cache_write"], usage_available),
+                self._evidence(counts["input"], input_available),
+                self._evidence(counts["output"], output_available),
+                self._evidence(counts["cache_read"], input_available),
+                self._evidence(counts["cache_write"], input_available),
                 EvidenceValue.unavailable(),
             ),
             timing=TimingEvidence(
@@ -640,11 +724,17 @@ class ClaudeRuntimeAdapter:
         side_cost = side_turns = 0
         approx_cost = False
         price_complete = True
+        input_complete = True
+        output_complete = True
     
         for rec in msgs:
-            usage = rec["usage"]
+            usage = _with_thinking_observation(
+                _normalized_usage(rec["usage"]), rec["content"]
+            )
             if not usage:
                 continue
+            input_complete = input_complete and usage["input_available"]
+            output_complete = output_complete and usage["output_available"]
             idx = len(series) + 1
             model = rec["model"]
             ts = rec["ts"]
@@ -657,10 +747,19 @@ class ClaudeRuntimeAdapter:
             user_input = user_prompt_preview(pending_user_texts)
             pending_user_texts = []
     
-            c = cost_of(usage, model, "claude", at=ts)
             _, approx = price_for(model, "claude", at=ts)
-            approx_cost = approx_cost or approx
-            price_complete = price_complete and not approx
+            cost_available = (
+                not approx
+                and usage["input_available"]
+                and usage["output_available"]
+            )
+            coverage_complete = _cost_coverage_complete(usage, cost_available)
+            c = cost_of(usage, model, "claude", at=ts) if cost_available else {
+                "input": 0.0, "cache_write": 0.0,
+                "cache_read": 0.0, "output": 0.0,
+            }
+            approx_cost = approx_cost or not coverage_complete
+            price_complete = price_complete and coverage_complete
             tc = sum(c.values())
             for key in cost:
                 cost[key] += c[key]
@@ -675,8 +774,16 @@ class ClaudeRuntimeAdapter:
             tot["output"] += out_tok
             model_tok[model] += total
             model_cost[model] += tc
-    
-            has_think = any(block.get("type") == "thinking" for block in rec["content"])
+
+            has_think = _has_thinking_block(rec["content"])
+            reasoning_available = (
+                usage.get("reasoning_available") is True
+                and usage.get("output_available") is True
+            )
+            reasoning_tokens = (
+                int(usage.get("reasoning_output_tokens") or 0)
+                if reasoning_available else 0
+            )
             tool_blocks = [b for b in rec["content"] if b.get("type") == "tool_use"]
             tools = []
             for block in tool_blocks:
@@ -695,17 +802,20 @@ class ClaudeRuntimeAdapter:
                 }
                 tools.append(tool)
     
-            if has_think:
+            if reasoning_available:
                 think_turns += 1
-                think_out += out_tok
-                think_cost += out_tok * price_for(model, "claude", at=ts)[0]["output"] / 1e6
+                think_out += reasoning_tokens
+                reasoning_cost = (
+                    c["output"] * reasoning_tokens / out_tok if out_tok else 0.0
+                )
+                think_cost += reasoning_cost
                 trace.append(trace_event(ts, "reasoning", "Reasoning", f"thinking turn #{idx}", idx,
-                                         tokens=out_tok, cost=think_cost, severity="reasoning",
-                                         model=model, output_tokens=out_tok,
+                                         tokens=reasoning_tokens, cost=reasoning_cost,
+                                         severity="reasoning", model=model,
+                                         output_tokens=reasoning_tokens,
                                          native_type="assistant",
                                          native_subtype="reasoning"))
-            else:
-                routine_out += out_tok
+            routine_out += max(0, out_tok - reasoning_tokens)
             if rec["stop_reason"] == "end_turn":
                 completed += 1
             if rec["side"]:
@@ -730,7 +840,7 @@ class ClaudeRuntimeAdapter:
                 fresh_input_tokens=fresh_input_tokens,
                 cache_read_tokens=cache_read_tokens,
                 cache_write_tokens=cache_write_tokens,
-                tool_count=len(tools), reasoning_tokens=out_tok if has_think else 0,
+                tool_count=len(tools), reasoning_tokens=reasoning_tokens,
                 native_type="assistant", native_subtype="agent_message",
             ))
             for tool in tools:
@@ -761,7 +871,7 @@ class ClaudeRuntimeAdapter:
                 "think": has_think,
                 "tools": len(tools),
                 "side": rec["side"],
-                "reasoning": out_tok if has_think else 0,
+                "reasoning": reasoning_tokens,
                 "user_message": user_input,
                 "user_input": user_input,
             })
@@ -771,7 +881,7 @@ class ClaudeRuntimeAdapter:
                 "ts": ts or 0,
                 "time": time.strftime("%H:%M:%S", time.localtime(ts)) if ts else "",
                 "model": model,
-                "tokens": {"input": in_tok, "output": out_tok, "reasoning": out_tok if has_think else 0,
+                "tokens": {"input": in_tok, "output": out_tok, "reasoning": reasoning_tokens,
                            "retrieval": sum(t["output_tokens"] for t in tools), "fresh_input": fresh_input_tokens,
                            "cache": cache_tokens, "cache_read": cache_read_tokens, "cache_write": cache_write_tokens,
                            "total": total},
@@ -779,7 +889,7 @@ class ClaudeRuntimeAdapter:
                 "cost_breakdown": {k: round(v, 6) for k, v in c.items()},
                 "tools": tools,
                 "tool_count": len(tools),
-                "reasoning_tokens": out_tok if has_think else 0,
+                "reasoning_tokens": reasoning_tokens,
                 "context_tokens": in_tok,
                 "context_window": None,
                 "context_pct": None,
@@ -819,6 +929,10 @@ class ClaudeRuntimeAdapter:
                             primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs),
                             wait_samples, availability=metric_availability(
                                 "claude", cost=price_complete,
+                                tokens=input_complete and output_complete,
+                                input_tokens=input_complete,
+                                output_tokens=output_complete,
+                                cache=input_complete,
                             ))
         state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
         return state
@@ -860,10 +974,16 @@ class ClaudeRuntimeAdapter:
         latest_context = 0
         context_samples = []
         primary_model = source.get("model") or "unknown-model"
+        input_complete = True
+        output_complete = True
         for rec in msgs:
-            usage = rec["usage"]
+            usage = _with_thinking_observation(
+                _normalized_usage(rec["usage"]), rec["content"]
+            )
             if not usage:
                 continue
+            input_complete = input_complete and usage["input_available"]
+            output_complete = output_complete and usage["output_available"]
             primary_model = rec["model"] or primary_model
             latest_context = (
                 int(usage.get("input_tokens") or 0)
@@ -871,18 +991,31 @@ class ClaudeRuntimeAdapter:
                 + int(usage.get("cache_creation_input_tokens") or 0)
             )
             context_samples.append(latest_context)
-            c = sum(cost_of(usage, rec["model"], "claude", at=rec["ts"]).values())
             _, missing = price_for(rec["model"], "claude", at=rec["ts"])
-            approx = approx or missing
-            price_complete = price_complete and not missing
+            cost_available = (
+                not missing
+                and usage["input_available"]
+                and usage["output_available"]
+            )
+            coverage_complete = _cost_coverage_complete(usage, cost_available)
+            c = sum(cost_of(usage, rec["model"], "claude", at=rec["ts"]).values()) \
+                if cost_available else 0.0
+            approx = approx or not coverage_complete
+            price_complete = price_complete and coverage_complete
             toks = usage_tokens(usage)
             cost += c
             tokens += toks
             models.add(rec["model"].replace("claude-", ""))
             model_cost[rec["model"]] += c
             model_tok[rec["model"]] += toks
-            input_count, output_count = add_model_summary(model_stats, rec["model"], usage, c)
-            add_model_daily(model_daily, rec["model"], usage, c, rec["ts"])
+            input_count, output_count = add_model_summary(
+                model_stats, rec["model"], usage, c,
+                cost_available=cost_available,
+            )
+            add_model_daily(
+                model_daily, rec["model"], usage, c, rec["ts"],
+                cost_available=cost_available,
+            )
             input_tokens += input_count
             output_tokens += output_count
             if rec["ts"]:
@@ -890,7 +1023,18 @@ class ClaudeRuntimeAdapter:
                 last_ts = rec["ts"] if last_ts is None else max(last_ts, rec["ts"])
                 day = time.strftime("%Y-%m-%d", time.localtime(rec["ts"]))
                 day_cost[day] += c
-    
+
+        for stats in (*model_stats.values(), *model_daily.values()):
+            stats["availability"] = metric_availability(
+                "claude",
+                cost=int(stats.get("cost_covered_executions") or 0) > 0,
+                tokens=(stats.get("input_evidence") is True
+                        or stats.get("output_evidence") is True),
+                input_tokens=stats.get("input_evidence") is True,
+                output_tokens=stats.get("output_evidence") is True,
+                cache=stats.get("input_evidence") is True,
+            )
+
         custom_title = ai_title = ""
         for obj in objs:
             record_type = obj.get("type")
@@ -917,7 +1061,13 @@ class ClaudeRuntimeAdapter:
         row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                           list(model_daily.values()), performance, wait_samples,
-                          availability=metric_availability("claude", cost=price_complete),
+                          availability=metric_availability(
+                              "claude", cost=price_complete,
+                              tokens=input_complete and output_complete,
+                              input_tokens=input_complete,
+                              output_tokens=output_complete,
+                              cache=input_complete,
+                          ),
                           session_name=declared_title)
         row["primary_model"] = primary_model
         row["context"] = {

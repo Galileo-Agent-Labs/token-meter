@@ -261,6 +261,37 @@ class ClaudeRuntimeAdapterTests(unittest.TestCase):
             "corrupt_rows", "usage_unavailable",
         ])
 
+    def test_native_load_rejects_malformed_and_oversized_usage(self):
+        self._write([
+            self.rows[0],
+            {
+                "type": "assistant", "timestamp": "2026-08-11T00:00:01Z",
+                "message": {
+                    "id": "bad-usage", "model": "claude-test",
+                    "usage": {
+                        "input_tokens": "bad",
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0,
+                        "output_tokens": 10 ** 400,
+                    },
+                    "content": [{"type": "text", "text": "private response"}],
+                    "stop_reason": "end_turn",
+                },
+            },
+        ])
+        source = self.adapter.discover(DiscoveryContext(home=str(self.root)))[0]
+
+        result = self.adapter.load(source, DetailLevel.FULL)
+
+        self.assertEqual(result.usage.input_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.output_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.cache_read_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.cache_write_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.turns[0].output_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual([warning.code for warning in result.warnings], [
+            "usage_unavailable",
+        ])
+
     def test_trace_and_desktop_metadata_both_change_revision(self):
         source = self.adapter.discover(DiscoveryContext(home=str(self.root)))[0]
         before = self.adapter.current_revision(source)

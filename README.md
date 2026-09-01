@@ -72,10 +72,10 @@ unavailable instead of appearing as a misleading zero.
 ## First Five Minutes
 
 1. Open **Sessions → Current sessions** and select an active run.
-2. Check cost confidence, context pressure, wait, input, output, and output pace
-   under **Run**. Add a session budget if the run needs an attention limit.
-3. After more sessions accumulate, use **Spend**, **Models**, and **Tools** to
-   review longer-term patterns.
+2. Under **Run**, check cost, context pressure, Output/$, and Reasoning ratio.
+   Add a session budget if the run needs an attention limit.
+3. After more sessions accumulate, use **Spend**, **Models**, **Tools**, and
+   **Efficiency** to review longer-term patterns.
 
 ## Product Tour
 
@@ -107,6 +107,16 @@ skill-pack activation, and bounded review candidates.
 <p align="center">
   <img src="images/tool-analytics.png" alt="Token Meter capability evidence and skill-pack review" width="900">
 </p>
+
+### Check token efficiency
+
+Use **Efficiency** to compare output per covered dollar and the reasoning share
+of covered output overall or by runtime-scoped model. Each headline includes a
+daily trend. Models default to spend descending and every column is sortable.
+Context load and output per token-covered execution remain as compact supporting
+statistics. Partial coverage and local estimates stay labelled beside the
+numbers. Claude thinking activity is noted, but its ratio stays unavailable
+unless the trace reports a separate thinking-token count.
 
 ### Configure budgets and agent access
 

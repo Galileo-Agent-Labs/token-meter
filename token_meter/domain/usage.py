@@ -19,6 +19,18 @@ _REPORTED_COST_WEIGHTS = {
     "output": 5.0,
     "reasoning": 5.0,
 }
+MAX_SAFE_TOKEN_COUNT = (1 << 53) - 1
+
+
+def normalize_reported_token_count(value):
+    """Return an exact, JSON-safe token count and whether it was reported."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0, False
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        return 0, False
+    if value < 0 or value > MAX_SAFE_TOKEN_COUNT:
+        return 0, False
+    return int(value), True
 
 
 def _combined_basis(*values):

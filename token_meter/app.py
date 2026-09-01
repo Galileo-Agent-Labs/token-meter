@@ -62,6 +62,7 @@ from token_meter.domain.usage import (
     cost_breakdown_values as _domain_cost_breakdown_values,
     make_usage_provenance as _domain_make_usage_provenance,
     metric_available as _domain_metric_available,
+    normalize_reported_token_count as _domain_normalize_reported_token_count,
     usage_io_token_counts as _domain_usage_io_token_counts,
     usage_provenance as _domain_usage_provenance,
     usage_token_total_counts as _domain_usage_token_total_counts,
@@ -320,6 +321,7 @@ CURRENT_SESSION_LIMIT = 8
 CURRENT_SESSION_CONTEXT_SAMPLES = 32
 SESSION_STATE_CACHE_LIMIT = 32
 MODEL_PROJECT_OPTION_LIMIT = 500
+OTHER_LOCAL_SESSIONS_PROJECT = "__other_local_sessions__"
 _summary_cache = {}
 _summary_cache_lock = threading.Lock()
 _matched_pace_cache = {"signature": None, "data": None}
@@ -2782,13 +2784,17 @@ def usage_io_tokens(u):
     )
 
 
-def add_model_summary(stats, model, usage, cost):
-    return _domain_add_model_summary(stats, model, usage, cost)
+def add_model_summary(stats, model, usage, cost, cost_available=None):
+    return _domain_add_model_summary(
+        stats, model, usage, cost, cost_available=cost_available,
+    )
 
 
-def add_model_daily(stats, model, usage, cost, ts):
+def add_model_daily(stats, model, usage, cost, ts, cost_available=None):
     """Accumulate exact trace-reported model I/O into local calendar days."""
-    return _domain_add_model_daily(stats, model, usage, cost, ts)
+    return _domain_add_model_daily(
+        stats, model, usage, cost, ts, cost_available=cost_available,
+    )
 
 
 def claude_performance_samples(objs):
@@ -2840,12 +2846,29 @@ def claude_performance_samples(objs):
         tool_ids = set()
         for rec in records:
             usage = rec.get("usage") or {}
-            in_count, out_count = usage_io_tokens(usage)
+            fresh_input, fresh_available = _domain_normalize_reported_token_count(
+                usage.get("input_tokens")
+            )
+            cache_read, cache_read_available = _domain_normalize_reported_token_count(
+                usage.get("cache_read_input_tokens", 0)
+            )
+            cache_write, cache_write_available = _domain_normalize_reported_token_count(
+                usage.get("cache_creation_input_tokens", 0)
+            )
+            out_count, output_available = _domain_normalize_reported_token_count(
+                usage.get("output_tokens")
+            )
+            if not (
+                fresh_available and cache_read_available
+                and cache_write_available and output_available
+            ):
+                return
+            in_count = fresh_input + cache_read + cache_write
             input_tokens += in_count
             output_tokens += out_count
-            uncached_input_tokens += int(usage.get("input_tokens") or 0)
-            cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
-            cache_write_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+            uncached_input_tokens += fresh_input
+            cache_read_tokens += cache_read
+            cache_write_tokens += cache_write
             peak_input_tokens = max(peak_input_tokens, in_count)
             for block in rec.get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
@@ -3140,7 +3163,9 @@ def claude_wait_samples(objs):
             message_id = msg.get("id") or obj.get("uuid")
             if message_id not in current["seen_usage"]:
                 current["seen_usage"].add(message_id)
-                _, output_tokens = usage_io_tokens(msg.get("usage") or {})
+                output_tokens, _ = _domain_normalize_reported_token_count(
+                    (msg.get("usage") or {}).get("output_tokens")
+                )
                 current["output_tokens"] += output_tokens
             for block in msg.get("content") or []:
                 if not isinstance(block, dict) or block.get("type") != "tool_use":
@@ -3231,15 +3256,37 @@ def performance_summary(samples, total_output_tokens=0):
 
 def codex_usage(raw):
     raw = raw or {}
-    input_total = int(raw.get("input_tokens") or 0)
-    cached = int(raw.get("cached_input_tokens") or 0)
+    input_total, input_reported = _domain_normalize_reported_token_count(
+        raw.get("input_tokens")
+    )
+    cached, cache_reported = _domain_normalize_reported_token_count(
+        raw.get("cached_input_tokens", 0)
+    )
+    output_tokens, output_reported = _domain_normalize_reported_token_count(
+        raw.get("output_tokens")
+    )
+    total_tokens, _ = _domain_normalize_reported_token_count(
+        raw.get("total_tokens", 0)
+    )
+    input_available = input_reported and cache_reported and cached <= input_total
+    reasoning_tokens, reasoning_available = _domain_normalize_reported_token_count(
+        raw.get("reasoning_output_tokens")
+    )
+    reasoning_available = (
+        output_reported
+        and reasoning_available
+        and reasoning_tokens <= output_tokens
+    )
     return {
-        "input_tokens": max(0, input_total - cached),
+        "input_tokens": max(0, input_total - cached) if input_available else 0,
         "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": cached,
-        "output_tokens": int(raw.get("output_tokens") or 0),
-        "reasoning_output_tokens": int(raw.get("reasoning_output_tokens") or 0),
-        "total_tokens": int(raw.get("total_tokens") or 0),
+        "cache_read_input_tokens": cached if input_available else 0,
+        "output_tokens": output_tokens if output_reported else 0,
+        "input_available": input_available,
+        "output_available": output_reported,
+        "reasoning_output_tokens": reasoning_tokens if reasoning_available else 0,
+        "reasoning_available": reasoning_available,
+        "total_tokens": total_tokens,
     }
 
 
@@ -4594,8 +4641,47 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
                 "tokens": int(values.get("tokens") or 0),
                 "input_tokens": int(values.get("input_tokens") or 0),
                 "output_tokens": int(values.get("output_tokens") or 0),
+                "token_covered_executions": int(values.get(
+                    "token_covered_executions", values.get("executions") or 0
+                ) or 0),
+                "io_covered_executions": int(values.get(
+                    "io_covered_executions", values.get("executions") or 0
+                ) or 0),
+                "cache_read_tokens": int(values.get("cache_read_tokens") or 0),
+                "cache_write_tokens": int(values.get("cache_write_tokens") or 0),
+                "reasoning_tokens": int(values.get("reasoning_tokens") or 0),
+                "reasoning_output_tokens": int(
+                    values.get("reasoning_output_tokens") or 0
+                ),
+                "reasoning_executions": int(values.get("reasoning_executions") or 0),
+                "thinking_executions": int(values.get("thinking_executions") or 0),
+                "thinking_covered_executions": int(
+                    values.get("thinking_covered_executions") or 0
+                ),
+                "reasoning_unavailable_executions": int(
+                    values.get(
+                        "reasoning_unavailable_executions",
+                        max(
+                            0,
+                            int(values.get("executions") or 0)
+                            - int(values.get("reasoning_executions") or 0),
+                        ),
+                    ) or 0
+                ),
                 "executions": int(values.get("executions") or 0),
                 "availability": values.get("availability") or availability,
+                **({"cost_covered_executions": int(
+                    values.get("cost_covered_executions") or 0
+                )} if "cost_covered_executions" in values else {}),
+                **({"cost_covered_output_tokens": int(
+                    values.get("cost_covered_output_tokens") or 0
+                )} if "cost_covered_output_tokens" in values else {}),
+                **({"cost_covered_cost": float(
+                    values.get("cost_covered_cost") or 0
+                )} if "cost_covered_cost" in values else {}),
+                **({"cache_covered_input_tokens": int(
+                    values.get("cache_covered_input_tokens") or 0
+                )} if "cache_covered_input_tokens" in values else {}),
             }
             for model, values in model_stats.items()
         ], key=lambda row: (-row["cost"], -row["tokens"], row["model"])),
@@ -4648,6 +4734,16 @@ def session_summary(source, opencode_conn=None):
     with _summary_cache_lock:
         _summary_cache[source["path"]] = {"signature": signature, "row": row}
     return row
+
+
+def selected_session_stats(source):
+    """Project exact, bounded efficiency statistics for one selected source."""
+    summary = session_summary(source)
+    return {
+        "model_stats": copy.deepcopy(summary.get("model_stats") or []),
+        "usage_basis": summary.get("usage_basis") or "reported",
+        "provenance": copy.deepcopy(summary.get("provenance") or {}),
+    }
 
 
 def current_session_summaries(rows, now=None, max_age_s=CURRENT_SESSION_MAX_AGE_S,
@@ -5327,6 +5423,163 @@ def set_agent_access(client, enabled, repair=False, runner=None, status_getter=N
     }
 
 
+def _toml_line_structure(line, state="normal", array_depth=0):
+    """Track TOML string state so root-table scanning never enters a literal."""
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if state == "triple-basic":
+            if line.startswith('\"\"\"', index):
+                state, index = "normal", index + 3
+            else:
+                index += 1
+        elif state == "triple-literal":
+            if line.startswith("'''", index):
+                state, index = "normal", index + 3
+            else:
+                index += 1
+        elif state == "basic":
+            if char == "\\":
+                index += 2
+            elif char == '"':
+                state, index = "normal", index + 1
+            else:
+                index += 1
+        elif state == "literal":
+            if char == "'":
+                state = "normal"
+            index += 1
+        else:
+            if char == "#":
+                break
+            if line.startswith('\"\"\"', index):
+                state, index = "triple-basic", index + 3
+            elif line.startswith("'''", index):
+                state, index = "triple-literal", index + 3
+            elif char == '"':
+                state, index = "basic", index + 1
+            elif char == "'":
+                state, index = "literal", index + 1
+            elif char == "[":
+                array_depth, index = array_depth + 1, index + 1
+            elif char == "]":
+                array_depth, index = max(0, array_depth - 1), index + 1
+            else:
+                index += 1
+    return state, array_depth
+
+
+def _toml_line_state(line, state="normal"):
+    return _toml_line_structure(line, state)[0]
+
+
+def _toml_is_table_header(line, state, array_depth):
+    if state != "normal" or array_depth:
+        return False
+    return bool(re.match(r"^[ \t]*(?:\[\[.*\]\]|\[.*\])[ \t]*(?:#.*)?(?:\r?\n)?$", line))
+
+
+def _toml_root_prefix(text):
+    offset, state, array_depth = 0, "normal", 0
+    for line in text.splitlines(keepends=True):
+        if _toml_is_table_header(line, state, array_depth):
+            return text[:offset], text[offset:]
+        state, array_depth = _toml_line_structure(line, state, array_depth)
+        offset += len(line)
+    return text, ""
+
+
+def _toml_comment_index(value):
+    index, state = 0, "normal"
+    while index < len(value):
+        char = value[index]
+        if state == "basic":
+            if char == "\\":
+                index += 2
+                continue
+            if char == '"':
+                state = "normal"
+        elif state == "literal":
+            if char == "'":
+                state = "normal"
+        elif char == "#":
+            return index
+        elif char == '"':
+            state = "basic"
+        elif char == "'":
+            state = "literal"
+        index += 1
+    return len(value)
+
+
+def _toml_root_assignment(prefix, key):
+    pattern = re.compile(rf"^(?P<before>[ \t]*(?:{re.escape(key)}|\"{re.escape(key)}\")[ \t]*=[ \t]*)(?P<after>.*)$")
+    offset, state = 0, "normal"
+    for line in prefix.splitlines(keepends=True):
+        line_body = line.rstrip("\r\n")
+        line_end = line[len(line_body):]
+        match = pattern.match(line_body) if state == "normal" else None
+        if match:
+            after = match.group("after")
+            comment_at = _toml_comment_index(after)
+            value = after[:comment_at].rstrip()
+            suffix = after[len(value):] + line_end
+            return {
+                "start": offset,
+                "end": offset + len(line),
+                "before": match.group("before"),
+                "value": value,
+                "suffix": suffix,
+            }
+        state = _toml_line_state(line, state)
+        offset += len(line)
+    return None
+
+
+def _toml_root_scalar(text, key):
+    prefix, _ = _toml_root_prefix(text)
+    assignment = _toml_root_assignment(prefix, key)
+    if not assignment:
+        return None
+    value = assignment["value"]
+    if value.startswith(('\"\"\"', "'''")):
+        return None
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    if len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+        return value[1:-1]
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _toml_root_scalar_text(value):
+    return str(int(value)) if isinstance(value, int) else json.dumps(value, ensure_ascii=False)
+
+
+def _set_toml_root_scalar(text, key, value):
+    prefix, suffix = _toml_root_prefix(text)
+    assignment = _toml_root_assignment(prefix, key)
+    if assignment and assignment["value"].startswith(('\"\"\"', "'''")):
+        raise ValueError(f"Codex {key} must be a single-line value.")
+    if value is None:
+        if assignment:
+            prefix = prefix[:assignment["start"]] + prefix[assignment["end"]:]
+        return prefix + suffix
+    if assignment:
+        replacement = f"{assignment['before']}{_toml_root_scalar_text(value)}{assignment['suffix']}"
+        prefix = prefix[:assignment["start"]] + replacement + prefix[assignment["end"]:]
+    else:
+        if prefix and not prefix.endswith("\n"):
+            prefix += "\n"
+        prefix += f"{key} = {_toml_root_scalar_text(value)}\n"
+    return prefix + suffix
+
+
 def set_codex_plugin_enabled(plugin_id, enabled):
     if not PLUGIN_ID_RE.fullmatch(str(plugin_id or "")):
         return {"ok": False, "error": "Invalid plugin id."}
@@ -5840,6 +6093,18 @@ def _finalize_throughput_fields(row):
     return row
 
 
+def project_filter_key(value):
+    """Keep project controls to folder-like paths; retain all other sessions together."""
+    project = str(value or "").strip().replace("\\", "/")
+    if (project.startswith("/") and not project.startswith("/private/")
+            or project.startswith("~/") and not project.startswith((
+                "~/.codex/", "~/Library/", "~/Documents/Codex/",
+            ))
+            or re.match(r"^[A-Za-z]:/", project)):
+        return project
+    return OTHER_LOCAL_SESSIONS_PROJECT
+
+
 def aggregate_model_stats(session_rows):
     return _domain_aggregate_model_stats(
         session_rows,
@@ -5847,6 +6112,7 @@ def aggregate_model_stats(session_rows):
         throughput_finalizer=_finalize_throughput_fields,
         matched_pace=matched_pace_windows,
         project_option_limit=MODEL_PROJECT_OPTION_LIMIT,
+        project_resolver=project_filter_key,
     )
 
 
@@ -6079,7 +6345,7 @@ def project_model_stats(project):
         }, 200
     matching = [
         row for row in (_xsess.get("internal_rows") or ())
-        if str(row.get("project") or "No project") == project
+        if project_filter_key(row.get("project")) == project
     ]
     if not matching:
         return {"ok": False, "error": "Project was not found."}, 404
@@ -8210,6 +8476,7 @@ class H(BaseHTTPRequestHandler):
             source = find_session(sid)
             st = cached_session_state(source) if source else None
             if st:
+                st["selected_stats"] = selected_session_stats(source)
                 cross = _xsess.get("data") or cross_session()
                 attach_cross_session(st, cross)
                 current_ids = {

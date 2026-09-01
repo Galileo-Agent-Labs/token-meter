@@ -108,7 +108,7 @@ class AggregateDomainTests(unittest.TestCase):
         self.assertEqual(row["timed_samples"], 2_100)
         self.assertLessEqual(len(row["workload_peak_inputs"]), 2_000)
         self.assertLessEqual(len(row["workload_outputs"]), 2_000)
-        self.assertLessEqual(len(captured_pace_groups["model-1::runtime"]), 500)
+        self.assertLessEqual(len(captured_pace_groups["model-1::runtime::unavailable"]), 500)
 
     def test_same_model_in_two_runtimes_stays_separate(self):
         result = aggregate_cross_session_rows([

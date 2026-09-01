@@ -111,6 +111,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .tbl{width:100%;border-collapse:collapse;font-size:13px}.tbl th{text-align:left;color:var(--faint);font-weight:780;font-size:11px;text-transform:uppercase;padding:8px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}.tbl td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.055);vertical-align:top}.tbl tr:hover td{background:rgba(255,255,255,.025)}.tbl tr:last-child td{border-bottom:0}.tbl .num{text-align:right;color:var(--dim)}.tbl .nm{font-weight:720}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:11px;border:1px solid var(--line);background:rgba(255,255,255,.045);border-radius:999px;padding:3px 7px;color:var(--dim);box-shadow:var(--inset)}.chip.mcp{color:#d4c0ff;border-color:rgba(183,140,255,.42);background:rgba(183,140,255,.12)}
 .tbtn{border:1px solid var(--line2);background:linear-gradient(180deg,rgba(0,188,235,.18),rgba(0,188,235,.08));color:var(--fg);border-radius:8px;padding:7px 10px;font:inherit;font-size:12px;font-weight:720;cursor:pointer}.tbtn:hover{border-color:rgba(0,188,235,.56);background:linear-gradient(180deg,rgba(0,188,235,.24),rgba(0,188,235,.1))}
+.sessionEfficiency{display:grid;grid-template-columns:minmax(112px,.55fr) repeat(2,minmax(0,1fr));align-items:stretch;margin-top:12px;padding:11px 14px;box-shadow:var(--shadow-soft)}.sessionEfficiencyIntro{display:flex;flex-direction:column;justify-content:center;padding-right:14px}.sessionEfficiencyIntro .sm{margin-top:2px;color:var(--faint);font-size:10.5px}.sessionEfficiencyMetric{min-width:0;padding:2px 16px;border-left:1px solid var(--line)}.sessionEfficiencyMetric strong{display:block;margin-top:2px;color:var(--fg);font-size:21px;font-weight:840;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sessionEfficiencyMetric span{display:block;margin-top:2px;color:var(--faint);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.previewStatus .previewRunEfficiencySlot{margin-top:14px;padding-top:11px;border-top:1px solid rgba(0,188,235,.14)}.previewStatus .previewRunEfficiencySlot .sessionEfficiency{grid-template-columns:repeat(2,minmax(0,1fr));margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}.previewStatus .previewRunEfficiencySlot .sessionEfficiencyIntro{grid-column:1/-1;flex-direction:row;align-items:baseline;justify-content:space-between;padding:0 0 8px}.previewStatus .previewRunEfficiencySlot .sessionEfficiencyIntro .sm{display:none}.previewStatus .previewRunEfficiencySlot .sessionEfficiencyMetric{padding:0 10px 0 0;border-left:0}.previewStatus .previewRunEfficiencySlot .sessionEfficiencyMetric+.sessionEfficiencyMetric{padding:0 0 0 10px;border-left:1px solid var(--line)}.previewStatus .previewRunEfficiencySlot .sessionEfficiencyMetric strong{font-size:18px}
 .sessionBudget{margin-top:12px;padding:12px 14px;display:grid;gap:9px;overflow:visible}.sessionBudgetHead,.sessionBudgetMeta{display:flex;align-items:center;justify-content:space-between;gap:14px}.sessionBudgetHead>div:first-child{min-width:0}.sessionBudgetExact{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:12px;white-space:nowrap}.sessionBudgetExact input{width:86px;background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:8px;color:var(--fg);padding:7px 9px;font:750 13px ui-monospace,"SF Mono",Menlo,monospace}.sessionBudgetExact input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.sessionBudgetTrack{display:grid;grid-template-columns:52px minmax(120px,1fr) 60px;align-items:center;gap:10px}.sessionBudgetTrack>span{font-size:10.5px;color:var(--faint)}.sessionBudgetTrack>span:last-child{text-align:right}.sessionBudgetTrack input[type=range]{--budget-fill:0%;appearance:none;-webkit-appearance:none;width:100%;height:22px;margin:0;background:transparent;cursor:pointer}.sessionBudgetTrack input[type=range]::-webkit-slider-runnable-track{height:7px;border:1px solid var(--line2);border-radius:999px;background:linear-gradient(90deg,var(--accent) 0 var(--budget-fill),rgba(255,255,255,.075) var(--budget-fill) 100%);box-shadow:var(--inset)}.sessionBudgetTrack input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;border:2px solid #dff8ff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,188,235,.15),0 3px 10px rgba(0,0,0,.45)}.sessionBudgetTrack input[type=range]:focus-visible{outline:none}.sessionBudgetTrack input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 5px rgba(0,188,235,.28),0 3px 10px rgba(0,0,0,.45)}.sessionBudgetTrack input[type=range]::-moz-range-track{height:7px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.075)}.sessionBudgetTrack input[type=range]::-moz-range-progress{height:7px;border-radius:999px;background:var(--accent)}.sessionBudgetTrack input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid #dff8ff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(0,188,235,.15)}.sessionBudgetMeta{font-size:11.5px;color:var(--faint)}.sessionBudgetMeta span:first-child{color:var(--dim);font-weight:680}
 .toastbox{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;flex-direction:column;gap:9px;width:min(360px,calc(100vw - 28px));pointer-events:none;transition:bottom .18s ease}.updateReady .toastbox{bottom:70px}.toast{pointer-events:auto;border:1px solid rgba(0,188,235,.38);border-left:4px solid var(--orange);border-radius:8px;background:linear-gradient(180deg,rgba(24,34,44,.98),rgba(13,18,24,.98));box-shadow:0 16px 42px rgba(0,0,0,.42);padding:10px 12px;animation:enter .18s ease}.toast.warn{border-left-color:var(--warn);border-color:rgba(255,180,87,.42)}.toast.bad{border-left-color:var(--bad);border-color:rgba(255,111,111,.42)}.toast .th{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;font-size:13px;font-weight:780}.toast .tb{font-size:12px;color:var(--dim);margin-top:2px}.toast button{border:0;background:transparent;color:var(--faint);font:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0}.toast button:hover{color:var(--fg)}.updateNotice{position:fixed;right:18px;bottom:18px;z-index:79;border:1px solid rgba(0,188,235,.58);border-radius:9px;background:linear-gradient(180deg,rgba(14,54,67,.98),rgba(10,29,38,.98));color:var(--fg);box-shadow:0 16px 42px rgba(0,0,0,.48),0 0 26px rgba(0,188,235,.12);padding:9px 13px;font:760 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer;animation:enter .18s ease}.updateNotice:hover{border-color:var(--accent);background:linear-gradient(180deg,rgba(18,69,84,.98),rgba(11,35,45,.98))}.updateNotice:disabled{cursor:wait;color:var(--dim);opacity:.84}.updateNotice[hidden]{display:none}
 .foot{margin-top:16px;font-size:11px;color:var(--faint);text-align:center}
@@ -121,6 +122,9 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
 .logsSummary{display:grid;grid-template-columns:minmax(380px,.78fr) minmax(440px,1.22fr);gap:10px;margin:0 0 12px;align-items:stretch}.logKpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.logStat{padding:13px 14px;min-height:82px;overflow:hidden}.logStat.waitStat{grid-column:1/-1;min-height:72px}.logStat .v{font-size:23px;font-weight:830;line-height:1.1;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logStat .subline{font-size:11px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.logModels{padding:13px 15px;min-width:0}.logModelsHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.logModelsHead .subline{font-size:11px;margin-top:2px}.logModelCount{font-size:11px;color:var(--faint);white-space:nowrap}.logModelList{display:grid;margin-top:6px}.logModelRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:7px 0;border-top:1px solid var(--line);min-width:0}.logModelRow:first-child{border-top:0}.logModelName{font-size:12.5px;font-weight:780;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelMeta{font-size:10.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.logModelValue{text-align:right}.logModelValue b{display:block;font-size:12.5px}.logModelValue span{display:block;font-size:10px;color:var(--faint);margin-top:1px}.logModelEmpty{font-size:12px;color:var(--faint);padding:16px 0 6px}
 .outputPair{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;min-width:0}.outputPair .v{min-width:0}.outputRate{display:grid;justify-items:end;line-height:1;padding-bottom:2px;white-space:nowrap}.outputRate strong{font-size:16px;color:var(--orange3);font-weight:840}.outputRate span{font-size:9.5px;color:var(--faint);font-weight:760;text-transform:uppercase;margin-top:3px}.modelHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}.modelHead h1,.modelHead h2{font-size:24px;line-height:1.2;margin:0}.modelHead p{color:var(--dim);margin:4px 0 0;font-size:13px;max-width:760px}.modelControls{display:grid;grid-template-columns:minmax(220px,290px) minmax(150px,190px);gap:9px;align-items:end}.modelPicker{position:relative;min-width:0}.modelPicker>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-width:0;height:38px;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 11px;font-size:13px;box-shadow:var(--inset);cursor:pointer}.modelPicker>summary::-webkit-details-marker{display:none}.modelPicker>summary:after{content:"\25be";color:var(--faint);font-size:11px;flex:0 0 auto}.modelPicker>summary span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelPicker[open]>summary,.modelPicker>summary:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.modelPickerMenu{position:absolute;right:0;top:calc(100% + 6px);z-index:60;width:max(100%,290px);max-height:min(360px,55vh);overflow:auto;border:1px solid var(--line2);border-radius:9px;background:linear-gradient(180deg,#17212b,#0d1218);box-shadow:0 18px 46px rgba(0,0,0,.58);padding:6px}.modelOption{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:center;gap:8px;padding:8px 9px;border-radius:7px;color:var(--dim);font-size:12.5px;cursor:pointer}.modelOption:hover{background:rgba(255,255,255,.055);color:var(--fg)}.modelOption input{width:15px;height:15px;margin:0;accent-color:var(--accent)}.modelOption span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelOption.all{border-bottom:1px solid var(--line);border-radius:7px 7px 0 0;margin-bottom:4px;padding-bottom:10px;font-weight:780;color:var(--fg)}.modelHero{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.modelKpi{padding:15px;min-height:110px;overflow:visible}.modelKpi .v{font-size:28px;font-weight:840;line-height:1.08;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.modelKpi .subline{font-size:11.5px;margin-top:5px}.modelDelta{display:inline-flex;align-items:center;gap:6px;color:var(--dim)}.modelDelta:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}.modelDelta.up{color:var(--good)}.modelDelta.up:before{background:var(--good)}.modelDelta.down{color:var(--warn)}.modelDelta.down:before{background:var(--warn)}.modelCoverage{height:7px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.045);overflow:hidden;margin-top:9px}.modelCoverage i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--orange3));border-radius:999px}.modelTrendCard{margin-top:12px;padding:16px 17px}.modelTrendHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.modelTrendHead h2{font-size:14px;margin:0}.modelTrendHead p{font-size:11.5px;color:var(--faint);margin:2px 0 0}.modelTrendControls{display:flex;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.modelLegend{display:flex;gap:13px;align-items:center;justify-content:flex-end;flex-wrap:wrap;color:var(--dim);font-size:11px}.modelLegend span{display:inline-flex;align-items:center;min-width:0;max-width:210px}.modelLegend i,.modelSwatch{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;flex:0 0 auto}.modelLegend b{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelChartWrap{position:relative;margin-top:10px}.modelChart{display:block;width:100%;height:270px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.022)}.modelChartTip{position:absolute;z-index:5;display:none;min-width:300px;max-width:min(440px,calc(100% - 16px));max-height:260px;overflow:auto;pointer-events:none;border:1px solid rgba(0,188,235,.5);background:linear-gradient(180deg,rgba(5,7,10,.98),rgba(13,18,24,.98));border-radius:8px;box-shadow:0 16px 34px rgba(0,0,0,.52);font:11.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;color:var(--dim)}.modelChartTip .h{padding:7px 10px;background:rgba(0,188,235,.14);font-weight:820;color:var(--fg)}.modelChartTip .r{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;padding:4px 10px}.modelChartTip .r span{display:flex;align-items:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelChartTip .r b{color:var(--fg);white-space:nowrap}.modelChartTip .cols{color:var(--faint);font-size:10px;border-bottom:1px solid var(--line);text-transform:uppercase}.modelTipSeries{padding:7px 10px;border-top:1px solid var(--line)}.modelTipSeries:first-of-type{border-top:0}.modelTipName{display:flex;align-items:center;min-width:0;color:var(--fg);font-weight:760;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelTipMetrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:5px}.modelTipMetrics span{display:grid;gap:1px;min-width:0}.modelTipMetrics small{color:var(--faint);font-size:9px;text-transform:uppercase}.modelTipMetrics b{color:var(--fg);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelTableWrap{margin-top:12px;overflow:auto;max-height:620px}.modelTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820;white-space:nowrap}.modelTableWrap .tbl th .fieldtip:after{bottom:auto;top:calc(100% + 7px);left:auto;right:0;z-index:4}.modelTableWrap .tbl td{vertical-align:middle}.modelNameLine{display:flex;align-items:center;min-width:0}.modelName{font-weight:790;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.modelRuntime{font-size:10.5px;color:var(--faint);margin-top:2px}.speedCell strong,.waitCell strong{display:block;color:var(--orange3);font-size:13px}.waitCell strong{color:var(--accent)}.speedCell span,.waitCell span{display:block;color:var(--faint);font-size:10px;margin-top:1px}.modelEmpty{padding:36px 16px;text-align:center;color:var(--faint)}
+.efficiencyHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.efficiencyRange{display:grid;gap:6px;min-width:260px}.efficiencyRange>span{font-size:10px;color:var(--faint);font-weight:780;text-transform:uppercase}.efficiencyHero{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.efficiencyHeadline{position:relative;min-height:184px;padding:15px 16px 12px;overflow:hidden}.efficiencyHeadline:after{content:"";position:absolute;right:-54px;bottom:-88px;width:210px;height:210px;border-radius:50%;background:radial-gradient(circle,rgba(0,188,235,.15),transparent 68%);pointer-events:none}.efficiencyHeadline.reasoning:after{background:radial-gradient(circle,rgba(199,167,255,.17),transparent 68%)}.efficiencyEyebrow{color:var(--dim);font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.efficiencyValueRow,.efficiencySupportValueRow{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.efficiencyValueRow{margin-top:7px}.efficiencyHeadline .v{min-width:0;font-size:34px;font-weight:860;line-height:1.02;letter-spacing:-.04em}.efficiencyTrendDelta{display:grid;justify-items:start;flex:0 0 auto;gap:2px;width:132px;padding:6px 9px;border:1px solid rgba(0,188,235,.38);border-radius:8px;background:rgba(0,188,235,.07);color:var(--orange3);font-size:10px;line-height:1.1}.efficiencyTrendDelta strong{font-size:16px;font-weight:840;line-height:1}.efficiencyTrendDelta span{color:var(--dim);font-size:10px;font-weight:720;white-space:nowrap}.efficiencyTrendDelta[data-tone="improving"]{border-color:rgba(102,217,144,.52);background:rgba(102,217,144,.1);color:var(--good)}.efficiencyTrendDelta[data-tone="degrading"]{border-color:rgba(255,111,111,.52);background:rgba(255,111,111,.1);color:var(--bad)}.efficiencyHeadline.reasoning .efficiencyTrendDelta[data-tone=""]{border-color:rgba(183,140,255,.5);background:rgba(183,140,255,.09);color:var(--spectrum-violet)}.efficiencyTrendDelta[data-direction=""]{border-color:var(--line2);background:rgba(255,255,255,.035);color:var(--faint)}.efficiencyTrendDelta[data-direction=""] strong{font-size:11px;line-height:1.2}.efficiencyCoverage{position:relative;z-index:1;margin-top:5px;color:var(--faint);font-size:10px}.efficiencyChartWrap{position:relative;z-index:2;margin-top:8px}.efficiencyChart{display:block;width:100%;height:64px;margin:0;color:var(--orange3);overflow:visible;cursor:crosshair}.efficiencyHeadline.reasoning .efficiencyChart{color:var(--spectrum-violet)}.efficiencyChartGrid{stroke:rgba(255,255,255,.07);stroke-width:1}.efficiencyChartLine{fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round}.efficiencyChartArea{fill:currentColor;opacity:.08}.efficiencyChartDot,.efficiencyChartInspectDot{fill:#101820;stroke:currentColor;stroke-width:2}.efficiencyChartInspect{pointer-events:none}.efficiencyChartInspectLine{stroke:currentColor;stroke-width:1;stroke-dasharray:3 3;opacity:.48}.efficiencyChartLabel{fill:var(--faint);font:9px ui-monospace,"SF Mono",Menlo,monospace}.efficiencyChartEmpty{fill:var(--faint);font:10px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.efficiencyChartTip{position:absolute;z-index:4;top:3px;transform:translateX(-50%);border:1px solid var(--line2);border-radius:6px;background:rgba(8,12,17,.96);box-shadow:var(--shadow-soft);color:var(--fg);padding:5px 8px;font:700 10px/1.2 ui-monospace,"SF Mono",Menlo,monospace;white-space:nowrap;pointer-events:none}.efficiencyChartTip[hidden]{display:none}.efficiencySupport{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.efficiencySupportItem{min-height:184px;padding:15px 16px 12px;overflow:hidden}.efficiencySupportValueRow{margin-top:7px;gap:10px}.efficiencySupportValueRow .v{margin-top:0}.efficiencySupportDelta{width:106px;padding:4px 7px}.efficiencySupportDelta strong{font-size:12px}.efficiencySupportDelta span{font-size:8.5px}.efficiencySupportItem .v{font-size:28px;font-weight:830;line-height:1.1;margin-top:6px}.efficiencySupportItem .subline{font-size:10px;line-height:1.35;margin-top:4px}.efficiencySupportItem .efficiencyChart{height:64px}.efficiencyModelCard{margin-top:12px;padding:0;overflow:hidden}.efficiencyModelHead{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 17px 11px;border-bottom:1px solid var(--line)}.efficiencyModelHead h2{font-size:14px;margin:0}.efficiencyModelMeta{font-size:10.5px;color:var(--faint);white-space:nowrap}.efficiencyTableWrap{overflow:auto;max-height:580px}.efficiencyTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820;white-space:nowrap}.efficiencyTableWrap .tbl td{vertical-align:middle}.efficiencySort{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px;width:100%;padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:inherit;text-transform:inherit;letter-spacing:inherit;cursor:pointer}.efficiencyTableWrap .tbl th:first-child .efficiencySort{justify-content:flex-start}.efficiencySort:hover,.efficiencySort:focus-visible{color:var(--fg)}.efficiencySort:focus-visible{outline:1px solid var(--orange);outline-offset:3px;border-radius:2px}.efficiencySortMark{width:9px;color:var(--orange3);font-size:9px;text-align:center}.efficiencyMetric strong{display:block;color:var(--fg);font-size:12.5px}.efficiencyMetric span{display:block;color:var(--faint);font-size:9.5px;margin-top:2px}.efficiencyEvidence{padding:9px 16px;border-top:1px solid var(--line);color:var(--faint);font-size:10px;line-height:1.35}
+.efficiencyTableWrap .tbl th,.efficiencyTableWrap .tbl td{padding-left:6px;padding-right:6px}
+.efficiencyChart{border-radius:4px}.efficiencyChart:focus-visible{outline:1px solid currentColor;outline-offset:3px}.efficiencyChartStatus{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .capHero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.currentCapHero{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}.capHero .pad{padding:13px 15px;overflow:visible}.capHero .card:hover,.capHero .card:focus-within{z-index:50}.capHero .fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:40}.capHero .card:last-child .fieldtip:after{left:auto;right:0}.capHero .meter{font-size:28px;margin-top:4px}.capHero .subline{font-size:12px;margin-top:5px}.capStatBar{height:8px;margin-top:9px;border:1px solid var(--line2);border-radius:999px;background:rgba(255,255,255,.055);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.42)}.capStatBar i{display:block;width:0;height:100%;border-radius:999px;transition:width .35s ease;background:linear-gradient(90deg,var(--good),var(--accent));box-shadow:0 0 14px rgba(102,217,144,.3)}.capStatBar.mcp i{background:linear-gradient(90deg,#9d72f1,#c2a5ff);box-shadow:0 0 14px rgba(183,140,255,.3)}.capStatBar.skill i{background:linear-gradient(90deg,var(--accent),var(--orange3));box-shadow:0 0 14px rgba(0,188,235,.3)}.capStatBar.warn i{background:linear-gradient(90deg,var(--warn),var(--orange));box-shadow:0 0 14px rgba(255,180,87,.3)}.capReview{margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border-left:3px solid var(--warn)}.capReview.good{border-left-color:var(--good)}.capReviewTitle{font-size:15px;font-weight:800;margin-top:4px}.capReviewDetail{font-size:12px;color:var(--dim);margin-top:3px;max-width:880px}.capCharts{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px}.capCharts .pad{padding:13px 17px}.defBar{height:12px;margin-top:10px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;overflow:hidden;display:flex}.defBar i{display:block;height:100%}.defBar .used{background:var(--good)}.defBar .unused{background:var(--warn)}.defBar .deferred{background:rgba(127,219,242,.42)}.capSource{margin-left:auto;font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 8px;background:rgba(255,255,255,.03);white-space:nowrap}.capFilters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:10px 0}.capTableWrap{overflow:auto;max-height:620px}.capTableWrap .tbl th{position:sticky;top:0;z-index:2;background:#111820}.capTableWrap .tbl th.sortable{cursor:pointer;user-select:none;white-space:nowrap}.capTableWrap .tbl th.sortable:after{content:"\2195";display:inline-block;margin-left:6px;color:var(--faint);font-size:10px}.capTableWrap .tbl th.sortable.sort-asc:after{content:"\2191";color:var(--accent)}.capTableWrap .tbl th.sortable.sort-desc:after{content:"\2193";color:var(--accent)}.capTableWrap .tbl th.sortable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}.stateDot{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.stateDot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint)}.stateDot.on:before{background:var(--good)}.stateDot.off:before{background:var(--bad)}.stateDot.lazy:before{background:var(--orange3)}.stateDot.prompt:before{background:var(--accent)}.capAction{border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:7px;padding:5px 8px;font:inherit;font-size:11px;font-weight:760;cursor:pointer;white-space:nowrap}.capAction:hover{border-color:var(--accent)}.capAction.disable{color:var(--warn);border-color:rgba(255,180,87,.4);background:rgba(255,180,87,.08)}.capAction:disabled{opacity:.45;cursor:not-allowed}.capPath{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint);font-size:11px}
 .capReviewActions{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.tbtn.danger{border-color:rgba(255,180,87,.45);background:rgba(255,180,87,.12);color:var(--warn)}.tbtn.danger:hover{background:rgba(255,180,87,.19)}
 .globalOverviewGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.overviewKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}.overviewKpis .pad{padding:14px}.overviewKpis .v{font-size:24px;font-weight:820;margin-top:4px}.overviewKpis .subline{font-size:11.5px;margin-top:3px}.overviewRows{display:grid;gap:7px;margin-top:12px}.overviewRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.overviewRow:first-child{border-top:0;padding-top:0}.overviewRow .name{font-weight:740;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.overviewRow .meta{font-size:11.5px;color:var(--faint);margin-top:2px}.overviewRow .value{text-align:right;font-weight:800}.priorityRows{display:grid;gap:8px;margin-top:12px}.priorityRow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line)}.priorityRow:first-child{border-top:0;padding-top:0}.priorityRow i{width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--accent)}.priorityRow.warn i{background:var(--warn)}.priorityRow.good i{background:var(--good)}.priorityRow b{display:block}.priorityRow span{display:block;color:var(--dim);font-size:12px;margin-top:2px}
@@ -138,6 +142,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .frustrationSection.positive .frustrationNotice{border-color:rgba(102,217,144,.24);border-left-color:var(--good);background:linear-gradient(90deg,rgba(102,217,144,.07),rgba(102,217,144,.018))}.frustrationSection.positive .frustrationHero .modelKpi:before{background:linear-gradient(90deg,var(--good),var(--accent),transparent 78%)}.frustrationSection.positive .signalRankTrack i,.frustrationSection.positive .chatSignalTrack i{background:linear-gradient(90deg,var(--good),var(--accent))}.frustrationSection.positive .signalRateBadge{border-color:rgba(102,217,144,.34);background:rgba(102,217,144,.08);color:var(--good)}
 .settingsLexicon{box-shadow:var(--shadow-soft)}.settingsLexiconHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.settingsLexicon h2{font-size:16px;line-height:1.25;margin:4px 0}.settingsLexicon p{color:var(--dim);font-size:11.5px;line-height:1.45;margin:0;max-width:420px}.settingsField{display:grid;gap:6px;margin-top:12px}.settingsField span{font-size:10px;text-transform:uppercase;color:var(--faint);font-weight:780}.settingsField textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line2);background:rgba(255,255,255,.045);color:var(--fg);border-radius:8px;padding:9px 10px;font:12px/1.45 ui-monospace,"SF Mono",Menlo,monospace;box-shadow:var(--inset)}.settingsField textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,188,235,.12)}.settingsActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.settingsActions .tbtn{padding:6px 9px;font-size:11px}.settingsActions .clearFilters{height:auto}.settingsStatus{width:100%;font-size:11px;color:var(--faint)}.settingsStatus.good{color:var(--good)}.settingsStatus.warn{color:var(--warn)}
 .previewHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:3px 0 14px}.previewHeadCopy{max-width:760px}.previewEyebrow{display:flex;align-items:center;gap:8px;color:var(--orange3);font-size:10.5px;font-weight:820;text-transform:uppercase;letter-spacing:.08em}.previewEyebrow span{border:1px solid rgba(0,188,235,.3);border-radius:999px;background:rgba(0,188,235,.08);padding:3px 7px}.previewHead h1{font-size:28px;line-height:1.08;margin:7px 0 0}.previewHead p{color:var(--dim);font-size:13px;margin:6px 0 0}.previewHead p:empty{display:none}.previewSwitch{flex:0 0 auto}.previewPanel{display:none}.previewPanel.on{display:block}.previewRunMeta{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}.previewRunMeta .repo{max-width:460px}.previewRunGrid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(300px,.65fr);gap:12px;align-items:start}.previewChartSlot,.previewDecision{min-width:0}.previewChartSlot .section-h{margin:0 0 10px}.previewChartSlot #session-chart-module>.card{min-height:350px}.previewChartSlot .chart{height:286px}.previewDecision{display:grid;gap:12px}.previewStatus{overflow:hidden;padding:17px;background:linear-gradient(155deg,rgba(23,37,48,.98),rgba(12,17,23,.98))}.previewStatus:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--good),var(--accent),transparent)}.previewStatus.warn:before{background:linear-gradient(90deg,var(--bad),var(--warn),transparent)}.previewStatusTop{display:flex;align-items:center;justify-content:space-between;gap:12px}.previewState{display:inline-flex;align-items:center;gap:7px;color:var(--good);font-size:11px;font-weight:820;text-transform:uppercase;letter-spacing:.05em}.previewState:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.previewStatus.warn .previewState{color:var(--bad)}.previewIdle{color:var(--faint);font-size:11px}.previewCost{font-size:clamp(32px,3.4vw,44px);font-weight:850;line-height:1.02;margin-top:12px;white-space:nowrap}.previewCostNote{color:var(--dim);font-size:12px;margin-top:6px}.previewPressure{margin-top:16px;padding-top:13px;border-top:1px solid var(--line)}.previewPressureHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;color:var(--dim);font-size:11.5px}.previewPressureHead b{color:var(--fg)}.previewPressureBar{height:7px;margin-top:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}.previewPressureBar i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--orange3));transition:width .2s}.previewRunBudgetSlot .sessionBudget{margin:0;box-shadow:var(--shadow-soft)}.previewRunBudgetSlot .sessionBudgetHead{align-items:flex-start;flex-direction:column;gap:9px}.previewRunBudgetSlot .sessionBudgetExact{width:100%;justify-content:space-between}.previewKpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:12px}.previewKpi{padding:12px 13px;min-height:92px}.previewKpi .v{font-size:20px;font-weight:820;margin-top:5px;overflow-wrap:anywhere}.previewKpi .sm{color:var(--faint);font-size:10.5px;margin-top:3px}.previewBrief{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:12px;margin-top:12px}.previewBrief .card{padding:16px}.previewStartText{font-size:14px;font-weight:720;line-height:1.45;margin-top:7px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.previewActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:13px}.previewInsightList{display:grid;gap:7px;margin-top:9px}.previewInsight{display:grid;grid-template-columns:8px minmax(0,1fr);gap:8px;align-items:start;color:var(--dim);font-size:12px}.previewInsight i{width:7px;height:7px;border-radius:50%;margin-top:5px;background:var(--accent)}.previewInsight.warn i{background:var(--warn)}.previewInsight.good i{background:var(--good)}.previewSettingsLayout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:12px;align-items:start}.previewSettingsNav{position:sticky;top:88px;padding:14px}.previewSettingsNav h2{font-size:15px;margin:0}.previewSettingsNav p{color:var(--dim);font-size:11.5px;margin:5px 0 12px}.previewSettingsNav button{width:100%;display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:center;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;color:var(--dim);padding:10px 2px;font:inherit;font-size:12px;font-weight:730;cursor:pointer}.previewSettingsNav button:hover{color:var(--fg)}.previewSettingsNav button span:first-child{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--line2);border-radius:6px;color:var(--orange3);font-size:10px}.previewSettingsContent{display:grid;gap:12px;min-width:0}.previewSettingsSlot{scroll-margin-top:100px;min-width:0}.previewSettingsSlot>.card{width:100%}.previewSettingsSlot .settingsLexicon p{max-width:700px}.settingsHome{display:contents}.sessionChartModule{min-width:0}
+.previewChartColumn{display:grid;align-content:start;gap:12px;min-width:0}.previewChartColumn .previewTokenSlot{margin-top:0}
 .previewTimes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}.previewTimes div{min-width:0}.previewTimes span{display:block;color:var(--faint);font-size:9.5px;text-transform:uppercase;letter-spacing:.04em}.previewTimes b{display:block;margin-top:4px;color:var(--dim);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.previewKpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.previewKpi{min-height:96px}.previewKpi .v{font-size:clamp(17px,1.55vw,21px)}.settingsPageLayout{display:grid;gap:10px}.settingsMap{display:grid;grid-template-columns:minmax(150px,.68fr) repeat(5,minmax(135px,1fr));align-items:stretch;padding:9px 11px;overflow:hidden}.settingsMap:before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent),var(--orange3),transparent)}.settingsMapIntro{display:grid;align-content:center;padding:3px 10px 3px 2px}.settingsMap h2{font-size:14px;margin:0}.settingsMapIntro p{color:var(--faint);font-size:10.5px;margin:3px 0 0}.settingsMap button{width:100%;display:grid;grid-template-columns:25px minmax(0,1fr);gap:8px;align-items:center;text-align:left;border:0;border-left:1px solid var(--line);background:transparent;color:var(--dim);padding:7px 11px;font:inherit;cursor:pointer;border-radius:0}.settingsMap button:hover,.settingsMap button:focus-visible{color:var(--fg);background:rgba(255,255,255,.03)}.settingsMap button>span:first-child{display:grid;place-items:center;width:23px;height:23px;border:1px solid var(--line2);border-radius:6px;color:var(--orange3);font:800 9.5px/1 ui-monospace,"SF Mono",Menlo,monospace}.settingsMap button b,.settingsMap button small{display:block}.settingsMap button b{font-size:11.5px}.settingsMap button small{color:var(--faint);font-size:9.5px;font-weight:500;margin-top:1px}.settingsPageContent{display:grid;gap:10px;min-width:0}.settingsPageContent>.card{scroll-margin-top:100px;width:100%;padding:14px 16px}.settingsBudgetSection{display:grid;gap:10px;scroll-margin-top:100px}.settingsBudgetSection .learnHead{margin-bottom:0}.settingsPageContent .settingsLexicon p{max-width:760px}.settingsPageContent .agentClients{margin-top:12px}.settingsPageContent .agentPromise{margin-top:9px}.settingsSignalGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.settingsSignalGrid .settingsField{margin-top:12px}.sessionChartModule{min-width:0}
 .previewSurface{display:none}.previewSurface.on{display:block}.previewSharedSlot{min-width:0}.previewSharedSlot>.session-panel{display:block}.previewStartStrip{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:12px;margin-bottom:12px;padding:11px 14px;min-width:0;border-left:3px solid var(--accent)}.previewStartLabel{color:var(--orange3);font-size:10px;font-weight:820;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}.previewStartStrip .previewStartText{display:block;min-width:0;margin:0;color:var(--fg);font-size:12.5px;font-weight:700;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.previewStartStrip .previewStartText:after{bottom:auto;top:calc(100% + 8px);z-index:60}.previewTokenSlot{margin-top:12px;min-width:0}.previewTokenSlot>.usageSplit{width:100%;margin:0}.previewTokenSlot .bar{height:26px}.previewKpi.fieldtip{display:block;overflow:visible}.previewKpi.fieldtip:after{bottom:auto;top:calc(100% + 8px);z-index:45}.previewKpi:hover,.previewKpi:focus{z-index:50;border-color:rgba(0,188,235,.34)}.previewSpeed .v{color:var(--accent);text-shadow:0 0 18px rgba(0,188,235,.18)}.previewAttention{grid-template-columns:1fr}.previewAttentionHead{display:flex;align-items:center;justify-content:space-between;gap:12px}.previewAttention .previewActions{margin-top:0}.sessionChartModule{min-width:0}
 .currentSessionFilterGroups{display:flex;align-items:center;gap:10px;min-width:0;overflow-x:auto;scrollbar-width:none}.currentSessionFilterGroups::-webkit-scrollbar{display:none}.currentSessionFilterGroup{display:flex;align-items:center;gap:5px;flex:0 0 auto}.currentSessionFilterGroup[hidden]{display:none}.currentSessionFilterLabel{color:var(--faint);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.currentSessionsCount{white-space:nowrap}
@@ -165,11 +170,11 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 @media(max-width:1120px){.currentSessionGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:1120px) and (min-width:901px){.frustrationBreakdown{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.frustrationBreakdown .chatPanel{grid-column:1/-1}}
 @media(max-width:1120px) and (min-width:901px){.globalControls{grid-template-columns:minmax(220px,1fr) minmax(190px,.8fr) minmax(150px,.55fr)}.filterSort{grid-column:1/3}.filterCount{align-self:end}}
-@media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.logsSummary{grid-template-columns:1fr}.logKpis,.modelHero{grid-template-columns:repeat(2,minmax(0,1fr))}.modelHead{align-items:flex-start;flex-direction:column}.modelControls{width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}.efficiencySupport{grid-template-columns:repeat(2,minmax(0,1fr))}.efficiencyHead{align-items:flex-start;flex-direction:column}.efficiencyRange{width:100%;min-width:0}}
 @media(max-width:900px){.budgetForm{grid-template-columns:1fr}.budgetAllocationFields{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.wrap{padding:14px}.top{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px 8px;padding-top:8px}.top .brand{grid-column:1/-1;min-width:0}.top .tabs{grid-column:1/-1;justify-self:stretch;justify-content:flex-start;width:100%;max-width:100%;overflow-x:auto}.top .spacer{display:none}.top .commandTrigger{grid-column:1;justify-self:start}.top .notify{grid-column:3;justify-self:end}.glob-hero,.wasteHero,.globalWasteGrid,.globalControls,.capHero,.capCharts,.capFilters,.capReview,.globalOverviewGrid,.dailyOverview,.dailyGrid,.dailyQualityGrid,.settingsGrid,.agentClients,.agentDisclosure,.frustrationBreakdown,.budgetDashboard,.budgetDetailGrid{grid-template-columns:1fr}.overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.globalControls .seg,.capFilters .seg{justify-content:flex-start}.globalMeta{white-space:normal}.srow{grid-template-columns:72px minmax(0,1fr) auto}.srow .tok,.srow .models{display:none}.meter{font-size:46px;overflow-wrap:anywhere}.costcard .meter{font-size:54px}.sessionhead{flex-wrap:wrap}.sessid{max-width:100%}.pill{white-space:normal}.statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailyHead{align-items:flex-start;flex-direction:column}.dailyQualityGrid{gap:16px}.agentDiscovery{align-items:flex-start;flex-wrap:wrap}.agentAccessHead{display:block}.agentAccessBadge{display:inline-block;margin-top:10px}.frustrationChart{height:240px}.chatSignalList{max-height:430px}}
 @media(max-width:900px){.previewHead{align-items:flex-start;flex-direction:column}.previewRunGrid,.previewBrief{grid-template-columns:1fr}.settingsMap{grid-template-columns:repeat(2,minmax(0,1fr))}.settingsMapIntro{grid-column:1/-1;padding:2px 2px 7px}.settingsMap button{border:1px solid var(--line);border-radius:7px;padding:8px}.previewChartSlot .chart{height:250px}.previewKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero{grid-template-columns:1fr;gap:8px}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.modelControls{grid-template-columns:1fr}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
+@media(max-width:520px){body{overflow-x:hidden}.tab,.seg button{padding:7px 11px}.top{grid-template-columns:minmax(0,1fr) auto}.top .commandTrigger{grid-column:1;justify-self:start}.top .notify{grid-column:1/-1;justify-self:start}.commandPalette{width:calc(100vw - 20px)}.commandSearch{padding:12px}.commandFooter{justify-content:flex-start;flex-wrap:wrap}.commandDescription{white-space:normal}.sessionStart{grid-template-columns:1fr;gap:3px}.overview,.overviewKpis,.modelHero,.efficiencyHero{grid-template-columns:1fr;gap:8px}.efficiencySupport{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.efficiencyHeadline{min-height:226px;padding:17px}.efficiencyHeadline .v{font-size:38px}.efficiencyModelHead,.efficiencyEvidence{align-items:flex-start;flex-direction:column}.ov{padding:13px 12px}.stat .v,.ov .v{font-size:22px}.meter{font-size:44px}.costcard .meter{font-size:42px}.costcard .subline{white-space:normal}.costmeta,.statgrid,.modelControls{grid-template-columns:1fr}.repo{max-width:100%}.dailyHead{width:100%}.dailyPicker{width:100%}.dailyPicker select{flex:1;min-width:0}.dailySpendTop{display:block}.dailyDelta{margin-top:12px}.dailySpendValue{font-size:44px}.dailyMetric{padding-left:9px;padding-right:9px}.dailyMetric .v{font-size:18px}.dailySession{grid-template-columns:26px minmax(0,1fr) auto}.dailySessionValue{min-width:62px}.dailySession .tbtn{grid-column:2/-1;justify-self:end}.dailySectionHead{display:block}.dailySectionHead .globalMeta{margin-top:4px}.dailyQualityNumbers{grid-template-columns:1fr 1fr}.learnStep{grid-template-columns:34px minmax(0,1fr)}.learnStep .tbtn{grid-column:2;justify-self:start}.glossaryToolbar{grid-template-columns:1fr}.capReviewActions{justify-content:flex-start}.modelChart{height:230px}.modelTrendHead{display:block}.modelLegend{margin-top:7px}.outputPair{display:block}.outputRate{justify-items:start;margin-top:5px}.frustrationChart{height:220px}.signalPanelHead{display:block}.signalPanelHead .seg{display:inline-flex;margin-top:9px}.chatSignal{grid-template-columns:minmax(0,1fr) auto}.chatSignalMeta{max-width:220px}.settingsLexiconHead{display:block}.settingsStatus{width:100%;margin-left:0}}
 @media(max-width:520px){.previewHead h1{font-size:24px}.previewRunMeta{flex-wrap:wrap}.previewRunMeta .repo{max-width:100%;width:100%}.previewChartSlot #session-chart-module>.card{min-height:0}.previewChartSlot .chart{height:226px}.previewChartSlot .chartbar{align-items:flex-start}.previewChartSlot .chartbar .label{width:100%;margin:0}.previewKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.previewKpi{min-height:82px;padding:10px}.previewKpi .v{font-size:17px}.previewCost{font-size:34px}.budgetReadouts,.budgetForm,.settingsMap,.settingsSignalGrid{grid-template-columns:1fr}.budgetCoreFields,.budgetAllocationFields{grid-template-columns:repeat(2,minmax(0,1fr))}.budgetAllocationFields label:last-child{grid-column:1/-1}.budgetReadouts>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 8px;padding:10px 11px}.budgetReadouts .v{margin-top:0}.budgetReadouts .subline{grid-column:1/-1}.budgetLeadHeadActions{justify-content:flex-start;margin-top:10px}.learnSectionHead .budgetLeadHeadActions .tbtn{margin-top:0}.budgetConfigHead{display:block}.budgetConfigBadge{display:inline-block;margin-top:9px}.budgetActions .settingsStatus{width:auto}.budgetRuntimeValue{display:grid;gap:1px;justify-items:end}.budgetChartInner{min-width:440px}.settingsMap button{width:100%;margin:0}.settingsPageContent>.card{padding:13px}.settingsPageContent .modelPriceTableWrap{margin-left:-5px;margin-right:-5px}}
 @media(max-width:520px){.budgetRuntimeHead{display:none}.budgetRuntime{grid-template-columns:minmax(0,1fr) minmax(100px,108px);grid-template-areas:"name input" "value input";padding:9px 0}.budgetRuntime:first-child{padding-top:9px}.budgetRuntimeValue{justify-items:start}.budgetRuntimeInput span{display:block}}
 @media(max-width:520px){.budgetSpendSummary{grid-template-columns:minmax(0,1.15fr) minmax(108px,.85fr);gap:12px}.budgetSpendLimit{padding-left:12px}.budgetSpendValue{font-size:clamp(32px,10vw,42px)}.budgetSpendBudget{font-size:23px}.budgetLeadBody .budgetReadouts{grid-template-columns:1fr}}
@@ -256,6 +261,7 @@ body.sessionRoute #view-session.sessionAll{--view-spectrum-a:rgba(0,188,235,.6);
 #view-daily{--view-spectrum-a:rgba(127,219,242,.58);--view-spectrum-b:rgba(255,180,87,.28);--view-spectrum-c:rgba(0,188,235,.34);--view-haze-a:rgba(127,219,242,.28);--view-haze-b:rgba(255,180,87,.12)}
 #view-models{--view-spectrum-a:rgba(199,167,255,.52);--view-spectrum-b:rgba(0,188,235,.38);--view-spectrum-c:rgba(127,219,242,.3);--view-haze-a:rgba(199,167,255,.23);--view-haze-b:rgba(0,188,235,.18)}
 #view-capabilities{--view-spectrum-a:rgba(0,188,235,.6);--view-spectrum-b:rgba(199,167,255,.38);--view-spectrum-c:rgba(27,160,225,.32);--view-haze-a:rgba(0,188,235,.26);--view-haze-b:rgba(199,167,255,.2)}
+#view-efficiency{--view-spectrum-a:rgba(0,188,235,.58);--view-spectrum-b:rgba(199,167,255,.42);--view-spectrum-c:rgba(255,180,87,.24);--view-haze-a:rgba(0,188,235,.24);--view-haze-b:rgba(199,167,255,.16)}
 #view-learn{--view-spectrum-a:rgba(127,219,242,.56);--view-spectrum-b:rgba(0,188,235,.34);--view-spectrum-c:rgba(255,180,87,.26);--view-haze-a:rgba(127,219,242,.25);--view-haze-b:rgba(255,180,87,.11)}
 #view-settings{--view-spectrum-a:rgba(199,167,255,.5);--view-spectrum-b:rgba(27,160,225,.36);--view-spectrum-c:rgba(0,188,235,.32);--view-haze-a:rgba(199,167,255,.22);--view-haze-b:rgba(0,188,235,.17)}
 body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr));background:var(--spectrum-card)}
@@ -382,9 +388,7 @@ body.sessionRoute #view-session.sessionDetail .previewStartLabel{color:var(--ses
 body.sessionRoute #view-session.sessionDetail .previewRunGrid{gap:14px}
 body.sessionRoute #view-session.sessionDetail .previewChartSlot #session-chart-module>.card{border-color:rgba(0,188,235,.15);border-radius:8px;background:radial-gradient(circle at 100% 0,rgba(0,188,235,.07),transparent 28%),linear-gradient(160deg,rgba(17,24,32,.98),rgba(7,11,15,.98));box-shadow:none}
 body.sessionRoute #view-session.sessionDetail .previewChartSlot .chart{border-color:rgba(255,255,255,.07);border-radius:6px;background:linear-gradient(180deg,rgba(5,9,13,.72),rgba(4,7,10,.5))}
-body.sessionRoute #view-session.sessionDetail .previewStatus{--context-pressure:0%;isolation:isolate;padding:18px;border-color:rgba(0,188,235,.24);border-radius:8px;background:radial-gradient(circle at 96% 5%,rgba(127,219,242,.16),transparent 34%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.1),transparent 40%),linear-gradient(145deg,rgba(23,33,43,.99),rgba(8,14,20,.99));box-shadow:var(--shadow-soft)}
-body.sessionRoute #view-session.sessionDetail .previewStatus:before{content:"";position:absolute;z-index:-1;inset:auto -58px -72px auto;width:184px;height:184px;overflow:hidden;border:1px solid rgba(0,188,235,.34);border-radius:50%;background:linear-gradient(to top,transparent 0 calc(var(--context-pressure) - 1px),rgba(127,219,242,.9) calc(var(--context-pressure) - 1px) calc(var(--context-pressure) + 1px),transparent calc(var(--context-pressure) + 1px) 100%),linear-gradient(to top,rgba(0,188,235,.34) 0 var(--context-pressure),rgba(0,188,235,.025) var(--context-pressure) 100%),radial-gradient(circle at 38% 30%,rgba(127,219,242,.22),rgba(27,160,225,.06) 44%,rgba(199,167,255,.04) 62%,transparent 72%);box-shadow:0 24px 58px rgba(0,96,132,.22);transition:background .24s ease}
-body.sessionRoute #view-session.sessionDetail .previewStatus>*{position:relative;z-index:1}
+body.sessionRoute #view-session.sessionDetail .previewStatus{padding:18px;border-color:rgba(0,188,235,.24);border-radius:8px;background:radial-gradient(circle at 96% 5%,rgba(127,219,242,.16),transparent 34%),radial-gradient(circle at 8% 100%,rgba(199,167,255,.1),transparent 40%),linear-gradient(145deg,rgba(23,33,43,.99),rgba(8,14,20,.99));box-shadow:var(--shadow-soft)}
 body.sessionRoute #view-session.sessionDetail .previewState{color:var(--good);font-size:11px}
 body.sessionRoute #view-session.sessionDetail .previewCost{color:var(--session-sky);font-size:clamp(34px,3vw,44px);font-weight:730;letter-spacing:-.02em;white-space:nowrap}
 body.sessionRoute #view-session.sessionDetail .previewCostNote{color:var(--dim)}
@@ -428,7 +432,7 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 .learnOnboarding{padding:16px;border:1px solid rgba(0,188,235,.25);border-radius:9px;background:rgba(0,188,235,.045)}.learnOnboarding .learnSectionHead{align-items:center}.learnShortcutGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}.learnShortcut{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.025);color:var(--dim);font-size:11px}.learnShortcut kbd{min-width:42px;border:1px solid var(--line2);border-radius:5px;background:rgba(255,255,255,.055);padding:2px 6px;color:var(--fg);font:750 10.5px/1.35 ui-monospace,"SF Mono",Menlo,monospace;text-align:center;white-space:nowrap}
 @media(max-width:900px){.onboardingChecklist{grid-template-columns:repeat(3,minmax(0,1fr))}.learnShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.onboardingCard{padding:13px}.onboardingHead{display:grid;grid-template-columns:1fr}.onboardingHeadActions{justify-content:space-between}.onboardingNext{grid-template-columns:1fr}.onboardingNext .tbtn{justify-self:start}.onboardingChecklist,.learnShortcutGrid{grid-template-columns:1fr}.onboardingCard.collapsed .onboardingHead{grid-template-columns:minmax(0,1fr) auto;align-items:center}.onboardingCard.collapsed .onboardingHeadActions{justify-content:end}.onboardingCard.collapsed .onboardingCount{display:none}.commandCoach{align-items:stretch;flex-direction:column;padding:9px 12px}.commandCoach .tbtn{width:100%}.onboardingLesson{padding:18px}.onboardingLesson h2{font-size:20px}.onboardingLessonFoot{align-items:flex-start;flex-direction:column}.onboardingLessonFoot .tbtn{width:100%}}
-.modelHead.spectrumPageHead{z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:2}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}
+:is(.modelHead,.efficiencyHead).spectrumPageHead{overflow:hidden;z-index:2}.spectrumPageHeadFrame:has(.modelControls){z-index:10}.modelPickerMenu{max-height:min(360px,calc(100dvh - 136px))}.modelPicker.opensUp .modelPickerMenu{top:auto;bottom:calc(100% + 6px)}body.spectrumApp .currentSessionCard:hover,body.spectrumApp.sessionRoute #view-session .currentSessionCard:hover{transform:none}body.spectrumApp.sessionRoute #view-session .srow:hover{transform:none}
 .dailySpendCard:before{content:none}
 /* tools-review-workflow-v3 */
 .capPageIntro{max-width:720px;margin:4px 0 0;color:var(--dim);font-size:12px;line-height:1.45}
@@ -456,6 +460,7 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 @media(max-width:900px){.spectrumPageActions .modelControls{display:grid;width:100%;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.spectrumPageActions .modelControls .filterControl{min-width:0}.spectrumPageActions .spendRangeControls{display:block;width:100%;min-width:0}.spectrumPageActions .spendRangeControls .seg{display:flex;width:100%;grid-template-columns:none;overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.spectrumPageActions .spendRangeControls .seg::-webkit-scrollbar{display:none}.spectrumPageActions .spendRangeControls .seg button{flex:0 0 auto}}
 @media(max-width:520px){.spectrumPageActions .modelControls{grid-template-columns:repeat(3,minmax(0,1fr))}.spectrumPageActions .spendRangeControls .seg{display:flex;grid-template-columns:none}.spectrumPageActions .spendRangeControls .seg button{padding-inline:8px}.spectrumPageActions .spendRangeControls [data-spend-range=custom]{grid-column:auto}}
 .currentSessionRuntime:before,.badge.app:before{content:none}.runtimeMark{display:block;width:16px;height:16px;flex:0 0 auto;overflow:visible;color:currentColor}.runtimeMark path,.runtimeMark circle,.runtimeMark polygon{vector-effect:non-scaling-stroke}.currentSessionRuntime .runtimeMark{width:18px;height:18px}
+.efficiencyHeadline{min-height:166px;padding:13px 15px 10px}.efficiencySupportItem{min-height:166px;padding:13px 15px 10px}.efficiencyHeadline .efficiencyChart{height:56px}.efficiencySupportItem .efficiencyChart{height:56px}.efficiencySupportDelta{width:132px;padding:6px 9px}.efficiencySupportDelta strong{font-size:16px}.efficiencySupportDelta span{font-size:10px}
 </style></head><body class=spectrumApp>
 <!--
 THESIS: Sessions are live instruments, not a generic grid of dark cards.
@@ -473,11 +478,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   <button class="tab on" id=tab-session data-label=Sessions aria-label=Sessions aria-keyshortcuts="Alt+1" title="Sessions · Shortcut: Option+1"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h16M4 12h16M4 17h16"/><path d="M7 5v4M14 10v4M18 15v4"/></svg><span class=tabLabel>Sessions</span><span class=tabShortcut aria-hidden=true>1</span></button>
 	   <button class=tab id=tab-daily data-label=Spend aria-label=Spend aria-keyshortcuts="Alt+2" title="Spend · Shortcut: Option+2"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 9h16M8 13h3M8 17h7"/></svg><span class=tabLabel>Spend</span><span class=tabShortcut aria-hidden=true>2</span></button>
 	   <button class=tab id=tab-models data-label=Models aria-label=Models aria-keyshortcuts="Alt+3" title="Models · Shortcut: Option+3"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 18l5-5 4 2 7-8"/><path d="M16 7h4v4M4 20h16"/></svg><span class=tabLabel>Models</span><span class=tabShortcut aria-hidden=true>3</span></button>
-	   <button class=tab id=tab-capabilities data-label=Tools aria-label=Tools aria-keyshortcuts="Alt+4" title="Tools · Shortcut: Option+4"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M14 6a4 4 0 0 0-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-3 3-3-3z"/></svg><span class=tabLabel>Tools</span><span class=tabShortcut aria-hidden=true>4</span></button>
+	   <button class=tab id=tab-efficiency data-label=Efficiency aria-label=Efficiency aria-keyshortcuts="Alt+5" title="Efficiency · Shortcut: Option+5"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M5 19V9M12 19V5M19 19v-7"/><path d="M3 19h18"/></svg><span class=tabLabel>Efficiency</span><span class=tabShortcut aria-hidden=true>5</span></button>
 	   </div>
 	   <div class=navSecondary>
-	   <button class=tab id=tab-learn data-label=Learn aria-label=Learn aria-keyshortcuts="Alt+5" title="Learn · Shortcut: Option+5"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22zM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"/></svg><span class=tabLabel>Learn</span><span class=tabShortcut aria-hidden=true>5</span></button>
-	   <button class=tab id=tab-settings data-label=Settings aria-label=Settings aria-keyshortcuts="Alt+6" title="Settings · Shortcut: Option+6"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h10M18 7h2M4 17h3M11 17h9M14 4v6M7 14v6"/></svg><span class=tabLabel>Settings</span><span class=tabShortcut aria-hidden=true>6</span></button>
+	   <button class=tab id=tab-learn data-label=Learn aria-label=Learn aria-keyshortcuts="Alt+6" title="Learn · Shortcut: Option+6"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22zM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"/></svg><span class=tabLabel>Learn</span><span class=tabShortcut aria-hidden=true>6</span></button>
+	   <button class=tab id=tab-capabilities data-label=Tools aria-label=Tools aria-keyshortcuts="Alt+4" title="Tools · Shortcut: Option+4"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M14 6a4 4 0 0 0-5 5L4 16l4 4 5-5a4 4 0 0 0 5-5l-3 3-3-3z"/></svg><span class=tabLabel>Tools</span><span class=tabShortcut aria-hidden=true>4</span></button>
+	   <button class=tab id=tab-settings data-label=Settings aria-label=Settings aria-keyshortcuts="Alt+7" title="Settings · Shortcut: Option+7"><svg class=tabIcon viewBox="0 0 24 24" aria-hidden=true><path d="M4 7h10M18 7h2M4 17h3M11 17h9M14 4v6M7 14v6"/></svg><span class=tabLabel>Settings</span><span class=tabShortcut aria-hidden=true>7</span></button>
 	   </div>
 	  </nav>
   <div class=spacer></div>
@@ -519,6 +525,14 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <div class=stat><div class="label fieldtip" tabindex=0 title="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not." data-tip="Cumulative wall-clock time from a user prompt until the completed response. Reasoning and tool use count because you are still waiting; gaps between prompts do not.">Wait time</div><div class="v mono" id=ov-duration>--</div><div class=sm id=ov-idle></div></div>
     <div class=stat><div class="label fieldtip" tabindex=0 title="Latest execution input/context tokens, shown against the model window when known." data-tip="Latest execution input/context tokens, shown against the model window when known.">Context in use</div><div class="v mono" id=ov-context>0</div><div class=sm id=ov-contextsm></div></div>
    </div>
+  </div>
+
+  <div id=session-efficiency-home>
+   <section class="card sessionEfficiency" id=session-efficiency aria-labelledby=session-efficiency-title>
+    <div class=sessionEfficiencyIntro><div class=label id=session-efficiency-title>Efficiency</div><div class=sm>This run</div></div>
+    <div class=sessionEfficiencyMetric><div class=label>Output / $</div><strong class=mono id=session-output-dollar>--</strong><span id=session-output-dollar-note>unavailable</span></div>
+    <div class=sessionEfficiencyMetric><div class=label>Reasoning ratio</div><strong class=mono id=session-reasoning-ratio>--</strong><span id=session-reasoning-ratio-note>unavailable</span></div>
+   </section>
   </div>
 
   <div id=session-budget-home>
@@ -644,7 +658,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
      <div class=currentDayMetric><span class=currentDayMetricLabel>Sessions today</span><strong class="currentDayMetricValue mono" id=current-day-sessions>--</strong><small class=currentDayMetricNote id=current-day-sessions-note>Waiting for activity</small></div>
      <div class=currentDayMetric><span class=currentDayMetricLabel>Vs yesterday</span><strong class="currentDayMetricValue mono" id=current-day-vs-yesterday>--</strong><small class=currentDayMetricNote id=current-day-vs-yesterday-note>Waiting for comparison</small></div>
     </div>
-    <a class="tbtn currentDayLearn" href="https://www.google.com/search?q=site%3Asplunk.com+tokenomics" target=_blank rel="noopener noreferrer" aria-label="Learn Tokenomics from Splunk search results (opens in a new tab)">Learn Tokenomics<svg class=currentDayLearnIcon viewBox="0 0 16 16" aria-hidden=true><path d="M8.5 3.5h4v4M12.5 3.5l-6 6"/><path d="M10.5 8.5v4h-7v-7h4"/></svg></a>
+    <a class="tbtn currentDayLearn" href="https://www.splunk.com/en_us/products/tokenomics.html" target=_blank rel="noopener noreferrer" aria-label="Get Enterprise Tokenomics from Splunk (opens in a new tab)">Get Enterprise Tokenomics<svg class=currentDayLearnIcon viewBox="0 0 16 16" aria-hidden=true><path d="M8.5 3.5h4v4M12.5 3.5l-6 6"/><path d="M10.5 8.5v4h-7v-7h4"/></svg></a>
    </section>
    <section id=current-sessions-overview role=tabpanel aria-labelledby=session-scope-current>
     <section class="card onboardingCard" id=onboarding-card aria-labelledby=onboarding-title aria-live=polite>
@@ -729,12 +743,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </section>
   <div class="previewSurface on" id=preview-surface-run>
   <div class=previewRunGrid>
-   <div class=previewChartSlot id=preview-run-chart-slot></div>
+   <div class=previewChartColumn>
+    <div class=previewChartSlot id=preview-run-chart-slot></div>
+    <div class=previewTokenSlot id=preview-token-split-slot></div>
+   </div>
    <aside class=previewDecision>
     <section class="card previewStatus" id=preview-status-card>
      <div class=previewStatusTop><span class=previewState id=preview-state>Live</span><span class="previewIdle mono" id=preview-idle>--</span></div>
      <div class="previewCost mono" id=preview-cost>$0.00</div>
      <div class=previewCostNote id=preview-cost-note>Waiting for live cost evidence.</div>
+     <div class=previewRunEfficiencySlot id=preview-run-efficiency-slot></div>
      <div class=previewPressure>
       <div class=previewPressureHead><span>Context pressure</span><b class=mono id=preview-context-pct>--</b></div>
       <div class=previewPressureBar role=progressbar aria-label="Session context pressure" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0 id=preview-context-bar><i></i></div>
@@ -747,7 +765,6 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <div class=previewRunBudgetSlot id=preview-run-budget-slot></div>
    </aside>
   </div>
-  <div class=previewTokenSlot id=preview-token-split-slot></div>
   <div class=previewKpis aria-label="Live run metrics">
    <div class="card previewKpi previewSpeed"><div class=label>Output speed</div><div class="v mono" id=preview-speed>--</div><div class=sm id=preview-speed-note>timing evidence</div></div>
    <div class="card previewKpi"><div class=label>Wait time</div><div class="v mono" id=preview-wait>--</div><div class=sm id=preview-wait-note>prompt to completion</div></div>
@@ -848,6 +865,32 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	    <section class="card spendShapeCard"><div class=spendInsightCardHead><div><h3>Session shape</h3><p>Selected-period cost; other measures are full-session totals for sessions with spend in the period.</p></div></div><div class=spendShape id=s-shape><div class=spendShapeEmpty>Loading session distributions…</div></div></section>
 	   </div>
 	   <section class="card spendScatterCard" id=s-scatter><div class=spendInsightCardHead><div><h3>Cost and input by active time</h3><p>Each point is an openable session. Both axes use a log scale so short and long runs remain visible.</p></div><div class=spendScatterControls><span class=spendScatterCoverage id=s-scatter-coverage></span><div class=seg id=s-scatter-metric aria-label="Outlier map metric"><button data-scatter-metric=cost>Spend</button><button data-scatter-metric=input>Processed input</button></div></div></div><div class=spendScatterWrap><svg class=spendScatterSvg id=s-scatter-svg viewBox="0 0 1040 340" preserveAspectRatio=none role=img aria-label="Session spend by active time"></svg><div class=spendScatterTip id=s-scatter-tip hidden></div></div><div class=spendScatterLegend><span><i></i>Session</span><span><i class=spendScatterTopDot></i>Top-decile spend</span><span>Only sessions with both active-time and selected metric evidence are plotted.</span></div></section>
+	  </section>
+	 </div>
+
+	 <div class=view id=view-efficiency>
+	  <div class="spectrumPageHeadFrame hasPageActions">
+	   <div class="efficiencyHead spectrumPageHead" data-page-signal=efficiency>
+	    <div class=spectrumPageHeadCopy><h1>Efficiency</h1><p class=spectrumPageSubtitle>Token efficiency from local stats.</p></div>
+	   </div>
+	   <div class=spectrumPageActions><div class=modelControls>
+	    <label class=filterControl><span>Project</span><select class=filterSelect id=e-project aria-label="Efficiency project filter"><option value="">All projects</option></select></label>
+	    <div class=filterControl><span>Models</span><details class=modelPicker id=e-model-picker><summary aria-label="Choose models for efficiency"><span id=e-model-summary>All models</span></summary><div class=modelPickerMenu id=e-model-options role=group aria-label="Models for efficiency"></div></details></div>
+	    <label class=filterControl><span>History</span><select class=filterSelect id=e-range aria-label="Efficiency history range"><option value=today>Today</option><option value=yesterday>Yesterday</option><option value=7 selected>Last 7 days</option><option value=30>Last 30 days</option><option value=90>Last 90 days</option><option value=all>All history</option></select></label>
+	   </div></div>
+	  </div>
+	  <div class=efficiencyHero aria-label="Mechanical efficiency">
+	   <section class="card efficiencyHeadline"><div class=efficiencyEyebrow>Output / $</div><div class=efficiencyValueRow><div class="v mono" id=e-output-dollar>--</div><div class=efficiencyTrendDelta id=e-output-dollar-change data-direction=""><strong>No comparable prior period</strong><span></span></div></div><div class=efficiencyChartWrap><svg class=efficiencyChart id=e-output-dollar-chart viewBox="0 0 520 96" preserveAspectRatio=none role=img tabindex=0 aria-label="Daily output per covered dollar"></svg><div class=efficiencyChartTip id=e-output-dollar-tip role=tooltip hidden></div><span class=efficiencyChartStatus id=e-output-dollar-status aria-live=polite></span></div><div class=efficiencyCoverage id=e-output-dollar-coverage>Waiting for covered cost and output.</div></section>
+	   <section class="card efficiencyHeadline reasoning"><div class=efficiencyEyebrow>Reasoning ratio</div><div class=efficiencyValueRow><div class="v mono" id=e-reasoning-ratio>--</div><div class=efficiencyTrendDelta id=e-reasoning-change data-direction=""><strong>No comparable prior period</strong><span></span></div></div><div class=efficiencyChartWrap><svg class=efficiencyChart id=e-reasoning-chart viewBox="0 0 520 96" preserveAspectRatio=none role=img tabindex=0 aria-label="Daily reasoning ratio"></svg><div class=efficiencyChartTip id=e-reasoning-tip role=tooltip hidden></div><span class=efficiencyChartStatus id=e-reasoning-status aria-live=polite></span></div><div class=efficiencyCoverage id=e-reasoning-coverage>Reasoning coverage unavailable.</div></section>
+	  </div>
+	  <div class=efficiencySupport>
+	   <section class="card efficiencySupportItem"><div class=label>Context load</div><div class=efficiencySupportValueRow><div class="v mono" id=e-context-load>--</div><div class="efficiencyTrendDelta efficiencySupportDelta" id=e-context-load-change data-direction=""><strong>No comparable prior period</strong><span></span></div></div><div class=efficiencyChartWrap><svg class=efficiencyChart id=e-context-load-chart viewBox="0 0 520 96" preserveAspectRatio=none role=img tabindex=0 aria-label="Daily context load"></svg><div class=efficiencyChartTip id=e-context-load-tip role=tooltip hidden></div><span class=efficiencyChartStatus id=e-context-load-status aria-live=polite></span></div><div class=subline id=e-context-load-note>input tokens per output token</div></section>
+	   <section class="card efficiencySupportItem"><div class=label>Output / execution</div><div class=efficiencySupportValueRow><div class="v mono" id=e-output-execution>--</div><div class="efficiencyTrendDelta efficiencySupportDelta" id=e-output-execution-change data-direction=""><strong>No comparable prior period</strong><span></span></div></div><div class=efficiencyChartWrap><svg class=efficiencyChart id=e-output-execution-chart viewBox="0 0 520 96" preserveAspectRatio=none role=img tabindex=0 aria-label="Daily output per execution"></svg><div class=efficiencyChartTip id=e-output-execution-tip role=tooltip hidden></div><span class=efficiencyChartStatus id=e-output-execution-status aria-live=polite></span></div><div class=subline id=e-output-execution-note>token-covered executions</div></section>
+	  </div>
+	  <section class="card efficiencyModelCard">
+	   <div class=efficiencyModelHead><h2>By model</h2><div class=efficiencyModelMeta id=e-model-meta>Waiting for model evidence.</div></div>
+	   <div class=efficiencyTableWrap><table class=tbl id=e-model-table><thead><tr><th aria-sort=none><button class=efficiencySort type=button data-efficiency-sort=model>Model<span class=efficiencySortMark aria-hidden=true></span></button></th><th>App</th><th>Reasoning effort</th><th class=num aria-sort=descending><button class=efficiencySort type=button data-efficiency-sort=cost>Spend<span class=efficiencySortMark aria-hidden=true>↓</span></button></th><th class=num aria-sort=none><button class=efficiencySort type=button data-efficiency-sort=output_per_dollar>Output / $<span class=efficiencySortMark aria-hidden=true></span></button></th><th class=num aria-sort=none><button class=efficiencySort type=button data-efficiency-sort=reasoning_ratio>Reasoning<span class=efficiencySortMark aria-hidden=true></span></button></th><th class=num aria-sort=none><button class=efficiencySort type=button data-efficiency-sort=context_load>Context load<span class=efficiencySortMark aria-hidden=true></span></button></th><th class=num aria-sort=none><button class=efficiencySort type=button data-efficiency-sort=output_per_execution>Output / exec<span class=efficiencySortMark aria-hidden=true></span></button></th></tr></thead><tbody></tbody></table></div>
+	   <div class=efficiencyEvidence>Statistics only · Compare similar work · no quality judgment.</div>
 	  </section>
 	 </div>
 
@@ -1005,7 +1048,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
    <section class="card pad agentAccess" id=agent-access>
     <div class=agentAccessHead><div><h2 class=fieldtip tabindex=0 aria-description="Give Codex and Claude read-only, on-demand access to numeric Token Meter evidence." data-tip="Give Codex and Claude read-only, on-demand access to numeric Token Meter evidence.">Agent connection</h2><div class=subline>Connect Token Meter to supported local agent clients.</div></div></div>
     <div class=agentClients id=agent-clients><div class=agentClient><div><div class=agentClientName>Loading connection status</div><div class=agentClientState>Checking local Codex and Claude Code configuration.</div></div></div></div>
-    <div class=agentAccessNote>Connections stay local and read-only. <a href="#learn-agent-access">See what agents can access in Learn.</a></div>
+    <div class=agentAccessNote>Connections stay local and read-only.</div>
    </section>
    <section class="card pad settingsLexicon settingsPricing" id=model-pricing-settings>
     <div class=settingsLexiconHead><div><div class=label>Cost estimates</div><h2 class=fieldtip tabindex=0 aria-description="Edit prices in USD per 1 million tokens. By default, a change starts now and older sessions retain their earlier prices." data-tip="Edit prices in USD per 1 million tokens. By default, a change starts now and older sessions retain their earlier prices.">Model pricing</h2></div><span class=agentAccessBadge id=model-pricing-badge>Loading prices</span></div>
@@ -1296,6 +1339,14 @@ function setHashRoute(route,{replace=false,apply=true}={}){
   if(apply)applyHashRoute();
  }else location.hash=route;
 }
+function openSelectedSessionRoute(route='summary'){
+ if(pinned&&history.pushState){
+  history.pushState({sessionScope:sessionReturnScope},'',sessionRoute(pinned));
+  applyHashRoute();
+  return;
+ }
+ setHashRoute(route);
+}
 const SESSION_SCOPES=['current','all'];
 let sessionScope='current',sessionReturnScope='current';
 function normalizeSessionScope(scope){return scope==='all'?'all':'current';}
@@ -1344,7 +1395,7 @@ const ONBOARDING_STEPS=[
  {id:'daily',title:'Review spend over time',short:'Spend',description:'Compare cost across calendar ranges and runtimes.',action:'Open Spend',route:'spend',lesson:'Spend shows how estimated cost changes over time and which runtime contributed it.',points:['Choose Today, 7 days, 30 days, or an inclusive custom date range.','Use the stacked bars and platform split to find the largest runtime contribution.','Partial coverage is a lower bound; unavailable evidence must not be read as zero.']},
  {id:'models',title:'Compare model evidence',short:'Models',description:'Compare runtime-scoped model histories with coverage and sample context.',action:'Open Models',route:'models',lesson:'Models helps compare observed histories without turning them into a simplistic leaderboard.',points:['The same model name in different runtimes remains separate because the execution environment matters.','Check pair count, timing coverage, output length, and workload before comparing observed pace.','Treat matched pace as a diagnostic signal, not proof that one model is universally faster or better.']},
  {id:'capabilities',title:'Review tools and skills',short:'Tools',description:'Separate observed capability use from removable-pack review candidates.',action:'Open Tools',route:'capabilities',lesson:'Tools shows what ran and which optional capability groups deserve a closer look.',points:['Tool and MCP counts are observed trace evidence; default and MCP capabilities remain read-only here.','An unused removable pack is a review candidate, not an automatic disable recommendation.','Confirm absence across scanned session history before changing a user-installed skill pack.']},
- {id:'palette',title:'Navigate with the command palette',short:'⌘K palette',description:'Open ⌘K, read the controls, then close it to finish the guide.',action:'Open command palette',palette:true,lesson:'The command palette is the fastest way to move around Token Meter from any view.',points:['Press ⌘K, type part of a destination, then press Return to open it.','Use ↑ and ↓ to move through matches; Escape closes the palette without navigating.','Use ⌥1–6 when you already know the top-level destination you want.']},
+ {id:'palette',title:'Navigate with the command palette',short:'⌘K palette',description:'Open ⌘K, read the controls, then close it to finish the guide.',action:'Open command palette',palette:true,lesson:'The command palette is the fastest way to move around Token Meter from any view.',points:['Press ⌘K, type part of a destination, then press Return to open it.','Use ↑ and ↓ to move through matches; Escape closes the palette without navigating.','Use ⌥1–7 when you already know the top-level destination you want.']},
 ];
 const ONBOARDING_STEP_IDS=new Set(ONBOARDING_STEPS.map(step=>step.id));
 function loadOnboardingState(){
@@ -1456,11 +1507,12 @@ const NAV_COMMANDS=[
  {id:'all-sessions',label:'All sessions',description:'Search, filter, and open recorded session history',aliases:'logs',section:'Navigate',route:'sessions-all',glyph:'All'},
  {id:'spend',label:'Spend',description:'Review spend across days and runtimes',section:'Navigate',route:'spend',directKey:'Digit2',glyph:'2'},
  {id:'models',label:'Models',description:'Compare model performance and review user language signals',section:'Navigate',route:'models',directKey:'Digit3',glyph:'3'},
+ {id:'efficiency',label:'Efficiency',description:'Review token efficiency overall and by model runtime',section:'Navigate',route:'efficiency',directKey:'Digit5',glyph:'5'},
+ {id:'learn',label:'Learn',description:'Open the recommended review workflow',section:'Navigate',route:'learn',directKey:'Digit6',glyph:'6'},
  {id:'capabilities',label:'Tools',description:'Inspect tools, MCPs, and optional skill packs',section:'Navigate',route:'capabilities',directKey:'Digit4',glyph:'4'},
- {id:'learn',label:'Learn',description:'Open the recommended review workflow',section:'Navigate',route:'learn',directKey:'Digit5',glyph:'5'},
- {id:'settings',label:'Settings',description:'Configure budgets, pricing, analytics, and agent connections',section:'Navigate',route:'settings',directKey:'Digit6',glyph:'6'},
+ {id:'settings',label:'Settings',description:'Configure budgets, pricing, analytics, connections, and updates',section:'Navigate',route:'settings',directKey:'Digit7',glyph:'7'},
  {id:'settings-budgets',label:'Settings · Monthly budget',description:'Set runtime budgets and track their monthly total',section:'Settings',route:'settings-budgets',glyph:'$'},
- {id:'session-run',label:'Session · Run',description:'Review cost, context, and pace for the selected session',section:'Selected session',route:'summary',glyph:'R'},
+ {id:'session-run',label:'Session · Run',description:'Review cost, context, and pace for the selected session',section:'Selected session',route:'summary',action:'selected-session',glyph:'R'},
  {id:'onboarding',label:'Getting started',description:'Resume or replay the first-five-minutes guide',section:'Help',action:'onboarding',glyph:'?'},
 ];
 let visibleCommands=[],commandIndex=0,commandReturnFocus=null;
@@ -1506,8 +1558,9 @@ function runNavigationCommand(command,{source='palette'}={}){
  closeCommandPalette();
  if(command.action==='onboarding'){resumeOrRestartOnboarding();return;}
  if(command.action==='sessions'){openCurrentSessions();return;}
+ if(command.action==='selected-session'){openSelectedSessionRoute(command.route);return;}
  if(command.latest)goToLatestSession();
- else setHashRoute(command.route);
+ else openTopLevelRoute(command.route);
 }
 [...document.querySelectorAll('.top .tab[aria-keyshortcuts]')].forEach((button,index)=>button.title=`${button.dataset.label} · Shortcut: Option+${index+1}`);
 $('command-coach-done').onclick=closeCommandPalette;
@@ -1549,7 +1602,7 @@ document.addEventListener('keydown',event=>{
 });
 
 const PANEL_KEYS=['summary'];
-const PANEL_ALIAS={overview:'summary',flow:'summary',efficiency:'summary',analysis:'summary',settings:'summary',activity:'summary',tools:'summary',insights:'summary',alerts:'summary'};
+const PANEL_ALIAS={overview:'summary',flow:'summary',analysis:'summary',settings:'summary',activity:'summary',tools:'summary',alerts:'summary'};
 const CURRENT_PANEL_KEYS=['sessions','run'];
 const CURRENT_PANEL_ROUTES={sessions:'sessions',run:'summary'};
 const storedSessionPanel=PANEL_ALIAS[localStorage.getItem('tm_session_panel')]||localStorage.getItem('tm_session_panel')||'summary';
@@ -1558,6 +1611,7 @@ let currentPanel=sessionPanel==='summary'?'run':sessionPanel;
 function restoreCurrentModules(){
  const homes=[
   ['session-chart-home','session-chart-module'],
+  ['session-efficiency-home','session-efficiency'],
   ['session-budget-home','session-budget-control'],
   ['session-token-split-home','session-token-split-module'],
  ];
@@ -1591,7 +1645,8 @@ function showCurrentPanel(panel){
   renderCurrentSessions();
   renderSessionScope();
  }else if(panel==='run'){
-  mountCurrentModule('preview-run-chart-slot','session-chart-module');
+ mountCurrentModule('preview-run-chart-slot','session-chart-module');
+  mountCurrentModule('preview-run-efficiency-slot','session-efficiency');
   mountCurrentModule('preview-run-budget-slot','session-budget-control');
   mountCurrentModule('preview-token-split-slot','session-token-split-module');
   if(CURRENT)requestAnimationFrame(()=>drawIO(CURRENT.series||[]));
@@ -1604,14 +1659,16 @@ function showTab(t){
  document.body.classList.toggle('sessionRoute',t==='session');
  $('tab-session').classList.toggle('on',t==='session');
 	 $('tab-models').classList.toggle('on',t==='models');
-	 $('tab-daily').classList.toggle('on',spend);
+ $('tab-daily').classList.toggle('on',spend);
  $('tab-capabilities').classList.toggle('on',t==='capabilities');
+ $('tab-efficiency').classList.toggle('on',t==='efficiency');
  $('tab-learn').classList.toggle('on',t==='learn');
  $('tab-settings').classList.toggle('on',t==='settings');
  $('view-session').classList.toggle('on',t==='session');
 	 $('view-models').classList.toggle('on',t==='models');
-	 $('view-daily').classList.toggle('on',spend);
+ $('view-daily').classList.toggle('on',spend);
  $('view-capabilities').classList.toggle('on',t==='capabilities');
+ $('view-efficiency').classList.toggle('on',t==='efficiency');
  $('view-learn').classList.toggle('on',t==='learn');
  $('view-settings').classList.toggle('on',t==='settings');
  [...document.querySelectorAll('.top .tab')].forEach(button=>{
@@ -1622,11 +1679,16 @@ function showTab(t){
  if(window.matchMedia('(max-width:760px)').matches&&activeTop?.scrollIntoView)requestAnimationFrame(()=>activeTop.scrollIntoView({block:'nearest',inline:'center'}));
  requestAnimationFrame(syncActivePageSignalEffects);
 }
-function openTopLevelRoute(route){window.scrollTo(0,0);setHashRoute(route);}
+function openTopLevelRoute(route){
+ window.scrollTo(0,0);
+ if(routedSessionId()&&history.pushState){history.pushState(null,'',`/#${route}`);applyHashRoute();return;}
+ setHashRoute(route);
+}
 $('tab-session').onclick=()=>{window.scrollTo(0,0);openCurrentSessions();};
 $('tab-models').onclick=()=>openTopLevelRoute('models');
 $('tab-daily').onclick=()=>openTopLevelRoute('spend');
 $('tab-capabilities').onclick=()=>openTopLevelRoute('capabilities');
+$('tab-efficiency').onclick=()=>openTopLevelRoute('efficiency');
 $('tab-learn').onclick=()=>openTopLevelRoute('learn');
 $('tab-settings').onclick=()=>openTopLevelRoute('settings');
 $('session-scope-tabs').onclick=event=>{
@@ -1656,7 +1718,7 @@ showCurrentPanel(currentPanel);
 function applyHashRoute(){
  const h=(location.hash||'').replace(/^#/,'');
  const panel=PANEL_ALIAS[h]||h;
- const legacyGlobal=h==='global'||h==='global-logs'||/^global-(overview|insights|evidence)$/.test(h);
+ const legacyGlobal=h==='global'||h==='global-logs'||/^global-(overview|evidence)$/.test(h);
  if(h==='sessions'||h==='sessions-all'||h==='current-sessions'){
  const scope=h==='sessions-all'?'all':'current',route=sessionScopeRoute(scope);
  if((routedSessionId()||h==='current-sessions')&&history.replaceState)history.replaceState(null,'',`/#${route}`);
@@ -1702,6 +1764,16 @@ if(h==='logs'||legacyGlobal){
 	  if(h==='frustration')requestAnimationFrame(()=>$('model-frustration').scrollIntoView({block:'start'}));
 	  return;
 	 }
+ if(h==='efficiency'){
+  if(routedSessionId()){
+   showTab('session');
+   showCurrentPanel('summary');
+  }else{
+   showTab('efficiency');
+   if(LATEST)renderActiveEfficiency();
+  }
+  return;
+ }
  if(h==='capabilities'){
   showTab('capabilities');
   if(LATEST)renderCapabilities(LATEST.xsession?.capabilities);
@@ -1710,6 +1782,13 @@ if(h==='logs'||legacyGlobal){
  if(h==='learn'||h==='learn-agent-access'){
   showTab('learn');
   if(h==='learn-agent-access')requestAnimationFrame(()=>$('learn-agent-access').scrollIntoView({block:'start'}));
+  return;
+ }
+ if(h==='settings-agent-defaults'){
+  setHashRoute('settings',{replace:true,apply:false});
+  showTab('settings');
+  if(LATEST)renderSettings(LATEST.xsession);
+  loadAgentAccess();
   return;
  }
  if(h==='settings'||h==='model-pricing'||h==='settings-budgets'||h==='settings-updates'||h==='budgets'){
@@ -2723,6 +2802,25 @@ let frustrationRange=localStorage.getItem('tm_frustration_range')||'30';
 let frustrationGroup=localStorage.getItem('tm_frustration_group')||'day';
 let frustrationChatMode=localStorage.getItem('tm_frustration_chat_mode')||'affected';
 let languageSignalGroup=localStorage.getItem('tm_language_signal_group')||'positive';
+const OTHER_LOCAL_SESSIONS_PROJECT='__other_local_sessions__';
+function projectFilterValue(value){
+ const project=String(value||'').trim().replaceAll('\\','/');
+ return project&&(project.startsWith('/')&&!project.startsWith('/private/')||project.startsWith('~/')&&!project.startsWith('~/.codex/')&&!project.startsWith('~/Library/')&&!project.startsWith('~/Documents/Codex/')||/^[A-Za-z]:\//.test(project))?project:OTHER_LOCAL_SESSIONS_PROJECT;
+}
+function projectFilterLabel(value){return value===OTHER_LOCAL_SESSIONS_PROJECT?'Other local sessions':value;}
+function storedModelFilterId(value){return typeof value==='string'&&value.length<=200&&!/[\\/\x00-\x1F\x7F]/.test(value)&&/^[^:]+::[^:]+(?:::[^:]+)?$/.test(value);}
+function migrateStoredProjectFilters(key,scoped=false){
+ const stored=localStorage.getItem(key);if(!stored)return scoped?undefined:'';
+ if(!scoped){const project=projectFilterValue(stored);if(project!==stored)localStorage.setItem(key,project);return project;}
+ let parsed={};try{const value=JSON.parse(stored);if(value&&typeof value==='object'&&!Array.isArray(value))parsed=value;}catch(error){return;}
+ const grouped={};Object.entries(parsed).forEach(([project,values])=>{if(!Array.isArray(values))return;const group=projectFilterValue(project);grouped[group]=[...new Set([...(grouped[group]||[]),...values.filter(storedModelFilterId)])];});
+ if(JSON.stringify(grouped)!==JSON.stringify(parsed))localStorage.setItem(key,JSON.stringify(grouped));
+}
+migrateStoredProjectFilters('tm_model_project_filters',true);
+migrateStoredProjectFilters('tm_efficiency_project_filters',true);
+globalProject=migrateStoredProjectFilters('tm_global_project');
+modelProject=migrateStoredProjectFilters('tm_model_project');
+modelFilters=loadModelFilters(modelProject);
 if(!['recent','cost','tokens','executions','wait'].includes(globalSort)) globalSort='recent';
 if(!['all','24h','7d','30d','90d'].includes(globalTime)) globalTime='all';
 if(!MODEL_RANGES.includes(modelRange)){modelRange='30';localStorage.setItem('tm_model_range',modelRange);}
@@ -2732,14 +2830,14 @@ if(!['day','week'].includes(frustrationGroup))frustrationGroup='day';
 if(!['affected','all'].includes(frustrationChatMode))frustrationChatMode='affected';
 if(!['positive','friction'].includes(languageSignalGroup))languageSignalGroup='positive';
 $('m-range').value=modelRange;
-function modelScopeLabel(project=modelProject){return project||'All projects';}
+function modelScopeLabel(project=modelProject){return project?projectFilterLabel(project):'All projects';}
 function paintModelProjects(stats){
  const projects=(stats?.projects||[]).filter(project=>typeof project==='string'&&project);
  if(modelProject&&!projects.includes(modelProject)){
   modelProject='';modelFilters=loadModelFilters('');
   localStorage.removeItem('tm_model_project');
  }
- const projectSelect=$('m-project'),projectOptions='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join('');
+ const projectSelect=$('m-project'),projectOptions='<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(projectFilterLabel(project))}</option>`).join('');
  setLogSelectOptions(projectSelect,projectOptions,modelProject);
  const projectTitle=stats?.projects_truncated?'Showing the first 500 discovered projects.':'';
  if(projectSelect.title!==projectTitle)projectSelect.title=projectTitle;
@@ -2784,7 +2882,7 @@ async function renderActiveModelStats(){
   commitModelStats(payload.model_stats,project,responseGeneration);
  }catch(error){
   if(request!==modelProjectRequest||project!==modelProject)return;
-  $('m-project-status').textContent=`Could not load ${project}${activeModelStats?` · still showing ${modelScopeLabel(activeModelScope)}`:''}`;
+  $('m-project-status').textContent=`Could not load ${projectFilterLabel(project)}${activeModelStats?` · still showing ${modelScopeLabel(activeModelScope)}`:''}`;
   $('m-project-status').classList.add('warn');
  }finally{
   if(modelProjectLoadingKey===key){modelProjectLoadingKey='';setModelProjectLoading(false);}
@@ -3336,7 +3434,6 @@ function renderCurrentRun(s){
  $('preview-cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
  $('preview-cost-note').textContent=alert.msg?alert.msg:(costAvailable&&Number.isFinite(cap)?`${money(Math.max(0,cap-(s.total_cost||0)))} before the ${money(cap)} session cap`:source.pricing_note||'Cost evidence unavailable.');
  $('preview-status-card').classList.toggle('warn',!!alert.msg);
- $('preview-status-card').style.setProperty('--context-pressure',`${context.window?Math.round(contextPct*100):0}%`);
  $('preview-context-pct').textContent=context.window?pct(contextPct):'--';
  $('preview-context-bar').setAttribute('aria-valuenow',String(Math.round(contextPct*100)));
  $('preview-context-bar').querySelector('i').style.width=`${Math.round(contextPct*100)}%`;
@@ -3415,7 +3512,7 @@ function renderSession(s){
  $('burnsm').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tok/min · active${cursorEstimate?' · local proxy':''}`:(timing.duration_available?'active timing available · billing unavailable':'execution timing unavailable');
  $('cpt').textContent=costAvailable?money(s.analyses?.cost_per_task?.per_task||0)+(cursorEstimate?' est':''):'--';
  $('cptsm').textContent=costAvailable?f(s.analyses?.cost_per_task?.completed||0)+` completed${cursorEstimate?' · local proxy':''}`:'billing unavailable';
- renderOverview(s); renderCurrentOptimization(s); renderCurrentRun(s);
+ renderOverview(s); renderCurrentOptimization(s); renderCurrentRun(s); renderSessionEfficiency(s);
 
  const semTot=Object.values(sem).reduce((a,b)=>a+(b||0),0)||1;
  const segs=[['reasoning','var(--reason)'],['output','var(--output)'],['retrieval','var(--retrieval)'],['coordination','var(--coord)']];
@@ -4407,8 +4504,31 @@ window.addEventListener('resize',()=>{
 
 [...document.querySelectorAll('[data-learn-route]')].forEach(button=>button.onclick=()=>setHashRoute(button.dataset.learnRoute));
 
-const MODEL_COUNTER_KEYS=['input_tokens','output_tokens','executions','cost','timed_output_tokens','timed_seconds','timed_samples','tool_free_output_tokens','tool_free_seconds','tool_free_samples','ttft_total_s','ttft_samples','wait_seconds','wait_samples','user_pause_seconds'];
+const MODEL_COUNTER_KEYS=['input_tokens','output_tokens','cost_covered_output_tokens','cost_covered_cost','executions','token_covered_executions','io_covered_executions','cost_covered_executions','cost','cache_read_tokens','cache_write_tokens','cache_covered_input_tokens','reasoning_tokens','reasoning_output_tokens','reasoning_executions','reasoning_unavailable_executions','thinking_executions','thinking_covered_executions','attempts','retries','failed_attempts','attempt_samples','timed_output_tokens','timed_seconds','timed_samples','tool_free_output_tokens','tool_free_seconds','tool_free_samples','ttft_total_s','ttft_samples','wait_seconds','wait_samples','user_pause_seconds'];
 const MODEL_ARRAY_KEYS=['wait_durations_s','workload_peak_inputs','workload_outputs','workload_tool_calls','workload_model_calls','workload_cache_ratios'];
+const EFFICIENCY_RANGES=['today','yesterday','7','30','90','all'];
+function loadEfficiencyFilters(project=''){
+ if(project){
+  const stored=localStorage.getItem('tm_efficiency_project_filters');
+  try{const scoped=JSON.parse(stored||'{}'),values=scoped?.[project];return Array.isArray(values)?[...new Set(values.filter(value=>typeof value==='string'&&value))]:[];}catch(error){return [];}
+ }
+ try{const stored=JSON.parse(localStorage.getItem('tm_efficiency_filters')||'[]');return Array.isArray(stored)?[...new Set(stored.filter(value=>typeof value==='string'&&value))]:[];}catch(error){return [];}
+}
+function saveActiveEfficiencyFilters(){
+ if(!efficiencyProject)localStorage.setItem('tm_efficiency_filters',JSON.stringify(efficiencyFilters));
+ else{
+  let scoped={};try{const stored=JSON.parse(localStorage.getItem('tm_efficiency_project_filters')||'{}');if(stored&&typeof stored==='object'&&!Array.isArray(stored))scoped=stored;}catch(error){}
+  scoped[efficiencyProject]=efficiencyFilters;localStorage.setItem('tm_efficiency_project_filters',JSON.stringify(scoped));
+ }
+}
+let efficiencyProject=migrateStoredProjectFilters('tm_efficiency_project');
+let efficiencyFilters=loadEfficiencyFilters(efficiencyProject);
+let efficiencyRange=localStorage.getItem('tm_efficiency_range')||'7';
+if(!EFFICIENCY_RANGES.includes(efficiencyRange))efficiencyRange='7';
+let efficiencySort={key:'cost',direction:'desc'};
+let activeEfficiencyStats=null,activeEfficiencyScope='',activeEfficiencyGeneration=0;
+let efficiencyProjectRequest=0,efficiencyProjectLoadingKey='';
+const efficiencyProjectCache=new Map();
 // model-color-logic-start
 const MODEL_COLORS={
  codex:['#55D6ED','#32B8C8','#7AA7FF','#50CFB0'],
@@ -4424,7 +4544,7 @@ const MODEL_RUNTIME_COLOR_FAMILIES={
 };
 const MODEL_OUTPUT_BAR_FILL='#536879',MODEL_OUTPUT_BAR_STROKE='#7890A3';
 function modelRuntimeColorFamily(identity){
- const runtime=String(identity||'').split('::').pop().trim().toLowerCase();
+ const parts=String(identity||'').split('::'),runtime=(parts.length>1?parts[1]:parts[0]).trim().toLowerCase();
  return MODEL_RUNTIME_COLOR_FAMILIES[runtime]||'fallback';
 }
 function modelColor(name,names){
@@ -4459,11 +4579,12 @@ function modelMedian(values){
 }
 function aggregateModelDays(rows){
 	 const total=MODEL_COUNTER_KEYS.reduce((out,key)=>(out[key]=0,out),{});
-	 rows=rows||[];const tokenCovered=rows.filter(row=>metricAvailable(row,'tokens')).length,costCovered=rows.filter(row=>metricAvailable(row,'cost')).length,tokenPartial=rows.some(row=>metricPartial(row,'tokens')),costPartial=rows.some(row=>metricPartial(row,'cost'));
+	 rows=rows||[];const tokenCovered=rows.filter(row=>metricAvailable(row,'tokens')).length,inputCovered=rows.filter(row=>metricAvailable(row,'input_tokens')).length,outputCovered=rows.filter(row=>metricAvailable(row,'output_tokens')).length,costCovered=rows.filter(row=>metricAvailable(row,'cost')).length,cacheCovered=rows.filter(row=>metricAvailable(row,'cache')).length,reasoningCovered=rows.filter(row=>row.availability?.reasoning_tokens===true).length,attemptCovered=rows.filter(row=>row.availability?.attempts===true).length,tokenPartial=rows.some(row=>metricPartial(row,'tokens')),costPartial=rows.some(row=>metricPartial(row,'cost')||(row.cost_covered_executions!==undefined&&Number(row.cost_covered_executions||0)<Number(row.executions||0))),cachePartial=rows.some(row=>metricPartial(row,'cache')),reasoningPartial=rows.some(row=>row.coverage?.reasoning_tokens?.complete===false),attemptPartial=rows.some(row=>row.coverage?.attempts?.complete===false);
 	 const estimated=rows.some(hasLocalEstimate),reported=rows.some(row=>['reported','mixed'].includes(usageBasis(row)));total.usage_basis=estimated?(reported?'mixed':'local_estimate'):'reported';total.provenance={usage_basis:total.usage_basis};
-	 total.availability={tokens:tokenCovered>0,input_tokens:tokenCovered>0,output_tokens:tokenCovered>0,cost:costCovered>0,throughput:tokenCovered>0};
-	 total.coverage={tokens:{complete:tokenCovered===rows.length&&!tokenPartial,covered_rows:tokenCovered,total_rows:rows.length},cost:{complete:costCovered===rows.length&&!costPartial,covered_rows:costCovered,total_rows:rows.length}};
+	 total.availability={tokens:tokenCovered>0,input_tokens:inputCovered>0,output_tokens:outputCovered>0,cost:costCovered>0,cache:cacheCovered>0,reasoning_tokens:reasoningCovered>0,attempts:attemptCovered>0,throughput:outputCovered>0};
+	 total.coverage={tokens:{complete:tokenCovered===rows.length&&!tokenPartial,covered_rows:tokenCovered,total_rows:rows.length},cost:{complete:costCovered===rows.length&&!costPartial,covered_rows:costCovered,total_rows:rows.length},cache:{complete:cacheCovered===rows.length&&!cachePartial,covered_rows:cacheCovered,total_rows:rows.length},reasoning_tokens:{complete:reasoningCovered===rows.length&&!reasoningPartial,covered_rows:reasoningCovered,total_rows:rows.length},attempts:{complete:attemptCovered===rows.length&&!attemptPartial,covered_rows:attemptCovered,total_rows:rows.length}};
 	 rows.forEach(row=>MODEL_COUNTER_KEYS.forEach(key=>total[key]+=Number(row[key]||0)));
+	 total.reasoning_efforts=[...new Set(rows.flatMap(row=>row.reasoning_efforts||[]))].sort((a,b)=>String(a).localeCompare(String(b))).slice(0,8);
 	 MODEL_ARRAY_KEYS.forEach(key=>total[key]=rows.flatMap(row=>(row[key]||[]).map(Number).filter(value=>Number.isFinite(value)&&value>=0)));
 	 total.max_wait_s=Math.max(0,...rows.map(row=>Number(row.max_wait_s||0)));
  const toolFree=total.tool_free_samples>0&&total.tool_free_seconds>0;
@@ -4492,23 +4613,261 @@ function mergeModelDays(models,window){
 	  const target=days.get(day.day)||{day:day.day};
 	  MODEL_COUNTER_KEYS.forEach(key=>target[key]=Number(target[key]||0)+Number(day[key]||0));
 	  MODEL_ARRAY_KEYS.forEach(key=>target[key]=[...(target[key]||[]),...(day[key]||[])]);
-	  target._metricRows=Number(target._metricRows||0)+1;target._tokenCovered=Number(target._tokenCovered||0)+(metricAvailable(day,'tokens')?1:0);target._costCovered=Number(target._costCovered||0)+(metricAvailable(day,'cost')?1:0);
+	  target._metricRows=Number(target._metricRows||0)+1;target._tokenCovered=Number(target._tokenCovered||0)+(metricAvailable(day,'tokens')?1:0);target._inputCovered=Number(target._inputCovered||0)+(metricAvailable(day,'input_tokens')?1:0);target._outputCovered=Number(target._outputCovered||0)+(metricAvailable(day,'output_tokens')?1:0);target._costCovered=Number(target._costCovered||0)+(metricAvailable(day,'cost')?1:0);target._cacheCovered=Number(target._cacheCovered||0)+(metricAvailable(day,'cache')?1:0);target._reasoningCovered=Number(target._reasoningCovered||0)+(day.availability?.reasoning_tokens===true?1:0);target._attemptCovered=Number(target._attemptCovered||0)+(day.availability?.attempts===true?1:0);target._tokenComplete=target._tokenComplete!==false&&day.coverage?.tokens?.complete!==false;target._costComplete=target._costComplete!==false&&day.coverage?.cost?.complete!==false;target._cacheComplete=target._cacheComplete!==false&&day.coverage?.cache?.complete!==false;target._reasoningComplete=target._reasoningComplete!==false&&day.coverage?.reasoning_tokens?.complete!==false;target._attemptComplete=target._attemptComplete!==false&&day.coverage?.attempts?.complete!==false;
 	  target._estimated=Boolean(target._estimated||hasLocalEstimate(day));target._reported=Boolean(target._reported||['reported','mixed'].includes(usageBasis(day)));target.usage_basis=target._estimated?(target._reported?'mixed':'local_estimate'):'reported';target.provenance={usage_basis:target.usage_basis};
-	  target.availability={tokens:target._tokenCovered>0,input_tokens:target._tokenCovered>0,output_tokens:target._tokenCovered>0,cost:target._costCovered>0,throughput:target._tokenCovered>0};target.coverage={tokens:{complete:target._tokenCovered===target._metricRows},cost:{complete:target._costCovered===target._metricRows}};
+	  target.availability={tokens:target._tokenCovered>0,input_tokens:target._inputCovered>0,output_tokens:target._outputCovered>0,cost:target._costCovered>0,cache:target._cacheCovered>0,reasoning_tokens:target._reasoningCovered>0,attempts:target._attemptCovered>0,throughput:target._outputCovered>0};target.coverage={tokens:{complete:target._tokenCovered===target._metricRows&&target._tokenComplete},cost:{complete:target._costCovered===target._metricRows&&target._costComplete},cache:{complete:target._cacheCovered===target._metricRows&&target._cacheComplete},reasoning_tokens:{complete:target._reasoningCovered===target._metricRows&&target._reasoningComplete},attempts:{complete:target._attemptCovered===target._metricRows&&target._attemptComplete}};
 	  target.max_wait_s=Math.max(Number(target.max_wait_s||0),Number(day.max_wait_s||0));
   days.set(day.day,target);
  }));
  return [...days.values()].sort((a,b)=>a.day.localeCompare(b.day));
 }
+function efficiencyMetrics(row){
+ const data=row||{},availability=data.availability||{},input=Math.max(0,Number(data.input_tokens)||0),output=Math.max(0,Number(data.output_tokens)||0),coveredOutput=data.cost_covered_output_tokens===undefined?output:Math.max(0,Number(data.cost_covered_output_tokens)||0),cost=Math.max(0,Number(data.cost)||0),coveredCost=data.cost_covered_cost===undefined?cost:Math.max(0,Number(data.cost_covered_cost)||0),executions=Math.max(0,Number(data.executions)||0),coveredExecutions=data.token_covered_executions===undefined?executions:Math.max(0,Number(data.token_covered_executions)||0),ioCoveredExecutions=data.io_covered_executions===undefined?coveredExecutions:Math.max(0,Number(data.io_covered_executions)||0),costCoveredExecutions=data.cost_covered_executions===undefined?executions:Math.max(0,Number(data.cost_covered_executions)||0),reasoning=Math.max(0,Number(data.reasoning_tokens)||0),reasoningOutput=Math.max(0,Number(data.reasoning_output_tokens)||0),cacheRead=Math.max(0,Number(data.cache_read_tokens)||0),cacheInput=data.cache_covered_input_tokens===undefined?input:Math.max(0,Number(data.cache_covered_input_tokens)||0),attempts=Math.max(0,Number(data.attempts)||0),retries=Math.max(0,Number(data.retries)||0),failed=Math.max(0,Number(data.failed_attempts)||0),tokensAvailable=availability.tokens===true,inputAvailable=availability.input_tokens===true||(availability.input_tokens===undefined&&tokensAvailable),outputAvailable=availability.output_tokens===true||(availability.output_tokens===undefined&&tokensAvailable),reasoningAvailable=availability.reasoning_tokens===true,cacheAvailable=availability.cache===true,attemptsAvailable=availability.attempts===true,ioComplete=ioCoveredExecutions>=executions&&data.coverage?.tokens?.complete!==false;
+ return {output_per_dollar:outputAvailable&&availability.cost===true&&costCoveredExecutions>0&&coveredCost>0?coveredOutput/coveredCost:null,reasoning_ratio:reasoningAvailable&&reasoningOutput>0?Math.min(1,reasoning/reasoningOutput):null,context_load:inputAvailable&&outputAvailable&&ioComplete&&output>0?input/output:null,cache_leverage:tokensAvailable&&cacheAvailable&&cacheInput>0?Math.min(1,cacheRead/cacheInput):null,retry_waste:attemptsAvailable&&attempts>0?Math.min(1,retries/attempts):null,failure_rate:attemptsAvailable&&attempts>0?Math.min(1,failed/attempts):null,output_per_execution:outputAvailable&&coveredExecutions>0?output/coveredExecutions:null};
+}
+function thinkingUnavailableExecutions(row){
+ const data=row||{},observed=Math.max(0,Number(data.thinking_executions)||0),covered=data.thinking_covered_executions===undefined?Math.min(observed,Math.max(0,Number(data.reasoning_executions)||0)):Math.max(0,Number(data.thinking_covered_executions)||0);
+ return Math.max(0,observed-covered);
+}
+function efficiencyRangeWindow(){return modelRangeWindow(efficiencyRange);}
+function filterEfficiencyModels(models,filters){
+ const allSelected=!(filters||[]).length;
+ return (models||[]).filter(model=>allSelected||(filters||[]).includes(model.id));
+}
+function efficiencyModelRows(models,window){
+ return (models||[]).map(row=>{const daily=window.daySet?(row.daily||[]).filter(day=>modelDayInRange(day.day,window)):[row];return {...row,window:aggregateModelDays(daily)};}).filter(row=>Number(row.window.executions||0)>0||Number(row.window.input_tokens||0)>0||Number(row.window.output_tokens||0)>0||Number(row.window.cost||0)>0).sort((a,b)=>Number(b.window.cost||0)-Number(a.window.cost||0)||Number(b.window.output_tokens||0)-Number(a.window.output_tokens||0)||modelRuntimeLabel(a).localeCompare(modelRuntimeLabel(b)));
+}
+function efficiencySortValue(row,key){
+ const data=row?.window||{},metric=efficiencyMetrics(data);
+ if(key==='model')return modelRuntimeLabel(row);
+ if(key==='cost')return data.availability?.cost===true?Number(data.cost)||0:null;
+ const value=metric[key];return value===null||!Number.isFinite(value)?null:value;
+}
+function sortEfficiencyRows(rows,sort=efficiencySort){
+ const direction=sort.direction==='asc'?1:-1;
+ return [...(rows||[])].sort((a,b)=>{const left=efficiencySortValue(a,sort.key),right=efficiencySortValue(b,sort.key);if(left===null&&right===null)return modelRuntimeLabel(a).localeCompare(modelRuntimeLabel(b));if(left===null)return 1;if(right===null)return -1;const compared=typeof left==='string'?left.localeCompare(right):left-right;return compared?compared*direction:modelRuntimeLabel(a).localeCompare(modelRuntimeLabel(b));});
+}
+function efficiencyTrendDays(rows,window){
+ const grouped=new Map((window.days||[]).map(day=>[day,[]]));
+ (rows||[]).forEach(row=>(row.daily||[]).forEach(day=>{if(!modelDayInRange(day.day,window))return;if(!grouped.has(day.day))grouped.set(day.day,[]);grouped.get(day.day).push(day);}));
+ return [...grouped].sort(([a],[b])=>a.localeCompare(b)).map(([day,items])=>({day,metrics:efficiencyMetrics(aggregateModelDays(items))}));
+}
+function efficiencyTrendDelta(trend,key){
+ const values=(trend||[]).map(row=>row?.metrics?.[key]).filter(value=>value!==null&&value!==undefined&&Number.isFinite(Number(value))).map(Number);
+ if(values.length<2||values.at(-2)<=0)return {text:'No comparable prior day',direction:''};
+ const change=(values.at(-1)-values.at(-2))/values.at(-2);
+ if(!Number.isFinite(change))return {text:'No comparable prior day',direction:''};
+ const direction=change>0?'up':change<0?'down':'flat',symbol=direction==='up'?'↑':direction==='down'?'↓':'→';
+ return {text:`${symbol} ${Math.abs(change*100).toFixed(1)}% vs prior covered day`,direction};
+}
+function efficiencyComparisonWindows(range,now=new Date()){
+ if(range==='today')return {current:modelRangeWindow('today',now),prior:modelRangeWindow('yesterday',now),label:'yesterday'};
+ if(range==='yesterday')return {current:modelRangeWindow('yesterday',now),prior:{days:[dateKeyAgo(2,now)],daySet:new Set([dateKeyAgo(2,now)])},label:'the day before'};
+ const count=Number(range);
+ if(!Number.isInteger(count)||count<=0)return null;
+ const priorDays=Array.from({length:count},(_,index)=>dateKeyAgo(count*2-1-index,now));
+ return {current:modelRangeWindow(String(count),now),prior:{days:priorDays,daySet:new Set(priorDays)},label:`prior ${count} days`};
+}
+function efficiencyPeriodDelta(current,prior,key,label){
+ const latest=Number(current?.[key]),baseline=Number(prior?.[key]);
+ if(!Number.isFinite(latest)||!Number.isFinite(baseline)||latest<0||baseline<=0)return {text:'No comparable prior period',direction:''};
+ const change=(latest-baseline)/baseline;
+ if(!Number.isFinite(change))return {text:'No comparable prior period',direction:''};
+ const direction=change>0?'up':change<0?'down':'flat',symbol=direction==='up'?'↑':direction==='down'?'↓':'→';
+ return {text:`${symbol} ${Math.abs(change*100).toFixed(1)}% vs ${label}`,direction};
+}
+function efficiencyTrendTone(delta,improvingDirection=''){
+ const direction=delta?.direction||'';
+ return direction&&improvingDirection?(direction===improvingDirection?'improving':'degrading'):'';
+}
+function renderEfficiencyTrendDelta(id,delta,improvingDirection='',hidden=false){
+ const change=$(id),parts=delta.direction?delta.text.split(' vs '):[delta.text,''];
+ change.hidden=hidden;change.querySelector('strong').textContent=parts[0];change.querySelector('span').textContent=parts[1]?`vs ${parts[1]}`:'';change.dataset.direction=delta.direction;change.dataset.tone=efficiencyTrendTone(delta,improvingDirection);
+}
+function efficiencyChartPointerIndex(clientX,rect,count){
+ if(count<=1)return 0;
+ const rectWidth=Math.max(1,Number(rect?.width)||0),localX=Math.max(0,Math.min(rectWidth,Number(clientX)-(Number(rect?.left)||0))),viewX=localX/rectWidth*520;
+ return Math.max(0,Math.min(count-1,Math.round((viewX-9)/502*(count-1))));
+}
+function efficiencyChartKeyIndex(key,index,count){
+ const last=Math.max(0,count-1),current=Math.max(0,Math.min(last,index));
+ if(key==='Home')return 0;
+ if(key==='End')return last;
+ if(key==='ArrowLeft')return Math.max(0,current-1);
+ if(key==='ArrowRight')return Math.min(last,current+1);
+ return current;
+}
+function efficiencyChartMetricPresentation(value,key){
+ if(key==='reasoning_ratio')return {axis:pct(value),detail:`${pct(value)} reasoning`};
+ if(key==='context_load')return {axis:efficiencyDecimal(value),detail:`${efficiencyDecimal(value)} context / output`};
+ if(key==='output_per_execution')return {axis:compactNumber(value),detail:`${Math.round(value).toLocaleString('en-US')} output tokens / exec`};
+ return {axis:compactNumber(value),detail:`${Math.round(value).toLocaleString('en-US')} output tokens / $`};
+}
+function efficiencyChartInspection(sample,key){
+ const parts=String(sample?.day||'').split('-').map(Number),months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],date=parts.length===3&&months[parts[1]-1]?`${months[parts[1]-1]} ${parts[2]}`:String(sample?.day||'Unknown day'),value=sample?.value;
+ if(value===null||!Number.isFinite(value))return {date,value:'No data'};
+ return {date,value:efficiencyChartMetricPresentation(value,key).detail};
+}
+function efficiencyChartAnnouncement(detail,announce){
+ return announce?`${detail.date} · ${detail.value}`:'';
+}
+function efficiencyChartSmoothPath(rows,x,y){
+ const points=(rows||[]).map(row=>({x:Number(x(row)),y:Number(y(row.value))})),format=value=>value.toFixed(1);
+ if(!points.length)return '';
+ if(points.length===1)return `M${format(points[0].x)} ${format(points[0].y)}`;
+ if(points.length===2)return `M${format(points[0].x)} ${format(points[0].y)} L${format(points[1].x)} ${format(points[1].y)}`;
+ const intervals=points.slice(1).map((point,index)=>point.x-points[index].x),slopes=points.slice(1).map((point,index)=>(point.y-points[index].y)/intervals[index]),tangents=points.map((point,index)=>index===0?slopes[0]:index===points.length-1?slopes.at(-1):0);
+ for(let index=1;index<points.length-1;index++){const previous=slopes[index-1],next=slopes[index],previousWidth=intervals[index-1],nextWidth=intervals[index];if(previous===0||next===0||previous*next<=0)tangents[index]=0;else{const left=2*nextWidth+previousWidth,right=nextWidth+2*previousWidth;tangents[index]=(left+right)/(left/previous+right/next);}}
+ let path=`M${format(points[0].x)} ${format(points[0].y)}`;
+ for(let index=0;index<points.length-1;index++){const start=points[index],end=points[index+1],width=intervals[index];path+=` C${format(start.x+width/3)} ${format(start.y+tangents[index]*width/3)} ${format(end.x-width/3)} ${format(end.y-tangents[index+1]*width/3)} ${format(end.x)} ${format(end.y)}`;}
+ return path;
+}
+function renderEfficiencyChart(id,trend,key,label){
+ const svg=$(id),tip=svg.parentElement?.querySelector('.efficiencyChartTip'),status=svg.parentElement?.querySelector('.efficiencyChartStatus'),hoverRatio=Number(svg.dataset.efficiencyHoverRatio),width=520,height=96,pad={left:9,right:9,top:10,bottom:16},samples=(trend||[]).map((row,index)=>({day:row.day,index,value:row.metrics?.[key]})),valid=samples.filter(row=>row.value!==null&&Number.isFinite(row.value));
+ if(tip)tip.hidden=true;
+ if(status)status.textContent='';
+ if(!samples.length){delete svg.dataset.efficiencyHoverRatio;svg.innerHTML='<text class=efficiencyChartEmpty x=10 y=51>No daily evidence</text>';svg.setAttribute('aria-label',`${label}: unavailable`);svg.onpointermove=null;svg.onpointerleave=null;svg.onfocus=null;svg.onkeydown=null;svg.onblur=null;return;}
+ const maxValue=key==='reasoning_ratio'?1:valid.length?Math.max(1,...valid.map(row=>row.value)):1,plotWidth=width-pad.left-pad.right,plotHeight=height-pad.top-pad.bottom,x=row=>pad.left+(samples.length<=1?plotWidth/2:row.index*plotWidth/(samples.length-1)),y=value=>pad.top+plotHeight-(Math.max(0,value)/maxValue)*plotHeight;
+ const segments=[];let segment=[];samples.forEach(row=>{if(row.value===null||!Number.isFinite(row.value)){if(segment.length)segments.push(segment);segment=[];}else segment.push(row);});if(segment.length)segments.push(segment);
+ const paths=segments.map(rows=>{const line=efficiencyChartSmoothPath(rows,x,y),area=`${line} L${x(rows.at(-1)).toFixed(1)} ${(pad.top+plotHeight).toFixed(1)} L${x(rows[0]).toFixed(1)} ${(pad.top+plotHeight).toFixed(1)} Z`;return `<path class=efficiencyChartArea d="${area}"/><path class=efficiencyChartLine d="${line}"/>`;}).join('');
+ const last=valid.at(-1),format=value=>efficiencyChartMetricPresentation(value,key).axis,firstDay=samples[0]?.day?.slice(5)||'',lastDay=samples.at(-1)?.day?.slice(5)||'',latest=last?`<circle class=efficiencyChartDot cx="${x(last).toFixed(1)}" cy="${y(last.value).toFixed(1)}" r="3.5"/>`:'',empty=valid.length?'':`<text class=efficiencyChartEmpty x=10 y=51>No daily evidence</text>`,maxLabel=valid.length?`<text class=efficiencyChartLabel x="${width-pad.right}" y="${pad.top+8}" text-anchor=end>${esc(format(maxValue))}</text>`:'';
+ svg.innerHTML=`<line class=efficiencyChartGrid x1="${pad.left}" x2="${width-pad.right}" y1="${pad.top}" y2="${pad.top}"/><line class=efficiencyChartGrid x1="${pad.left}" x2="${width-pad.right}" y1="${pad.top+plotHeight}" y2="${pad.top+plotHeight}"/>${paths}${latest}${empty}<text class=efficiencyChartLabel x="${pad.left}" y="${height-2}">${esc(firstDay)}</text><text class=efficiencyChartLabel x="${width-pad.right}" y="${height-2}" text-anchor=end>${esc(lastDay)}</text>${maxLabel}<g class=efficiencyChartInspect visibility=hidden><line class=efficiencyChartInspectLine y1="${pad.top}" y2="${pad.top+plotHeight}"/><circle class=efficiencyChartInspectDot r="4"/></g>`;
+ const instruction='Use Left and Right arrow keys to inspect daily values.',summaryLabel=`${last?`${label}: ${valid.length} daily values, latest ${format(last.value)}`:`${label}: unavailable`}. ${instruction}`;
+ svg.setAttribute('aria-label',summaryLabel);
+ let activeIndex=samples.length-1;
+ const inspect=svg.querySelector('.efficiencyChartInspect'),line=inspect?.querySelector('line'),dot=inspect?.querySelector('circle'),hideInspection=()=>{inspect?.setAttribute('visibility','hidden');if(tip)tip.hidden=true;};
+ const showInspection=(index,localX,announce=false)=>{const sample=samples[index],detail=efficiencyChartInspection(sample,key),pointX=x(sample);inspect?.setAttribute('visibility','visible');line?.setAttribute('x1',pointX.toFixed(1));line?.setAttribute('x2',pointX.toFixed(1));if(dot){if(sample.value===null||!Number.isFinite(sample.value))dot.setAttribute('visibility','hidden');else{dot.setAttribute('visibility','visible');dot.setAttribute('cx',pointX.toFixed(1));dot.setAttribute('cy',y(sample.value).toFixed(1));}}const text=`${detail.date} · ${detail.value}`;if(tip){const rect=svg.getBoundingClientRect(),edge=Math.min(105,rect.width/2);tip.textContent=text;tip.style.left=`${Math.max(edge,Math.min(rect.width-edge,localX))}px`;tip.hidden=false;}if(status)status.textContent=efficiencyChartAnnouncement(detail,announce);};
+ svg.onpointermove=event=>{const rect=svg.getBoundingClientRect(),localX=Math.max(0,Math.min(rect.width,event.clientX-rect.left));svg.dataset.efficiencyHoverRatio=String(localX/Math.max(1,rect.width));activeIndex=efficiencyChartPointerIndex(event.clientX,rect,samples.length);showInspection(activeIndex,localX);};
+ svg.onpointerleave=()=>{delete svg.dataset.efficiencyHoverRatio;hideInspection();svg.setAttribute('aria-label',summaryLabel);};
+ svg.onfocus=()=>{const rect=svg.getBoundingClientRect();activeIndex=samples.length-1;showInspection(activeIndex,rect.width*x(samples[activeIndex])/width,true);};
+ svg.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();activeIndex=efficiencyChartKeyIndex(event.key,activeIndex,samples.length);const rect=svg.getBoundingClientRect();showInspection(activeIndex,rect.width*x(samples[activeIndex])/width,true);};
+ svg.onblur=()=>{hideInspection();svg.setAttribute('aria-label',summaryLabel);if(status)status.textContent='';};
+ if(svg.matches(':hover')&&Number.isFinite(hoverRatio)){const rect=svg.getBoundingClientRect(),localX=Math.max(0,Math.min(rect.width,rect.width*hoverRatio));activeIndex=efficiencyChartPointerIndex(rect.left+localX,rect,samples.length);showInspection(activeIndex,localX);}
+}
+function updateEfficiencySortHeaders(){
+ document.querySelectorAll('[data-efficiency-sort]').forEach(button=>{const active=button.dataset.efficiencySort===efficiencySort.key,th=button.closest('th'),mark=button.querySelector('.efficiencySortMark');th?.setAttribute('aria-sort',active?(efficiencySort.direction==='asc'?'ascending':'descending'):'none');if(mark)mark.textContent=active?(efficiencySort.direction==='asc'?'↑':'↓'):'';});
+}
+function efficiencyDecimal(value,suffix='x'){
+ if(value===null||!Number.isFinite(value))return '--';
+ const digits=value>=100?0:value>=10?1:2;
+ return value.toFixed(digits).replace(/\.0+$/,'')+suffix;
+}
+function efficiencyCoverageNote(overall,metric,label){
+ const coverage=overall.coverage?.[metric]||{},covered=Number(coverage.covered_rows||0),total=Number(coverage.total_rows||0);
+ if(!covered)return `${label} unavailable`;
+ return `${label} · ${f(covered)} / ${f(total)} models${coverage.complete?'':' · partial'}`;
+}
+function efficiencyEstimateNote(row){
+ const basis=usageBasis(row);
+ return basis==='mixed'?' · includes local estimates':basis==='local_estimate'?' · local estimate':'';
+}
+function efficiencyReasoningPresentation(data,metric){
+ const executions=Math.max(0,Number(data?.executions)||0),reasoningExecutions=Math.max(0,Number(data?.reasoning_executions)||0),thinkingExecutions=Math.min(executions,Math.max(0,Number(data?.thinking_executions)||0));
+ if(metric?.reasoning_ratio!==null&&Number.isFinite(metric?.reasoning_ratio))return {value:pct(metric.reasoning_ratio),note:`${f(reasoningExecutions)} / ${f(executions)} exec`};
+ if(thinkingExecutions>0&&executions>0)return {value:`${pct(thinkingExecutions/executions)} thinking execs`,note:'token ratio unavailable'};
+ return {value:'--',note:'unavailable'};
+}
+function efficiencySummaryPresentation(data){
+ const metric=efficiencyMetrics(data),reasoning=efficiencyReasoningPresentation(data,metric),estimate=hasLocalEstimate(data)?' · local est':'';
+ const outputAvailable=metric.output_per_dollar!==null&&Number.isFinite(metric.output_per_dollar),outputNote=outputAvailable?(data?.coverage?.cost?.complete===false?'partial':'covered'):'unavailable';
+ return {output:{value:outputAvailable?`${compactNumber(metric.output_per_dollar)} / $`:'--',note:outputNote+(outputAvailable?estimate:'')},reasoning:{value:reasoning.value,note:reasoning.note+(reasoning.value!=='--'?estimate:'')}};
+}
+function sessionEfficiencySource(s){
+ if(Array.isArray(s?.selected_stats?.model_stats))return s.selected_stats;
+ const id=stateSessionId(s),path=String(s?.source?.path||''),rows=s?.xsession?.sessions||[];
+ const summary=path?rows.find(row=>String(row?.path||'')===path):rows.find(row=>String(row?.id||'')===String(id||''));
+ return summary||s||{};
+}
+function normalizeSessionEfficiencyAggregate(overall){
+ const data=overall||{},reasoningAvailable=Number(data.reasoning_executions||0)>0&&Number(data.reasoning_output_tokens||0)>0;
+ return {...data,availability:{...(data.availability||{}),reasoning_tokens:reasoningAvailable}};
+}
+function renderSessionEfficiency(s){
+ const source=sessionEfficiencySource(s),overall=normalizeSessionEfficiencyAggregate(aggregateModelDays(source.model_stats||[]));
+ if(hasLocalEstimate(source)||hasLocalEstimate(s)){overall.usage_basis=usageBasis(source)||usageBasis(s);overall.provenance={usage_basis:overall.usage_basis};}
+ const presentation=efficiencySummaryPresentation(overall);
+ $('session-output-dollar').textContent=presentation.output.value;
+ $('session-output-dollar-note').textContent=presentation.output.note;
+ $('session-reasoning-ratio').textContent=presentation.reasoning.value;
+ $('session-reasoning-ratio-note').textContent=presentation.reasoning.note;
+}
+function renderEfficiency(stats){
+ const allModels=(stats?.models||[]).map(row=>({...row,id:row.id||row.model,runtime:row.runtime||(row.providers||[]).join(' + ')||'unknown runtime'})),window=efficiencyRangeWindow();
+ efficiencyFilters=migrateModelRuntimeFilters(efficiencyFilters,allModels);saveActiveEfficiencyFilters();
+ const allSelected=!efficiencyFilters.length,selected=filterEfficiencyModels(allModels,efficiencyFilters),options=allModels.slice().sort((a,b)=>modelRuntimeLabel(a).localeCompare(modelRuntimeLabel(b))),rows=efficiencyModelRows(selected,window),efficiencyModelRowsForRange=rows.map(row=>row.window),overall=aggregateModelDays(efficiencyModelRowsForRange),metrics=efficiencyMetrics(overall),rangeLabel=modelRangeLabel(efficiencyRange);
+ const pickerOptions=`<label class="modelOption all"><input type=checkbox data-efficiency-model-choice=all ${allSelected?'checked':''}><span>All model/runtime/budget rows</span></label>`+options.map(row=>{const label=modelRuntimeLabel(row);return `<label class=modelOption title="${esc(label)}"><input type=checkbox data-efficiency-model-choice=model value="${esc(row.id)}" ${efficiencyFilters.includes(row.id)?'checked':''}><span>${esc(label)}</span></label>`;}).join('');
+ setLogHtml($('e-model-options'),pickerOptions);
+ if($('e-model-picker').open)requestAnimationFrame(positionEfficiencyPickerMenu);
+ const selectionLabel=allSelected?'All model runtimes':selected.length===1?modelRuntimeLabel(selected[0]):`${selected.length} model runtimes selected`;
+ $('e-model-summary').textContent=selectionLabel;$('e-model-summary').title=allSelected?'All model runtimes':selected.map(modelRuntimeLabel).join(', ');
+ $('e-range').value=efficiencyRange;
+ $('e-output-dollar').textContent=metrics.output_per_dollar===null?'--':`${compactNumber(metrics.output_per_dollar)} / $`;
+ $('e-output-dollar-coverage').textContent=efficiencyCoverageNote(overall,'cost','Coverage')+efficiencyEstimateNote(overall);
+ $('e-reasoning-ratio').textContent=metrics.reasoning_ratio===null?'--':pct(metrics.reasoning_ratio);
+ const reasoningCovered=Number(overall.reasoning_executions||0),reasoningTotal=Number(overall.executions||0),thinkingUnavailable=efficiencyModelRowsForRange.reduce((total,row)=>total+thinkingUnavailableExecutions(row),0),thinkingNote=thinkingUnavailable?` · ${f(thinkingUnavailable)} thinking exec · token split unavailable`:'';
+ $('e-reasoning-coverage').textContent=(reasoningCovered?`Thinking / reasoning coverage · ${f(reasoningCovered)} / ${f(reasoningTotal)} exec${thinkingNote}`:thinkingUnavailable?`${f(thinkingUnavailable)} thinking exec · token split unavailable`:'Thinking / reasoning coverage unavailable')+efficiencyEstimateNote(overall);
+ const comparison=efficiencyComparisonWindows(efficiencyRange),priorOverall=comparison?aggregateModelDays(efficiencyModelRows(selected,comparison.prior).map(row=>row.window)):null,priorMetrics=priorOverall?efficiencyMetrics(priorOverall):null,comparisonDelta=key=>comparison?efficiencyPeriodDelta(metrics,priorMetrics,key,comparison.label):{text:'No comparable prior period',direction:''},trend=efficiencyTrendDays(rows,window),outputDelta=comparisonDelta('output_per_dollar'),reasoningDelta=comparisonDelta('reasoning_ratio'),contextDelta=comparisonDelta('context_load'),outputExecutionDelta=comparisonDelta('output_per_execution');
+ renderEfficiencyTrendDelta('e-output-dollar-change',outputDelta,'up',!comparison);renderEfficiencyTrendDelta('e-reasoning-change',reasoningDelta,'down',!comparison);renderEfficiencyTrendDelta('e-context-load-change',contextDelta,'down',!comparison);renderEfficiencyTrendDelta('e-output-execution-change',outputExecutionDelta,'up',!comparison);
+ renderEfficiencyChart('e-output-dollar-chart',trend,'output_per_dollar','Output per covered dollar');renderEfficiencyChart('e-reasoning-chart',trend,'reasoning_ratio','Reasoning ratio');renderEfficiencyChart('e-context-load-chart',trend,'context_load','Context load');renderEfficiencyChart('e-output-execution-chart',trend,'output_per_execution','Output per execution');
+ $('e-context-load').textContent=efficiencyDecimal(metrics.context_load);
+ $('e-context-load-note').textContent=metrics.context_load===null?(overall.availability?.input_tokens===true&&overall.availability?.output_tokens===true?'paired input/output coverage partial':'input/output evidence unavailable'):'input tokens per output token';
+ $('e-output-execution').textContent=metrics.output_per_execution===null?'--':compactNumber(metrics.output_per_execution);
+ $('e-output-execution-note').textContent=metrics.output_per_execution===null?'token-covered executions unavailable':`${f(overall.token_covered_executions)} / ${f(overall.executions)} exec covered`;
+ $('e-model-meta').textContent=`${f(rows.length)} models · ${allSelected?'all runtimes':`${f(selected.length)} selected`} · ${rangeLabel}${efficiencyEstimateNote(overall)}`;updateEfficiencySortHeaders();
+	 const sortedRows=sortEfficiencyRows(rows);$('e-model-table').querySelector('tbody').innerHTML=sortedRows.length?sortedRows.map(row=>{const data=row.window,metric=efficiencyMetrics(row.window),reasoning=efficiencyReasoningPresentation(data,metric),tokenExecutions=Number(data.token_covered_executions===undefined?data.executions:data.token_covered_executions)||0,tokenCoverage=tokenExecutions===Number(data.executions||0)?`${f(tokenExecutions)} exec`:`${f(tokenExecutions)} / ${f(data.executions)} covered`,ioExecutions=Number(data.io_covered_executions===undefined?tokenExecutions:data.io_covered_executions)||0,contextCoverage=ioExecutions>=Number(data.executions||0)&&data.coverage?.tokens?.complete!==false?'covered':'partial',estimate=hasLocalEstimate(row)?' · local est':'',effort=modelEffortLabel(row);return `<tr><td><div class=modelName title="${esc(row.model)}">${esc(row.model)}</div></td><td>${esc(row.runtime)}${estimate}</td><td>${esc(effort)}</td><td class="num efficiencyMetric"><strong class=mono>${data.availability?.cost===false?'--':money(data.cost)}</strong><span>${data.availability?.cost===false?'unavailable':data.coverage?.cost?.complete?'covered':'partial'}</span></td><td class="num efficiencyMetric"><strong class=mono>${metric.output_per_dollar===null?'--':compactNumber(metric.output_per_dollar)+' / $'}</strong><span>${metric.output_per_dollar===null?'unavailable':data.coverage?.cost?.complete?'covered':'partial'}</span></td><td class="num efficiencyMetric"><strong class=mono>${reasoning.value}</strong><span>${reasoning.note}</span></td><td class="num efficiencyMetric"><strong class=mono>${efficiencyDecimal(metric.context_load)}</strong><span>${contextCoverage}</span></td><td class="num efficiencyMetric"><strong class=mono>${metric.output_per_execution===null?'--':compactNumber(metric.output_per_execution)}</strong><span>${tokenCoverage}</span></td></tr>`;}).join(''):'<tr><td colspan=8><div class=modelEmpty>No model activity in this range</div></td></tr>';
+}
+function paintEfficiencyProjects(stats){
+ const projects=(stats?.projects||[]).filter(project=>typeof project==='string'&&project);
+ if(efficiencyProject&&!projects.includes(efficiencyProject)){efficiencyProject='';efficiencyFilters=loadEfficiencyFilters('');localStorage.removeItem('tm_efficiency_project');}
+ setLogSelectOptions($('e-project'),'<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(projectFilterLabel(project))}</option>`).join(''),efficiencyProject);
+ $('e-project').title=stats?.projects_truncated?'Showing the first 500 discovered projects.':'';
+}
+function setEfficiencyProjectLoading(loading){if(loading)$('e-project').setAttribute('aria-busy','true');else $('e-project').removeAttribute('aria-busy');}
+function commitEfficiencyStats(stats,scope,generation){activeEfficiencyStats=stats;activeEfficiencyScope=scope;activeEfficiencyGeneration=generation;setEfficiencyProjectLoading(false);renderEfficiency(stats);}
+async function renderActiveEfficiency(){
+ if(!LATEST)return;
+ const machine=LATEST.xsession?.model_stats||{models:[],projects:[]},generation=Number(LATEST.xsession?.generated_at||0);paintEfficiencyProjects(machine);
+ if(!efficiencyProject){efficiencyProjectRequest++;efficiencyProjectLoadingKey='';setEfficiencyProjectLoading(false);commitEfficiencyStats(machine,'',generation);return;}
+ const project=efficiencyProject,key=`${generation}\n${project}`,cached=efficiencyProjectCache.get(key);
+ if(cached){commitEfficiencyStats(cached,project,generation);return;}
+ if(efficiencyProjectLoadingKey===key)return;
+ setEfficiencyProjectLoading(true);efficiencyProjectLoadingKey=key;const request=++efficiencyProjectRequest;
+ try{
+  const response=await fetch('/model-stats?project='+encodeURIComponent(project),{cache:'no-store'}),payload=await response.json();
+  if(!response.ok||!payload.ok)throw new Error('Project model stats are unavailable.');
+  if(request!==efficiencyProjectRequest||project!==efficiencyProject)return;
+  const responseGeneration=Number(payload.generated_at||generation);efficiencyProjectCache.set(key,payload.model_stats);efficiencyProjectCache.set(`${responseGeneration}\n${project}`,payload.model_stats);commitEfficiencyStats(payload.model_stats,project,responseGeneration);
+ }catch(error){if(request===efficiencyProjectRequest&&project===efficiencyProject)setEfficiencyProjectLoading(false);}
+ finally{if(efficiencyProjectLoadingKey===key){efficiencyProjectLoadingKey='';setEfficiencyProjectLoading(false);}}
+}
+function rerenderActiveEfficiency(){
+ if(activeEfficiencyStats&&activeEfficiencyScope===efficiencyProject)renderEfficiency(activeEfficiencyStats);
+ else renderActiveEfficiency();
+}
+$('e-range').value=efficiencyRange;
+$('e-range').onchange=event=>{efficiencyRange=EFFICIENCY_RANGES.includes(event.target.value)?event.target.value:'7';localStorage.setItem('tm_efficiency_range',efficiencyRange);if(LATEST)renderActiveEfficiency();};
+$('e-project').addEventListener('change',event=>{efficiencyProject=event.target.value;efficiencyFilters=loadEfficiencyFilters(efficiencyProject);if(efficiencyProject)localStorage.setItem('tm_efficiency_project',efficiencyProject);else localStorage.removeItem('tm_efficiency_project');efficiencyProjectRequest++;efficiencyProjectLoadingKey='';renderActiveEfficiency();});
+$('e-model-options').addEventListener('change',event=>{const input=event.target.closest('input[data-efficiency-model-choice]');if(!input)return;if(input.dataset.efficiencyModelChoice==='all')efficiencyFilters=[];else if(input.checked)efficiencyFilters=[...new Set([...efficiencyFilters,input.value])];else efficiencyFilters=efficiencyFilters.filter(id=>id!==input.value);saveActiveEfficiencyFilters();rerenderActiveEfficiency();});
+$('e-model-picker').addEventListener('keydown',event=>{if(event.key==='Escape')$('e-model-picker').removeAttribute('open');});
+document.addEventListener('pointerdown',event=>{const picker=$('e-model-picker');if(picker.open&&!picker.contains(event.target))picker.removeAttribute('open');});
+function positionEfficiencyPickerMenu(){const picker=$('e-model-picker'),menu=$('e-model-options');if(!picker.open){picker.classList.remove('opensUp');menu.style.maxHeight='';return;}const trigger=picker.querySelector('summary'),rect=trigger.getBoundingClientRect(),margin=12,above=Math.max(0,rect.top-margin),below=Math.max(0,window.innerHeight-rect.bottom-margin),preferred=Math.min(360,menu.scrollHeight||360),opensUp=below<preferred&&above>below,available=opensUp?above:below;picker.classList.toggle('opensUp',opensUp);menu.style.maxHeight=`${Math.min(360,available)}px`;}
+$('e-model-picker').addEventListener('toggle',()=>requestAnimationFrame(positionEfficiencyPickerMenu));
+window.addEventListener('resize',()=>{if($('e-model-picker').open)positionEfficiencyPickerMenu();});
+document.querySelectorAll('[data-efficiency-sort]').forEach(button=>button.onclick=()=>{const key=button.dataset.efficiencySort;if(efficiencySort.key===key)efficiencySort={key,direction:efficiencySort.direction==='desc'?'asc':'desc'};else efficiencySort={key,direction:key==='model'?'asc':'desc'};if(activeEfficiencyStats)renderEfficiency(activeEfficiencyStats);});
 function filledModelDays(rows,window){
  if(!window.days)return rows;
  const byDay=new Map(rows.map(row=>[row.day,row]));
  return window.days.map(day=>byDay.get(day)||{day});
 }
-function modelRuntimeLabel(row){return `${row.model} · ${row.runtime||'unknown runtime'}`;}
+function modelEffortLabel(row){
+ const effort=String(row?.reasoning_effort||'').trim().replaceAll('_',' ');
+ if(effort)return effort;
+ return Number(row?.thinking_executions||0)>0?'thinking unavailable':'unavailable';
+}
+function modelRuntimeLabel(row){return `${row.model} · ${row.runtime||'unknown runtime'} · ${modelEffortLabel(row)}`;}
 function migrateModelRuntimeFilters(filters,models){
  const ids=new Set(models.map(row=>row.id)),migrated=[];
- (filters||[]).forEach(value=>{if(ids.has(value)){migrated.push(value);return;}const candidates=models.filter(row=>row.model===value).sort((a,b)=>Number(b.output_tokens||0)-Number(a.output_tokens||0));if(candidates.length)migrated.push(candidates[0].id);});
+ (filters||[]).forEach(value=>{if(ids.has(value)){migrated.push(value);return;}const legacy=models.filter(row=>`${row.model}::${row.runtime||'unknown runtime'}`===value);if(legacy.length){migrated.push(...legacy.map(row=>row.id));return;}const candidates=models.filter(row=>row.model===value).sort((a,b)=>Number(b.output_tokens||0)-Number(a.output_tokens||0));if(candidates.length)migrated.push(candidates[0].id);});
  return [...new Set(migrated)];
 }
 function buildModelTrend(models,window,names){
@@ -4608,6 +4967,7 @@ function renderModelStats(stats){
  drawModelTrend(chart);
  const tableRows=selected.map(model=>{const daily=(model.daily||[]).filter(row=>modelDayInRange(row.day,rangeWindow));return {...model,window:aggregateModelDays(daily)};}).filter(row=>row.window.input_tokens||row.window.output_tokens||row.window.executions||row.window.wait_samples).sort((a,b)=>b.window.output_tokens-a.window.output_tokens||b.window.input_tokens-a.window.input_tokens||b.window.executions-a.window.executions||a.model.localeCompare(b.model));
 		 $('m-table').querySelector('tbody').innerHTML=tableRows.length?tableRows.map(row=>{const data=row.window,basis=data.throughput_basis,basisLabel=basis==='tool_free'?'tool-free':basis==='end_to_end'?'end-to-end':'unavailable',coverage=pct(data.timing_coverage),rowTokens=metricAvailable(data,'tokens'),rowTokenPartial=metricPartial(data,'tokens'),cursorEstimate=row.runtime==='Cursor',est=cursorEstimate?' est':'',ttftNote=data.ttft_samples?`${Math.round(data.avg_ttft_ms)}ms avg TTFT`:'TTFT unavailable in these traces',timingTip=data.available?`${cursorEstimate?'Locally estimated visible':'Observed'} output pace; not a matched model verdict. Includes reasoning/thinking output and excludes external tool results. ${basisLabel} timing · ${f(data.throughput_samples)} timed ${countWord(data.throughput_samples,'sample')} · ${coverage} output coverage · ${ttftNote}.`:(rowTokens?'No attributable completed timing samples in this window.':'Output pace unavailable because this runtime does not persist output tokens.'),pauseNote=data.user_pause_seconds?` · ${waitFmt(data.user_pause_seconds)} trace-visible human pause excluded`:'' ,waitTip=data.wait_samples?`Prompt-to-completed-response wait. ${f(data.wait_samples)} timed ${countWord(data.wait_samples,'request')} · ${waitFmt(data.median_wait_s)} median · ${waitFmt(data.avg_wait_s)} average · ${waitFmt(data.p95_wait_s)} p95 · ${waitFmt(data.max_wait_s)} longest${pauseNote}.`:'No model-attributable completed waits in this window.',workloadTip=`Completed timed turns in this window. ${compactNumber(data.median_peak_input_tokens)} median peak context · ${rowTokens?compactNumber(data.median_workload_output_tokens):'--'} median output · ${compactNumber(data.median_tool_calls)} median tools · ${compactNumber(data.median_model_calls)} median model calls${cursorEstimate?' · Cursor input/output are local proxies':rowTokens?` · ${pct(data.median_cache_ratio)} median cache-read share`:''}.`,color=modelColor(row.id,names);return `<tr><td><div class=modelNameLine><i class=modelSwatch style="background:${color}"></i><div class=modelName title="${esc(row.model)}">${esc(row.model)}</div></div><div class=modelRuntime>${esc(row.runtime)}${est}</div></td><td class="num mono" title="All scanned history">${f(row.logs)}</td><td class="num mono">${f(data.executions)}</td><td class="num mono">${rowTokens?compactNumber(data.input_tokens)+(rowTokenPartial?'*':'')+est:'--'}</td><td class="num mono">${rowTokens?compactNumber(data.output_tokens)+(rowTokenPartial?'*':'')+est:'--'}</td><td class="num workloadCell" title="${esc(workloadTip)}"><strong class=mono>${compactNumber(data.median_peak_input_tokens)} ctx</strong><span>${rowTokens?compactNumber(data.median_workload_output_tokens)+est:'--'} out · ${compactNumber(data.median_tool_calls)} tools · ${compactNumber(data.median_model_calls)} calls</span></td><td class="num speedCell" title="${esc(timingTip)}"><strong class=mono>${data.available?speedFmt(data.output_tps)+' tok/s'+est:'--'}</strong><span>${data.available?`${basisLabel} · ${f(data.throughput_samples)} ${countWord(data.throughput_samples,'sample')} · ${coverage}`:(rowTokens?'no timing':'output unavailable')}</span></td><td class="num waitCell" title="${esc(waitTip)}"><strong class=mono>${data.wait_samples?waitFmt(data.median_wait_s):'--'}</strong><span>${data.wait_samples?`${waitFmt(data.avg_wait_s)} avg · ${waitFmt(data.p95_wait_s)} p95`:'no timing'}</span></td></tr>`;}).join(''):`<tr><td colspan=8><div class=modelEmpty>No model activity in this window</div></td></tr>`;
+ $('m-table').querySelectorAll('.modelRuntime').forEach((cell,index)=>cell.append(document.createTextNode(` · ${modelEffortLabel(tableRows[index])}`)));
 }
 
 function frustrationSeries(data,group=frustrationGroup){
@@ -4772,19 +5132,19 @@ function renderAllSessions(xs){
   localStorage.removeItem('tm_global_app');
  }
  setLogSelectOptions($('g-app'),'<option value="">All apps</option>'+apps.map(app=>`<option value="${esc(app.id)}">${esc(app.label)}</option>`).join(''),globalApp);
- const projects=[...new Set(all.map(s=>s.project||'No project'))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+ const projects=[...new Set(all.map(s=>projectFilterValue(s.project)))].sort((a,b)=>projectFilterLabel(a).localeCompare(projectFilterLabel(b),undefined,{sensitivity:'base'}));
  if(globalProject&&!projects.includes(globalProject)){
   globalProject='';
   localStorage.removeItem('tm_global_project');
  }
- setLogSelectOptions($('g-project'),'<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(project)}</option>`).join(''),globalProject);
+ setLogSelectOptions($('g-project'),'<option value="">All projects</option>'+projects.map(project=>`<option value="${esc(project)}">${esc(projectFilterLabel(project))}</option>`).join(''),globalProject);
  paintGlobalFilters();
  const timeLabels={'24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days','90d':'Last 90 days'};
  const appLabel=apps.find(app=>app.id===globalApp)?.label||globalApp;
  const activeFilters=[
   globalSearch.trim()&&['search',`Search: “${globalSearch.trim()}”`],
   globalApp&&['app',`App: ${appLabel}`],
-  globalProject&&['project',`Project: ${globalProject}`],
+  globalProject&&['project',`Project: ${projectFilterLabel(globalProject)}`],
   globalTime!=='all'&&['time',timeLabels[globalTime]||globalTime],
  ].filter(Boolean);
  const hideActiveFilters=!activeFilters.length;
@@ -4797,7 +5157,7 @@ function renderAllSessions(xs){
  const rangeStart=rangeSeconds?Date.now()/1000-rangeSeconds:0;
  let sessions=all.filter(s=>{
   if(globalApp&&appFilterGroup(s)!==globalApp)return false;
-  if(globalProject&&(s.project||'No project')!==globalProject)return false;
+  if(globalProject&&projectFilterValue(s.project)!==globalProject)return false;
   if(rangeStart&&(s.mtime||0)<rangeStart)return false;
   return !q||[s.title,s.project,s.provider,s.label,(s.models||[]).join(' ')].join(' ').toLowerCase().includes(q);
  });
@@ -5483,6 +5843,7 @@ function applyLiveState(state){
 	 if($('view-models').classList.contains('on')){renderActiveModelStats();renderFrustration(LATEST.xsession?.language_signals,LATEST.xsession?.sessions);}
 	 if($('view-daily').classList.contains('on'))renderSpend(LATEST.xsession);
  if($('view-capabilities').classList.contains('on'))renderCapabilities(LATEST.xsession?.capabilities);
+	 if($('view-efficiency').classList.contains('on'))renderActiveEfficiency();
 	 if($('view-settings').classList.contains('on'))renderSettings(LATEST.xsession);
 }
 async function refreshLiveState(){

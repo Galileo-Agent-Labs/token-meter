@@ -680,6 +680,27 @@ class CodexRuntimeAdapterTests(unittest.TestCase):
             ["corrupt_rows", "usage_unavailable"],
         )
 
+    def test_native_load_rejects_malformed_and_oversized_usage(self):
+        rows = json.loads(json.dumps(self.rows))
+        rows[6]["payload"]["info"]["last_token_usage"] = {
+            "input_tokens": "bad",
+            "cached_input_tokens": 0,
+            "output_tokens": 10 ** 400,
+        }
+        self._write(rows)
+        source = self.adapter.discover(self.context)[0]
+
+        result = self.adapter.load(source, DetailLevel.FULL)
+
+        self.assertEqual(result.usage.input_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.output_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.cache_read_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.usage.cache_write_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual(result.turns[0].output_tokens.basis, EvidenceBasis.UNAVAILABLE)
+        self.assertEqual([warning.code for warning in result.warnings], [
+            "usage_unavailable",
+        ])
+
     def test_trace_or_index_title_changes_revision(self):
         source = self.adapter.discover(DiscoveryContext(home=str(self.root)))[0]
         before = self.adapter.current_revision(source)

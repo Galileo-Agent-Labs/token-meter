@@ -923,9 +923,14 @@ class KiroRuntimeAdapter:
             model_cost[model.model_id] += value
             model_tok[model.model_id] += total
             models.add(model.model_id)
-            compat["add_model_summary"](model_stats, model.model_id, usage, value)
+            compat["add_model_summary"](
+                model_stats, model.model_id, usage, value,
+                cost_available=cost_available,
+            )
             compat["add_model_daily"](
-                model_daily, model.model_id, usage, value, turn.get("end") or turn.get("start")
+                model_daily, model.model_id, usage, value,
+                turn.get("end") or turn.get("start"),
+                cost_available=cost_available,
             )
             if turn.get("end"):
                 day_cost[time.strftime("%Y-%m-%d", time.localtime(turn["end"]))] += value
@@ -945,6 +950,14 @@ class KiroRuntimeAdapter:
             throughput=False, context=False, timing=bool(intervals),
             tool_results=any(call["output_tokens"] for call in tool_calls),
         )
+        for stats in (*model_stats.values(), *model_daily.values()):
+            stats["availability"] = compat["metric_availability"](
+                "kiro",
+                cost=int(stats.get("cost_covered_executions") or 0) > 0,
+                tokens=True, input_tokens=True, output_tokens=True,
+                cache=False, throughput=False, context=False, timing=False,
+                tool_results=False,
+            )
         active = merge_execution_intervals(intervals)
         first_ts = min((turn["start"] for turn in turns if turn["start"]), default=0)
         last_ts = max((turn["end"] for turn in turns if turn["end"]), default=0)

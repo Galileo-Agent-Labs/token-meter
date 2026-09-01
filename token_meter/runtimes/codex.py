@@ -28,6 +28,7 @@ from token_meter.contracts import (
     TurnSummary,
     UsageEvidence,
 )
+from token_meter.domain.usage import normalize_reported_token_count
 
 
 DEFAULT_MODEL = "gpt-5.6-sol"
@@ -171,15 +172,35 @@ def _corrected_rows(rows, inherited_count, default_model="unknown-model"):
 
 def codex_usage(raw):
     raw = raw or {}
-    input_total = _safe_int(raw.get("input_tokens"))
-    cached = _safe_int(raw.get("cached_input_tokens"))
+    input_total, input_reported = normalize_reported_token_count(
+        raw.get("input_tokens")
+    )
+    cached, cache_reported = normalize_reported_token_count(
+        raw.get("cached_input_tokens", 0)
+    )
+    output_tokens, output_reported = normalize_reported_token_count(
+        raw.get("output_tokens")
+    )
+    total_tokens, _ = normalize_reported_token_count(raw.get("total_tokens", 0))
+    input_available = input_reported and cache_reported and cached <= input_total
+    reasoning_tokens, reasoning_available = normalize_reported_token_count(
+        raw.get("reasoning_output_tokens")
+    )
+    reasoning_available = (
+        output_reported
+        and reasoning_available
+        and reasoning_tokens <= output_tokens
+    )
     return {
-        "input_tokens": max(0, input_total - cached),
+        "input_tokens": max(0, input_total - cached) if input_available else 0,
         "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": cached,
-        "output_tokens": _safe_int(raw.get("output_tokens")),
-        "reasoning_output_tokens": _safe_int(raw.get("reasoning_output_tokens")),
-        "total_tokens": _safe_int(raw.get("total_tokens")),
+        "cache_read_input_tokens": cached if input_available else 0,
+        "output_tokens": output_tokens if output_reported else 0,
+        "input_available": input_available,
+        "output_available": output_reported,
+        "reasoning_output_tokens": reasoning_tokens if reasoning_available else 0,
+        "reasoning_available": reasoning_available,
+        "total_tokens": total_tokens,
     }
 
 
@@ -666,7 +687,9 @@ class CodexRuntimeAdapter:
         rows = self._accounting_rows(source, rows)
 
         counts = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
-        usage_available = False
+        usage_seen = False
+        input_complete = True
+        output_complete = True
         tools = []
         turns = []
         task_started = None
@@ -694,8 +717,10 @@ class CodexRuntimeAdapter:
                 raw = ((payload.get("info") or {}).get("last_token_usage") or {})
                 if not raw:
                     continue
-                usage_available = True
+                usage_seen = True
                 usage = codex_usage(raw)
+                input_complete = input_complete and usage["input_available"]
+                output_complete = output_complete and usage["output_available"]
                 counts["input"] += usage["input_tokens"]
                 counts["output"] += usage["output_tokens"]
                 counts["cache_read"] += usage["cache_read_input_tokens"]
@@ -703,7 +728,9 @@ class CodexRuntimeAdapter:
                 if len(turns) < self.max_detail_turns:
                     turns.append(TurnSummary(
                         len(turns) + 1, task_started, row_time,
-                        EvidenceValue(usage["output_tokens"], EvidenceBasis.MEASURED),
+                        self._usage_evidence(
+                            usage["output_tokens"], usage["output_available"]
+                        ),
                     ))
             elif ptype == "task_complete":
                 duration_ms = payload.get("duration_ms")
@@ -723,7 +750,9 @@ class CodexRuntimeAdapter:
         warning_codes = []
         if corrupt:
             warning_codes.append("corrupt_rows")
-        if not usage_available:
+        input_available = usage_seen and input_complete
+        output_available = usage_seen and output_complete
+        if not input_available or not output_available:
             warning_codes.append("usage_unavailable")
         if len(turns) >= self.max_detail_turns or len(tools) >= self.max_tool_events:
             warning_codes.append("history_truncated")
@@ -737,10 +766,10 @@ class CodexRuntimeAdapter:
             started_at=started_at,
             ended_at=ended_at,
             usage=UsageEvidence(
-                self._usage_evidence(counts["input"], usage_available),
-                self._usage_evidence(counts["output"], usage_available),
-                self._usage_evidence(counts["cache_read"], usage_available),
-                self._usage_evidence(counts["cache_write"], usage_available),
+                self._usage_evidence(counts["input"], input_available),
+                self._usage_evidence(counts["output"], output_available),
+                self._usage_evidence(counts["cache_read"], input_available),
+                self._usage_evidence(counts["cache_write"], input_available),
                 EvidenceValue.unavailable(),
             ),
             timing=TimingEvidence(
@@ -818,6 +847,8 @@ class CodexRuntimeAdapter:
         completed = 0
         approx_cost = True
         price_complete = True
+        input_complete = True
+        output_complete = True
         task_start_ts = None
         context_window = None
         tools_loaded = int(source.get("tools_loaded") or 0)
@@ -1016,11 +1047,21 @@ class CodexRuntimeAdapter:
                     continue
                 context_window = info.get("model_context_window") or context_window or pending.get("context_window")
                 usage = codex_usage(raw)
+                input_complete = input_complete and usage["input_available"]
+                output_complete = output_complete and usage["output_available"]
                 idx = len(series) + 1
-                c = cost_of(usage, model, "codex", at=ts)
                 _, missing_price = price_for(model, "codex", at=ts)
-                approx_cost = approx_cost or missing_price
-                price_complete = price_complete and not missing_price
+                cost_available = (
+                    not missing_price
+                    and usage["input_available"]
+                    and usage["output_available"]
+                )
+                c = cost_of(usage, model, "codex", at=ts) if cost_available else {
+                    "input": 0.0, "cache_write": 0.0,
+                    "cache_read": 0.0, "output": 0.0,
+                }
+                approx_cost = approx_cost or not cost_available
+                price_complete = price_complete and cost_available
                 tc = sum(c.values())
                 for key in cost:
                     cost[key] += c[key]
@@ -1156,6 +1197,10 @@ class CodexRuntimeAdapter:
                             primary_model, "estimated with public OpenAI API rates", execution_timing("codex", objs),
                             wait_samples, availability=metric_availability(
                                 "codex", cost=price_complete,
+                                tokens=input_complete and output_complete,
+                                input_tokens=input_complete,
+                                output_tokens=output_complete,
+                                cache=input_complete,
                             ))
         state["throughput"] = performance_summary(codex_performance_samples(objs, source.get("model")), tot["output"])
         state["live_throughput"] = codex_live_performance_summary(objs)
@@ -1202,6 +1247,8 @@ class CodexRuntimeAdapter:
         latest_context = 0
         context_samples = []
         terminal = False
+        input_complete = True
+        output_complete = True
     
         for obj in objs:
             payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
@@ -1223,12 +1270,20 @@ class CodexRuntimeAdapter:
                 continue
             context_window = int(info.get("model_context_window") or context_window or 0)
             usage = codex_usage(raw)
+            input_complete = input_complete and usage["input_available"]
+            output_complete = output_complete and usage["output_available"]
             latest_context = int(usage.get("input_tokens") or 0) + int(usage.get("cache_read_input_tokens") or 0)
             context_samples.append(latest_context)
             ts = parse_iso(obj.get("timestamp", ""))
-            c = sum(cost_of(usage, model, "codex", at=ts).values())
             _, missing_price = price_for(model, "codex", at=ts)
-            price_complete = price_complete and not missing_price
+            cost_available = (
+                not missing_price
+                and usage["input_available"]
+                and usage["output_available"]
+            )
+            c = sum(cost_of(usage, model, "codex", at=ts).values()) \
+                if cost_available else 0.0
+            price_complete = price_complete and cost_available
             toks = usage_tokens(usage)
             turns += 1
             cost += c
@@ -1236,8 +1291,14 @@ class CodexRuntimeAdapter:
             models.add(model)
             model_cost[model] += c
             model_tok[model] += toks
-            input_count, output_count = add_model_summary(model_stats, model, usage, c)
-            add_model_daily(model_daily, model, usage, c, ts)
+            input_count, output_count = add_model_summary(
+                model_stats, model, usage, c,
+                cost_available=cost_available,
+            )
+            add_model_daily(
+                model_daily, model, usage, c, ts,
+                cost_available=cost_available,
+            )
             input_tokens += input_count
             output_tokens += output_count
             if ts:
@@ -1245,7 +1306,18 @@ class CodexRuntimeAdapter:
                 last_ts = ts if last_ts is None else max(last_ts, ts)
                 day = time.strftime("%Y-%m-%d", time.localtime(ts))
                 day_cost[day] += c
-    
+
+        for stats in (*model_stats.values(), *model_daily.values()):
+            stats["availability"] = metric_availability(
+                "codex",
+                cost=int(stats.get("cost_covered_executions") or 0) > 0,
+                tokens=(stats.get("input_evidence") is True
+                        or stats.get("output_evidence") is True),
+                input_tokens=stats.get("input_evidence") is True,
+                output_tokens=stats.get("output_evidence") is True,
+                cache=stats.get("input_evidence") is True,
+            )
+
         title = source.get("title")
         if not title:
             for obj in objs:
@@ -1258,7 +1330,13 @@ class CodexRuntimeAdapter:
         row = summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("codex", objs), input_tokens, output_tokens, model_stats,
                           list(model_daily.values()), performance, wait_samples,
-                          availability=metric_availability("codex", cost=price_complete))
+                          availability=metric_availability(
+                              "codex", cost=price_complete,
+                              tokens=input_complete and output_complete,
+                              input_tokens=input_complete,
+                              output_tokens=output_complete,
+                              cache=input_complete,
+                          ))
         row["primary_model"] = model
         row["reasoning_effort"] = reasoning_effort
         row["context"] = {

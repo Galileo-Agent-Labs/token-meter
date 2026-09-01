@@ -28,7 +28,10 @@ from token_meter.contracts import (
     UsageEvidence,
 )
 from token_meter.domain.timing import merge_execution_intervals
-from token_meter.domain.usage import distribute_reported_cost_counts
+from token_meter.domain.usage import (
+    distribute_reported_cost_counts,
+    normalize_reported_token_count,
+)
 
 
 DETAIL_MESSAGE_LIMIT = 200
@@ -93,7 +96,7 @@ def decode_json(value, default=None):
 def int_value(value, default=0):
     try:
         return int(value or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -102,12 +105,26 @@ def usage_counts(data):
     tokens = tokens if isinstance(tokens, dict) else {}
     cache = tokens.get("cache")
     cache = cache if isinstance(cache, dict) else {}
+    input_tokens, input_available = normalize_reported_token_count(
+        tokens.get("input")
+    )
+    output_tokens, output_available = normalize_reported_token_count(
+        tokens.get("output")
+    )
+    reasoning_tokens, reasoning_available = normalize_reported_token_count(
+        tokens.get("reasoning")
+    )
+    cache_read_tokens, _ = normalize_reported_token_count(cache.get("read"))
+    cache_write_tokens, _ = normalize_reported_token_count(cache.get("write"))
     return {
-        "input_tokens": int_value(tokens.get("input")),
-        "output_tokens": int_value(tokens.get("output")),
-        "reasoning_tokens": int_value(tokens.get("reasoning")),
-        "cache_read_input_tokens": int_value(cache.get("read")),
-        "cache_creation_input_tokens": int_value(cache.get("write")),
+        "input_tokens": input_tokens,
+        "input_available": input_available,
+        "output_tokens": output_tokens,
+        "output_available": output_available,
+        "reasoning_tokens": reasoning_tokens,
+        "reasoning_available": reasoning_available,
+        "cache_read_input_tokens": cache_read_tokens,
+        "cache_creation_input_tokens": cache_write_tokens,
     }
 
 
@@ -122,7 +139,10 @@ def reported_cost(data):
     value = data.get("cost") if isinstance(data, dict) else None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return 0.0, False
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0, False
     return (value, True) if math.isfinite(value) and value >= 0 else (0.0, False)
 
 
@@ -561,8 +581,10 @@ class OpenCodeRuntimeAdapter:
                 continue
             if role != "assistant":
                 continue
-            token_evidence = isinstance(data.get("tokens"), dict)
             usage = usage_counts(data)
+            input_evidence = usage["input_available"]
+            output_evidence = usage["output_available"]
+            token_evidence = input_evidence or output_evidence
             in_tok = usage["input_tokens"]
             cache_write = usage["cache_creation_input_tokens"]
             cache_read = usage["cache_read_input_tokens"]
@@ -665,7 +687,7 @@ class OpenCodeRuntimeAdapter:
             execution_cost_available = msg_cost_available
             execution_availability = metric_availability(
                 "opencode", cost=execution_cost_available, tokens=token_evidence,
-                input_tokens=token_evidence, output_tokens=token_evidence,
+                input_tokens=input_evidence, output_tokens=output_evidence,
                 throughput=bool(duration_ms and out_tok),
                 context=bool(message_context_window), timing=bool(duration_ms), tool_results=True,
             )
@@ -958,6 +980,8 @@ class OpenCodeRuntimeAdapter:
     
             turns += 1
             usage = usage_counts(data)
+            input_evidence = usage["input_available"]
+            output_evidence = usage["output_available"]
             msg_tokens = context_tokens(usage)
             msg_cost, msg_cost_available = reported_cost(data)
             msg_model = str(data.get("modelID") or model)
@@ -976,16 +1000,47 @@ class OpenCodeRuntimeAdapter:
             model_tok[msg_model] += msg_tokens
             stats = model_stats.setdefault(msg_model, {
                 "cost": 0.0, "tokens": 0, "input_tokens": 0,
-                "output_tokens": 0, "executions": 0,
-                "cost_evidence": False, "token_evidence": False,
+                "output_tokens": 0, "cache_read_tokens": 0,
+                "cache_write_tokens": 0, "reasoning_tokens": 0,
+                "reasoning_output_tokens": 0, "reasoning_executions": 0,
+                "reasoning_unavailable_executions": 0,
+                "token_covered_executions": 0,
+                "io_covered_executions": 0,
+                "cost_covered_executions": 0,
+                "cost_covered_output_tokens": 0,
+                "cost_covered_cost": 0.0,
+                "cache_covered_input_tokens": 0, "executions": 0,
+                "cost_evidence": False, "input_evidence": False,
+                "output_evidence": False,
             })
             stats["cost"] += msg_cost
             stats["tokens"] += msg_tokens
             stats["input_tokens"] += input_tokens
             stats["output_tokens"] += output_tokens
+            stats["cache_read_tokens"] += usage["cache_read_input_tokens"]
+            stats["cache_write_tokens"] += usage["cache_creation_input_tokens"]
+            if output_evidence:
+                stats["token_covered_executions"] += 1
+            if input_evidence and output_evidence:
+                stats["io_covered_executions"] += 1
+            if input_evidence:
+                stats["cache_covered_input_tokens"] += input_tokens
+            if msg_cost_available and output_evidence:
+                stats["cost_covered_executions"] += 1
+                stats["cost_covered_output_tokens"] += output_tokens
+                stats["cost_covered_cost"] += msg_cost
+            if usage["reasoning_available"] and output_evidence:
+                stats["reasoning_tokens"] += min(
+                    output_tokens, usage["reasoning_tokens"]
+                )
+                stats["reasoning_output_tokens"] += output_tokens
+                stats["reasoning_executions"] += 1
+            else:
+                stats["reasoning_unavailable_executions"] += 1
             stats["executions"] += 1
             stats["cost_evidence"] = stats["cost_evidence"] or msg_cost_available
-            stats["token_evidence"] = stats["token_evidence"] or isinstance(data.get("tokens"), dict)
+            stats["input_evidence"] = stats["input_evidence"] or input_evidence
+            stats["output_evidence"] = stats["output_evidence"] or output_evidence
     
             if ts:
                 day = time.strftime("%Y-%m-%d", time.localtime(ts))
@@ -993,15 +1048,47 @@ class OpenCodeRuntimeAdapter:
                     day_cost[day] += msg_cost
                 daily = model_daily.setdefault((msg_model, day), {
                     "model": msg_model, "day": day, "cost": 0.0,
-                    "input_tokens": 0, "output_tokens": 0, "executions": 0,
-                    "cost_evidence": False, "token_evidence": False,
+                    "input_tokens": 0, "output_tokens": 0,
+                    "cache_read_tokens": 0, "cache_write_tokens": 0,
+                    "reasoning_tokens": 0, "reasoning_output_tokens": 0,
+                    "reasoning_executions": 0,
+                    "reasoning_unavailable_executions": 0,
+                    "token_covered_executions": 0,
+                    "io_covered_executions": 0,
+                    "cost_covered_executions": 0,
+                    "cost_covered_output_tokens": 0,
+                    "cost_covered_cost": 0.0,
+                    "cache_covered_input_tokens": 0, "executions": 0,
+                    "cost_evidence": False, "input_evidence": False,
+                    "output_evidence": False,
                 })
                 daily["cost"] += msg_cost
                 daily["input_tokens"] += input_tokens
                 daily["output_tokens"] += output_tokens
+                daily["cache_read_tokens"] += usage["cache_read_input_tokens"]
+                daily["cache_write_tokens"] += usage["cache_creation_input_tokens"]
+                if output_evidence:
+                    daily["token_covered_executions"] += 1
+                if input_evidence and output_evidence:
+                    daily["io_covered_executions"] += 1
+                if input_evidence:
+                    daily["cache_covered_input_tokens"] += input_tokens
+                if msg_cost_available and output_evidence:
+                    daily["cost_covered_executions"] += 1
+                    daily["cost_covered_output_tokens"] += output_tokens
+                    daily["cost_covered_cost"] += msg_cost
+                if usage["reasoning_available"] and output_evidence:
+                    daily["reasoning_tokens"] += min(
+                        output_tokens, usage["reasoning_tokens"]
+                    )
+                    daily["reasoning_output_tokens"] += output_tokens
+                    daily["reasoning_executions"] += 1
+                else:
+                    daily["reasoning_unavailable_executions"] += 1
                 daily["executions"] += 1
                 daily["cost_evidence"] = daily["cost_evidence"] or msg_cost_available
-                daily["token_evidence"] = daily["token_evidence"] or isinstance(data.get("tokens"), dict)
+                daily["input_evidence"] = daily["input_evidence"] or input_evidence
+                daily["output_evidence"] = daily["output_evidence"] or output_evidence
     
             if msg_tokens or isinstance(data.get("tokens"), dict):
                 context_samples.append(msg_tokens)
@@ -1039,18 +1126,24 @@ class OpenCodeRuntimeAdapter:
             models.add(model)
         for stats in model_stats.values():
             cost_evidence = stats.pop("cost_evidence")
-            token_evidence = stats.pop("token_evidence")
+            input_evidence = stats.pop("input_evidence")
+            output_evidence = stats.pop("output_evidence")
             stats["availability"] = metric_availability(
-                "opencode", cost=cost_evidence, tokens=token_evidence,
-                input_tokens=token_evidence, output_tokens=token_evidence,
+                "opencode", cost=cost_evidence,
+                tokens=input_evidence or output_evidence,
+                input_tokens=input_evidence, output_tokens=output_evidence,
+                cache=input_evidence,
             )
         model_daily_rows = []
         for daily in model_daily.values():
             cost_evidence = daily.pop("cost_evidence")
-            token_evidence = daily.pop("token_evidence")
+            input_evidence = daily.pop("input_evidence")
+            output_evidence = daily.pop("output_evidence")
             daily["availability"] = metric_availability(
-                "opencode", cost=cost_evidence, tokens=token_evidence,
-                input_tokens=token_evidence, output_tokens=token_evidence,
+                "opencode", cost=cost_evidence,
+                tokens=input_evidence or output_evidence,
+                input_tokens=input_evidence, output_tokens=output_evidence,
+                cache=input_evidence,
             )
             model_daily_rows.append(daily)
     

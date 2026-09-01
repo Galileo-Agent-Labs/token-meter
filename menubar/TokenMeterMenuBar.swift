@@ -944,7 +944,7 @@ struct MeterSnapshot {
 
     var menuBarTodaySpendLabel: String {
         guard todaySpendAvailable else { return "--" }
-        return "\(formatMoney(todaySpendTotalCost))\(todaySpendEstimated ? " est" : "")"
+        return "\(String(format: "$%.0f", todaySpendTotalCost))\(todaySpendEstimated ? " est" : "")"
     }
 
     var contextLabel: String {

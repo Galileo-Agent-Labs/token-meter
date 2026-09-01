@@ -2978,6 +2978,8 @@ class CodexLineageAccountingTests(unittest.TestCase):
         sources = self.root_child_and_grandchild_sources()
         saved_xsess = dict(meter._xsess)
         saved_summaries = dict(meter._summary_cache)
+        budget_now = datetime.datetime(2026, 8, 11, tzinfo=datetime.timezone.utc)
+        original_budget_status = meter.monthly_budget_status
         try:
             meter._xsess.update({
                 "data": None,
@@ -2989,6 +2991,12 @@ class CodexLineageAccountingTests(unittest.TestCase):
             meter._summary_cache.clear()
             with mock.patch.object(
                 meter, "_codex_native_adapter", return_value=self.adapter,
+            ), mock.patch.object(
+                meter,
+                "monthly_budget_status",
+                side_effect=lambda months, settings: original_budget_status(
+                    months, settings, now=budget_now,
+                ),
             ):
                 result = meter.cross_session(sources=list(sources.values()))
         finally:
@@ -3020,6 +3028,7 @@ class CodexLineageAccountingTests(unittest.TestCase):
             sum(row["cost"] for row in result["monthly"]),
             result["total_cost"],
         )
+        self.assertEqual(result["budget"]["month"], "2026-08")
         self.assertAlmostEqual(result["budget"]["spend"], result["total_cost"])
         encoded = json.dumps(result)
         for private_field in (
@@ -8203,7 +8212,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let text = snapshot.menuBarTodaySpendLabel', self.source)
         self.assertIn('case .todaySpend: return "Today spend"', self.source)
         self.assertIn(
-            'return "\\(formatMoney(todaySpendTotalCost))\\(todaySpendEstimated ? " est" : "")"',
+            'return "\\(String(format: "$%.0f", todaySpendTotalCost))\\(todaySpendEstimated ? " est" : "")"',
             self.source,
         )
         self.assertIn('parts[parts.count - 1].text = "· " + parts[parts.count - 1].text', self.source)

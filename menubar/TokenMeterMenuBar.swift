@@ -10,6 +10,7 @@ private let tokenMeterInstallUpdateURL = URL(string: "http://127.0.0.1:8722/upda
 private let pinnedSessionDefaultsKey = "TokenMeterPinnedSessionID"
 private let titleModeDefaultsKey = "TokenMeterTitleMode"
 private let titleMetricsDefaultsKey = "TokenMeterTitleMetrics"
+private let todaySpendTitlePreferenceDefaultsKey = "TokenMeterTodaySpendTitlePreference"
 private let quotaAlertsEnabledDefaultsKey = "TokenMeterQuotaAlertsEnabled"
 private let quotaAlertThresholdDefaultsKey = "TokenMeterQuotaAlertThreshold"
 private let quotaNotificationStatesDefaultsKey = "TokenMeterQuotaNotificationStates"
@@ -274,6 +275,7 @@ enum TitleMetric: String, CaseIterable {
     case context
     case model
     case limits
+    case todaySpend
 
     var title: String {
         switch self {
@@ -282,6 +284,7 @@ enum TitleMetric: String, CaseIterable {
         case .context: return "Context"
         case .model: return "Model"
         case .limits: return "Limits"
+        case .todaySpend: return "Today spend"
         }
     }
 }
@@ -673,6 +676,9 @@ struct MeterSnapshot {
     var cacheAvailable: Bool
     var throughputAvailable: Bool
     var totalCost: Double
+    var todaySpendAvailable: Bool
+    var todaySpendTotalCost: Double
+    var todaySpendEstimated: Bool
     var estimatedCost: Bool
     var estimatedTokens: Bool
     var totalTokens: Int
@@ -718,6 +724,9 @@ struct MeterSnapshot {
             cacheAvailable: false,
             throughputAvailable: false,
             totalCost: 0,
+            todaySpendAvailable: false,
+            todaySpendTotalCost: 0,
+            todaySpendEstimated: false,
             estimatedCost: false,
             estimatedTokens: false,
             totalTokens: 0,
@@ -766,6 +775,10 @@ struct MeterSnapshot {
         let cacheAvailable = metricAvailable(availability, "cache")
         let throughputAvailable = metricAvailable(availability, "throughput")
         let totalCost = double(dict["total_cost"])
+        let todaySpend = dict["today_spend"] as? [String: Any] ?? [:]
+        let todaySpendAvailable = bool(todaySpend["available"])
+        let todaySpendTotalCost = double(todaySpend["total_cost"])
+        let todaySpendEstimated = bool(todaySpend["estimated"])
         let estimatedCost = bool(dict["cost_approx"]) || bool(source["approximate_cost"])
         let estimatedTokens = bool(source["token_estimate"])
         let totalTokens = int(dict["total_tokens"])
@@ -851,6 +864,9 @@ struct MeterSnapshot {
             cacheAvailable: cacheAvailable,
             throughputAvailable: throughputAvailable,
             totalCost: totalCost,
+            todaySpendAvailable: todaySpendAvailable,
+            todaySpendTotalCost: todaySpendTotalCost,
+            todaySpendEstimated: todaySpendEstimated,
             estimatedCost: estimatedCost,
             estimatedTokens: estimatedTokens,
             totalTokens: totalTokens,
@@ -924,6 +940,11 @@ struct MeterSnapshot {
 
     var menuBarCostLabel: String {
         costAvailable ? String(format: "$%.0f", totalCost) : "--"
+    }
+
+    var menuBarTodaySpendLabel: String {
+        guard todaySpendAvailable else { return "--" }
+        return "\(formatMoney(todaySpendTotalCost))\(todaySpendEstimated ? " est" : "")"
     }
 
     var contextLabel: String {
@@ -1004,14 +1025,27 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var globalHotKey: EventHotKeyRef?
     private var globalHotKeyHandler: EventHandlerRef?
     private var titleMetrics: Set<TitleMetric> = {
-        if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
-            let metrics = Set(saved.compactMap(TitleMetric.init(rawValue:)))
-            if !metrics.isEmpty { return metrics }
+        var metrics: Set<TitleMetric>
+        let savedMetrics = Set(
+            (tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] ?? [])
+                .compactMap(TitleMetric.init(rawValue:))
+        )
+        if !savedMetrics.isEmpty {
+            metrics = savedMetrics
+        } else if tokenMeterDefaults.string(forKey: titleModeDefaultsKey) == "limits" {
+            metrics = [.limits]
+        } else {
+            metrics = [.cost, .speed]
         }
-        if tokenMeterDefaults.string(forKey: titleModeDefaultsKey) == "limits" {
-            return [.limits]
+        if tokenMeterDefaults.object(forKey: todaySpendTitlePreferenceDefaultsKey) == nil {
+            metrics.insert(.todaySpend)
+            tokenMeterDefaults.set(
+                TitleMetric.allCases.filter(metrics.contains).map(\.rawValue),
+                forKey: titleMetricsDefaultsKey
+            )
+            tokenMeterDefaults.set(true, forKey: todaySpendTitlePreferenceDefaultsKey)
         }
-        return [.cost, .speed]
+        return metrics
     }()
     private var quotaAlertsEnabled: Bool = {
         if tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil { return true }
@@ -1179,17 +1213,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addSessionPicker()
         menu.addItem(.separator())
 
-        if snapshot.connected {
-            addMetricRow("Cost", snapshot.costLabel)
-            let contextDetail = snapshot.contextPct == nil
-                ? "Unavailable"
-                : "\(snapshot.contextLabel) · \(formatCompactInt(snapshot.contextTokens)) / \(formatCompactInt(snapshot.contextWindow))"
-            addMetricRow(
-                "Context",
-                contextDetail,
-                valueColor: contextSignalColor(snapshot.contextPct)
-            )
-        } else {
+        if !snapshot.connected {
             addConnectionRow()
         }
 
@@ -1656,7 +1680,8 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         guard statusItem.menu === menu,
               expectedTitleSegments.count >= 4,
-              !expectedTitle.contains("·"),
+              expectedTitleSegments.last == "· \(snapshot.menuBarTodaySpendLabel)",
+              expectedTitleSegments.last?.hasPrefix("· ") == true,
               !expectedTitleSegments[0].contains("."),
               !expectedTitleSegments[1].contains("."),
               !expectedTitleSegments[0].contains(" est"),
@@ -1736,7 +1761,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch effectiveStatusDisplayMode() {
         case .text:
             let titleImage = statusTitleImage(presentation)
-            statusItem.length = titleImage.size.width + 16
+            statusItem.length = titleImage.size.width + 8
             button.title = ""
             button.attributedTitle = NSAttributedString(string: "")
             button.image = titleImage
@@ -1781,7 +1806,7 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 warning: false
             )
         }
-        let parts = TitleMetric.allCases.compactMap { metric -> StatusTitleSegment? in
+        var parts = TitleMetric.allCases.compactMap { metric -> StatusTitleSegment? in
             guard titleMetrics.contains(metric) else { return nil }
             switch metric {
             case .cost:
@@ -1805,7 +1830,14 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     symbol: runtimeCatalog[constrained.provider.id]?.symbol ?? "runtime.generic",
                     accessibilityText: accessibilityText
                 )
+            case .todaySpend:
+                let text = snapshot.menuBarTodaySpendLabel
+                return StatusTitleSegment(text: text, symbol: nil, accessibilityText: text)
             }
+        }
+        if parts.count > 1, titleMetrics.contains(.todaySpend) {
+            parts[parts.count - 1].text = "· " + parts[parts.count - 1].text
+            parts[parts.count - 1].accessibilityText = "· " + parts[parts.count - 1].accessibilityText
         }
         let segments = parts.isEmpty
             ? [StatusTitleSegment(text: "TM", symbol: nil, accessibilityText: "TM")]
@@ -1955,6 +1987,12 @@ final class TokenMeterMenuBar: NSObject, NSApplicationDelegate, NSMenuDelegate {
             TitleMetric.allCases.filter(titleMetrics.contains).map(\.rawValue),
             forKey: titleMetricsDefaultsKey
         )
+        if metric == .todaySpend {
+            tokenMeterDefaults.set(
+                titleMetrics.contains(.todaySpend),
+                forKey: todaySpendTitlePreferenceDefaultsKey
+            )
+        }
         tokenMeterDefaults.removeObject(forKey: titleModeDefaultsKey)
         refreshMenu()
     }
@@ -2426,10 +2464,13 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             .compactMap { RecentSession.fromJSON($0, catalog: runtimeCatalog) }
         let savedMetrics: Set<TitleMetric> = {
             if let saved = tokenMeterDefaults.array(forKey: titleMetricsDefaultsKey) as? [String] {
-                let parsed = Set(saved.compactMap(TitleMetric.init(rawValue:)))
+                var parsed = Set(saved.compactMap(TitleMetric.init(rawValue:)))
+                if tokenMeterDefaults.object(forKey: todaySpendTitlePreferenceDefaultsKey) == nil {
+                    parsed.insert(.todaySpend)
+                }
                 if !parsed.isEmpty { return parsed }
             }
-            return [.cost, .speed]
+            return [.cost, .speed, .todaySpend]
         }()
         let alertsEnabled = tokenMeterDefaults.object(forKey: quotaAlertsEnabledDefaultsKey) == nil
             ? true : tokenMeterDefaults.bool(forKey: quotaAlertsEnabledDefaultsKey)
@@ -2439,7 +2480,7 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             .filter(\.fresh)
             .flatMap { provider in provider.windows.map { (provider: provider, window: $0) } }
             .max { $0.window.usedPercent < $1.window.usedPercent }
-        let baseTitle = TitleMetric.allCases.compactMap { metric -> String? in
+        var titleSegments = TitleMetric.allCases.compactMap { metric -> String? in
             guard savedMetrics.contains(metric) else { return nil }
             switch metric {
             case .cost: return snapshot.menuBarCostLabel
@@ -2449,11 +2490,16 @@ if ProcessInfo.processInfo.environment["TOKEN_METER_MENUBAR_SMOKE"] == "1" {
             case .limits:
                 guard let constrained = constrained else { return nil }
                 return "\(constrained.provider.label) \(constrained.window.percentLabel)"
+            case .todaySpend: return snapshot.menuBarTodaySpendLabel
             }
-        }.joined(separator: "  ")
+        }
+        if titleSegments.count > 1, savedMetrics.contains(.todaySpend) {
+            titleSegments[titleSegments.count - 1] = "· " + titleSegments[titleSegments.count - 1]
+        }
+        let baseTitle = titleSegments.joined(separator: "  ")
         let activeTitle = budget?.anyExceeded == true ? "⚠︎ \(baseTitle)" : baseTitle
-        guard !activeTitle.contains("·"), !activeTitle.contains(" est") else {
-            throw NSError(domain: "TokenMeterMenuBar", code: 15, userInfo: [NSLocalizedDescriptionKey: "Compact status title contains centered-dot separators or estimate suffixes."])
+        guard !activeTitle.contains("Today ") else {
+            throw NSError(domain: "TokenMeterMenuBar", code: 15, userInfo: [NSLocalizedDescriptionKey: "Compact status title still includes the removed today prefix."])
         }
         print("native-menu=system chevron=template status-title=adaptive-template sessions=\(sessions.prefix(5).count) direct-follow=true")
         print(snapshot.statusTitle)

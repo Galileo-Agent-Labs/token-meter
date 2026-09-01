@@ -8063,15 +8063,15 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertNotIn('tok/s\\(live)', self.source)
         self.assertIn('print(snapshot.outputSpeedLabel)', self.source)
 
-    def test_core_info_starts_with_amount_and_omits_operational_rows(self):
+    def test_selected_session_cost_and_context_are_not_menu_rows(self):
         rebuild = self.source[
             self.source.index("    private func rebuildMenu()"):
             self.source.index("    private var activeShortcutKeyCode")
         ]
         self.assertIn('return "\\(costLabel) · \\(contextLabel) · \\(outputSpeedLabel) · \\(model)"', self.source)
         self.assertNotIn('return "\\(verdict.prefix) \\(formatMoney(totalCost))', self.source)
-        self.assertIn('addMetricRow("Cost", snapshot.costLabel', rebuild)
-        self.assertIn('"Context",\n                contextDetail', rebuild)
+        self.assertNotIn('addMetricRow("Cost", snapshot.costLabel', rebuild)
+        self.assertNotIn('"Context",\n                contextDetail', rebuild)
         self.assertNotIn('addMetricRow("Status"', rebuild)
         self.assertNotIn('"Now"', rebuild)
         self.assertNotIn('"Action"', rebuild)
@@ -8082,7 +8082,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let costAvailable = metricAvailable(availability, "cost")', self.source)
         self.assertIn('let tokensAvailable = metricAvailable(availability, "tokens")', self.source)
         self.assertIn('let estimatedTokens = bool(source["token_estimate"])', self.source)
-        self.assertIn('addMetricRow("Cost", snapshot.costLabel', self.source)
+        self.assertIn('var menuBarTodaySpendLabel: String', self.source)
 
     def test_live_polling_bypasses_cached_menubar_responses(self):
         self.assertIn('cachePolicy: .reloadIgnoringLocalCacheData', self.source)
@@ -8189,7 +8189,7 @@ class MenubarSourceTests(unittest.TestCase):
 
     def test_configurable_title_and_quota_notifications_have_safe_defaults(self):
         self.assertIn('enum TitleMetric: String, CaseIterable', self.source)
-        self.assertIn('return [.cost, .speed]', self.source)
+        self.assertIn('metrics = [.cost, .speed]', self.source)
         self.assertIn('for metric in TitleMetric.allCases', self.source)
         self.assertIn('#selector(toggleTitleMetric(_:))', self.source)
         self.assertIn('TitleMetric.allCases.filter(titleMetrics.contains).map(\\.rawValue)', self.source)
@@ -8199,6 +8199,22 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('let text = snapshot.menuBarOutputSpeedLabel', self.source)
         self.assertIn('let text = snapshot.menuBarContextLabel', self.source)
         self.assertIn('let text = snapshot.model', self.source)
+        self.assertIn('case .todaySpend:', self.source)
+        self.assertIn('let text = snapshot.menuBarTodaySpendLabel', self.source)
+        self.assertIn('case .todaySpend: return "Today spend"', self.source)
+        self.assertIn(
+            'return "\\(formatMoney(todaySpendTotalCost))\\(todaySpendEstimated ? " est" : "")"',
+            self.source,
+        )
+        self.assertIn('parts[parts.count - 1].text = "· " + parts[parts.count - 1].text', self.source)
+        self.assertIn('metrics.insert(.todaySpend)', self.source)
+        self.assertIn('todaySpendTitlePreferenceDefaultsKey', self.source)
+        self.assertIn('todaySpendEstimated ? " est" : ""', self.source)
+        self.assertIn('metrics = [.limits]', self.source)
+        self.assertIn(
+            'tokenMeterDefaults.set(true, forKey: todaySpendTitlePreferenceDefaultsKey)',
+            self.source,
+        )
         self.assertIn('let accessibilityText = limitsStatusTitle()', self.source)
         self.assertIn('symbol: runtimeCatalog[constrained.provider.id]?.symbol', self.source)
         self.assertNotIn('private func compactStatusTitle()', self.source)
@@ -8232,7 +8248,7 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertIn('.foregroundColor: NSColor.black', self.source)
         self.assertIn('image.isTemplate = true', self.source)
         self.assertIn('let titleImage = statusTitleImage(presentation)', self.source)
-        self.assertIn('statusItem.length = titleImage.size.width + 16', self.source)
+        self.assertIn('statusItem.length = titleImage.size.width + 8', self.source)
         self.assertIn('button.contentTintColor = nil', self.source)
         self.assertIn('button.setAccessibilityLabel("Token Meter")', self.source)
         self.assertIn('button.setAccessibilityValue(title)', self.source)
@@ -8253,17 +8269,16 @@ class MenubarSourceTests(unittest.TestCase):
         self.assertNotIn('statusTitleColor(for:', self.source)
         self.assertNotIn('NSWorkspace.didActivateApplicationNotification', self.source)
 
-    def test_native_menu_leads_with_cost_and_context_only(self):
+    def test_native_menu_omits_cost_and_context_below_recent_sessions(self):
         rebuild = self.source[
             self.source.index("    private func rebuildMenu()"):
             self.source.index("    private var activeShortcutKeyCode")
         ]
         sessions_position = rebuild.index('addSessionPicker()')
-        cost_position = rebuild.index('addMetricRow("Cost", snapshot.costLabel')
         limits_position = rebuild.index('let limitsItem = NSMenuItem(title: "Provider limits"')
-        self.assertLess(sessions_position, cost_position)
-        self.assertLess(cost_position, limits_position)
-        self.assertIn('"Context",\n                contextDetail', rebuild)
+        self.assertLess(sessions_position, limits_position)
+        self.assertNotIn('addMetricRow("Cost", snapshot.costLabel', rebuild)
+        self.assertNotIn('"Context",\n                contextDetail', rebuild)
         self.assertNotIn('addMetricRow("Tokens"', rebuild)
         self.assertNotIn('addMetricRow("Cache"', rebuild)
         self.assertNotIn('addMetricRow("Output', rebuild)
@@ -8746,6 +8761,49 @@ class HealthStateTests(unittest.TestCase):
 
 
 class MenubarSessionTests(unittest.TestCase):
+    def test_menubar_state_projects_today_cross_session_spend(self):
+        today = datetime.date.today().isoformat()
+        source = {
+            "id": "live", "provider": "codex", "label": "Codex",
+            "path": "/tmp/live.jsonl", "session": "live.jsonl", "project": "/repo",
+        }
+        state = {
+            "provider": "codex", "source": source, "session": "live.jsonl",
+            "project": "/repo", "context": {}, "cache": {}, "executions": [], "insights": [],
+        }
+        cross = {
+            "daily": [{
+                "day": today, "cost": 1.25,
+                "availability": {"cost": True},
+                "provenance": {"estimated_cost": 0.25},
+            }],
+        }
+        with mock.patch.object(meter, "STATE", state), \
+                mock.patch.object(meter, "cached_session_sources", return_value=([source], True)), \
+                mock.patch.object(meter, "provider_quota_snapshots", return_value=[]), \
+                mock.patch.dict(meter._xsess, {"data": cross}, clear=False):
+            payload = meter.menubar_state()
+
+        self.assertEqual(payload["today_spend"], {
+            "available": True,
+            "total_cost": 1.25,
+            "estimated": True,
+        })
+
+    def test_menubar_today_spend_keeps_unavailable_cost_unavailable(self):
+        today = datetime.date.today()
+
+        projection = meter.menubar_today_spend({"daily": [{
+            "day": today.isoformat(), "cost": 0,
+            "availability": {"cost": False},
+        }]}, today=today)
+
+        self.assertEqual(projection, {
+            "available": False,
+            "total_cost": None,
+            "estimated": False,
+        })
+
     def test_recommendations_always_target_the_single_run_surface(self):
         states = (
             {"context": {"latest_pct": 0.9}, "executions": [], "insights": []},

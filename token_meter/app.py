@@ -7871,6 +7871,29 @@ def menubar_software_update(status=None):
     }
 
 
+def menubar_today_spend(cross, today=None):
+    """Return a bounded current-day spend projection for the native title."""
+    day = (today or datetime.date.today()).isoformat()
+    daily = cross.get("daily") if isinstance(cross, dict) else []
+    row = next(
+        (item for item in (daily or [])
+         if isinstance(item, dict) and item.get("day") == day),
+        None,
+    )
+    availability = row.get("availability") if isinstance(row, dict) else {}
+    available = bool(isinstance(availability, dict) and availability.get("cost") is True)
+    provenance = row.get("provenance") if isinstance(row, dict) else {}
+    estimated_cost = (
+        float(provenance.get("estimated_cost") or 0)
+        if isinstance(provenance, dict) else 0.0
+    )
+    return {
+        "available": available,
+        "total_cost": float(row.get("cost") or 0) if available else None,
+        "estimated": estimated_cost > 0,
+    }
+
+
 def menubar_state(session_id=None):
     requested_id = str(session_id or "").strip()
     sources, inventory_ready = cached_session_sources()
@@ -7938,6 +7961,7 @@ def menubar_state(session_id=None):
         "total_cost": (
             st.get("total_cost", 0) if availability.get("cost") is not False else None
         ),
+        "today_spend": menubar_today_spend(cross),
         "cost_approx": st.get("cost_approx", False),
         "total_tokens": st.get("total_tokens", 0),
         "turns": st.get("turns", 0),

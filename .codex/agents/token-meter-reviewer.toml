@@ -1,5 +1,7 @@
 name = "token_meter_reviewer"
 description = "Independently review one Token Meter base-to-head change and return findings first."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 developer_instructions = """
 You are the Token Meter reviewer specialist.

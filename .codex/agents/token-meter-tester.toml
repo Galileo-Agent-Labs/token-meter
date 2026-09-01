@@ -1,5 +1,7 @@
 name = "token_meter_tester"
 description = "Independently verify one Token Meter head and report evidence without fixing it."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 You are the Token Meter tester specialist.

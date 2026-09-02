@@ -114,13 +114,24 @@ skill-pack activation, and bounded review candidates.
 
 ### Check token efficiency
 
-Use **Efficiency** to compare output per covered dollar and the reasoning share
-of covered output overall or by runtime-scoped model. Each headline includes a
-daily trend. Models default to spend descending and every column is sortable.
-Context load and output per token-covered execution remain as compact supporting
-statistics. Partial coverage and local estimates stay labelled beside the
-numbers. Claude thinking activity is noted, but its ratio stays unavailable
-unless the trace reports a separate thinking-token count.
+Use **Efficiency** to compare four signals over comparable, covered work:
+
+- **Output / $**: reported output tokens per covered dollar. Higher is better
+  over time because more output is reaching the response for the spend.
+- **Reasoning ratio**: reported reasoning tokens as a share of output. Lower or
+  stable is usually better for comparable work, while difficult work may need
+  more reasoning.
+- **Context load**: processed input tokens per output token. Lower is better
+  because less context is carried into each response.
+- **Output / execution**: output tokens per covered run. Higher generally means
+  a less fragmented workflow.
+
+Each headline includes a daily trend, and partial coverage or unavailable
+evidence stays labelled beside the numbers.
+
+<p align="center">
+  <img src="images/efficiency.png" alt="Token Meter Efficiency page with output per dollar, reasoning ratio, context load, and output per execution" width="900">
+</p>
 
 ### Configure budgets and agent access
 

@@ -32,6 +32,7 @@ from token_meter.domain.usage import normalize_reported_token_count
 
 
 DEFAULT_MODEL = "gpt-5.6-sol"
+AUTO_REVIEW_MODEL = "codex-auto-review"
 MAX_DETAIL_TURNS = 2_000
 MAX_TOOL_EVENTS = 2_000
 TOKEN_EVENT_CACHE_LIMIT = 2_048
@@ -120,6 +121,29 @@ def _token_events_match(left, right):
     if bool(left_total) != bool(right_total):
         return False
     return not left_total or left_total == right_total
+
+
+def _context_model(payload, current_model, source_model):
+    """Keep Codex's internal auto-review marker out of model attribution."""
+    trace_model = payload.get("model") if isinstance(payload, dict) else None
+    if trace_model == AUTO_REVIEW_MODEL:
+        return source_model if source_model != AUTO_REVIEW_MODEL else "unknown-model"
+    return str(trace_model or current_model or "unknown-model")
+
+
+def _resolved_token_events(events, source_model):
+    """Normalize internal auto-review event markers for lineage matching."""
+    resolved_model = str(source_model or "unknown-model")
+    if resolved_model == AUTO_REVIEW_MODEL:
+        resolved_model = "unknown-model"
+    return tuple(
+        (row_index, resolved_model if model == AUTO_REVIEW_MODEL else model, last, total)
+        for row_index, model, last, total in events
+    )
+
+
+def _token_events_for_source(rows, default_model, source_model):
+    return _resolved_token_events(_token_events(rows, default_model), source_model)
 
 
 def _inherited_token_prefix(child_events, parent_events):
@@ -494,6 +518,9 @@ class CodexRuntimeAdapter:
         }
         self._records_by_path = {record["path"]: record for record in records}
         for record in records:
+            if record.get("model") == AUTO_REVIEW_MODEL:
+                record["model"] = self._resolved_auto_review_model(record)
+        for record in records:
             parent_id = record.get("lineage_parent_id")
             parent = self._record_by_physical_id.get(parent_id)
             if (
@@ -655,6 +682,22 @@ class CodexRuntimeAdapter:
             current = self._record_by_physical_id.get(parent_id)
         return False
 
+    def _resolved_auto_review_model(self, record):
+        """Resolve Codex's internal auto-review marker from its linked parent."""
+        seen = {record.get("physical_trace_id")}
+        current = record
+        while current:
+            parent_id = current.get("parent_thread_id")
+            parent = self._record_by_physical_id.get(parent_id)
+            if not parent or parent.get("physical_trace_id") in seen:
+                return "unknown-model"
+            seen.add(parent["physical_trace_id"])
+            parent_model = parent.get("model")
+            if parent_model != AUTO_REVIEW_MODEL:
+                return str(parent_model or "unknown-model")
+            current = parent
+        return "unknown-model"
+
     def _accounting_rows(self, source, rows):
         path = (
             source.locator.value
@@ -669,8 +712,13 @@ class CodexRuntimeAdapter:
         parent = self._record_by_physical_id.get(parent_id)
         if not parent or parent.get("path") == path:
             return _corrected_rows(rows, 0)
-        child_events = _token_events(rows)
-        parent_events = self._token_events_for_path(parent["path"])
+        child_events = _token_events_for_source(
+            rows, self.default_model, record.get("model"),
+        )
+        parent_events = _resolved_token_events(
+            self._token_events_for_path(parent["path"]),
+            parent.get("model"),
+        )
         inherited_count = _inherited_token_prefix(child_events, parent_events)
         return _corrected_rows(rows, inherited_count)
 
@@ -875,7 +923,7 @@ class CodexRuntimeAdapter:
                     tool_namespaces = sorted(set(t["namespace"] for t in tool_catalog))
                 continue
             if otype == "turn_context":
-                model = payload.get("model") or model
+                model = _context_model(payload, model, source.get("model"))
                 meta_cwd = home_shorten(payload.get("cwd") or meta_cwd)
                 detail = " · ".join(x for x in [
                     model,
@@ -1253,7 +1301,7 @@ class CodexRuntimeAdapter:
         for obj in objs:
             payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
             if obj.get("type") == "turn_context":
-                model = payload.get("model") or model
+                model = _context_model(payload, model, source.get("model"))
                 effort = payload.get("effort")
                 if isinstance(effort, (str, int, float)) and str(effort).strip():
                     reasoning_effort = compact_text(str(effort).strip().lower(), 20)

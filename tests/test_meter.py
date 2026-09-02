@@ -2974,6 +2974,126 @@ class CodexLineageAccountingTests(unittest.TestCase):
         self.assertEqual(summary["live_throughput"]["measured_seconds"], 2)
         self.assertEqual(summary["live_throughput"]["output_tps"], 2.5)
 
+    def test_auto_review_child_inherits_its_linked_parent_model(self):
+        self.write_trace("parent", [
+            self.meta("parent-1"),
+            self.turn("2026-08-11T00:00:01Z"),
+        ], 10)
+        self.write_trace("auto-review", [
+            self.meta("auto-review-1", parent_thread_id="parent-1"),
+            {
+                "timestamp": "2026-08-11T01:00:01.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+            self.tokens(100, 10, 100, 10, "2026-08-11T01:00:02Z"),
+        ], 20)
+
+        sources = {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+        native = next(
+            source for source in self.adapter.discover(self.context)
+            if source.locator.value.endswith("rollout-auto-review.jsonl")
+        )
+        detail = self.adapter.recompute_legacy(sources["auto-review-1"])
+        summary = self.adapter.summarize_legacy(sources["auto-review-1"])
+
+        self.assertEqual(sources["auto-review-1"]["model"], "gpt-5.6")
+        self.assertEqual(native.model_ref.model_id, "gpt-5.6")
+        self.assertEqual(detail["primary_model"], "gpt-5.6")
+        self.assertTrue(detail["availability"]["cost"])
+        self.assertGreater(detail["total_cost"], 0)
+        self.assertEqual(summary["primary_model"], "gpt-5.6")
+        self.assertTrue(summary["availability"]["cost"])
+        self.assertGreater(summary["cost"], 0)
+
+    def test_auto_review_child_without_a_linked_parent_stays_unknown(self):
+        self.write_trace("orphaned-auto-review", [
+            self.meta("orphaned-auto-review-1", parent_thread_id="missing-parent"),
+            {
+                "timestamp": "2026-08-11T01:00:01.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+        ], 20)
+
+        source = self.adapter.discover_legacy(self.context)[0]
+
+        self.assertEqual(source["model"], "unknown-model")
+
+    def test_auto_review_fork_without_a_desktop_parent_stays_unknown(self):
+        self.write_trace("parent", [
+            self.meta("parent-1"),
+            self.turn("2026-08-11T00:00:01Z"),
+        ], 10)
+        self.write_trace("forked-auto-review", [
+            self.meta("forked-auto-review-1", forked_from_id="parent-1"),
+            {
+                "timestamp": "2026-08-11T01:00:01.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+        ], 20)
+
+        sources = {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+
+        self.assertEqual(sources["forked-auto-review-1"]["model"], "unknown-model")
+
+    def test_auto_review_child_with_a_cyclic_parent_stays_unknown(self):
+        self.write_trace("auto-review", [
+            self.meta("auto-review-1", parent_thread_id="parent-1"),
+            {
+                "timestamp": "2026-08-11T01:00:01.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+        ], 10)
+        self.write_trace("parent", [
+            self.meta("parent-1", parent_thread_id="auto-review-1"),
+            {
+                "timestamp": "2026-08-11T01:00:02.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+        ], 20)
+
+        sources = {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+
+        self.assertEqual(sources["auto-review-1"]["model"], "unknown-model")
+
+    def test_auto_review_child_deduplicates_an_inherited_parent_token_row(self):
+        self.write_trace("parent", [
+            self.meta("parent-1"),
+            self.turn("2026-08-11T00:00:01Z"),
+            self.tokens(100, 10, 100, 10, "2026-08-11T00:00:02Z"),
+        ], 10)
+        self.write_trace("auto-review", [
+            self.meta("auto-review-1", parent_thread_id="parent-1"),
+            {
+                "timestamp": "2026-08-11T01:00:01.000Z",
+                "type": "turn_context",
+                "payload": {"model": "codex-auto-review", "cwd": "/work/project"},
+            },
+            self.tokens(100, 10, 100, 10, "2026-08-11T01:00:02Z"),
+        ], 20)
+
+        sources = {
+            source["physical_trace_id"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+        summary = self.adapter.summarize_legacy(sources["auto-review-1"])
+
+        self.assertEqual(summary["tokens"], 0)
+        self.assertEqual(summary["turns"], 0)
+
     def test_cross_session_daily_models_spend_and_budget_share_corrected_totals(self):
         sources = self.root_child_and_grandchild_sources()
         saved_xsess = dict(meter._xsess)
@@ -3779,6 +3899,53 @@ class DashboardLayoutTests(unittest.TestCase):
                        "external tool-result tokens"):
             self.assertIn(marker, self.page)
         self.assertIn(".previewSpeed .v{color:var(--accent)", self.page)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_unavailable_cost_value_explains_why_it_is_not_zero(self):
+        match = re.search(
+            r"const COST_UNAVAILABLE_TIP=.*?^function setCostValue\(.*?^\}\n",
+            self.page,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, "dashboard needs an unavailable-cost helper")
+        script = """
+const element={classList:{values:new Set(),toggle(name,on){on?this.values.add(name):this.values.delete(name);}},attributes:{},setAttribute(name,value){this.attributes[name]=String(value);},removeAttribute(name){delete this.attributes[name];}};
+const $=id=>element;
+""" + match.group(0) + """
+setCostValue('cost','$1.25',true);
+const available={text:element.textContent,classes:[...element.classList.values],attributes:{...element.attributes}};
+setCostValue('cost','$1.25',false);
+console.log(JSON.stringify({available,unavailable:{text:element.textContent,classes:[...element.classList.values],attributes:{...element.attributes}}}));
+"""
+        result = subprocess.run(
+            ["node", "-e", script], capture_output=True, text=True, check=True,
+        )
+        rendered = json.loads(result.stdout)
+        self.assertEqual(rendered["available"], {
+            "text": "$1.25", "classes": [], "attributes": {},
+        })
+        self.assertEqual(rendered["unavailable"]["text"], "--")
+        self.assertEqual(rendered["unavailable"]["classes"], ["fieldtip"])
+        self.assertIn("not $0", rendered["unavailable"]["attributes"]["data-tip"])
+        self.assertIn("locally stored usage", rendered["unavailable"]["attributes"]["aria-description"])
+
+    def test_cross_session_cost_placeholders_share_the_unavailable_cost_explanation(self):
+        for renderer, helper in (
+            ("function logRowContent(s){", "costValueHtml("),
+            ("function renderAllSessionStats(sessions){", "costValueHtml("),
+            ("function renderCurrentDaySummary(xs){", "setCostValue("),
+            ("function renderSpend(xs){", "setCostValue("),
+            ("function renderCurrentSessions(state=LATEST){", "costValueHtml("),
+        ):
+            section = self.page.split(renderer, 1)[1].split("\nfunction ", 1)[0]
+            self.assertIn(helper, section, renderer)
+
+    def test_current_session_cost_tooltip_does_not_add_a_nested_tab_stop(self):
+        session_cards = self.page.split("function renderCurrentSessions(state=LATEST){", 1)[1].split(
+            "const currentSessionGrid=$('current-session-grid');", 1
+        )[0]
+        self.assertIn("costValueHtml(money(row.cost)+(estimate?' est':''),costAvailable,false)", session_cards)
+        self.assertIn("const costTipAttrs=costAvailable?'':costUnavailableAttrs();", session_cards)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_active_session_surfaces_prefer_live_throughput(self):

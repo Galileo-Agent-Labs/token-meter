@@ -29,6 +29,18 @@ class ModelPricingBoundaryTests(unittest.TestCase):
         self.assertEqual(quote.basis, EvidenceBasis.ESTIMATED)
         self.assertEqual(quote.matched_rule, "claude-sonnet-5")
 
+    def test_fable_and_mythos_5_1_use_their_published_cache_read_price(self):
+        for model_id in ("claude-fable-5-1", "claude-mythos-5-1"):
+            with self.subTest(model_id=model_id):
+                quote = quote_for(PriceQuery(ModelRef("anthropic", model_id)))
+
+                self.assertTrue(quote.available)
+                self.assertEqual(quote.input_per_million, 10.0)
+                self.assertEqual(quote.output_per_million, 50.0)
+                self.assertEqual(quote.cache_write_per_million, 12.50)
+                self.assertEqual(quote.cache_read_per_million, 0.25)
+                self.assertEqual(quote.matched_rule, model_id)
+
     def test_unknown_provider_is_explicitly_unavailable_without_cross_fallback(self):
         unknown_provider = quote_for(PriceQuery(ModelRef("unknown", "gpt-5.6")))
         wrong_provider = quote_for(PriceQuery(ModelRef("anthropic", "gpt-5.6")))

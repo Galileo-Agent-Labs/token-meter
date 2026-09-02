@@ -100,7 +100,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .bar span{display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:780;min-width:0;transition:width .35s ease;white-space:nowrap}
 #sembar span{color:#07090c}
 .legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px;color:var(--dim)}.dot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
-.fieldtip{position:relative;display:inline-flex;align-items:center;cursor:help;outline:none}
+.fieldtip{position:relative;display:inline-flex;align-items:center;cursor:help;outline:none}.currentSessionCard.fieldtip{display:grid}
 .fieldtip:focus-visible{color:var(--fg)}
 #fieldtip-popup{position:fixed;left:0;top:0;z-index:1000;box-sizing:border-box;width:min(320px,calc(100vw - 24px));pointer-events:none;border:1px solid rgba(0,188,235,.42);border-radius:8px;background:linear-gradient(180deg,rgba(6,8,11,.98),rgba(15,21,28,.98));box-shadow:0 14px 32px rgba(0,0,0,.46);padding:8px 10px;color:var(--dim);font-size:12px;line-height:1.35;font-weight:560;overflow-wrap:anywhere}
 #fieldtip-popup[hidden]{display:none}
@@ -1203,6 +1203,22 @@ initFieldTipPopup();
 const f=n=>Math.round(n||0).toLocaleString();
 const compactNumber=n=>{n=Number(n)||0;const a=Math.abs(n);if(a>=1e9)return (n/1e9).toFixed(a>=1e10?0:1).replace(/\.0$/,'')+'B';if(a>=1e6)return (n/1e6).toFixed(a>=1e7?0:1).replace(/\.0$/,'')+'M';if(a>=1e3)return (n/1e3).toFixed(a>=1e4?0:1).replace(/\.0$/,'')+'K';return f(n);};
 const money=n=>'$'+(Math.abs(n||0)>=1?(n||0).toFixed(2):(n||0).toFixed(3));
+const COST_UNAVAILABLE_TIP='Cost is unavailable, not $0. Token Meter can estimate cost only from locally stored usage with an identifiable model and an available configured rate. The local trace may omit billable usage, the model may be unknown or unpriced, or the session may be cloud-hosted without a readable local trace.';
+function setCostValue(id,value,available){
+ const element=$(id);element.textContent=available?value:'--';
+ element.classList.toggle('fieldtip',!available);
+ if(available){
+  element.removeAttribute('tabindex');element.removeAttribute('aria-description');element.removeAttribute('data-tip');
+  return;
+ }
+ element.setAttribute('tabindex','0');element.setAttribute('aria-description',COST_UNAVAILABLE_TIP);element.setAttribute('data-tip',COST_UNAVAILABLE_TIP);
+}
+function costUnavailableAttrs(){const safe=esc(COST_UNAVAILABLE_TIP);return `data-tip="${safe}"`;}
+function costValueHtml(value,available,focusable=true){
+ if(available)return value;
+ if(focusable)return `<span ${tipAttrs(COST_UNAVAILABLE_TIP)}>--</span>`;
+ const safe=esc(COST_UNAVAILABLE_TIP);return `<span class=fieldtip aria-description="${safe}" data-tip="${safe}">--</span>`;
+}
 const pct=n=>Math.round((n||0)*100)+'%';
 const metricAvailable=(row,metric)=>row?.availability?.[metric]!==false;
 const metricText=(row,metric,value,formatter)=>metricAvailable(row,metric)?formatter(value):'--';
@@ -3331,12 +3347,12 @@ function renderOverview(s){
  $('ov-loaded').textContent=f(tools.loaded||0);
  $('ov-loadedsm').textContent=tools.loaded_known?`${f(tools.eager||0)} eager · ${f(tools.deferred||0)} deferred · partial catalog`:`${f(tools.unique_used||0)} observed · catalog unavailable`;
  $('ov-exec').textContent=f(s.turns); $('ov-model').textContent=s.primary_model||'';
- $('ov-avg').textContent=costAvailable?money(avg)+estimate:'--';
+ setCostValue('ov-avg',money(avg)+estimate,costAvailable);
  $('ov-tools').textContent=f(tools.total_calls||0); $('ov-tooltok').textContent=f(tools.total_output_tokens||0)+' returned tok';
  $('ov-peak').textContent=f(peak);
  $('ov-peak').textContent=f(context.peak||peak);
  $('ov-peak').nextElementSibling.textContent=context.window?`${pct(context.peak_pct)} of model window`:'max input tokens';
- $('ov-big').textContent=costAvailable?money(s.biggest_turn?.cost||0)+estimate:'--'; $('ov-bigsm').textContent=costAvailable?(s.biggest_turn?'execution #'+s.biggest_turn.idx+(estimate?' · local estimate':''):''):'billing unavailable';
+ setCostValue('ov-big',money(s.biggest_turn?.cost||0)+estimate,costAvailable); $('ov-bigsm').textContent=costAvailable?(s.biggest_turn?'execution #'+s.biggest_turn.idx+(estimate?' · local estimate':''):''):'billing unavailable';
 }
 function setCapabilityStatBar(id,value){
  const bar=$(id);
@@ -3431,7 +3447,7 @@ function renderCurrentRun(s){
  renderCodexDesktopSessionLink(s);
  $('preview-state').textContent=pinned?'Pinned':(frozen?'Complete':'Live');
  $('preview-idle').textContent=frozen?'frozen':idleLabel(s.idle_s);
- $('preview-cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
+ setCostValue('preview-cost',money(s.total_cost)+(s.cost_approx?' est':''),costAvailable);
  $('preview-cost-note').textContent=alert.msg?alert.msg:(costAvailable&&Number.isFinite(cap)?`${money(Math.max(0,cap-(s.total_cost||0)))} before the ${money(cap)} session cap`:source.pricing_note||'Cost evidence unavailable.');
  $('preview-status-card').classList.toggle('warn',!!alert.msg);
  $('preview-context-pct').textContent=context.window?pct(contextPct):'--';
@@ -3458,7 +3474,7 @@ function renderCurrentRun(s){
  $('preview-cache-saved-note').textContent=costAvailable&&cacheAvailable?`${money(cache.cost||0)} cache cost · avoided spend`:'cache savings unavailable';
  $('preview-burn').textContent=costAvailable&&timing.duration_available?money(s.burn_usd_min)+(cursorEstimate?' est':''):'--';
  $('preview-burn-note').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tokens/min · active`:(timing.duration_available?'billing unavailable':'execution timing unavailable');
- $('preview-cost-task').textContent=costAvailable?money(costPerTask.per_task||0)+(cursorEstimate?' est':''):'--';
+ setCostValue('preview-cost-task',money(costPerTask.per_task||0)+(cursorEstimate?' est':''),costAvailable);
  $('preview-cost-task-note').textContent=costAvailable?`${f(costPerTask.completed||0)} completed tasks`:'billing unavailable';
  const startMessage=sessionStartMessage(s)||'No user message captured.';
  $('preview-start').textContent=startMessage;
@@ -3486,7 +3502,7 @@ function renderSession(s){
  deleteButton.title=deleteAvailable?'Move this session log to the system Trash.':'Session deletion is unavailable for this provider.';
  $('frozen').classList.toggle('on',frozen);
  const costAvailable=metricAvailable(s,'cost'),tokensAvailable=metricAvailable(s,'tokens'),inputAvailable=metricAvailable(s,'input_tokens'),outputAvailable=metricAvailable(s,'output_tokens'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput'),cursorEstimate=s.provider==='cursor';
- $('cost').textContent=costAvailable?money(s.total_cost)+(s.cost_approx?' est':''):'--';
+ setCostValue('cost',money(s.total_cost)+(s.cost_approx?' est':''),costAvailable);
  const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
  $('cost-tip').innerHTML=costTipHtml(s,tok);
  const inputTokens=(tok.input||0)+(tok.cache_read||0)+(tok.cache_write||0), outputTokens=tok.output||0;
@@ -3510,7 +3526,7 @@ function renderSession(s){
  $('cache-savedsm').textContent=costAvailable&&cacheAvailable?`${money(cache.cost||0)} cache cost`:'cache savings unavailable';
  $('burn').textContent=costAvailable&&timing.duration_available?money(s.burn_usd_min)+(cursorEstimate?' est':''):'--';
  $('burnsm').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tok/min · active${cursorEstimate?' · local proxy':''}`:(timing.duration_available?'active timing available · billing unavailable':'execution timing unavailable');
- $('cpt').textContent=costAvailable?money(s.analyses?.cost_per_task?.per_task||0)+(cursorEstimate?' est':''):'--';
+ setCostValue('cpt',money(s.analyses?.cost_per_task?.per_task||0)+(cursorEstimate?' est':''),costAvailable);
  $('cptsm').textContent=costAvailable?f(s.analyses?.cost_per_task?.completed||0)+` completed${cursorEstimate?' · local proxy':''}`:'billing unavailable';
  renderOverview(s); renderCurrentOptimization(s); renderCurrentRun(s); renderSessionEfficiency(s);
 
@@ -4377,7 +4393,7 @@ function renderSpendLogs(payload,window){
  const maxCost=Math.max(.001,...rows.map(row=>Number(row.cost||0)));
  setSpendLogsHtml(rows.map((row,index)=>{
   const available=metricAvailable(row,'cost'),estimated=hasLocalEstimate(row),cost=Number(row.cost||0),share=available&&rangeTotal?pct(cost/rangeTotal):'0%',days=Math.max(1,Number(row.active_days)||1);
-  return `<div class=spendLogRow><div class=spendLogRank>${index+1}</div><div class=spendLogMain><div class=spendLogName title="${esc(row.title||'Untitled session')}">${esc(row.title||'Untitled session')}</div><div class=spendLogMeta>${esc(row.project||'No project')} · ${esc(row.label||row.provider||'Unknown runtime')} · ${f(days)} ${countWord(days,'day')}${estimated?' · local est':''}</div><div class=spendLogTrack><i style="width:${available?100*cost/maxCost:0}%"></i></div></div><div class=spendLogValue><strong class=mono>${available?money(cost)+estimateSuffix(row):'--'}</strong><span>${available?`${share} of range spend`:'cost unavailable'}</span></div><button class=tbtn data-spend-session="${esc(row.id)}" type=button>Open</button></div>`;
+  return `<div class=spendLogRow><div class=spendLogRank>${index+1}</div><div class=spendLogMain><div class=spendLogName title="${esc(row.title||'Untitled session')}">${esc(row.title||'Untitled session')}</div><div class=spendLogMeta>${esc(row.project||'No project')} · ${esc(row.label||row.provider||'Unknown runtime')} · ${f(days)} ${countWord(days,'day')}${estimated?' · local est':''}</div><div class=spendLogTrack><i style="width:${available?100*cost/maxCost:0}%"></i></div></div><div class=spendLogValue><strong class=mono>${costValueHtml(money(cost)+estimateSuffix(row),available)}</strong><span>${available?`${share} of range spend`:'cost unavailable'}</span></div><button class=tbtn data-spend-session="${esc(row.id)}" type=button>Open</button></div>`;
  }).join(''));
 }
 function loadSpendLogs(window,generatedAt){
@@ -4406,7 +4422,7 @@ function showSpendTip(day,button=$('s-chart-inner').querySelector(`[data-spend-d
  if(!row||!button){hideSpendTip();return;}
  spendInspectDay=day;
  const details=spendDayDetails(row),total=Number(row.cost||0);
- const runtimeRows=details.runtimes.length?details.runtimes.map(runtime=>`<div class=spendTipRuntime style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><span><i></i>${esc(runtime.label)}</span><b class=mono>${runtime.unavailable&&!runtime.cost?'--':money(runtime.cost)}</b><small>${runtime.unavailable?'unavailable':total?spendPct(runtime.cost/total):'0%'}${runtime.estimated?' · est':''}${runtime.partial?' · partial':''}</small></div>`).join(''):'<div class=spendTipEmpty>No runtime spend recorded.</div>';
+ const runtimeRows=details.runtimes.length?details.runtimes.map(runtime=>`<div class=spendTipRuntime style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><span><i></i>${esc(runtime.label)}</span><b class=mono>${costValueHtml(money(runtime.cost),!(runtime.unavailable&&!runtime.cost))}</b><small>${runtime.unavailable?'unavailable':total?spendPct(runtime.cost/total):'0%'}${runtime.estimated?' · est':''}${runtime.partial?' · partial':''}</small></div>`).join(''):'<div class=spendTipEmpty>No runtime spend recorded.</div>';
  const html=`<div class=spendTipDate>${esc(dayLabel(row.day))}</div><div class=spendTipTotal><span>Daily total</span><b class=mono>${esc(details.totalText)}</b></div>${details.note?`<div class=spendTipNote>${esc(details.note)}</div>`:''}<div class=spendTipRuntimes>${runtimeRows}</div>`;
  if(tip._spendHtml!==html){tip.innerHTML=html;tip._spendHtml=html;}
  tip.hidden=false;
@@ -4433,9 +4449,9 @@ function renderSpend(xs){
  if(!$('s-range-error').textContent){$('s-from').value=spendCustomFrom;$('s-to').value=spendCustomTo;}
 	 const rows=spendCurrentRows,total=rows.reduce((sum,row)=>sum+Number(row.cost||0),0),dailyAverage=window.dayCount?total/window.dayCount:0,evidence=spendEvidence(rows),runtimeTotals=spendRuntimeTotals(rows),topRuntime=runtimeTotals.reduce((best,row)=>!best||row.cost>best.cost?row:best,null),highest=rows.reduce((best,row)=>!best||Number(row.cost||0)>Number(best.cost||0)?row:best,null);
  const rangeText=spendRangeLabel(window),periodUnavailable=evidence.allUnavailable&&!total;
- $('s-total').textContent=periodUnavailable?'--':money(total);
+ setCostValue('s-total',money(total),!periodUnavailable);
  $('s-total-note').textContent=periodUnavailable?'Cost unavailable for recorded activity':`${rangeText} · API-equivalent estimate${evidence.partial?' · lower bound':''}`;
-	 $('s-average').textContent=periodUnavailable?'--':money(dailyAverage);
+	 setCostValue('s-average',money(dailyAverage),!periodUnavailable);
  const previousWindow=spendPreviousWindow(window),previousRows=spendCalendarRows(source,previousWindow),previousEvidence=source.some(row=>row.day>=previousWindow.start&&row.day<=previousWindow.end),previousCoverage=spendEvidence(previousRows),previousTotal=previousRows.reduce((sum,row)=>sum+Number(row.cost||0),0);
  $('s-average-note').textContent=periodUnavailable?'Daily average unavailable':previousEvidence&&!evidence.partial&&!previousCoverage.partial?`${dailyDeltaLabel(total,previousTotal)} vs preceding ${window.dayCount}d`:`${window.dayCount} calendar ${countWord(window.dayCount,'day')}${evidence.partial||previousCoverage.partial?' · comparison withheld for partial coverage':''}`;
  $('s-top-runtime').textContent=periodUnavailable?'Unavailable':topRuntime&&topRuntime.cost?topRuntime.label:'No spend';
@@ -4446,7 +4462,7 @@ function renderSpend(xs){
  $('s-legend').innerHTML=visibleRuntimes.map(runtime=>`<span style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><i></i>${esc(runtime.label)}</span>`).join('')+(visibleRuntimes.some(runtime=>runtime.estimated)?'<span class=spendEstimateKey><i></i>Local estimate</span>':'');
  reconcileSpendBars(rows);
 	 $('s-chart').setAttribute('aria-label',`${rangeText}. ${periodUnavailable?'Spend unavailable':`${money(total)} estimated spend, daily average ${money(dailyAverage)}`}${evidence.partial?', partial coverage':''}. Use arrow keys to inspect days.`);
- $('s-platforms').innerHTML=visibleRuntimes.length?`<div class=spendPlatformRows>${visibleRuntimes.map(runtime=>`<div class=spendPlatformRow style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><div class=spendPlatformName><i></i><span>${esc(runtime.label)}</span></div><div class=spendPlatformTrack><i style="width:${total?100*runtime.cost/total:0}%"></i></div><div class="spendPlatformValue mono">${runtime.unavailable&&!runtime.cost?'--':money(runtime.cost)}<span>${runtime.unavailable?'unavailable':total?spendPct(runtime.cost/total):'0%'}${runtime.estimated?' · est':''}${runtime.partial?' · partial':''}</span></div></div>`).join('')}</div>`:`<div class=spendEmpty>${evidence.active?'Recorded activity has no runtime cost evidence.':'No spend recorded in this range.'}</div>`;
+ $('s-platforms').innerHTML=visibleRuntimes.length?`<div class=spendPlatformRows>${visibleRuntimes.map(runtime=>`<div class=spendPlatformRow style="--spend-color:${SPEND_RUNTIME_COLORS[runtime.key]}"><div class=spendPlatformName><i></i><span>${esc(runtime.label)}</span></div><div class=spendPlatformTrack><i style="width:${total?100*runtime.cost/total:0}%"></i></div><div class="spendPlatformValue mono">${costValueHtml(money(runtime.cost),!(runtime.unavailable&&!runtime.cost))}<span>${runtime.unavailable?'unavailable':total?spendPct(runtime.cost/total):'0%'}${runtime.estimated?' · est':''}${runtime.partial?' · partial':''}</span></div></div>`).join('')}</div>`:`<div class=spendEmpty>${evidence.active?'Recorded activity has no runtime cost evidence.':'No spend recorded in this range.'}</div>`;
  loadSpendLogs(window,xs?.generated_at);
  const hovered=$('s-chart-inner').querySelector('.spendDay:hover');
  if(hovered)showSpendTip(hovered.dataset.spendDay,hovered);else hideSpendTip();
@@ -5070,7 +5086,7 @@ function logRowContent(s){
   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i></i></div></div>
   <div class="badge models">${esc(modelText)}</div>
   <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
-  <div class=smetrics><div class="c mono">${rowCost?money(s.cost)+(s.cost_approx?' est':''):'--'}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div>${sessionDeleteAvailable(s,renderedAllSessionActions)?`<button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button>`:''}</div>`;
+  <div class=smetrics><div class="c mono">${costValueHtml(money(s.cost)+(s.cost_approx?' est':''),rowCost)}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div>${sessionDeleteAvailable(s,renderedAllSessionActions)?`<button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button>`:''}</div>`;
 }
 function reconcileLogRows(sessions,maxCost,liveSessionIds=new Set()){
  const root=$('slist');
@@ -5201,7 +5217,7 @@ function renderAllSessionStats(sessions){
  const costPartial=totals.costCovered<sessions.length,tokenPartial=totals.tokenCovered<sessions.length;
  const filteredEstimateSuffix=localEstimates?(localEstimates===totals.costCovered?' est':' incl. est'):'';
  const filteredCostEstimateSuffix=localEstimates===totals.costCovered&&totals.costCovered?' est':'';
- setLogText($('lf-cost'),totals.costCovered?money(totals.cost)+(costPartial?' partial':'')+filteredCostEstimateSuffix:'--');
+ setLogHtml($('lf-cost'),costValueHtml(money(totals.cost)+(costPartial?' partial':'')+filteredCostEstimateSuffix,Boolean(totals.costCovered)));
  setLogText($('lf-cost-note'),sessions.length?(totals.costCovered?`${f(totals.costCovered)} of ${f(sessions.length)} cost-covered sessions · ${money(totals.cost/totals.costCovered)}/covered session${localEstimates?` · ${f(localEstimates)} Cursor local ${countWord(localEstimates,'estimate')}`:''}`:'cost unavailable for matching sessions'):'no matching sessions');
  setLogText($('lf-input'),totals.tokenCovered?compactNumber(totals.input)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--');setLogAttribute($('lf-input'),'title',totals.tokenCovered?f(totals.input)+' reported or locally estimated input/context tokens':'input evidence unavailable');
  setLogText($('lf-output'),totals.tokenCovered?compactNumber(totals.output)+(tokenPartial?' partial':'')+filteredEstimateSuffix:'--');setLogAttribute($('lf-output'),'title',totals.tokenCovered?f(totals.output)+' reported or locally estimated output tokens':'output evidence unavailable');
@@ -5220,7 +5236,7 @@ function renderAllSessionStats(sessions){
  });
  const ranked=[...models.values()].sort((a,b)=>b.cost-a.cost||b.tokens-a.tokens||a.model.localeCompare(b.model));
  setLogText($('lf-model-count'),`${f(ranked.length)} ${countWord(ranked.length,'model')}`);
- setLogHtml($('lf-models'),ranked.length?ranked.slice(0,4).map(row=>`<div class=logModelRow><div><div class=logModelName title="${esc(row.model)} · ${esc(row.runtime)}">${esc(row.model)} · ${esc(row.runtime)}</div><div class=logModelMeta>${f(row.sessions)} ${countWord(row.sessions,'session')} · ${f(row.executions)} execs · ${row.tokenCovered?compactNumber(row.input)+' in · '+compactNumber(row.output)+' out'+(row.estimated?' · includes local est':''):'token evidence unavailable'}</div></div><div class=logModelValue><b class=mono>${row.costCovered?money(row.cost)+(row.estimated?' est':''):'--'}</b><span>${row.costCovered?pct(totals.cost?row.cost/totals.cost:0)+' of covered cost':'billing unavailable'}</span></div></div>`).join('')+(ranked.length>4?`<div class=logModelEmpty>+${f(ranked.length-4)} more ${countWord(ranked.length-4,'model runtime')}</div>`:''):'<div class=logModelEmpty>No model data for these filters</div>');
+ setLogHtml($('lf-models'),ranked.length?ranked.slice(0,4).map(row=>`<div class=logModelRow><div><div class=logModelName title="${esc(row.model)} · ${esc(row.runtime)}">${esc(row.model)} · ${esc(row.runtime)}</div><div class=logModelMeta>${f(row.sessions)} ${countWord(row.sessions,'session')} · ${f(row.executions)} execs · ${row.tokenCovered?compactNumber(row.input)+' in · '+compactNumber(row.output)+' out'+(row.estimated?' · includes local est':''):'token evidence unavailable'}</div></div><div class=logModelValue><b class=mono>${costValueHtml(money(row.cost)+(row.estimated?' est':''),Boolean(row.costCovered))}</b><span>${row.costCovered?pct(totals.cost?row.cost/totals.cost:0)+' of covered cost':'billing unavailable'}</span></div></div>`).join('')+(ranked.length>4?`<div class=logModelEmpty>+${f(ranked.length-4)} more ${countWord(ranked.length-4,'model runtime')}</div>`:''):'<div class=logModelEmpty>No model data for these filters</div>');
 }
 
 function currentSessionAge(row){
@@ -5524,7 +5540,7 @@ function renderCurrentDaySummary(xs){
  const today=days.find(row=>row.day===todayKey),yesterday=days.find(row=>row.day===yesterdayKey);
  const todayCostAvailable=Boolean(today)&&metricAvailable(today,'cost'),todayPartial=Boolean(today)&&metricPartial(today,'cost');
  const yesterdayCostAvailable=Boolean(yesterday)&&metricAvailable(yesterday,'cost'),yesterdayPartial=Boolean(yesterday)&&metricPartial(yesterday,'cost');
- $('current-day-spend').textContent=todayCostAvailable?money(today.cost)+estimateSuffix(today):'--';
+ setCostValue('current-day-spend',money(today?.cost)+estimateSuffix(today||{}),todayCostAvailable);
  $('current-day-spend-note').textContent=!today?'No recorded activity today':!todayCostAvailable?'Cost unavailable':todayPartial?'Partial billing coverage':hasLocalEstimate(today)?'API-equivalent estimate · includes local estimates':'API-equivalent estimate';
  const todaySessions=Number(today?.sessions||0),yesterdaySessions=Number(yesterday?.sessions||0),sessionDelta=todaySessions-yesterdaySessions;
  $('current-day-sessions').textContent=f(todaySessions);
@@ -5668,7 +5684,8 @@ function renderCurrentSessions(state=LATEST){
   const {state:activity,label:activityLabel}=currentSessionActivity(row);
   const costAvailable=row.availability?.cost!==false;
   const estimate=row.cost_approx||['local_estimate','mixed'].includes(row.usage_basis);
-  const cost=costAvailable?money(row.cost)+(estimate?' est':''):'--';
+  const cost=costValueHtml(money(row.cost)+(estimate?' est':''),costAvailable,false);
+  const costTipAttrs=costAvailable?'':costUnavailableAttrs();
   const context=currentSessionContext(row);
   const runtime=runtimeLabel(row),model=currentSessionModelName(row.primary_model);
   const effort=String(row.reasoning_effort||'').trim().replaceAll('_',' ');
@@ -5679,7 +5696,7 @@ function renderCurrentSessions(state=LATEST){
   const contextSpark=currentSessionContextSparkline(row);
   const cardDescription=`${contextSpark.summary} Drag to reorder. Press ⌥ and an arrow key to move.`;
   const arriving=arrivingIds.has(String(row.id))?' is-arriving':'';
-  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}${arriving}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${esc(cost)}</b></div><div class=currentSessionMetric><span>Context in use</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
+  return `<button class="card currentSessionCard provider-${esc(provider)} activity-${activity}${arriving}${costAvailable?'':' fieldtip'}" style="--harness:${esc(runtimeHarness(row))}" type=button draggable=true data-current-session-id="${esc(row.id)}" aria-label="${esc(`Open ${sessionName}`)}" aria-description="${esc(cardDescription)}" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown" ${costTipAttrs}><div class=currentSessionTop><div class=currentSessionRuntime>${runtimeMarkSvg(row)}<span>${esc(runtimeLine)}</span></div><div class="currentSessionStatus ${activity}">${activityLabel}</div></div><div class=currentSessionIdentity><h3>${esc(sessionName)}</h3><p>${esc(row.project||'No project')}</p></div><div class=currentSessionMetrics><div class=currentSessionMetric><span>Cost</span><b class=mono>${cost}</b></div><div class=currentSessionMetric><span>Context in use</span><div class=currentSessionContextValue><b class=mono>${esc(context)}</b>${contextSpark.html}</div></div><div class=currentSessionMetric><span>Speed</span><b class=mono>${esc(speed)}</b></div></div><div class=currentSessionFoot><span class=currentSessionMove><svg class=currentSessionGrip viewBox="0 0 12 16" aria-hidden=true><circle cx="3" cy="3" r="1.2"/><circle cx="9" cy="3" r="1.2"/><circle cx="3" cy="8" r="1.2"/><circle cx="9" cy="8" r="1.2"/><circle cx="3" cy="13" r="1.2"/><circle cx="9" cy="13" r="1.2"/></svg>${currentSessionAge(row)}</span></div></button>`;
  }).join(''):(filterView.activitySelection==='all'?currentSessionsEmptyHtml(state?.xsession):currentSessionsFilteredEmptyHtml(filterView.activitySelection));
  if(focusedId)requestAnimationFrame(()=>focusCurrentSessionCard(focusedId));
 }

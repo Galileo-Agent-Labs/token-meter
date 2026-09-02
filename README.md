@@ -69,6 +69,10 @@ Cursor Agent/Composer, OpenCode, and Kiro.
 Evidence varies by runtime and client version. Missing values remain
 unavailable instead of appearing as a misleading zero.
 
+Token Meter works when the agent keeps session evidence on your machine in a
+supported local store. Sessions that exist only in a cloud-hosted service may
+not be available to Token Meter.
+
 ## First Five Minutes
 
 1. Open **Sessions → Current sessions** and select an active run.

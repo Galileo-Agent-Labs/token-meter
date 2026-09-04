@@ -6595,17 +6595,17 @@ console.log(JSON.stringify({
     def test_primary_navigation_and_command_palette_share_the_same_workflow_order(self):
         tab_ids = [
             "tab-session", "tab-daily", "tab-models",
-            "tab-efficiency", "tab-learn", "tab-capabilities", "tab-settings",
+            "tab-efficiency", "tab-git", "tab-learn", "tab-capabilities", "tab-settings",
         ]
         positions = [self.page.index(f"id={tab_id}") for tab_id in tab_ids]
         self.assertEqual(positions, sorted(positions))
         for marker in (
             "id=command-palette", "id=command-search",
-            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit7'",
+            "const NAV_COMMANDS=[", "directKey:'Digit1'", "directKey:'Digit8'",
             "key==='k'", "event.key==='Escape'", "event.key==='ArrowDown'",
             "event.key==='Enter'",
             "class=tabs aria-label=\"Primary navigation\"",
-            "button.dataset.label} · Shortcut: Option+${index+1}",
+            "button.dataset.label} · Shortcut: Option+${shortcut}",
             "button.setAttribute('aria-current','page')",
         ):
             self.assertIn(marker, self.page)
@@ -6626,6 +6626,31 @@ console.log(JSON.stringify({
         self.assertNotIn("$('livetxt')", self.page)
         self.assertNotIn("id=command-alt-key", self.page)
         self.assertNotIn("class=commandShortcut", self.page)
+
+    def test_top_level_shortcuts_follow_visible_rail_order(self):
+        expected = [
+            ("session", "1"), ("daily", "2"), ("models", "3"),
+            ("efficiency", "4"), ("git", "5"), ("learn", "6"),
+            ("capabilities", "7"), ("settings", "8"),
+        ]
+        for tab_id, digit in expected:
+            match = re.search(rf'<button[^>]+id=tab-{tab_id}[^>]*>.*?</button>', self.page)
+            self.assertIsNotNone(match, tab_id)
+            button = match.group(0)
+            self.assertIn(f'aria-keyshortcuts="Alt+{digit}"', button)
+            self.assertIn(f'Shortcut: Option+{digit}', button)
+            self.assertIn(f'<span class=tabShortcut aria-hidden=true>{digit}</span>', button)
+        commands = self.page.split("const NAV_COMMANDS=[", 1)[1].split("];", 1)[0]
+        for command_id, digit in (
+            ("sessions", "1"), ("spend", "2"), ("models", "3"),
+            ("efficiency", "4"), ("git", "5"), ("learn", "6"),
+            ("capabilities", "7"), ("settings", "8"),
+        ):
+            self.assertRegex(
+                commands,
+                rf"id:'{command_id}'.*?directKey:'Digit{digit}'.*?glyph:'{digit}'",
+            )
+        self.assertIn('&#8997;1&ndash;8', self.page)
 
     def test_tools_is_in_the_secondary_rail_above_settings(self):
         secondary = self.page.split("<div class=navSecondary>", 1)[1].split(
@@ -7763,12 +7788,13 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             "Compare model cost, speed, and context.",
             "Review installed tools, MCP servers, and skills.",
             "Token efficiency from local stats.",
+            "Pushed code &times; covered spend.",
             "Learn the core Token Meter review loop.",
             "Manage budgets, connections, pricing, and updates.",
         ):
             self.assertIn(marker, self.page)
-        self.assertEqual(self.page.count("data-page-signal="), 7)
-        self.assertEqual(self.page.count("class=spectrumPageSubtitle"), 7)
+        self.assertEqual(self.page.count("data-page-signal="), 8)
+        self.assertEqual(self.page.count("class=spectrumPageSubtitle"), 8)
         self.assertNotIn(".spectrumPageHead{position:relative;isolation:isolate;display:flex;width:100%;max-width:none;min-height:138px", self.page)
 
     def test_shared_header_effect_adapter_exposes_generic_mounts(self):
@@ -7788,7 +7814,9 @@ const ticks=async(count=8)=>{{while(count--)await Promise.resolve();}};
             self.page,
             re.DOTALL,
         )
-        self.assertEqual(titles, ["Sessions", "Models", "Spend", "Efficiency"])
+        self.assertEqual(
+            titles, ["Sessions", "Models", "Spend", "Efficiency", "Git"],
+        )
         self.assertTrue(all(len(title) <= 12 for title in titles))
 
     def test_mobile_header_action_rows_scroll_instead_of_stacking(self):
@@ -8132,7 +8160,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "body.spectrumApp .top .tabs{grid-column:1/-1;grid-row:2;min-width:0;width:100%;overflow-x:auto;flex:none;flex-direction:row",
             ".navPrimary,.navSecondary{display:contents}",
             "@media(max-width:760px){#view-models{overflow-x:clip}}",
-            "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(5,minmax(125px,1fr))",
+            "body.spectrumApp .settingsMap{grid-template-columns:minmax(140px,.65fr) repeat(6,minmax(118px,1fr))",
         ):
             self.assertIn(marker, self.page)
         for marker in (

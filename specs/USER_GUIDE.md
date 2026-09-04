@@ -113,11 +113,34 @@ exposure, skill-pack activation, and review candidates. Incomplete evidence,
 built-in packs, default tools, and read-only runtimes are not treated as safe
 disable recommendations.
 
+### Git
+
+Git compares locally observed successful pushes with covered AI spend.
+The installer seeds readable remote-tracking reflogs immediately. Token Meter
+then rechecks accessible repositories every five minutes and matches authored
+changes to each repository's effective local Git email. Code pushed is text
+additions plus deletions; binary changes are excluded. Spend per 1K lines uses
+only projects with both Git and covered-cost evidence. Daily chart inspection
+keeps exact added, deleted, daily Spend / 1K, and trailing seven-day Spend / 1K
+values. The plotted cost-intensity line uses trailing seven-day totals. The
+coverage readout leads with the share of available spend represented by
+comparable repositories.
+
+No remote request is made and GitHub CLI is not required. A macOS-protected
+location can remain partial after the installer seed rather than triggering a
+folder permission prompt. The local ledger stores hashed repository and object
+keys, observation time, and numeric line totals. It does not store paths,
+remotes, branches, identities, messages, file names, or diff content. Missing
+or expired reflog evidence is shown as partial or unavailable rather than zero.
+Git evidence history is bounded to the latest 12 months. Clear the ledger under
+**Settings → Git evidence history** to remove its totals and begin a new baseline;
+older reflog entries are not imported again.
+
 ### Settings
 
 Settings contains the default session budget, monthly budget allocations and
-thresholds, effective-dated model pricing, software updates, menu-bar
-preferences, language signals, and local agent connections. The default session
+thresholds, effective-dated model pricing, Git evidence history, software updates,
+menu-bar preferences, language signals, and local agent connections. The default session
 budget applies whenever that browser has no saved cap for a session; changing it
 does not replace existing per-session caps. Model pricing shows the review date
 and provider sources for bundled rates. Select the models to change, edit their

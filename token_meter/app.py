@@ -103,6 +103,7 @@ from token_meter.domain.tools import (
     tool_identity as _domain_tool_identity,
     tool_summary as _domain_tool_summary,
 )
+from token_meter.services.git_delivery import GitDeliveryLedger, GitDeliveryService
 from token_meter.models.catalog import (
     ANTHROPIC_PRICE as CLAUDE_PRICE,
     BUILTIN_MODEL_PRICE_HISTORY as _CANONICAL_BUILTIN_MODEL_PRICE_HISTORY,
@@ -252,6 +253,9 @@ TOKEN_METER_SESSION_MODEL_IDENTITIES = os.path.expanduser(
 TOKEN_METER_UPDATE_STATUS = os.path.expanduser(
     os.environ.get("TOKEN_METER_UPDATE_STATUS", "~/.token-meter/update-status.json")
 )
+TOKEN_METER_GIT_DELIVERY_DB = os.path.expanduser(
+    os.environ.get("TOKEN_METER_GIT_DELIVERY_DB", "~/.token-meter/git-delivery.sqlite3")
+)
 PORT = 8722
 
 DEFAULT_FRUSTRATION_TERMS = [
@@ -280,6 +284,7 @@ MIN_SESSION_BUDGET = 0.5
 MAX_MONTHLY_BUDGET = 100_000_000.0
 OPENCODE_DETAIL_MESSAGE_LIMIT = 200
 UPDATE_CHECK_INTERVAL_S = 10 * 60
+GIT_DELIVERY_INTERVAL_S = 5 * 60
 UPDATE_FETCH_TIMEOUT_S = 45
 UPDATE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{1,199}$")
 
@@ -321,6 +326,9 @@ _SOURCE_INVENTORY = {
     "clients": {},
     "updated_at": None,
 }
+_git_delivery_service_instance = None
+_git_delivery_service_lock = threading.Lock()
+_git_delivery_wake = threading.Event()
 _xsess = {
     "data": None, "at": 0.0, "sessions": [],
     "internal_rows": (), "project_model_stats": {},
@@ -2847,6 +2855,7 @@ def publish_source_inventory(sources):
         "clients": dict(clients),
         "updated_at": time.time(),
     }
+    _git_delivery_wake.set()
     return _SOURCE_INVENTORY
 
 
@@ -6547,6 +6556,185 @@ def project_filter_key(value):
     return OTHER_LOCAL_SESSIONS_PROJECT
 
 
+def delivery_project_label(value):
+    """Return a compact project label without exposing its local path."""
+    project = project_filter_key(value)
+    if project == OTHER_LOCAL_SESSIONS_PROJECT:
+        return ""
+    root = os.path.abspath(os.path.expanduser(project))
+    name = os.path.basename(root.rstrip(os.sep)) or "Project"
+    suffix = git_delivery_service().project_suffix(root)
+    return "{} · {}".format(name[:54], suffix)
+
+
+def git_delivery_candidates(sources=None):
+    """Derive bounded repository candidates from already-discovered projects."""
+    candidates = []
+    seen_roots = set()
+    for source in list(sources or ()):
+        raw_project = source.get("project") if isinstance(source, dict) else ""
+        if project_filter_key(raw_project) == OTHER_LOCAL_SESSIONS_PROJECT:
+            continue
+        root = os.path.abspath(os.path.expanduser(raw_project))
+        project = delivery_project_label(raw_project)
+        if len(root) > 4096 or not project or root in seen_roots:
+            continue
+        candidates.append({"root": root, "project": project})
+        seen_roots.add(root)
+        if len(candidates) >= 50:
+            break
+    return candidates
+
+
+def delivery_spend_rows(internal_rows):
+    """Project daily cost and token totals into the content-free Git boundary."""
+    rows = []
+    for session in internal_rows or ():
+        project = delivery_project_label(session.get("project"))
+        if not project:
+            continue
+        availability = session.get("availability") or {}
+        cost_available = availability.get("cost") is not False
+        costs = session.get("_day_cost") or {}
+        model_days = {}
+        for daily in session.get("_model_daily") or ():
+            day = daily.get("day") if isinstance(daily, dict) else ""
+            if not isinstance(day, str) or len(day) != 10:
+                continue
+            target = model_days.setdefault(day, {
+                "executions": 0,
+                "cost_covered_executions": 0,
+                "efficiency_covered_cost": 0.0,
+                "covered_output_tokens": 0,
+                "reasoning_tokens": 0,
+                "reasoning_output_tokens": 0,
+                "reasoning_executions": 0,
+            })
+            target["executions"] += max(0, int(daily.get("executions") or 0))
+            target["cost_covered_executions"] += max(
+                0, int(daily.get("cost_covered_executions") or 0),
+            )
+            try:
+                efficiency_cost = float(daily.get("cost_covered_cost") or 0)
+            except (TypeError, ValueError):
+                efficiency_cost = 0.0
+            if math.isfinite(efficiency_cost) and efficiency_cost >= 0:
+                target["efficiency_covered_cost"] += efficiency_cost
+            target["covered_output_tokens"] += max(
+                0, int(daily.get("cost_covered_output_tokens") or 0),
+            )
+            target["reasoning_tokens"] += max(
+                0, int(daily.get("reasoning_tokens") or 0),
+            )
+            target["reasoning_output_tokens"] += max(
+                0, int(daily.get("reasoning_output_tokens") or 0),
+            )
+            target["reasoning_executions"] += max(
+                0, int(daily.get("reasoning_executions") or 0),
+            )
+        days = list(costs)
+        for day in model_days:
+            if day not in days:
+                days.append(day)
+        for day in days:
+            if not isinstance(day, str) or len(day) != 10:
+                continue
+            try:
+                cost = float(costs.get(day) or 0)
+            except (TypeError, ValueError):
+                cost = 0.0
+            if not math.isfinite(cost) or cost < 0:
+                cost = 0.0
+            row = {
+                "project": project,
+                "day": day,
+                "covered_cost": cost if cost_available else 0.0,
+                "cost_available": cost_available,
+            }
+            evidence = model_days.get(day)
+            if evidence is not None:
+                executions = evidence["executions"]
+                covered_executions = min(
+                    executions, evidence["cost_covered_executions"],
+                )
+                reasoning_executions = min(
+                    executions, evidence["reasoning_executions"],
+                )
+                row.update({
+                    "efficiency_covered_cost": evidence["efficiency_covered_cost"],
+                    "covered_output_tokens": evidence["covered_output_tokens"],
+                    "output_available": covered_executions > 0,
+                    "output_partial": covered_executions < executions,
+                    "reasoning_tokens": min(
+                        evidence["reasoning_output_tokens"],
+                        evidence["reasoning_tokens"],
+                    ),
+                    "reasoning_output_tokens": evidence["reasoning_output_tokens"],
+                    "reasoning_available": (
+                        reasoning_executions > 0
+                        and evidence["reasoning_output_tokens"] > 0
+                    ),
+                    "reasoning_partial": reasoning_executions < executions,
+                })
+            rows.append(row)
+    return rows
+
+
+def git_delivery_service():
+    """Return the process-local service backed by Token Meter's private ledger."""
+    global _git_delivery_service_instance
+    with _git_delivery_service_lock:
+        if _git_delivery_service_instance is None:
+            _git_delivery_service_instance = GitDeliveryService(
+                TOKEN_METER_GIT_DELIVERY_DB,
+            )
+        return _git_delivery_service_instance
+
+
+def bootstrap_git_delivery():
+    """Seed readable local push history from the interactive installer context."""
+    sources = all_session_sources()
+    return git_delivery_service().scan(git_delivery_candidates(sources))
+
+
+def git_delivery_state(project="", range_key="7"):
+    """Build the bounded Git payload from watcher-owned source evidence."""
+    if _xsess.get("data") is None:
+        cross_session()
+    internal_rows = _xsess.get("internal_rows") or ()
+    candidates = git_delivery_candidates(_SOURCE_INVENTORY.get("sources") or ())
+    projects = sorted({candidate["project"] for candidate in candidates})
+    return git_delivery_service().query(
+        project,
+        range_key,
+        delivery_spend_rows(internal_rows),
+        projects,
+        candidates,
+    )
+
+
+def clear_git_delivery_activity(confirm=False):
+    """Clear only the Token Meter-owned hash-and-numbers Git ledger."""
+    if confirm is not True:
+        return {"ok": False, "error": "Explicit confirmation is required."}
+    git_delivery_service().clear()
+    _git_delivery_wake.set()
+    return {"ok": True}
+
+
+def git_delivery_watcher():
+    """Inspect local successful-push reflogs every five minutes."""
+    while True:
+        if not _SOURCE_INVENTORY.get("ready"):
+            _git_delivery_wake.wait(1.0)
+            _git_delivery_wake.clear()
+            continue
+        candidates = git_delivery_candidates(_SOURCE_INVENTORY.get("sources") or ())
+        git_delivery_service().scan(candidates)
+        _git_delivery_wake.wait(GIT_DELIVERY_INTERVAL_S)
+        _git_delivery_wake.clear()
+
+
 def aggregate_model_stats(session_rows):
     return _domain_aggregate_model_stats(
         session_rows,
@@ -8771,8 +8959,8 @@ class H(BaseHTTPRequestHandler):
                             "/agent-access/toggle", "/session/delete",
                             "/settings/frustration", "/settings/language-signals",
                             "/settings/model-pricing", "/settings/session-model-identity",
-                            "/settings/budgets",
-                            "/settings/updates", "/updates/check", "/updates/install"):
+                            "/settings/budgets", "/settings/updates",
+                            "/git-delivery/clear", "/updates/check", "/updates/install"):
             self.send_error(404)
             return
         origin = self.headers.get("Origin") or ""
@@ -8891,6 +9079,11 @@ class H(BaseHTTPRequestHandler):
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return
+        if req_path == "/git-delivery/clear":
+            result = clear_git_delivery_activity(payload.get("confirm") is True)
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
         if req_path == "/updates/check":
             result = trigger_software_update_check()
             self._send(json.dumps(result), "application/json",
@@ -9003,6 +9196,15 @@ class H(BaseHTTPRequestHandler):
             project = (parse_qs(parsed.query).get("project") or [""])[0]
             payload, status = project_model_stats(project)
             self._send(json.dumps(payload), "application/json", status=status)
+        elif req_path == "/git-delivery":
+            query = parse_qs(parsed.query)
+            project = (query.get("project") or [""])[0]
+            range_key = (query.get("range") or ["7"])[0]
+            payload = git_delivery_state(project, range_key)
+            status = 200 if payload.get("ok") else (
+                404 if payload.get("error") == "Project was not found." else 400
+            )
+            self._send(json.dumps(payload), "application/json", status=status)
         elif req_path == "/agent-access/status":
             self._send(json.dumps(agent_access_status()), "application/json")
         elif req_path == "/menubar":
@@ -9111,7 +9313,7 @@ def main():
         handler_class=H,
         server_class=TokenMeterHTTPServer,
         port=PORT,
-        background=(watcher, software_update_watcher),
+        background=(watcher, software_update_watcher, git_delivery_watcher),
     )
 
 

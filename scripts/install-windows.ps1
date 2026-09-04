@@ -497,6 +497,23 @@ try {
     Move-Item -LiteralPath $StagingRoot -Destination $InstallRoot
     $Swapped = $true
 
+    $DeliveryBootstrapJson = ""
+    Push-Location $InstallRoot
+    try {
+        $DeliveryBootstrapJson = (
+            & $PythonExe -X utf8 -c `
+                'import json; from token_meter.app import bootstrap_git_delivery; print(json.dumps(bootstrap_git_delivery()))' `
+                2>$null | Out-String
+        ).Trim()
+    } finally {
+        Pop-Location
+    }
+    if ($DeliveryBootstrapJson -match '"ok"\s*:\s*true') {
+        Write-Host "Indexed available local Git delivery history."
+    } else {
+        Write-Host "Local Git delivery history will remain partial until a readable repository is observed."
+    }
+
     $PowerShellCommand = Get-Command powershell.exe -CommandType Application -ErrorAction Stop
     $PowerShellExe = $PowerShellCommand.Source
     $StartScript = Join-Path $InstallRoot "scripts\start-token-meter.ps1"

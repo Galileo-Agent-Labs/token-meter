@@ -32,6 +32,13 @@ It should not expose the dashboard to public networks. The project should not
 send logs, prompts, responses, project paths, token counts, or costs to external
 services.
 
+The Git page is a local-only Git reader. It inspects bounded remote-tracking reflogs
+for successful-push markers and never fetches, pulls, pushes, updates refs, or
+contacts a remote. Its SQLite ledger stores salted repository/object keys,
+timestamped clear baselines, numeric text-line totals, and coverage state only.
+Public project suffixes use the same per-machine salt. It must not
+persist or project paths, remote/ref names, identities, messages, filenames,
+diff content, raw object IDs, subprocess output, or exceptions.
 Runtime-specific provider resources are not automatically safe public model
 identifiers. For example, a Pi application-profile reference can contain
 account-bearing segments. Such a value must never be projected verbatim or used

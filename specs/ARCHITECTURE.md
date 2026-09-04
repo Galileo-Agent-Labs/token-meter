@@ -150,8 +150,8 @@ allowlisted fields or discovered canonical identifiers.
 ## Client Interfaces
 
 The browser polls live state and renders all top-level review surfaces from
-`page.html`. Dashboard order is `Sessions → Daily → Models → Tools → Efficiency →
-Learn → Settings`; Sessions owns Current and All session modes. Efficiency derives
+`page.html`. Dashboard order is `Sessions → Spend → Models → Efficiency → Git →
+Learn → Tools → Settings`; Sessions owns Current and All session modes. Efficiency derives
 mechanical token-efficiency ratios and daily trends from the same runtime-scoped
 model aggregates. Its sortable model table defaults to spend descending and
 preserves unavailable and partial evidence. A Claude thinking-block observation
@@ -161,6 +161,21 @@ reuses those same aggregate formulas for a compact Output/$ and Reasoning ratio
 module. `/session` projects that selected source's bounded model statistics
 directly, so older All Sessions entries do not depend on the 60-row cross-session
 preview. Charts and model comparison remain on the top-level Efficiency route.
+Git reads bounded local remote-tracking reflogs. The installer seeds
+readable history in its invoking app's context, then the background service
+rechecks accessible repositories every five minutes. This preserves useful
+history when a macOS LaunchAgent lacks access to a protected folder without
+requesting broader permission. The service matches `update by push` entries to
+the repository's effective Git email, deduplicates hashed object identities,
+and aggregates a date-bounded 12-month maximum of numeric text additions and
+deletions against project/day covered spend. The public projection also joins
+already-aggregated daily output and reasoning totals to expose Output / $,
+pushed lines per 1K covered output tokens, spend-weighted coverage, and a
+trailing seven-day cost-intensity series. This association stays at
+project/day and selected-period scope; it does not attribute pushed code to a
+session or model. Public project discriminators use the ledger's per-machine
+salt. Clearing the ledger establishes a timestamped baseline so older reflogs
+do not repopulate it. The service does not contact remotes.
 
 Native companions never parse traces. macOS AppKit, Linux AppIndicator, and
 Windows NotifyIcon clients read the compact `/menubar` projection and use the
@@ -193,6 +208,13 @@ Provider quota checks are the only bounded network exception: each adapter uses
 the matching provider credential, fixed HTTPS endpoints, timeouts, response
 size limits, sanitized errors, and in-memory caching. No credential is copied to
 Token Meter storage or another provider.
+
+Git performs no network operation. Its SQLite ledger contains only salted
+repository/object keys, local observation timestamps and days, numeric text-line
+totals, and coverage state. Project paths, remote/ref names, Git identity,
+messages, filenames, diffs, raw object IDs, command output, and exceptions are
+never persisted or projected. Missing Git, identity, repository access, or
+reflog history remains partial or unavailable.
 
 `token_meter/telemetry/` is mapping-only. It contains no OpenTelemetry SDK,
 exporter, collector address, socket, file sink, subprocess, or background

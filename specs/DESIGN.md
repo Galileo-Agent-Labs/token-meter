@@ -274,6 +274,24 @@ card above the session budget. It keeps the same coverage and thinking-fallback
 semantics; daily charts and per-model comparison stay on the main Efficiency
 page.
 
+### Git Field
+
+Git uses three major surfaces: period overview, daily evidence, and project
+detail. The overview is one compact scorecard rather than a collection of hero
+cards. It keeps the period comparison, pushed lines, spend per 1K lines, and
+spend coverage in one aligned reading plane. Push days, measured
+repositories, and comparable projects sit in a quiet evidence strip beneath it.
+A linear evidence bar carries actual coverage and replaces decorative radial
+geometry. Partial coverage stays visibly partial and never becomes a positive or
+negative status score.
+
+The daily chart follows the overview and pairs pushed text lines with trailing
+seven-day cost intensity. It stands on its own without a secondary metric rail.
+The sortable project table is the final drill-down. Visible helper copy is
+limited to the product boundary; detailed metric definitions live in accessible
+field tooltips. Git does not attribute pushed work to a session or model and
+does not claim code quality or developer productivity.
+
 ### Session Instrument Card
 
 Each card is one selectable, reorderable instrument plate. Provider/runtime and activity status sit at the top without a colored left rail; the task name is the primary identity; cost, context, and speed share an aligned three-readout ledger. Context history is rendered as a small cyan bar horizon. Hover lifts the plate by 3px and focus uses a visible cyan outline. Cards use layered operational gradients but no decorative dial.

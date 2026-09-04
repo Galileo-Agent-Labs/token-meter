@@ -93,8 +93,8 @@ safe generic model label and are never used to guess a foundation model.
 1. Open **Sessions → Current sessions** and select an active run.
 2. Under **Run**, check cost, context pressure, Output/$, and Reasoning ratio.
    Add a session budget if the run needs an attention limit.
-3. After more sessions accumulate, use **Spend**, **Models**, **Tools**, and
-   **Efficiency** to review longer-term patterns.
+3. After more sessions accumulate, use **Spend**, **Models**, **Tools**,
+   **Efficiency**, and **Git** to review longer-term patterns.
 
 ## Product Tour
 
@@ -147,6 +147,26 @@ evidence stays labelled beside the numbers.
 <p align="center">
   <img src="images/efficiency.png" alt="Token Meter Efficiency page with output per dollar, reasoning ratio, context load, and output per execution" width="900">
 </p>
+
+### Git
+
+**Git** reads successful-push evidence already recorded by local repositories. It
+counts text additions plus deletions from matching-author changes and compares
+that volume with covered Token Meter spend by project and day. The headline
+shows Code pushed and Spend per 1K lines, followed by a previous-period
+comparison, daily trend, and spend-sorted project table. The chart inspector
+keeps exact added, deleted, daily Spend per 1K, and trailing seven-day Spend per
+1K values. Its cost-intensity line uses trailing seven-day totals to avoid tiny
+daily denominators dominating the scale. Spend-weighted coverage is shown
+before raw repository coverage.
+
+This requires `git`, not `gh`, and makes no remote request. Binary changes are
+excluded. The installer seeds readable history immediately; the background
+service rechecks accessible repositories every five minutes. A macOS-protected
+location can remain partial after that seed rather than triggering a folder
+permission prompt. History queries are capped at the latest 12 months. Clearing
+Git evidence history starts a new baseline, so older reflogs are not reimported.
+Git is a mechanical signal, not a code-quality or productivity score.
 
 ### Configure budgets and agent access
 

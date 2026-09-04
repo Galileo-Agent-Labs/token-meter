@@ -160,6 +160,18 @@ if [[ -n "$commit" ]]; then
   printf '%s\n' "$commit" > "$INSTALL_ROOT/INSTALLED_REVISION"
 fi
 
+delivery_bootstrap_json="$(
+  cd "$INSTALL_ROOT"
+  PYTHONPATH="$INSTALL_ROOT" python3 -c \
+    'import json; from token_meter.app import bootstrap_git_delivery; print(json.dumps(bootstrap_git_delivery()))' \
+    2>/dev/null || true
+)"
+if [[ "$delivery_bootstrap_json" == *'"ok": true'* ]]; then
+  echo "Indexed available local Git delivery history."
+else
+  echo "Local Git delivery history will remain partial until a readable repository is observed."
+fi
+
 "$INSTALL_ROOT/scripts/install-launch-agent" server-only
 
 health_json=""

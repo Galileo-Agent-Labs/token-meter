@@ -32,6 +32,12 @@ It should not expose the dashboard to public networks. The project should not
 send logs, prompts, responses, project paths, token counts, or costs to external
 services.
 
+Runtime-specific provider resources are not automatically safe public model
+identifiers. For example, a Pi application-profile reference can contain
+account-bearing segments. Such a value must never be projected verbatim or used
+to infer a priced foundation model; it is replaced with a non-account generic
+label before dashboard, native, or MCP projection.
+
 The menu-bar quota view is a bounded exception to otherwise local processing.
 It makes read-only account-usage requests to the provider matching the local
 credential: Codex through its local app-server or signed-in usage API, Claude

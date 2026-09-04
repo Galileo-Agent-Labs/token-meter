@@ -227,7 +227,7 @@ require `sudo` or security-control changes.
 ## Data and Evidence
 
 Token Meter reads local runtime stores: JSONL traces for Claude, Codex, Cursor,
-and Kiro; read-only SQLite enrichment for Cursor and OpenCode; and
+Kiro, and Pi; read-only SQLite enrichment for Cursor and OpenCode; and
 runtime-owned metadata needed to join a visible session to its trace.
 
 Discovery and parsing are runtime adapters. Operating-system paths are platform
@@ -236,6 +236,22 @@ its source is missing, locked, corrupt, or unsupported. Opening a historical
 session without new trace activity does not make it current. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for path precedence, data flow, cache
 invalidation, and extension contracts.
+
+### Pi coding-agent sessions
+
+Pi discovery reads only Pi-owned JSONL session files. Its default root is
+`~/.pi/agent`; set `PI_CODING_AGENT_DIR` when Pi stores its local agent files
+elsewhere. A file must have the expected Pi session header before Token Meter
+will show it. The adapter does not import cloud transcripts, scan arbitrary
+directories, or project message, reasoning, or tool-payload content.
+
+Pi sessions use a generic content-free title. Recorded input, output, cache,
+cost, and tool-call evidence can be shown when present. Wait is inferred from
+the user-to-assistant timestamps. Context pressure, output speed, cache savings,
+and semantic token classification remain unavailable because Pi's records do
+not establish them. A provider resource identifier, such as an
+application-profile reference, is replaced with a safe generic model label;
+Token Meter does not infer or price a foundation model from it.
 
 ### Costs and estimates
 
@@ -247,8 +263,12 @@ all history.
 Codex costs use public API-equivalent rates and remain estimates because
 subscription billing can differ. Cursor input, output, pace, and cost are local
 proxies derived from persisted evidence and remain labeled `est`; cache and
-hidden model work may be unavailable. Token Meter reports recorded evidence,
-not a pre-flight prediction.
+hidden model work may be unavailable. Pi cost is the local estimate persisted
+in its session record, never a Token Meter price-table lookup. Token Meter does
+not display Pi application-profile identifiers, and leaves Pi context pressure,
+semantic token classification, and cache savings unavailable when the trace
+does not record that evidence.
+Token Meter reports recorded evidence, not a pre-flight prediction.
 
 ## Privacy
 
@@ -290,6 +310,14 @@ and a trace.
 Desktop attribution depends on current metadata containing a joinable session
 identifier. If metadata is missing or uses an unknown schema, Token Meter keeps
 the authoritative trace and uses the narrower label rather than guessing.
+
+### Pi sessions do not appear
+
+Run a normal Pi coding-agent session, then confirm that its local JSONL evidence
+is under `~/.pi/agent` or the directory named by `PI_CODING_AGENT_DIR`. Token
+Meter ignores files without a Pi session header, malformed files, symlinks, and
+cloud-only conversations. It does not need an API key or a provider account to
+read local Pi evidence.
 
 ### Source changes do not appear
 

@@ -3,7 +3,7 @@
 </p>
 
 Token Meter is a local-first observability dashboard for AI coding agents. It
-turns session evidence from Claude, Codex, Cursor, OpenCode, and Kiro into one
+turns session evidence from Claude, Codex, Cursor, OpenCode, Kiro, and Pi into one
 view of what happened, what it cost, and where time went—so you can decide
 whether to continue, intervene, compare, or investigate a run.
 
@@ -58,7 +58,7 @@ troubleshooting, see the [User guide](specs/USER_GUIDE.md).
 ## Coverage
 
 **Runtimes:** Claude Code and Desktop Agent/Cowork, Codex CLI and desktop,
-Cursor Agent/Composer, OpenCode, and Kiro.
+Cursor Agent/Composer, OpenCode, Kiro, and Pi.
 
 | Platform | Status | Experience |
 | --- | --- | --- |
@@ -72,6 +72,21 @@ unavailable instead of appearing as a misleading zero.
 Token Meter works when the agent keeps session evidence on your machine in a
 supported local store. Sessions that exist only in a cloud-hosted service may
 not be available to Token Meter.
+
+### Pi coding-agent sessions
+
+Pi support reads its local session JSONL files and exposes only content-free
+usage evidence. When a Pi record includes it, Token Meter shows recorded input,
+output, cache-read, cache-write, local cost, and tool-call evidence. Wait time
+is inferred from the recorded user-to-assistant timestamps; it is not a
+measured output-speed signal.
+
+Pi does not provide every dashboard signal. Context-window pressure, output
+speed, cache savings, and semantic token classification remain unavailable
+rather than appearing as zero. Pi's persisted cost is already a local estimate,
+so Token Meter does not look up a provider price. Provider resource identifiers,
+including account-bearing application-profile references, are replaced with a
+safe generic model label and are never used to guess a foundation model.
 
 ## First Five Minutes
 
@@ -187,9 +202,8 @@ costs, or derived analytics. Do not expose the localhost dashboard publicly.
 
 Costs and selected token values can be estimates. Codex cost uses public
 API-equivalent rates, which can differ from subscription billing; Cursor usage
-includes local proxies where authoritative values are unavailable. Provider
-limit checks make bounded read-only requests using the matching provider's
-existing sign-in.
+includes local proxies where authoritative values are unavailable; Pi cost are
+estimates based on model API pricing.
 
 The optional MCP returns bounded derived evidence, not prompts, responses,
 reasoning, tool contents, credentials, settings, or trace paths. A result sent

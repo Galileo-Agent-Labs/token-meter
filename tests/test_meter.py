@@ -275,6 +275,7 @@ class CursorTraceTests(unittest.TestCase):
                     mock.patch.object(meter, "CODEX_INDEX", str(root / "no-index")), \
                     mock.patch.object(meter, "KIRO_SESSIONS", str(root / "no-kiro")), \
                     mock.patch.object(meter, "KIRO_AGENT_STORAGE", str(root / "no-kiro-agent")), \
+                    mock.patch.object(meter, "PI_AGENT_DIR", str(root / "no-pi-agent")), \
                     mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", []), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}):
                 sources = meter.all_session_sources()
@@ -7985,7 +7986,7 @@ console.log(JSON.stringify({history,html,firstRunHtml}));
             "<span>Context in use</span>",
             ">Context in use</div><div class=\"v mono\" id=ov-context>",
             ">Context in use</div><div class=\"v mono\" id=preview-context>",
-            "costAvailable&&cacheAvailable?money(cache.saved||s.cache_saved||0):'--'",
+            "cacheSavingsAvailable?money(cache.saved||s.cache_saved||0):'--'",
             "const cardDescription=`${contextSpark.summary}",
         ):
             self.assertIn(marker, self.page)
@@ -11695,7 +11696,7 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(stored["budgets"]["monthly_total"], 80)
         self.assertEqual(
             stored["budgets"]["allocations"],
-            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 0, "kiro": 0},
+            {"claude": 50, "codex": 30, "cursor": 0, "opencode": 0, "kiro": 0, "pi": 0},
         )
         self.assertIn("model_pricing", stored)
 
@@ -11719,13 +11720,13 @@ class MonthlyBudgetTests(unittest.TestCase):
         self.assertEqual(loaded["monthly_total"], 0)
         self.assertEqual(
             loaded["allocations"],
-            {"claude": 0, "codex": 0, "cursor": 0, "opencode": 0, "kiro": 0},
+            {"claude": 0, "codex": 0, "cursor": 0, "opencode": 0, "kiro": 0, "pi": 0},
         )
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["budgets"]["monthly_total"], 1490)
         self.assertEqual(
             saved["budgets"]["allocations"],
-            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 0, "kiro": 0},
+            {"claude": 0, "codex": 1490, "cursor": 0, "opencode": 0, "kiro": 0, "pi": 0},
         )
 
     def test_monthly_rollup_keeps_runtime_costs_and_partial_coverage(self):
@@ -11844,6 +11845,173 @@ class McpDocumentationContractTests(unittest.TestCase):
             self.assertNotIn(prohibited_claim, combined)
 
 
+class PiDocumentationTests(unittest.TestCase):
+    def test_docs_explain_pi_evidence_and_privacy_boundaries(self):
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text()
+        guide = (root / "specs/USER_GUIDE.md").read_text()
+        architecture = (root / "specs/ARCHITECTURE.md").read_text()
+        security = (root / "specs/SECURITY.md").read_text()
+
+        self.assertIn("Pi coding-agent sessions", readme)
+        self.assertIn("Wait time\nis inferred", readme)
+        self.assertIn("semantic token classification", readme)
+        self.assertIn("PI_CODING_AGENT_DIR", guide)
+        self.assertIn("Pi coding-agent sessions", guide)
+        self.assertIn("does not import cloud transcripts", guide)
+        self.assertIn("Pi adapter", architecture)
+        self.assertIn("application-profile", architecture)
+        self.assertIn("application-profile", security)
+
+
+class PiRuntimeTests(unittest.TestCase):
+    """Pi sessions are local JSONL records with no content projection."""
+
+    def _write_session(self, agent_root, *, legacy=False, provider="anthropic",
+                       model="claude-test"):
+        directory = Path(agent_root) if legacy else (
+            Path(agent_root) / "sessions" / "--repo--"
+        )
+        directory.mkdir(parents=True)
+        path = directory / "pi-session.jsonl"
+        rows = [
+            {"type": "session", "version": 1, "id": "pi-session",
+             "timestamp": "2026-09-04T10:00:00Z", "cwd": "/repo"},
+            {"type": "model_change", "id": "model-change", "parentId": None,
+             "timestamp": "2026-09-04T10:00:01Z", "provider": provider,
+             "modelId": model},
+            {"type": "message", "id": "user", "parentId": "model-change",
+             "timestamp": "2026-09-04T10:00:02Z",
+             "message": {"role": "user", "content": []}},
+            {"type": "message", "id": "assistant", "parentId": "user",
+             "timestamp": "2026-09-04T10:00:05Z", "message": {
+                "role": "assistant", "model": model, "provider": provider,
+                 "content": [{"type": "toolCall", "id": "call", "name": "read",
+                              "arguments": {}}],
+                 "usage": {"input": 100, "output": 20, "cacheRead": 10,
+                           "cacheWrite": 5, "totalTokens": 135,
+                           "cost": {"input": 0.001, "output": 0.002,
+                                    "cacheRead": 0.0001, "cacheWrite": 0.0002}},
+             }},
+            {"type": "message", "id": "result", "parentId": "assistant",
+             "timestamp": "2026-09-04T10:00:06Z",
+             "message": {"role": "toolResult", "toolCallId": "call", "toolName": "read"}},
+        ]
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        return path
+
+    def test_discovers_and_projects_pi_usage_as_a_local_cost_estimate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            self._write_session(root)
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}), \
+                    mock.patch.object(meter, "_RUNTIME_REGISTRY", None):
+                sources = meter.pi_session_sources()
+                state = meter.recompute(sources[0])
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0]["provider"], "pi")
+        self.assertEqual(sources[0]["model"], "claude-test")
+        self.assertEqual(sources[0]["model_provider"], "anthropic")
+        self.assertEqual(sources[0]["project"], "/repo")
+        self.assertEqual(sources[0]["title"], "Pi session")
+        self.assertEqual(state["tokens"], {
+            "input": 100, "cache_write": 5, "cache_read": 10, "output": 20,
+        })
+        self.assertEqual(state["total_tokens"], 135)
+        self.assertAlmostEqual(state["total_cost"], 0.0033)
+        self.assertTrue(state["cost_approx"])
+        self.assertTrue(state["availability"]["cost"])
+        self.assertFalse(state["availability"]["context"])
+        self.assertEqual(state["context"]["latest"], 0)
+        self.assertFalse(state["semantic_available"])
+        self.assertEqual(state["semantic"], {
+            "reasoning": 0, "output": 0, "retrieval": 0, "coordination": 0,
+        })
+        self.assertFalse(state["cache"]["savings_available"])
+        self.assertIsNone(state["cache"]["saved"])
+        self.assertIsNone(state["cache_saved"])
+        self.assertTrue(state["wait_time"]["available"])
+        self.assertEqual(state["executions"][0]["tools"][0]["name"], "read")
+        self.assertNotIn("arguments", json.dumps(state))
+
+    def test_redacts_pi_bedrock_application_profile_without_inferring_a_model(self):
+        raw_profile = (
+            "arn:aws:bedrock:us-west-2:123456789012:"
+            "application-inference-profile/private-profile"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            self._write_session(root, provider="amazon-bedrock", model=raw_profile)
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}), \
+                    mock.patch.object(meter, "_RUNTIME_REGISTRY", None):
+                source = meter.pi_session_sources()[0]
+                state = meter.recompute(source)
+                summary = meter.pi_summary(source)
+
+        self.assertEqual(source["model"], "aws-bedrock-profile")
+        self.assertEqual(source["model_provider"], "amazon")
+        public = json.dumps({"source": source, "state": state, "summary": summary})
+        self.assertNotIn(raw_profile, public)
+        self.assertNotIn("123456789012", public)
+        self.assertTrue(state["cost_approx"])
+        self.assertTrue(summary["wait_time"]["available"])
+
+    def test_keeps_pi_cache_savings_unavailable_without_a_price_lookup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            self._write_session(root)
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}), \
+                    mock.patch.object(meter, "_RUNTIME_REGISTRY", None):
+                source = meter.pi_session_sources()[0]
+                with mock.patch.object(
+                    meter, "price_for",
+                    side_effect=AssertionError("Pi must not infer cache savings from pricing"),
+                ):
+                    state = meter.recompute(source)
+
+        self.assertFalse(state["cache"]["savings_available"])
+        self.assertIsNone(state["cache"]["saved"])
+
+    def test_discovers_legacy_pi_sessions_at_the_agent_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            self._write_session(root, legacy=True)
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}):
+                sources = meter.pi_session_sources()
+
+        self.assertEqual([source["id"] for source in sources], ["pi-session"])
+
+    def test_ignores_non_pi_jsonl_without_poisoning_discovery_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            root.mkdir()
+            (root / "not-a-pi-session.jsonl").write_text("{}\n")
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}):
+                self.assertEqual(meter.pi_session_sources(), [])
+                self.assertEqual(meter.pi_session_sources(), [])
+
+    def test_keeps_cost_unavailable_when_a_pi_turn_lacks_its_local_estimate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "agent"
+            path = self._write_session(root)
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            del rows[3]["message"]["usage"]["cost"]
+            path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+            with mock.patch.object(meter, "PI_AGENT_DIR", str(root)), \
+                    mock.patch.object(meter, "_pi_native_adapters", {}), \
+                    mock.patch.object(meter, "_RUNTIME_REGISTRY", None):
+                state = meter.recompute(meter.pi_session_sources()[0])
+
+        self.assertFalse(state["availability"]["cost"])
+        self.assertEqual(state["total_cost"], 0)
+
+
 class OpenCodeTests(unittest.TestCase):
     """OpenCode is discovered from its read-only SQLite database."""
 
@@ -11937,6 +12105,7 @@ class OpenCodeTests(unittest.TestCase):
                     mock.patch.object(meter, "CURSOR_PROJECTS", str(root / "no-cursor")), \
                     mock.patch.object(meter, "KIRO_SESSIONS", str(root / "no-kiro")), \
                     mock.patch.object(meter, "KIRO_AGENT_STORAGE", str(root / "no-kiro-agent")), \
+                    mock.patch.object(meter, "PI_AGENT_DIR", str(root / "no-pi-agent")), \
                     mock.patch.object(meter, "CLAUDE_DESKTOP_DATA_ROOTS", []), \
                     mock.patch.object(meter, "claude_desktop_index", return_value={}):
                 sources = meter.all_session_sources()

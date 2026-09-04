@@ -570,7 +570,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <div class=usageDetailsBody>
   <div id=session-token-split-home>
   <div class="card pad usageSplit" id=session-token-split-module>
-   <div class=splithead><div class="label fieldtip" tabindex=0 title="Semantic split of where the current log's tokens went." data-tip="Semantic split of where the current log's tokens went.">Where tokens go</div><span class=hint>semantic split</span></div>
+   <div class=splithead><div class="label fieldtip" tabindex=0 title="Semantic split of where the current log's tokens went." data-tip="Semantic split of where the current log's tokens went.">Where tokens go</div><span class=hint id=semhint>semantic split</span></div>
    <div class=bar id=sembar></div>
    <div class=legend>
     <span class=fieldtip tabindex=0 title="Tokens associated with model reasoning or thinking output." data-tip="Tokens associated with model reasoning or thinking output."><i class=dot style=background:var(--reason)></i>reasoning</span>
@@ -3462,7 +3462,7 @@ function sessionThroughputNote(throughput){
 
 function renderCurrentRun(s){
 	 const source=s.source||{},throughput=sessionDisplayThroughput(s),wait=s.wait_time||{},context=s.context||{},tools=s.tools||{},cache=s.cache||{},timing=s.timing||{};
- const costAvailable=metricAvailable(s,'cost'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput');
+ const costAvailable=metricAvailable(s,'cost'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput'),cacheSavingsAvailable=costAvailable&&cacheAvailable&&cache.savings_available!==false;
  const contextPct=Math.max(0,Math.min(1,Number(context.latest_pct)||0)),toolResultTokens=tools.total_output_tokens||0;
  const alert=sessionAlert(s),frozen=!!s.ended,cursorEstimate=s.provider==='cursor',cap=dollarInputValue('budget',Infinity),costPerTask=s.analyses?.cost_per_task||{};
  $('preview-provider').innerHTML=runtimeBadgeContent(s,source.label||s.provider||'source');
@@ -3495,13 +3495,13 @@ function renderCurrentRun(s){
  $('preview-tool-results-note').textContent=`${f(tools.total_calls||0)} calls · estimated returned tokens`;
  $('preview-cache-rate').textContent=cacheAvailable?pct(cache.input_share||0):'--';
  $('preview-cache-rate-note').textContent=cacheAvailable?`${f(cache.total||0)} cached · ${f(cache.fresh||0)} fresh`:'cache accounting unavailable';
- $('preview-cache-saved').textContent=costAvailable&&cacheAvailable?money(cache.saved||s.cache_saved||0):'--';
- $('preview-cache-saved-note').textContent=costAvailable&&cacheAvailable?`${money(cache.cost||0)} cache cost · avoided spend`:'cache savings unavailable';
+ $('preview-cache-saved').textContent=cacheSavingsAvailable?money(cache.saved||s.cache_saved||0):'--';
+ $('preview-cache-saved-note').textContent=cacheSavingsAvailable?`${money(cache.cost||0)} cache cost · avoided spend`:'cache savings unavailable';
  $('preview-burn').textContent=costAvailable&&timing.duration_available?money(s.burn_usd_min)+(cursorEstimate?' est':''):'--';
  $('preview-burn-note').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tokens/min · active`:(timing.duration_available?'billing unavailable':'execution timing unavailable');
  setCostValue('preview-cost-task',money(costPerTask.per_task||0)+(cursorEstimate?' est':''),costAvailable);
  $('preview-cost-task-note').textContent=costAvailable?`${f(costPerTask.completed||0)} completed tasks`:'billing unavailable';
- const startMessage=sessionStartMessage(s)||'No user message captured.';
+ const startMessage=sessionStartMessage(s)||(s.provider==='pi'?'Pi message content is not captured.':'No user message captured.');
  $('preview-start').textContent=startMessage;
  $('preview-start').dataset.tip=startMessage;
  $('preview-start').setAttribute('aria-description',startMessage);
@@ -3529,6 +3529,7 @@ function renderSession(s){
  const costAvailable=metricAvailable(s,'cost'),tokensAvailable=metricAvailable(s,'tokens'),inputAvailable=metricAvailable(s,'input_tokens'),outputAvailable=metricAvailable(s,'output_tokens'),cacheAvailable=metricAvailable(s,'cache'),throughputAvailable=metricAvailable(s,'throughput'),cursorEstimate=s.provider==='cursor';
  setCostValue('cost',money(s.total_cost)+(s.cost_approx?' est':''),costAvailable);
  const tok=s.tokens||{}, sem=s.semantic||{}, tools=s.tools||{}, cache=s.cache||{}, latestCache=cache.latest||{}, timing=s.timing||{};
+ const cacheSavingsAvailable=costAvailable&&cacheAvailable&&cache.savings_available!==false;
  $('cost-tip').innerHTML=costTipHtml(s,tok);
  const inputTokens=(tok.input||0)+(tok.cache_read||0)+(tok.cache_write||0), outputTokens=tok.output||0;
 	 const thinkingTokens=sem.reasoning||0, toolCallTokens=tools.total_output_tokens||0, throughput=sessionDisplayThroughput(s);
@@ -3547,17 +3548,18 @@ function renderSession(s){
  $('think-toksm').textContent=cursorEstimate?`${f(s.analyses?.reasoning?.think_turns||0)} reasoning exec · hidden reasoning excluded`:outputAvailable?f(s.analyses?.reasoning?.think_turns||0)+' reasoning exec':`${f(s.analyses?.reasoning?.think_turns||0)} reasoning exec · duration only`;
  $('toolcall-tok').textContent=f(toolCallTokens);
  $('toolcall-toksm').textContent=f(tools.total_calls||0)+' calls returned';
- $('cache-saved').textContent=costAvailable&&cacheAvailable?money(cache.saved||s.cache_saved||0):'--';
- $('cache-savedsm').textContent=costAvailable&&cacheAvailable?`${money(cache.cost||0)} cache cost`:'cache savings unavailable';
+ $('cache-saved').textContent=cacheSavingsAvailable?money(cache.saved||s.cache_saved||0):'--';
+ $('cache-savedsm').textContent=cacheSavingsAvailable?`${money(cache.cost||0)} cache cost`:'cache savings unavailable';
  $('burn').textContent=costAvailable&&timing.duration_available?money(s.burn_usd_min)+(cursorEstimate?' est':''):'--';
  $('burnsm').textContent=costAvailable&&timing.duration_available?`${f(s.burn_tok_min)} tok/min · active${cursorEstimate?' · local proxy':''}`:(timing.duration_available?'active timing available · billing unavailable':'execution timing unavailable');
  setCostValue('cpt',money(s.analyses?.cost_per_task?.per_task||0)+(cursorEstimate?' est':''),costAvailable);
  $('cptsm').textContent=costAvailable?f(s.analyses?.cost_per_task?.completed||0)+` completed${cursorEstimate?' · local proxy':''}`:'billing unavailable';
  renderOverview(s); renderCurrentOptimization(s); renderCurrentRun(s); renderSessionEfficiency(s);
 
- const semTot=Object.values(sem).reduce((a,b)=>a+(b||0),0)||1;
+ const semanticAvailable=s.semantic_available!==false,semTot=Object.values(sem).reduce((a,b)=>a+(b||0),0)||1;
  const segs=[['reasoning','var(--reason)'],['output','var(--output)'],['retrieval','var(--retrieval)'],['coordination','var(--coord)']];
- $('sembar').innerHTML=tokensAvailable?segs.map(([k,c])=>{const w=100*(sem[k]||0)/semTot; if(w<0.6)return''; return `<span style="width:${w}%;background:${c}">${w>8?f(sem[k]):''}</span>`;}).join(''):'';
+ $('semhint').textContent=semanticAvailable?'semantic split':'semantic data unavailable';
+ $('sembar').innerHTML=tokensAvailable&&semanticAvailable?segs.map(([k,c])=>{const w=100*(sem[k]||0)/semTot; if(w<0.6)return''; return `<span style="width:${w}%;background:${c}">${w>8?f(sem[k]):''}</span>`;}).join(''):'';
  drawIO(s.series||[]);
 
  const liveView=!pinned;

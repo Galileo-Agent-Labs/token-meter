@@ -175,6 +175,10 @@ from token_meter.runtimes.kiro import (
     KiroRuntimeAdapterProxy,
     default_agent_storage_root as _default_kiro_agent_storage_root,
 )
+from token_meter.runtimes.pi import (
+    PiRuntimeAdapter,
+    PiRuntimeAdapterProxy,
+)
 from token_meter.runtimes.path_cache import BoundedPathCache
 from token_meter.runtimes.registry import RuntimeRegistry
 from token_meter.mcp.service import MCPQueryService
@@ -233,6 +237,9 @@ KIRO_SESSIONS = os.path.abspath(os.path.expanduser(
 KIRO_AGENT_STORAGE = _default_kiro_agent_storage_root(
     os.path.expanduser("~"), os.environ
 )
+PI_AGENT_DIR = os.path.abspath(os.path.expanduser(
+    os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")
+))
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
@@ -265,7 +272,7 @@ MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICING_MTIME_TTL_S = 0.25
 MAX_SESSION_MODEL_IDENTITIES = 2_048
 SESSION_MODEL_IDENTITY_KEY_RE = re.compile(r"^[a-f0-9]{64}$")
-BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode", "kiro")
+BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode", "kiro", "pi")
 DEFAULT_RUNTIME_BUDGET = 0.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
 DEFAULT_SESSION_BUDGET = 10.0
@@ -2565,6 +2572,56 @@ def _kiro_native_adapter():
     return _kiro_adapter_for()
 
 
+_pi_native_adapters = {}
+
+
+def _pi_compatibility():
+    return {
+        "add_model_daily": add_model_daily,
+        "add_model_summary": add_model_summary,
+        "analysis_block": analysis_block,
+        "build_state": build_state,
+        "metric_availability": metric_availability,
+        "summarize_tool_evidence": summarize_tool_evidence,
+        "summary_row": summary_row,
+        "tool_identity": tool_identity,
+        "tool_summary": tool_summary,
+        "trace_event": trace_event,
+    }
+
+
+def _pi_adapter_for(agent_dir=None):
+    path = os.path.abspath(os.path.expanduser(agent_dir or PI_AGENT_DIR))
+    adapter = _pi_native_adapters.get(path)
+    if adapter is None:
+        adapter = PiRuntimeAdapter(
+            path,
+            project_resolver=home_shorten,
+            compatibility=_pi_compatibility(),
+            path_cache=_recursive_path_cache,
+        )
+        _pi_native_adapters[path] = adapter
+        if len(_pi_native_adapters) > 8:
+            oldest = next(iter(_pi_native_adapters))
+            if oldest != path:
+                _pi_native_adapters.pop(oldest, None)
+    return adapter
+
+
+def _pi_native_adapter():
+    return _pi_adapter_for()
+
+
+def pi_session_sources(agent_dir=None):
+    return list(_pi_adapter_for(agent_dir).discover_legacy(
+        DiscoveryContext(home=os.path.expanduser("~"))
+    ))
+
+
+def recompute_pi(source):
+    return _pi_native_adapter().recompute_legacy(source)
+
+
 def opencode_db_path():
     path = os.path.expanduser(OPENCODE_DB)
     return path if os.path.isabs(path) else os.path.join(OPENCODE_DATA_ROOT, path)
@@ -4502,6 +4559,7 @@ def runtime_registry():
                 CursorRuntimeAdapterProxy(lambda: _cursor_native_adapter()),
                 OpenCodeRuntimeAdapterProxy(lambda: _opencode_native_adapter()),
                 KiroRuntimeAdapterProxy(lambda: _kiro_native_adapter()),
+                PiRuntimeAdapterProxy(lambda: _pi_native_adapter()),
             ))
     return _RUNTIME_REGISTRY
 
@@ -4665,7 +4723,10 @@ def build_state(source, tot, cost, total_tokens, total_cost, series, executions,
     minutes = max(active_seconds / 60.0, 1e-9)
     cache_in = tot["cache_read"] + tot["cache_write"]
     cache_ratio = (tot["cache_read"] / cache_in) if cache_in else 0.0
-    cache = cache_block(tot, cost, executions, source["provider"], primary_model)
+    cache = cache_block(
+        tot, cost, executions, source["provider"], primary_model,
+        savings_available=source.get("cache_savings_available") is not False,
+    )
     tool_data = tool_summary(executions)
     context_window = (source.get("context_window") or
                       max((e.get("context_window") or 0 for e in executions), default=0) or None)
@@ -4863,7 +4924,7 @@ def cache_savings(tot, provider, model, executions=None):
     )
 
 
-def cache_block(tot, cost, executions, provider, model):
+def cache_block(tot, cost, executions, provider, model, savings_available=True):
     fresh = int(tot.get("input", 0) or 0)
     read = int(tot.get("cache_read", 0) or 0)
     write = int(tot.get("cache_write", 0) or 0)
@@ -4872,18 +4933,22 @@ def cache_block(tot, cost, executions, provider, model):
     latest_cache = int(latest_tokens.get("cache", 0) or 0)
     latest_read = int(latest_tokens.get("cache_read", latest_cache) or 0)
     latest_write = int(latest_tokens.get("cache_write", 0) or 0)
-    return _domain_cache_metrics(
+    result = _domain_cache_metrics(
         fresh=fresh,
         read=read,
         write=write,
         read_cost=cost.get("cache_read", 0.0),
         write_cost=cost.get("cache_write", 0.0),
-        saved=cache_savings(tot, provider, model, executions),
+        saved=cache_savings(tot, provider, model, executions) if savings_available else 0.0,
         latest_input=latest_input,
         latest_cache=latest_cache,
         latest_read=latest_read,
         latest_write=latest_write,
     )
+    result["savings_available"] = bool(savings_available)
+    if not savings_available:
+        result["saved"] = None
+    return result
 
 
 def build_insights(tot, cost, total_cost, cache_ratio, biggest, n_turns, an,
@@ -5089,6 +5154,10 @@ def opencode_summary(source, objs=None):
 
 def kiro_summary(source, objs=None):
     return _kiro_native_adapter().summarize_legacy(source, objs)
+
+
+def pi_summary(source, objs=None):
+    return _pi_native_adapter().summarize_legacy(source, objs)
 
 
 def session_summary(source, opencode_conn=None):
@@ -6863,6 +6932,8 @@ def _source_inventory_roots():
         CURSOR_PROJECTS,
         KIRO_SESSIONS,
         KIRO_AGENT_STORAGE,
+        PI_AGENT_DIR,
+        os.path.join(PI_AGENT_DIR, "sessions"),
     )
 
 

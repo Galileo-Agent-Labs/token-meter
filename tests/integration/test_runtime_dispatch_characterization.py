@@ -10,13 +10,14 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
     def test_runtime_registry_has_the_current_runtimes_in_discovery_order(self):
         self.assertEqual(
             meter.runtime_registry().runtime_ids,
-            ("claude", "codex", "cursor", "opencode", "kiro"),
+            ("claude", "codex", "cursor", "opencode", "kiro", "pi"),
         )
         self.assertNotIsInstance(meter.runtime_registry().get("claude"), LegacyRuntimeAdapter)
         self.assertNotIsInstance(meter.runtime_registry().get("codex"), LegacyRuntimeAdapter)
         self.assertNotIsInstance(meter.runtime_registry().get("cursor"), LegacyRuntimeAdapter)
         self.assertNotIsInstance(meter.runtime_registry().get("opencode"), LegacyRuntimeAdapter)
         self.assertNotIsInstance(meter.runtime_registry().get("kiro"), LegacyRuntimeAdapter)
+        self.assertNotIsInstance(meter.runtime_registry().get("pi"), LegacyRuntimeAdapter)
 
     def test_claude_routes_through_the_native_adapter(self):
         source = {"provider": "claude", "id": "claude-session"}
@@ -73,6 +74,17 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
 
         adapter.load.assert_called_once()
 
+    def test_pi_routes_through_the_native_adapter(self):
+        source = {"provider": "pi", "id": "pi-session"}
+        expected = {"provider": "pi", "marker": object()}
+        adapter = mock.Mock()
+        adapter.load.return_value = expected
+
+        with mock.patch.object(meter, "_pi_native_adapter", return_value=adapter):
+            self.assertIs(meter.recompute(source), expected)
+
+        adapter.load.assert_called_once()
+
     def test_string_source_is_resolved_before_runtime_dispatch(self):
         source = {"provider": "codex", "id": "session-1"}
         expected = {"provider": "codex"}
@@ -94,7 +106,7 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
     def test_discovery_routes_each_runtime_once_in_registry_order(self):
         rows = {
             runtime_id: {"provider": runtime_id, "id": runtime_id + "-session"}
-            for runtime_id in ("claude", "codex", "cursor", "opencode", "kiro")
+            for runtime_id in ("claude", "codex", "cursor", "opencode", "kiro", "pi")
         }
         opencode_adapter = mock.Mock()
         opencode_adapter.discover_legacy.return_value = (rows["opencode"],)
@@ -106,6 +118,8 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
         claude_adapter.discover_legacy.return_value = (rows["claude"],)
         kiro_adapter = mock.Mock()
         kiro_adapter.discover_legacy.return_value = (rows["kiro"],)
+        pi_adapter = mock.Mock()
+        pi_adapter.discover_legacy.return_value = (rows["pi"],)
         with mock.patch.object(
             meter, "_claude_native_adapter", return_value=claude_adapter
         ), mock.patch.object(
@@ -120,17 +134,21 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
             meter, "_opencode_native_adapter", return_value=opencode_adapter
         ), mock.patch.object(
             meter, "_kiro_native_adapter", return_value=kiro_adapter
+        ), mock.patch.object(
+            meter, "_pi_native_adapter", return_value=pi_adapter
         ):
             discovered = meter.all_session_sources()
 
         self.assertEqual(discovered, [
             rows["claude"], rows["codex"], rows["cursor"], rows["opencode"], rows["kiro"],
+            rows["pi"],
         ])
         claude_adapter.discover_legacy.assert_called_once()
         codex_adapter.discover_legacy.assert_called_once()
         cursor_adapter.discover_legacy.assert_called_once()
         opencode_adapter.discover_legacy.assert_called_once()
         kiro_adapter.discover_legacy.assert_called_once()
+        pi_adapter.discover_legacy.assert_called_once()
 
     def test_one_discovery_failure_returns_other_runtimes_and_bounded_status(self):
         codex_source = {"provider": "codex", "id": "codex-session"}
@@ -144,6 +162,8 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
         claude_adapter.discover_legacy.side_effect = RuntimeError("/private/sentinel")
         kiro_adapter = mock.Mock()
         kiro_adapter.discover_legacy.return_value = ()
+        pi_adapter = mock.Mock()
+        pi_adapter.discover_legacy.return_value = ()
         with mock.patch.object(
             meter, "_claude_native_adapter", return_value=claude_adapter
         ), mock.patch.object(
@@ -154,6 +174,8 @@ class LegacyRuntimeDispatchCharacterizationTests(unittest.TestCase):
             meter, "_opencode_native_adapter", return_value=opencode_adapter
         ), mock.patch.object(
             meter, "_kiro_native_adapter", return_value=kiro_adapter
+        ), mock.patch.object(
+            meter, "_pi_native_adapter", return_value=pi_adapter
         ):
             discovered = meter.all_session_sources()
 

@@ -716,6 +716,177 @@ class CodexRuntimeAdapterTests(unittest.TestCase):
         self.assertNotEqual(before, after_trace)
         self.assertNotEqual(after_trace, after_index)
 
+    def test_auto_review_model_requires_an_actual_direct_parent_model(self):
+        self._write_trace("identity-root", [
+            self._session_meta("identity-root-1"),
+            self._turn(),
+        ], mtime=10)
+        self._write_trace("identity-middle", [
+            self._session_meta("identity-middle-1", parent_thread_id="identity-root-1"),
+            self._turn(model="codex-auto-review"),
+        ], mtime=20)
+        leaf_path = self._write_trace("identity-leaf", [
+            self._session_meta("identity-leaf-1", parent_thread_id="identity-middle-1"),
+            self._turn(model="codex-auto-review"),
+        ], mtime=30)
+
+        sources = {
+            source["path"]: source
+            for source in self.adapter.discover_legacy(self.context)
+        }
+
+        middle = next(
+            source for source in sources.values()
+            if source["physical_trace_id"] == "identity-middle-1"
+        )
+        leaf = sources[str(leaf_path)]
+        self.assertEqual(middle["model"], "gpt-test")
+        self.assertEqual(middle["model_resolution"], "verified_parent")
+        self.assertEqual(leaf["model"], "unknown-model")
+        self.assertEqual(leaf["model_resolution"], "unresolved")
+
+    def test_auto_review_model_rejects_a_direct_parent_without_a_model(self):
+        self._write_trace("identity-model-less-parent", [
+            self._session_meta("identity-model-less-parent-1"),
+        ], mtime=10)
+        child_path = self._write_trace("identity-model-less-child", [
+            self._session_meta(
+                "identity-model-less-child-1",
+                parent_thread_id="identity-model-less-parent-1",
+            ),
+            self._turn(model="codex-auto-review"),
+        ], mtime=20)
+
+        child = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["model"], "unknown-model")
+        self.assertEqual(child["model_resolution"], "unresolved")
+        self.assertEqual(child["model_resolution_reason"], "parent_unavailable")
+
+    def test_auto_review_model_rejects_cyclic_lineage_even_with_a_direct_model(self):
+        child_path = self._write_trace("identity-cycle-child", [
+            self._session_meta(
+                "identity-cycle-child-1", parent_thread_id="identity-cycle-parent-1",
+            ),
+            self._turn(model="codex-auto-review"),
+        ], mtime=10)
+        self._write_trace("identity-cycle-parent", [
+            self._session_meta(
+                "identity-cycle-parent-1", forked_from_id="identity-cycle-child-1",
+            ),
+            self._turn(),
+        ], mtime=20)
+
+        child = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["model"], "unknown-model")
+        self.assertEqual(child["model_resolution_reason"], "cyclic")
+        self.assertIsNone(self.adapter.auto_review_evidence(child))
+
+    def test_auto_review_model_rejects_a_direct_parent_cycle_masked_by_a_fork(self):
+        self._write_trace("identity-cycle-fork", [
+            self._session_meta("identity-cycle-fork-1"),
+            self._turn(),
+        ], mtime=10)
+        child_path = self._write_trace("identity-cycle-masked-child", [
+            self._session_meta(
+                "identity-cycle-masked-child-1",
+                forked_from_id="identity-cycle-fork-1",
+                parent_thread_id="identity-cycle-masked-parent-1",
+            ),
+            self._turn(model="codex-auto-review"),
+        ], mtime=20)
+        self._write_trace("identity-cycle-masked-parent", [
+            self._session_meta(
+                "identity-cycle-masked-parent-1",
+                parent_thread_id="identity-cycle-masked-child-1",
+            ),
+            self._turn(),
+        ], mtime=30)
+
+        child = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["lineage_parent_id"], "identity-cycle-fork-1")
+        self.assertEqual(child["model"], "unknown-model")
+        self.assertEqual(child["model_resolution_reason"], "cyclic")
+        self.assertIsNone(self.adapter.auto_review_evidence(child))
+
+    def test_auto_review_model_rejects_a_non_openai_parent_provider(self):
+        self._write_trace("identity-provider-parent", [
+            self._session_meta("identity-provider-parent-1", model_provider="custom"),
+            self._turn(),
+        ], mtime=10)
+        child_path = self._write_trace("identity-provider-child", [
+            self._session_meta(
+                "identity-provider-child-1",
+                parent_thread_id="identity-provider-parent-1",
+            ),
+            self._turn(model="codex-auto-review"),
+        ], mtime=20)
+
+        child = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+
+        self.assertEqual(child["model"], "unknown-model")
+        self.assertEqual(child["model_resolution"], "unresolved")
+
+    def test_verified_auto_review_prefix_survives_missing_parent_only_at_same_revision(self):
+        parent_path = self._write_trace("evidence-parent", [
+            self._session_meta("evidence-parent-1"),
+            self._turn(),
+            self._token_event(10, 2, 10, 2),
+        ], mtime=10)
+        child_path = self._write_trace("evidence-child", [
+            self._session_meta("evidence-child-1", parent_thread_id="evidence-parent-1"),
+            self._turn(model="codex-auto-review", timestamp="2026-08-11T01:00:01Z"),
+            self._token_event(10, 2, 10, 2, "2026-08-11T01:00:02Z"),
+        ], mtime=20)
+        live_source = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        evidence = self.adapter.auto_review_evidence(live_source)
+
+        self.assertEqual(evidence["model"], "gpt-test")
+        self.assertEqual(evidence["inherited_prefix"], 1)
+        parent_path.unlink()
+        historical_source = next(
+            source for source in self.adapter.discover_legacy(self.context)
+            if source["path"] == str(child_path)
+        )
+        historical_source.update({
+            "model": evidence["model"],
+            "observed_model": "codex-auto-review",
+            "_verified_inherited_prefix": evidence["inherited_prefix"],
+            "_verified_inherited_prefix_revision": evidence["revision"],
+        })
+        rows, _corrupt, available = self.adapter.load_rows(str(child_path))
+
+        self.assertTrue(available)
+        corrected = self.adapter._accounting_rows(historical_source, rows)
+        self.assertEqual(codex_runtime._token_events(corrected), ())
+
+        with child_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._token_event(
+                3, 1, 13, 3, "2026-08-11T01:00:03Z",
+            )) + "\n")
+        changed_rows, _corrupt, available = self.adapter.load_rows(str(child_path))
+
+        self.assertTrue(available)
+        unchanged = self.adapter._accounting_rows(historical_source, changed_rows)
+        self.assertEqual(len(codex_runtime._token_events(unchanged)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

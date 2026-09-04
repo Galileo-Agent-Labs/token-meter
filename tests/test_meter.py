@@ -1744,7 +1744,7 @@ class FrustrationSignalTests(unittest.TestCase):
 class PricingTests(unittest.TestCase):
     def test_builtin_pricing_exposes_reviewed_primary_sources(self):
         pricing = meter.model_pricing_settings()
-        self.assertEqual(pricing["reviewed_on"], "2026-09-02")
+        self.assertEqual(pricing["reviewed_on"], "2026-09-04")
         self.assertEqual(
             [source["provider"] for source in pricing["sources"]],
             ["anthropic", "openai", "cursor"],
@@ -1835,6 +1835,24 @@ class PricingTests(unittest.TestCase):
                 actual, approximate = meter.price_for(model, "codex")
                 self.assertEqual(actual, prices)
                 self.assertFalse(approximate)
+
+    def test_gpt_6_astra_uses_official_api_rates_and_appears_in_settings(self):
+        expected = {
+            "input": 10.0, "output": 50.0,
+            "cache_write": 0.0, "cache_read": 1.0,
+        }
+        actual, unavailable = meter.price_for("gpt-6-astra", "codex")
+
+        self.assertEqual(actual, expected)
+        self.assertFalse(unavailable)
+        row = next(
+            item for item in meter.model_pricing_settings()["models"]
+            if item["provider"] == "codex" and item["model"] == "gpt-6-astra"
+        )
+        self.assertTrue(row["builtin"])
+        self.assertFalse(row["overridden"])
+        self.assertEqual(row["source"], "built-in")
+        self.assertEqual(row["prices"], expected)
 
     def test_gpt_5_6_price_cutover_preserves_older_session_estimates(self):
         previous = {
@@ -5685,6 +5703,24 @@ console.log(JSON.stringify({
             self.assertIn(marker, self.page)
         self.assertNotIn(
             'style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end"',
+            self.page,
+        )
+
+    def test_language_signals_use_shared_spectrum_colors(self):
+        for marker in (
+            "--signal-primary:var(--spectrum-blue)",
+            "--signal-secondary:var(--spectrum-sky)",
+            "--signal-edge:rgba(127,219,242,.34)",
+            "--signal-wash:rgba(0,188,235,.08)",
+            "background:linear-gradient(90deg,var(--signal-primary),var(--signal-secondary))",
+            ".termPanel .signalRankTrack i{background:linear-gradient(90deg,var(--signal-secondary),var(--signal-primary))",
+            ".frustrationSection .signalRateBadge{border-color:var(--signal-edge)",
+            "class=signalMatched",
+            "cssVar('--spectrum-blue')",
+        ):
+            self.assertIn(marker, self.page)
+        self.assertNotIn(
+            '<span><i style="background:var(--warn)"></i>matched',
             self.page,
         )
 

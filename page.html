@@ -65,6 +65,7 @@ body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 .sessid{color:var(--dim);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sessionDesktopLink{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}.sessionDesktopLink[hidden]{display:none}
 .sessionDelete{border:1px solid rgba(255,111,111,.36);background:rgba(255,111,111,.07);border-radius:8px;color:#ffaaaa;font:inherit;font-size:12px;font-weight:720;padding:6px 10px;cursor:pointer;box-shadow:var(--inset);white-space:nowrap}.sessionDelete:hover:not(:disabled){border-color:rgba(255,111,111,.68);background:rgba(255,111,111,.13);color:#ffd0d0}.sessionDelete:disabled{opacity:.42;cursor:not-allowed}.sessionDelete[hidden]{display:none}.smetrics .sessionDelete{font-size:10.5px;padding:4px 7px;margin-top:5px}
+.sessionModelAssign{border:1px solid rgba(0,188,235,.42);background:rgba(0,188,235,.08);border-radius:8px;color:var(--orange3);font:inherit;font-size:10.5px;font-weight:720;padding:4px 7px;cursor:pointer;box-shadow:var(--inset);white-space:nowrap;margin-top:5px}.sessionModelAssign:hover:not(:disabled){border-color:rgba(0,188,235,.7);background:rgba(0,188,235,.15);color:var(--fg)}.sessionModelAssign:disabled{opacity:.42;cursor:not-allowed}
 .hero{display:grid;grid-template-columns:minmax(410px,.86fr) minmax(620px,1.14fr);gap:12px;align-items:start}
 .costcard{overflow:hidden;align-self:start;min-height:238px;padding:16px;display:flex;flex-direction:column;justify-content:flex-start;background:
  linear-gradient(180deg,rgba(27,38,48,.98),rgba(13,18,24,.98)),
@@ -461,6 +462,20 @@ body.sessionRoute #view-session.sessionDetail .previewKpi.previewSpeed .v{color:
 @media(max-width:520px){.spectrumPageActions .modelControls{grid-template-columns:repeat(3,minmax(0,1fr))}.spectrumPageActions .spendRangeControls .seg{display:flex;grid-template-columns:none}.spectrumPageActions .spendRangeControls .seg button{padding-inline:8px}.spectrumPageActions .spendRangeControls [data-spend-range=custom]{grid-column:auto}}
 .currentSessionRuntime:before,.badge.app:before{content:none}.runtimeMark{display:block;width:16px;height:16px;flex:0 0 auto;overflow:visible;color:currentColor}.runtimeMark path,.runtimeMark circle,.runtimeMark polygon{vector-effect:non-scaling-stroke}.currentSessionRuntime .runtimeMark{width:18px;height:18px}
 .efficiencyHeadline{min-height:166px;padding:13px 15px 10px}.efficiencySupportItem{min-height:166px;padding:13px 15px 10px}.efficiencyHeadline .efficiencyChart{height:56px}.efficiencySupportItem .efficiencyChart{height:56px}.efficiencySupportDelta{width:132px;padding:6px 9px}.efficiencySupportDelta strong{font-size:16px}.efficiencySupportDelta span{font-size:10px}
+/* models-language-signal-spectrum-v1 */
+.frustrationSection{--signal-primary:var(--spectrum-blue);--signal-secondary:var(--spectrum-sky);--signal-left:var(--spectrum-cyan);--signal-edge:rgba(127,219,242,.34);--signal-wash:rgba(0,188,235,.08);--signal-wash-faint:rgba(0,188,235,.018)}
+.frustrationSection.positive{--signal-primary:var(--good);--signal-secondary:var(--accent);--signal-left:var(--good);--signal-edge:rgba(102,217,144,.34);--signal-wash:rgba(102,217,144,.08);--signal-wash-faint:rgba(102,217,144,.018)}
+.frustrationSection .frustrationNotice{border-color:var(--signal-edge);border-left-color:var(--signal-left);background:linear-gradient(90deg,var(--signal-wash),var(--signal-wash-faint))}
+.frustrationSection .frustrationHero .modelKpi:before{background:linear-gradient(90deg,var(--signal-left),var(--signal-primary),transparent 78%)}
+.frustrationSection .frustrationHero .modelKpi:nth-child(2):before{background:linear-gradient(90deg,var(--signal-primary),var(--signal-secondary),transparent 78%)}
+.frustrationSection .frustrationHero .modelKpi:nth-child(3):before{background:linear-gradient(90deg,var(--signal-secondary),var(--signal-left),transparent 78%)}
+.frustrationSection .frustrationHero .modelKpi:nth-child(4):before{background:linear-gradient(90deg,var(--signal-left),var(--signal-secondary),transparent 78%)}
+.frustrationSection .frustrationLegend .signalTurns{background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)}
+.frustrationSection .frustrationLegend .signalMatched,.frustrationSection .frustrationLegend .rateDot{background:var(--signal-primary)}
+.frustrationSection .signalRank[data-frustration-model].selected{box-shadow:inset 2px 0 var(--signal-primary)}
+.frustrationSection .signalRankTrack i,.frustrationSection .chatSignalTrack i{background:linear-gradient(90deg,var(--signal-primary),var(--signal-secondary))}
+.frustrationSection .termPanel .signalRankTrack i{background:linear-gradient(90deg,var(--signal-secondary),var(--signal-primary))}
+.frustrationSection .signalRateBadge{border-color:var(--signal-edge);background:var(--signal-wash);color:var(--signal-secondary)}
 </style></head><body class=spectrumApp>
 <!--
 THESIS: Sessions are live instruments, not a generic grid of dark cards.
@@ -822,7 +837,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 	   <div class="card modelKpi"><div class="label fieldtip" tabindex=0 aria-description="Repeated configured terms count separately." data-tip="Repeated configured terms count separately.">Term hits</div><div class="v mono" id=f-matches>0</div></div>
 	  </div>
 	  <div class="card frustrationTrendCard">
-	   <div class=modelTrendHead><div><h2>Signal over time</h2><p id=f-trend-note></p></div><div class=signalTrendControls><div class=frustrationLegend><span><i style="background:rgba(0,188,235,.28);border:1px solid rgba(0,188,235,.5)"></i>user turns</span><span><i style="background:var(--warn)"></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
+	   <div class=modelTrendHead><div><h2>Signal over time</h2><p id=f-trend-note></p></div><div class=signalTrendControls><div class=frustrationLegend><span><i class=signalTurns></i>user turns</span><span><i class=signalMatched></i>matched</span><span><i class=rateDot></i>rate</span></div><div class=seg id=f-group><button data-fgroup=day>Days</button><button data-fgroup=week>Weeks</button></div></div></div>
 	   <div class=modelChartWrap><svg class="modelChart frustrationChart" id=f-chart viewBox="0 0 1040 286" preserveAspectRatio=none role=img aria-label="Language-signal rate and matched user utterances over time"></svg><div class=modelChartTip id=f-chart-tip></div></div>
 	  </div>
 	  <div class=frustrationBreakdown>
@@ -1145,6 +1160,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <code id=session-delete-id></code>
   <div class=subline id=session-delete-note></div>
   <div class=actions><button class=tbtn id=session-delete-cancel>Cancel</button><button class="tbtn danger" id=session-delete-confirm>Move to Trash</button></div>
+ </div>
+</dialog>
+<dialog class=mcpDialog id=session-model-identity-dialog aria-labelledby=session-model-identity-title aria-describedby=session-model-identity-note>
+ <div class=inner>
+  <h3 id=session-model-identity-title>Assign model to this session</h3>
+  <div class=subline id=session-model-identity-sub></div>
+  <div class=evidence id=session-model-identity-evidence></div>
+  <label class=settingsField><span>Codex / OpenAI model ID</span><input id=session-model-identity-model autocomplete=off spellcheck=false maxlength=160 placeholder="gpt-model-version"></label>
+  <div class=subline id=session-model-identity-note>This affects only this saved session. It does not change model prices; configure a model rate separately in Settings → Model pricing.</div>
+  <div class=actions><button class="tbtn danger" id=session-model-identity-remove type=button hidden>Clear assignment</button><button class=tbtn id=session-model-identity-cancel type=button>Cancel</button><button class=tbtn id=session-model-identity-save type=button>Save model</button></div>
  </div>
 </dialog>
 <button class=updateNotice id=update-notice type=button hidden>New update available</button>
@@ -3598,6 +3623,67 @@ $('session-delete-confirm').onclick=async()=>{
  }
 };
 
+let pendingSessionModelIdentity=null;
+function sessionModelIdentitySourceLabel(identity){
+ return ({user_assigned:'User-assigned model',unresolved:'Underlying model unavailable'}[identity?.source]||'Saved model evidence');
+}
+function openSessionModelIdentityDialog(target){
+ const identity=target?.model_identity||{};
+ if(!identity.assignable||!identity.key)return;
+ pendingSessionModelIdentity={target,identity};
+ $('session-model-identity-sub').textContent=`${target.label||target.provider||'Codex'} · ${target.project||'No project'}`;
+ $('session-model-identity-evidence').innerHTML=`<div><b>${esc(target.title||'(untitled session)')}</b></div><div>${esc(sessionModelIdentitySourceLabel(identity))}. Token Meter could not verify an exact billable model from the available local trace.</div>`;
+ $('session-model-identity-model').value=identity.source==='user_assigned'?(target.models||[])[0]||'':'';
+ $('session-model-identity-remove').hidden=identity.source!=='user_assigned';
+ $('session-model-identity-save').disabled=false;
+ $('session-model-identity-save').textContent='Save model';
+ $('session-model-identity-dialog').showModal();
+ requestAnimationFrame(()=>$('session-model-identity-model').focus());
+}
+function closeSessionModelIdentityDialog(){
+ $('session-model-identity-dialog').close();pendingSessionModelIdentity=null;
+}
+async function requestSessionModelIdentity(payload){
+ const token=agentActionToken();
+ if(!token)throw new Error('Settings are not ready yet. Wait for live state and try again.');
+ const response=await fetch('/settings/session-model-identity',{method:'POST',headers:{'Content-Type':'application/json','X-Token-Meter-Action':token},body:JSON.stringify(payload)});
+ const result=await response.json();
+ if(!response.ok||!result.ok)throw new Error(result.error||'Could not save the session model.');
+ return result;
+}
+$('session-model-identity-cancel').onclick=closeSessionModelIdentityDialog;
+$('session-model-identity-dialog').addEventListener('cancel',()=>{pendingSessionModelIdentity=null;});
+$('session-model-identity-save').onclick=async()=>{
+ const pending=pendingSessionModelIdentity,button=$('session-model-identity-save');
+ if(!pending)return;
+ const model=$('session-model-identity-model').value.trim();
+ if(!model){$('session-model-identity-model').focus();showAppToast({title:'Model ID required',body:'Enter the exact Codex / OpenAI model ID used for this saved session.',kind:'warn'});return;}
+ button.disabled=true;button.textContent='Saving…';
+ try{
+  await requestSessionModelIdentity({session_key:pending.identity.key,provider:'codex',model});
+  closeSessionModelIdentityDialog();
+  await refreshLiveState();
+  showAppToast({title:'Session model assigned',body:'Only this saved session changed. Model prices were not changed.',kind:'good'});
+ }catch(error){
+  button.disabled=false;button.textContent='Save model';
+  showAppToast({title:'Session model could not be saved',body:error.message||String(error),kind:'warn',sticky:true});
+ }
+};
+$('session-model-identity-remove').onclick=async()=>{
+ const pending=pendingSessionModelIdentity,button=$('session-model-identity-remove');
+ if(!pending)return;
+ button.disabled=true;button.textContent='Clearing…';
+ try{
+  await requestSessionModelIdentity({session_key:pending.identity.key,remove:true});
+  closeSessionModelIdentityDialog();
+  await refreshLiveState();
+  showAppToast({title:'Session model assignment cleared',body:'This saved session remains unavailable until exact local evidence is present.',kind:'good'});
+ }catch(error){
+  button.disabled=false;button.textContent='Clear assignment';
+  showAppToast({title:'Session model could not be cleared',body:error.message||String(error),kind:'warn',sticky:true});
+ }
+};
+
 const CAPABILITY_SORT_KEYS=new Set(['name','type','runtime','state','use','last','control']);
 const CAPABILITY_TYPES=new Set(['all','tool','mcp','skill']);
 const CAPABILITY_PAGE_SIZE=100;
@@ -5016,7 +5102,7 @@ function frustrationPeriodLabel(row){
 function drawFrustrationTrend(rows){
  const svg=$('f-chart'),tip=$('f-chart-tip'),points=(rows||[]).slice(-18);
  if(!points.length){svg.innerHTML='<text x="520" y="143" text-anchor="middle" fill="var(--faint)" font-size="12">No dated user turns in this window</text>';tip.style.display='none';return;}
- const VW=1040,VH=286,ML=50,MR=56,MT=20,MB=38,PW=VW-ML-MR,PH=VH-MT-MB,step=PW/points.length,signalColor=languageSignalGroup==='positive'?cssVar('--good'):cssVar('--warn');
+ const VW=1040,VH=286,ML=50,MR=56,MT=20,MB=38,PW=VW-ML-MR,PH=VH-MT-MB,step=PW/points.length,signalColor=languageSignalGroup==='positive'?cssVar('--good'):cssVar('--spectrum-blue');
  const maxTurns=Math.max(1,...points.map(row=>Number(row.user_turns||0))),barW=Math.max(10,Math.min(34,step*.54));
  const x=index=>ML+step*(index+.5),turnY=value=>MT+PH*(1-Math.max(0,Number(value||0))/maxTurns),rateY=value=>MT+PH*(1-Math.max(0,Math.min(1,Number(value||0))));
  let html='';
@@ -5076,17 +5162,19 @@ function renderFrustration(signals,sessions){
 }
 
 function logRowRenderKey(s,active){
- return JSON.stringify([active,sessionDeleteAvailable(s,renderedAllSessionActions),s.client,s.provider,s.label,s.title,s.project,s.last,s.start,s.wait_time,s.turns,s.cost,s.availability,s.models,s.tokens,s.provenance,s.usage_basis,s.token_estimate,s.throughput,s.cost_approx]);
+ return JSON.stringify([active,sessionDeleteAvailable(s,renderedAllSessionActions),s.client,s.provider,s.label,s.title,s.project,s.last,s.start,s.wait_time,s.turns,s.cost,s.availability,s.models,s.model_identity,s.tokens,s.provenance,s.usage_basis,s.token_estimate,s.throughput,s.cost_approx]);
 }
 function logRowContent(s){
  const rowCost=metricAvailable(s,'cost'),rowTokens=metricAvailable(s,'tokens'),localEstimate=hasLocalEstimate(s),avg=rowCost&&s.turns?money((s.cost||0)/s.turns)+estimateSuffix(s):'--';
  const wait=s.wait_time||{},waitText=wait.available?`${waitFmt(wait.total_s)} wait · ${waitFmt(wait.avg_s)} avg`:'wait unavailable';
- const modelText=(s.models||[]).join(', ')||'--',throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
+ const identity=s.model_identity||{},unresolvedIdentity=identity.kind==='auto_review'&&identity.source==='unresolved',assignedIdentity=identity.kind==='auto_review'&&identity.source==='user_assigned',identityLabel={verified_parent:' · parent verified',verified_history:' · verified history',user_assigned:' · assigned'}[identity.source]||'';
+ const modelText=unresolvedIdentity?'Auto-review · model unconfirmed':`${(s.models||[]).join(', ')||'--'}${identityLabel}`,throughput=s.throughput||{},speed=throughput.available?` · ${speedFmt(throughput.output_tps)} ${localEstimate?'visible out tok/s est':'out tok/s'}`:'';
+ const identityAction=identity.assignable&&identity.key?`<button class=sessionModelAssign data-session-model-identity="${esc(identity.key)}" type=button>${assignedIdentity?'Change model':'Assign model'}</button>`:'';
  return `<div><span class="badge app ${appBadgeClass(s)}">${runtimeMarkSvg(s)}${esc(s.label||s.provider)}</span></div>
   <div class=sMain><div class=t>${esc(s.title)}</div><div class=meta>${esc(s.project||'local')} · ${esc(s.last||s.start||'')} · ${waitText} · ${f(s.turns)} execs · ${avg}/exec${speed}</div><div class=sbar><i></i></div></div>
   <div class="badge models">${esc(modelText)}</div>
   <div class="badge tok">${rowTokens?f(s.tokens)+' tok'+(localEstimate?' est':''):'tokens --'}</div>
-  <div class=smetrics><div class="c mono">${costValueHtml(money(s.cost)+(s.cost_approx?' est':''),rowCost)}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):'billing unavailable'} · ${f(s.turns)} execs</div>${sessionDeleteAvailable(s,renderedAllSessionActions)?`<button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button>`:''}</div>`;
+  <div class=smetrics><div class="c mono">${costValueHtml(money(s.cost)+(s.cost_approx?' est':''),rowCost)}</div><div class=meta>${rowCost?(localEstimate?'local estimate':'cost'):(unresolvedIdentity?'model unconfirmed · billing unavailable':'billing unavailable')} · ${f(s.turns)} execs</div>${identityAction}${sessionDeleteAvailable(s,renderedAllSessionActions)?`<button class=sessionDelete data-delete-session="${esc(s.id)}" type=button>Delete</button>`:''}</div>`;
 }
 function reconcileLogRows(sessions,maxCost,liveSessionIds=new Set()){
  const root=$('slist');
@@ -5192,6 +5280,13 @@ function renderAllSessions(xs){
  reconcileLogRows(sessions,maxCost,liveSessionIds);
 }
 $('slist').onclick=event=>{
+ const identityButton=event.target.closest('[data-session-model-identity]');
+ if(identityButton){
+  event.stopPropagation();
+  const row=renderedAllSessions.get(identityButton.closest('[data-id]')?.dataset.id);
+  if(row)openSessionModelIdentityDialog(row);
+  return;
+ }
  const button=event.target.closest('[data-delete-session]');
  if(button){
   event.stopPropagation();

@@ -497,7 +497,11 @@ class CodexRuntimeAdapter:
                 "mtime": os.path.getmtime(path) if os.path.exists(path) else 0.0,
                 "title": _compact(title) or None,
                 "model": metadata.get("model"),
+                "observed_model": metadata.get("model"),
                 "model_provider": metadata.get("model_provider") or "openai",
+                "model_resolution": "observed",
+                "model_resolution_parent_id": None,
+                "model_resolution_reason": "",
                 "tools_loaded": metadata.get("tools_loaded") or 0,
                 "tools_eager": metadata.get("tools_eager") or 0,
                 "tools_deferred": metadata.get("tools_deferred") or 0,
@@ -518,8 +522,24 @@ class CodexRuntimeAdapter:
         }
         self._records_by_path = {record["path"]: record for record in records}
         for record in records:
-            if record.get("model") == AUTO_REVIEW_MODEL:
-                record["model"] = self._resolved_auto_review_model(record)
+            if record.get("observed_model") == AUTO_REVIEW_MODEL:
+                if self._has_auto_review_identity_cycle(record):
+                    record["model"] = "unknown-model"
+                    record["model_resolution"] = "unresolved"
+                    record["model_resolution_reason"] = "cyclic"
+                else:
+                    model, parent_id = self._resolved_auto_review_model(record)
+                    record["model"] = model
+                    if parent_id:
+                        record["model_resolution"] = "verified_parent"
+                        record["model_resolution_parent_id"] = parent_id
+                        parent = self._record_by_physical_id.get(parent_id) or {}
+                        record["model_provider"] = (
+                            parent.get("model_provider") or record["model_provider"]
+                        )
+                    else:
+                        record["model_resolution"] = "unresolved"
+                        record["model_resolution_reason"] = "parent_unavailable"
         for record in records:
             parent_id = record.get("lineage_parent_id")
             parent = self._record_by_physical_id.get(parent_id)
@@ -581,6 +601,11 @@ class CodexRuntimeAdapter:
             "mtime": record["mtime"],
             "title": record["title"],
             "model": record["model"],
+            "observed_model": record["observed_model"],
+            "model_provider": record["model_provider"],
+            "model_resolution": record["model_resolution"],
+            "model_resolution_parent_id": record["model_resolution_parent_id"],
+            "model_resolution_reason": record["model_resolution_reason"],
             "tools_loaded": record["tools_loaded"],
             "tools_eager": record["tools_eager"],
             "tools_deferred": record["tools_deferred"],
@@ -682,21 +707,106 @@ class CodexRuntimeAdapter:
             current = self._record_by_physical_id.get(parent_id)
         return False
 
+    def _has_auto_review_identity_cycle(self, record):
+        """Fail closed when either direct-parent or fork lineage is cyclic."""
+        visiting = set()
+        visited = set()
+
+        def visit(current):
+            physical_id = str((current or {}).get("physical_trace_id") or "")
+            if not physical_id:
+                return True
+            if physical_id in visiting:
+                return True
+            if physical_id in visited:
+                return False
+            visiting.add(physical_id)
+            try:
+                for field in ("parent_thread_id", "forked_from_id"):
+                    parent_id = current.get(field)
+                    if not parent_id:
+                        continue
+                    parent = self._record_by_physical_id.get(parent_id)
+                    if parent and visit(parent):
+                        return True
+            finally:
+                visiting.discard(physical_id)
+            visited.add(physical_id)
+            return False
+
+        return visit(record)
+
     def _resolved_auto_review_model(self, record):
-        """Resolve Codex's internal auto-review marker from its linked parent."""
-        seen = {record.get("physical_trace_id")}
-        current = record
-        while current:
-            parent_id = current.get("parent_thread_id")
-            parent = self._record_by_physical_id.get(parent_id)
-            if not parent or parent.get("physical_trace_id") in seen:
-                return "unknown-model"
-            seen.add(parent["physical_trace_id"])
-            parent_model = parent.get("model")
-            if parent_model != AUTO_REVIEW_MODEL:
-                return str(parent_model or "unknown-model")
-            current = parent
-        return "unknown-model"
+        """Resolve only an unambiguous direct parent that reports an actual model."""
+        parent_id = record.get("parent_thread_id")
+        parent = self._record_by_physical_id.get(parent_id)
+        if not parent or parent.get("physical_trace_id") == record.get("physical_trace_id"):
+            return "unknown-model", None
+        if parent.get("observed_model") == AUTO_REVIEW_MODEL:
+            return "unknown-model", None
+        if str(parent.get("model_provider") or "openai").strip().lower() != "openai":
+            return "unknown-model", None
+        parent_model = str(parent.get("model") or "")
+        if parent_model in ("", "unknown", "unknown-model", AUTO_REVIEW_MODEL):
+            return "unknown-model", None
+        return parent_model, str(parent_id)
+
+    @staticmethod
+    def _verified_inherited_prefix(source, path):
+        if not isinstance(source, dict):
+            return None
+        if source.get("observed_model") != AUTO_REVIEW_MODEL:
+            return None
+        value = source.get("_verified_inherited_prefix")
+        revision = source.get("_verified_inherited_prefix_revision")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        if not isinstance(revision, (list, tuple)) or len(revision) != 2:
+            return None
+        if tuple(str(item) for item in revision) != _file_signature(path):
+            return None
+        return value
+
+    def auto_review_evidence(self, source):
+        """Return bounded, content-free proof for a live direct auto-review match."""
+        if not isinstance(source, dict):
+            return None
+        path = os.path.abspath(os.path.expanduser(str(source.get("path") or "")))
+        record = self._record_for_path(path)
+        if (
+            not record
+            or record.get("observed_model") != AUTO_REVIEW_MODEL
+            or record.get("model_resolution") != "verified_parent"
+            or self._has_auto_review_identity_cycle(record)
+        ):
+            return None
+        parent_id = record.get("model_resolution_parent_id")
+        parent = self._record_by_physical_id.get(parent_id)
+        if not parent or parent.get("path") == path:
+            return None
+        rows, _corrupt, available = self.load_rows(path)
+        if not available:
+            return None
+        inherited_prefix = 0
+        accounting_parent = self._record_by_physical_id.get(
+            record.get("lineage_parent_id")
+        )
+        if accounting_parent and not self._has_lineage_cycle(record):
+            child_events = _token_events_for_source(
+                rows, self.default_model, record.get("model"),
+            )
+            parent_events = _resolved_token_events(
+                self._token_events_for_path(accounting_parent["path"]),
+                accounting_parent.get("model"),
+            )
+            inherited_prefix = _inherited_token_prefix(child_events, parent_events)
+        return {
+            "model": str(record.get("model") or ""),
+            "model_provider": str(record.get("model_provider") or "openai"),
+            "revision": list(_file_signature(path)),
+            "parent_id": str(parent_id),
+            "inherited_prefix": inherited_prefix,
+        }
 
     def _accounting_rows(self, source, rows):
         path = (
@@ -711,7 +821,8 @@ class CodexRuntimeAdapter:
         parent_id = record.get("lineage_parent_id")
         parent = self._record_by_physical_id.get(parent_id)
         if not parent or parent.get("path") == path:
-            return _corrected_rows(rows, 0)
+            inherited_prefix = self._verified_inherited_prefix(source, path)
+            return _corrected_rows(rows, inherited_prefix or 0)
         child_events = _token_events_for_source(
             rows, self.default_model, record.get("model"),
         )
@@ -1439,6 +1550,9 @@ class CodexRuntimeAdapterProxy:
 
     def summarize_legacy(self, source, objs=None):
         return self._adapter().summarize_legacy(source, objs)
+
+    def auto_review_evidence(self, source):
+        return self._adapter().auto_review_evidence(source)
 
     def deletion_plan(self, source):
         return self._adapter().deletion_plan(source)

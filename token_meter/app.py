@@ -151,6 +151,7 @@ from token_meter.runtimes.cursor import (
     CursorRuntimeAdapterProxy,
 )
 from token_meter.runtimes.codex import (
+    AUTO_REVIEW_MODEL,
     CodexRuntimeAdapter,
     CodexRuntimeAdapterProxy,
 )
@@ -235,6 +236,12 @@ KIRO_AGENT_STORAGE = _default_kiro_agent_storage_root(
 TOKEN_METER_SETTINGS = os.path.expanduser(
     os.environ.get("TOKEN_METER_SETTINGS", "~/.token-meter/settings.json")
 )
+TOKEN_METER_SESSION_MODEL_IDENTITIES = os.path.expanduser(
+    os.environ.get(
+        "TOKEN_METER_SESSION_MODEL_IDENTITIES",
+        "~/.token-meter/session-model-identities.json",
+    )
+)
 TOKEN_METER_UPDATE_STATUS = os.path.expanduser(
     os.environ.get("TOKEN_METER_UPDATE_STATUS", "~/.token-meter/update-status.json")
 )
@@ -256,6 +263,8 @@ MAX_MODEL_PRICE_PERIODS = 256
 MAX_MODEL_PRICE_CHANGES = 256
 MAX_MODEL_PRICE = 1_000_000.0
 MODEL_PRICING_MTIME_TTL_S = 0.25
+MAX_SESSION_MODEL_IDENTITIES = 2_048
+SESSION_MODEL_IDENTITY_KEY_RE = re.compile(r"^[a-f0-9]{64}$")
 BUDGET_PROVIDERS = ("claude", "codex", "cursor", "opencode", "kiro")
 DEFAULT_RUNTIME_BUDGET = 0.0
 DEFAULT_BUDGET_THRESHOLDS = (80, 90, 100)
@@ -338,6 +347,7 @@ _model_pricing_cache = {
     "path": None, "mtime_ns": None, "mtime_checked_at": 0.0,
     "histories": {}, "effective": {}, "quotes": {},
 }
+_session_model_identity_lock = threading.RLock()
 _quota_cache = {}
 _quota_inflight = set()
 _quota_lock = threading.Lock()
@@ -1167,6 +1177,354 @@ def set_model_price(provider, model, prices=None, remove=False, path=None,
         "removed": change["removed"],
     })
     return result
+
+
+def _opaque_session_identity_key(value, namespace):
+    value = str(value or "").strip()
+    if not value or len(value) > 512:
+        return ""
+    return hashlib.sha256(
+        (str(namespace) + "\0" + value).encode("utf-8")
+    ).hexdigest()
+
+
+def session_model_identity_key(source):
+    """Return an opaque, physical-trace-scoped key without retaining its ID."""
+    if not isinstance(source, dict) or source.get("provider") != "codex":
+        return ""
+    return _opaque_session_identity_key(
+        source.get("physical_trace_id"), "token-meter-codex-session-v1",
+    )
+
+
+def _session_model_identity_parent_key(parent_id):
+    return _opaque_session_identity_key(
+        parent_id, "token-meter-codex-parent-v1",
+    )
+
+
+def _session_model_identity_revision(source):
+    signature = file_signature(str((source or {}).get("path") or ""))
+    if not signature:
+        return None
+    return tuple(str(value) for value in signature)
+
+
+def _normalize_session_model_identity_revision(value):
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    normalized = tuple(str(item) for item in value)
+    if any(not re.fullmatch(r"[0-9]{1,24}", item) for item in normalized):
+        return None
+    return normalized
+
+
+def _normalize_session_model_identity_model(provider, model):
+    provider = normalize_model_price_provider(provider)
+    if provider != "codex":
+        raise ValueError("Codex session assignments require Codex / OpenAI models.")
+    model = normalize_model_price_id(model)
+    if model in ("unknown-model", AUTO_REVIEW_MODEL):
+        raise ValueError("Choose an actual Codex / OpenAI model ID.")
+    return "openai", model
+
+
+def _normalize_session_model_identity_verified(value):
+    if not isinstance(value, dict):
+        return None
+    try:
+        provider, model = _normalize_session_model_identity_model(
+            value.get("model_provider"), value.get("model"),
+        )
+    except ValueError:
+        return None
+    revision = _normalize_session_model_identity_revision(value.get("revision"))
+    parent_key = str(value.get("parent_key") or "")
+    inherited_prefix = value.get("inherited_prefix")
+    if (
+        not revision
+        or not SESSION_MODEL_IDENTITY_KEY_RE.fullmatch(parent_key)
+        or isinstance(inherited_prefix, bool)
+        or not isinstance(inherited_prefix, int)
+        or inherited_prefix < 0
+        or inherited_prefix > 1_000_000
+    ):
+        return None
+    return {
+        "model_provider": provider,
+        "model": model,
+        "revision": list(revision),
+        "parent_key": parent_key,
+        "inherited_prefix": inherited_prefix,
+    }
+
+
+def _normalize_session_model_identity_user(value):
+    if not isinstance(value, dict):
+        return None
+    try:
+        provider, model = _normalize_session_model_identity_model(
+            value.get("model_provider"), value.get("model"),
+        )
+    except ValueError:
+        return None
+    return {"model_provider": provider, "model": model}
+
+
+def _load_session_model_identity_store(path=None):
+    path = path or TOKEN_METER_SESSION_MODEL_IDENTITIES
+    raw = load_json(path, {})
+    rows = raw.get("sessions") if isinstance(raw, dict) else {}
+    sessions = {}
+    if isinstance(rows, dict):
+        for key, value in list(rows.items())[:MAX_SESSION_MODEL_IDENTITIES]:
+            key = str(key or "")
+            if not SESSION_MODEL_IDENTITY_KEY_RE.fullmatch(key) or not isinstance(value, dict):
+                continue
+            entry = {}
+            verified = _normalize_session_model_identity_verified(value.get("verified"))
+            user = _normalize_session_model_identity_user(value.get("user"))
+            if verified:
+                entry["verified"] = verified
+            if user:
+                entry["user"] = user
+            if entry:
+                sessions[key] = entry
+    return {"version": 1, "sessions": sessions}
+
+
+def _write_session_model_identity_store(store, path=None):
+    path = path or TOKEN_METER_SESSION_MODEL_IDENTITIES
+    sessions = (store or {}).get("sessions") or {}
+    serialized = {
+        "version": 1,
+        "sessions": {key: sessions[key] for key in sorted(sessions)},
+    }
+    atomic_write_text(path, json.dumps(serialized, indent=2, ensure_ascii=False) + "\n")
+
+
+def codex_auto_review_evidence(source):
+    """Ask the Codex adapter for non-content evidence from a live direct parent."""
+    if (
+        not isinstance(source, dict)
+        or source.get("provider") != "codex"
+        or source.get("observed_model") != AUTO_REVIEW_MODEL
+    ):
+        return None
+    try:
+        evidence = _codex_native_adapter().auto_review_evidence(source)
+    except (OSError, TypeError, ValueError):
+        return None
+    return evidence if isinstance(evidence, dict) else None
+
+
+def _verified_session_model_identity(source, evidence):
+    if not isinstance(evidence, dict):
+        return None
+    try:
+        provider, model = _normalize_session_model_identity_model(
+            evidence.get("model_provider"), evidence.get("model"),
+        )
+    except ValueError:
+        return None
+    revision = _normalize_session_model_identity_revision(evidence.get("revision"))
+    source_revision = _session_model_identity_revision(source)
+    parent_key = _session_model_identity_parent_key(evidence.get("parent_id"))
+    inherited_prefix = evidence.get("inherited_prefix")
+    if (
+        source.get("observed_model") != AUTO_REVIEW_MODEL
+        or str(source.get("model") or "") != model
+        or not revision
+        or revision != source_revision
+        or not parent_key
+        or isinstance(inherited_prefix, bool)
+        or not isinstance(inherited_prefix, int)
+        or inherited_prefix < 0
+        or inherited_prefix > 1_000_000
+    ):
+        return None
+    return {
+        "model_provider": provider,
+        "model": model,
+        "revision": list(revision),
+        "parent_key": parent_key,
+        "inherited_prefix": inherited_prefix,
+    }
+
+
+def _verified_identity_matches_source(verified, source):
+    if not verified:
+        return False
+    return (
+        tuple(verified.get("revision") or ())
+        == _session_model_identity_revision(source)
+    )
+
+
+def _public_session_model_identity(key, source, assignable=False):
+    result = {
+        "key": key,
+        "kind": "auto_review",
+        "source": source,
+        "assignable": bool(assignable),
+    }
+    if source == "unresolved":
+        result["reason"] = "underlying_model_unavailable"
+    return result
+
+
+def public_session_model_identity(value):
+    if not isinstance(value, dict):
+        return None
+    key = str(value.get("key") or "")
+    source = str(value.get("source") or "")
+    if (
+        not SESSION_MODEL_IDENTITY_KEY_RE.fullmatch(key)
+        or value.get("kind") != "auto_review"
+        or source not in {
+            "verified_parent", "verified_history", "user_assigned", "unresolved",
+        }
+    ):
+        return None
+    result = {
+        "key": key,
+        "kind": "auto_review",
+        "source": source,
+        "assignable": bool(value.get("assignable")),
+    }
+    if source == "unresolved":
+        result["reason"] = "underlying_model_unavailable"
+    return result
+
+
+def _apply_verified_session_identity(source, verified):
+    source["model"] = verified["model"]
+    source["model_provider"] = verified["model_provider"]
+    source["_verified_inherited_prefix"] = verified["inherited_prefix"]
+    source["_verified_inherited_prefix_revision"] = list(verified["revision"])
+
+
+def enrich_codex_model_identities(sources, path=None):
+    """Apply revision-bound Codex identity evidence without changing price settings."""
+    source_rows = [dict(source) for source in (sources or ()) if isinstance(source, dict)]
+    with _session_model_identity_lock:
+        store = _load_session_model_identity_store(path)
+        changed = False
+        for source in source_rows:
+            if (
+                source.get("provider") != "codex"
+                or source.get("observed_model") != AUTO_REVIEW_MODEL
+            ):
+                continue
+            key = session_model_identity_key(source)
+            if not key:
+                source["model"] = "unknown-model"
+                continue
+            entry = dict(store["sessions"].get(key) or {})
+            verified = _verified_session_model_identity(
+                source, codex_auto_review_evidence(source),
+            )
+            if verified:
+                if entry.get("verified") != verified:
+                    entry["verified"] = verified
+                    store["sessions"][key] = entry
+                    changed = True
+                _apply_verified_session_identity(source, verified)
+                source["model_identity"] = _public_session_model_identity(
+                    key, "verified_parent",
+                )
+                continue
+            user = _normalize_session_model_identity_user(entry.get("user"))
+            historical = _normalize_session_model_identity_verified(entry.get("verified"))
+            historical_matches = (
+                source.get("model_resolution_reason") != "cyclic"
+                and _verified_identity_matches_source(historical, source)
+            )
+            if user:
+                source["model"] = user["model"]
+                source["model_provider"] = user["model_provider"]
+                if historical_matches:
+                    _apply_verified_session_identity(source, historical)
+                    source["model"] = user["model"]
+                    source["model_provider"] = user["model_provider"]
+                source["model_identity"] = _public_session_model_identity(
+                    key, "user_assigned", assignable=True,
+                )
+            elif historical_matches:
+                _apply_verified_session_identity(source, historical)
+                source["model_identity"] = _public_session_model_identity(
+                    key, "verified_history",
+                )
+            else:
+                source["model"] = "unknown-model"
+                source["model_identity"] = _public_session_model_identity(
+                    key, "unresolved", assignable=True,
+                )
+        if changed:
+            try:
+                _write_session_model_identity_store(store, path)
+            except OSError:
+                pass
+    return source_rows
+
+
+def set_session_model_identity(session_key, model=None, provider="codex", remove=False,
+                               sources=None, path=None):
+    """Save or remove one explicit fallback model without touching model pricing."""
+    key = str(session_key or "")
+    if not SESSION_MODEL_IDENTITY_KEY_RE.fullmatch(key):
+        return {"ok": False, "error": "A valid saved-session identity is required."}
+    source_rows = enrich_codex_model_identities(
+        sources if sources is not None else all_session_sources(), path=path,
+    )
+    matches = [
+        source for source in source_rows
+        if (source.get("model_identity") or {}).get("key") == key
+    ]
+    if len(matches) != 1:
+        return {
+            "ok": False,
+            "error": "This saved session is no longer uniquely available.",
+        }
+    source = matches[0]
+    identity = source.get("model_identity") or {}
+    with _session_model_identity_lock:
+        store = _load_session_model_identity_store(path)
+        entry = dict(store["sessions"].get(key) or {})
+        if remove:
+            changed = "user" in entry
+            entry.pop("user", None)
+            if entry:
+                store["sessions"][key] = entry
+            else:
+                store["sessions"].pop(key, None)
+        else:
+            if not identity.get("assignable"):
+                return {
+                    "ok": False,
+                    "error": "This session already has verified model evidence.",
+                }
+            try:
+                model_provider, model_id = _normalize_session_model_identity_model(
+                    provider, model,
+                )
+            except ValueError as error:
+                return {"ok": False, "error": str(error)}
+            user = {"model_provider": model_provider, "model": model_id}
+            changed = entry.get("user") != user
+            entry["user"] = user
+            store["sessions"][key] = entry
+        try:
+            if changed:
+                _write_session_model_identity_store(store, path)
+        except OSError:
+            return {"ok": False, "error": "Token Meter could not save this session model."}
+    return {
+        "ok": True,
+        "changed": changed,
+        "removed": bool(remove),
+        "session_key": key,
+    }
 
 
 def normalize_budget_settings(values):
@@ -2331,9 +2689,11 @@ def codex_index():
 
 
 def codex_session_sources():
-    return list(_codex_native_adapter().discover_legacy(
-        DiscoveryContext(home=os.path.expanduser("~"))
-    ))
+    return enrich_codex_model_identities(
+        _codex_native_adapter().discover_legacy(
+            DiscoveryContext(home=os.path.expanduser("~"))
+        )
+    )
 
 
 def _cursor_db_connection(path=None):
@@ -2374,7 +2734,7 @@ def all_session_sources():
     result = runtime_registry().discover_legacy_all(
         DiscoveryContext(home=os.path.expanduser("~"))
     )
-    sources = list(result.sources)
+    sources = enrich_codex_model_identities(result.sources)
     _RUNTIME_DISCOVERY_FAILURES = result.failures
     return sources
 
@@ -2452,17 +2812,24 @@ def source_from_path(path):
     if path and path.startswith(os.path.expanduser("~/.codex/")):
         meta = codex_meta(path)
         sid = codex_id_from_path(path, meta)
-        return {
+        source = {
             "provider": "codex", "label": "Codex", "id": sid, "session": os.path.basename(path),
             "path": path, "project": home_shorten(meta.get("cwd") or os.path.dirname(path)),
             "mtime": safe_mtime(path), "title": None,
             "model": meta.get("model") or "unknown-model",
+            "observed_model": meta.get("model") or "unknown-model",
+            "model_provider": meta.get("model_provider") or "openai",
+            "physical_trace_id": meta.get("physical_trace_id") or sid,
+            "logical_session_id": meta.get("logical_session_id") or sid,
+            "parent_thread_id": meta.get("parent_thread_id"),
+            "lineage_parent_id": meta.get("lineage_parent_id"),
             "tools_loaded": meta.get("tools_loaded") or 0,
             "tools_eager": meta.get("tools_eager") or 0,
             "tools_deferred": meta.get("tools_deferred") or 0,
             "tool_catalog": meta.get("tool_catalog") or [],
             "tool_namespaces": meta.get("tool_namespaces") or [],
         }
+        return enrich_codex_model_identities([source])[0]
     if path and path.startswith(os.path.expanduser("~/.cursor/")):
         sid = os.path.basename(path).rsplit(".", 1)[0]
         adapter = _cursor_native_adapter()
@@ -4176,11 +4543,15 @@ def source_revision_signature(source):
     if not source:
         return None
     path = str(source.get("path") or "")
+    identity = public_session_model_identity(source.get("model_identity")) or {}
     return (
         float(source.get("signature_mtime") or source.get("mtime") or safe_mtime(path)),
         str(source.get("title") or ""),
         str(source.get("request_revision") or ""),
         tuple(source.get("lineage_revision") or ()),
+        str(source.get("model") or ""),
+        str(source.get("model_provider") or ""),
+        tuple(sorted(identity.items())),
     )
 
 
@@ -4613,6 +4984,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
     performance_samples = performance_samples or []
     wait_samples = wait_samples or []
     availability = availability or metric_availability(source.get("provider"))
+    model_identity = public_session_model_identity(source.get("model_identity"))
     wall_duration = (last_ts - first_ts) if (first_ts and last_ts) else 0
     row = {
         "id": source["id"],
@@ -4634,6 +5006,7 @@ def summary_row(source, title, cost, tokens, turns, models, first_ts, last_ts, m
         "output_tokens": int(output_tokens or 0),
         "turns": turns,
         "models": sorted(models),
+        **({"model_identity": model_identity} if model_identity else {}),
         "model_stats": sorted([
             {
                 "model": model,
@@ -8326,7 +8699,8 @@ class H(BaseHTTPRequestHandler):
         if req_path not in ("/capability/toggle", "/capability/disable-unused",
                             "/agent-access/toggle", "/session/delete",
                             "/settings/frustration", "/settings/language-signals",
-                            "/settings/model-pricing", "/settings/budgets",
+                            "/settings/model-pricing", "/settings/session-model-identity",
+                            "/settings/budgets",
                             "/settings/updates", "/updates/check", "/updates/install"):
             self.send_error(404)
             return
@@ -8403,6 +8777,26 @@ class H(BaseHTTPRequestHandler):
                 updated = recompute(source) if source else None
                 cross = refresh_cross_session_state(updated or STATE)
                 result["model_pricing"] = cross.get("model_pricing") or result["model_pricing"]
+            self._send(json.dumps(result), "application/json",
+                       status=200 if result.get("ok") else 400)
+            return
+        if req_path == "/settings/session-model-identity":
+            result = set_session_model_identity(
+                payload.get("session_key"),
+                model=payload.get("model"),
+                provider=payload.get("provider") or "codex",
+                remove=payload.get("remove") is True,
+            )
+            if result.get("ok"):
+                with _summary_cache_lock:
+                    _summary_cache.clear()
+                with _session_state_cache_lock:
+                    _session_state_cache.clear()
+                _xsess["data"], _xsess["at"] = None, 0.0
+                current_id = ((STATE.get("source") or {}).get("id") if STATE else "")
+                source = find_session(current_id) if current_id else newest_source()
+                updated = recompute(source) if source else None
+                refresh_cross_session_state(updated or STATE)
             self._send(json.dumps(result), "application/json",
                        status=200 if result.get("ok") else 400)
             return
